@@ -114,6 +114,7 @@ RDFlib's built-in serializers always sort alphabetically, which:
 
 ## Roadmap
 
+- [ ] RDF -> PlantUML
 - [ ] Semantic diff tool
 - [ ] RDF Changeset generation
 - [ ] JSON-LD support
