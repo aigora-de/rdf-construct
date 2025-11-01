@@ -15,6 +15,11 @@ from .core import (
     serialise_turtle,
     sort_subjects,
 )
+from .uml import (
+    load_uml_config,
+    collect_diagram_entities,
+    render_plantuml,
+)
 
 
 @click.group()
@@ -166,6 +171,135 @@ def profiles(config: Path):
         if prof.description:
             click.echo(f"    {prof.description}")
         click.echo(f"    Sections: {len(prof.sections)}")
+        click.echo()
+
+
+@cli.command()
+@click.argument("source", type=click.Path(exists=True, path_type=Path))
+@click.argument("config", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--context",
+    "-c",
+    multiple=True,
+    help="Context(s) to generate (default: all contexts in config)",
+)
+@click.option(
+    "--outdir",
+    "-o",
+    type=click.Path(path_type=Path),
+    default="diagrams",
+    help="Output directory (default: diagrams)",
+)
+def uml(source: Path, config: Path, context: tuple[str, ...], outdir: Path):
+    """Generate PlantUML diagrams from RDF ontologies.
+
+    SOURCE: Input RDF Turtle file (.ttl)
+    CONFIG: YAML configuration file defining UML contexts
+
+    Examples:
+
+        # Generate all contexts defined in config
+        rdf-construct uml ontology.ttl uml_contexts.yml
+
+        # Generate only specific contexts
+        rdf-construct uml ontology.ttl uml_contexts.yml -c animal_taxonomy
+
+        # Custom output directory
+        rdf-construct uml ontology.ttl uml_contexts.yml -o output/diagrams/
+    """
+    # Load configuration
+    uml_config = load_uml_config(config)
+
+    # Determine which contexts to generate
+    if context:
+        contexts_to_gen = list(context)
+    else:
+        contexts_to_gen = uml_config.list_contexts()
+
+    # Validate requested contexts exist
+    for ctx_name in contexts_to_gen:
+        if ctx_name not in uml_config.contexts:
+            click.secho(
+                f"Error: Context '{ctx_name}' not found in config.", fg="red", err=True
+            )
+            available = ", ".join(uml_config.list_contexts())
+            click.echo(f"Available contexts: {available}", err=True)
+            raise click.Abort()
+
+    # Create output directory
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    # Parse source RDF
+    click.echo(f"Loading {source}...")
+    graph = Graph()
+    graph.parse(source.as_posix(), format="turtle")
+
+    # Get selectors from defaults (if any)
+    selectors = uml_config.defaults.get("selectors", {})
+
+    # Generate each context
+    for ctx_name in contexts_to_gen:
+        click.echo(f"Generating diagram: {ctx_name}")
+        ctx = uml_config.get_context(ctx_name)
+
+        # Collect entities for this context
+        entities = collect_diagram_entities(graph, ctx, selectors)
+
+        # Count selected entities
+        num_classes = len(entities["classes"])
+        num_props = (
+            len(entities["object_properties"])
+            + len(entities["datatype_properties"])
+            + len(entities["annotation_properties"])
+        )
+        num_instances = len(entities["instances"])
+
+        click.echo(
+            f"  Selected: {num_classes} classes, {num_props} properties, "
+            f"{num_instances} instances"
+        )
+
+        # Render to PlantUML
+        out_file = outdir / f"{source.stem}-{ctx_name}.puml"
+        render_plantuml(graph, entities, out_file)
+        click.secho(f"  ✓ {out_file}", fg="green")
+
+    click.secho(
+        f"\nGenerated {len(contexts_to_gen)} diagram(s) in {outdir}/", fg="cyan"
+    )
+
+
+@cli.command()
+@click.argument("config", type=click.Path(exists=True, path_type=Path))
+def contexts(config: Path):
+    """List available UML contexts in a configuration file.
+
+    CONFIG: YAML configuration file to inspect
+    """
+    uml_config = load_uml_config(config)
+
+    click.secho("Available UML contexts:", fg="cyan", bold=True)
+    click.echo()
+
+    for ctx_name in uml_config.list_contexts():
+        ctx = uml_config.get_context(ctx_name)
+        click.secho(f"  {ctx_name}", fg="green", bold=True)
+        if ctx.description:
+            click.echo(f"    {ctx.description}")
+
+        # Show selection strategy
+        if ctx.root_classes:
+            click.echo(f"    Roots: {', '.join(ctx.root_classes)}")
+        elif ctx.focus_classes:
+            click.echo(f"    Focus: {', '.join(ctx.focus_classes)}")
+        elif ctx.selector:
+            click.echo(f"    Selector: {ctx.selector}")
+
+        if ctx.include_descendants:
+            depth_str = f"depth={ctx.max_depth}" if ctx.max_depth else "unlimited"
+            click.echo(f"    Includes descendants ({depth_str})")
+
+        click.echo(f"    Properties: {ctx.property_mode}")
         click.echo()
 
 
