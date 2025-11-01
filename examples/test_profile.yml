@@ -1,0 +1,166 @@
+# test_profile.yml
+#
+# Configuration for testing rdf-construct with example ontologies
+# Use with:
+#   rdf-construct order examples/animal_ontology.ttl examples/test_profile.yml
+#   rdf-construct order examples/organisation_ontology.ttl examples/test_profile.yml
+
+defaults:
+  tie_breaker: qname_alpha
+  preserve_prefix_order: true
+
+prefix_order:
+  - owl
+  - rdfs
+  - xsd
+  - ex
+  - org
+
+selectors:
+  classes: "rdf:type owl:Class"
+  obj_props: "rdf:type owl:ObjectProperty"
+  data_props: "rdf:type owl:DatatypeProperty"
+  ann_props: "rdf:type owl:AnnotationProperty"
+  individuals: "FILTER NOT EXISTS { ?s a owl:Class }"
+
+# YAML anchors for reusability
+shared:
+  # For animal ontology
+  animal_roots: &animal_roots
+    - ex:Animal
+  
+  # For organization ontology  
+  org_roots: &org_roots
+    - org:Organization
+    - org:Person
+    - org:Department
+
+profiles:
+
+  # ============================================
+  # Profile 1: Pure Alphabetical
+  # ============================================
+  alpha:
+    description: "Alphabetical ordering - good for diffs"
+    sections:
+      - header: {}
+      - classes:
+          select: classes
+          sort: alpha
+      - object_properties:
+          select: obj_props
+          sort: alpha
+      - data_properties:
+          select: data_props
+          sort: alpha
+      - annotation_properties:
+          select: ann_props
+          sort: alpha
+      - individuals:
+          select: individuals
+          sort: alpha
+
+  # ============================================
+  # Profile 2: Topological (Hierarchy-Aware)
+  # ============================================
+  topo:
+    description: "Parents before children - preserves hierarchy"
+    sections:
+      - header: {}
+      - classes:
+          select: classes
+          sort: topological
+      - object_properties:
+          select: obj_props
+          sort: topological
+      - data_properties:
+          select: data_props
+          sort: alpha
+      - annotation_properties:
+          select: ann_props
+          sort: alpha
+      - individuals:
+          select: individuals
+          sort: alpha
+
+  # ============================================
+  # Profile 3: Topological with Roots (Animal)
+  # ============================================
+  animal_topo:
+    description: "Animal ontology with root-based ordering"
+    sections:
+      - header: {}
+      - classes:
+          select: classes
+          sort: topological
+          roots: *animal_roots
+      - object_properties:
+          select: obj_props
+          sort: topological
+      - data_properties:
+          select: data_props
+          sort: alpha
+      - annotation_properties:
+          select: ann_props
+          sort: alpha
+      - individuals:
+          select: individuals
+          sort: alpha
+
+  # ============================================
+  # Profile 4: Topological with Roots (Organization)
+  # ============================================
+  org_topo:
+    description: "Organization ontology with multiple root hierarchies"
+    sections:
+      - header: {}
+      - classes:
+          select: classes
+          sort: topological
+          roots: *org_roots
+      - object_properties:
+          select: obj_props
+          sort: topological
+      - data_properties:
+          select: data_props
+          sort: alpha
+      - annotation_properties:
+          select: ann_props
+          sort: alpha
+      - individuals:
+          select: individuals
+          sort: alpha
+
+  # ============================================
+  # Profile 5: Mixed (Classes topo, rest alpha)
+  # ============================================
+  mixed:
+    description: "Classes hierarchical, everything else alphabetical"
+    sections:
+      - header: {}
+      - classes:
+          select: classes
+          sort: topological
+      - object_properties:
+          select: obj_props
+          sort: alpha
+      - data_properties:
+          select: data_props
+          sort: alpha
+      - annotation_properties:
+          select: ann_props
+          sort: alpha
+      - individuals:
+          select: individuals
+          sort: alpha
+
+  # ============================================
+  # Profile 6: Compact (minimal sections)
+  # ============================================
+  compact:
+    description: "Just header and classes - useful for quick inspection"
+    sections:
+      - header: {}
+      - classes:
+          select: classes
+          sort: topological

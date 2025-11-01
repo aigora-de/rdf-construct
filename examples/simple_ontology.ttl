@@ -1,0 +1,28 @@
+PREFIX ex: <http://example.org/test#>
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+ex:Animal
+    a owl:Class ;
+    rdfs:label "Animal" .
+
+ex:Mammal
+    a owl:Class ;
+    rdfs:subClassOf ex:Animal ;
+    rdfs:label "Mammal" .
+
+ex:Dog
+    a owl:Class ;
+    rdfs:subClassOf ex:Mammal ;
+    rdfs:label "Dog" .
+
+ex:Cat
+    a owl:Class ;
+    rdfs:subClassOf ex:Mammal ;
+    rdfs:label "Cat" .
+
+ex:hasParent
+    a owl:ObjectProperty ;
+    rdfs:domain ex:Animal ;
+    rdfs:range ex:Animal ;
+    rdfs:label "has parent" .

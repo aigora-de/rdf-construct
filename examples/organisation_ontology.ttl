@@ -1,0 +1,255 @@
+@prefix org: <http://example.org/organisation#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Ontology header
+org:
+    a owl:Ontology ;
+    rdfs:label "Organisation Ontology" ;
+    rdfs:comment "Example ontology for organisational structures" ;
+    owl:versionInfo "1.0" .
+
+# ============================================
+# Classes - Multiple hierarchies
+# ============================================
+
+# Organisation hierarchy
+org:Organisation
+    a owl:Class ;
+    rdfs:label "Organisation"@en-GB ;
+    rdfs:label "Organization"@en-US ;
+    rdfs:comment "A social unit of people systematically structured" .
+
+org:Company
+    a owl:Class ;
+    rdfs:subClassOf org:Organisation ;
+    rdfs:label "Company" ;
+    rdfs:comment "Commercial business organisation" .
+
+org:Nonprofit
+    a owl:Class ;
+    rdfs:subClassOf org:Organisation ;
+    rdfs:label "Non-profit Organisation"@en-GB ;
+    rdfs:label "Non-profit Organization"@en-US .
+
+org:GovernmentAgency
+    a owl:Class ;
+    rdfs:subClassOf org:Organisation ;
+    rdfs:label "Government Agency" .
+
+# Person/Role hierarchy
+org:Person
+    a owl:Class ;
+    rdfs:label "Person" ;
+    rdfs:comment "An individual human being" .
+
+org:Employee
+    a owl:Class ;
+    rdfs:subClassOf org:Person ;
+    rdfs:label "Employee" ;
+    rdfs:comment "Person employed by an organisation" .
+
+org:Manager
+    a owl:Class ;
+    rdfs:subClassOf org:Employee ;
+    rdfs:label "Manager" ;
+    rdfs:comment "Employee with management responsibilities" .
+
+org:Executive
+    a owl:Class ;
+    rdfs:subClassOf org:Manager ;
+    rdfs:label "Executive" ;
+    rdfs:comment "Senior manager with strategic responsibilities" .
+
+org:CEO
+    a owl:Class ;
+    rdfs:subClassOf org:Executive ;
+    rdfs:label "Chief Executive Officer" ;
+    rdfs:label "CEO" .
+
+# Department hierarchy
+org:Department
+    a owl:Class ;
+    rdfs:label "Department" ;
+    rdfs:comment "Functional division within an organisation" .
+
+org:Engineering
+    a owl:Class ;
+    rdfs:subClassOf org:Department ;
+    rdfs:label "Engineering Department" .
+
+org:Sales
+    a owl:Class ;
+    rdfs:subClassOf org:Department ;
+    rdfs:label "Sales Department" .
+
+org:HumanResources
+    a owl:Class ;
+    rdfs:subClassOf org:Department ;
+    rdfs:label "Human Resources" .
+
+# ============================================
+# Object Properties - With domain/range
+# ============================================
+
+org:worksFor
+    a owl:ObjectProperty ;
+    rdfs:domain org:Employee ;
+    rdfs:range org:Organisation ;
+    rdfs:label "works for" ;
+    rdfs:comment "Relates an employee to their employer" .
+
+org:manages
+    a owl:ObjectProperty ;
+    rdfs:domain org:Manager ;
+    rdfs:range org:Employee ;
+    rdfs:label "manages" ;
+    rdfs:comment "Managerial relationship" .
+
+org:reportsTo
+    a owl:ObjectProperty ;
+    rdfs:domain org:Employee ;
+    rdfs:range org:Manager ;
+    rdfs:label "reports to" ;
+    rdfs:comment "Reporting structure" ;
+    owl:inverseOf org:manages .
+
+org:hasDepartment
+    a owl:ObjectProperty ;
+    rdfs:domain org:Organisation ;
+    rdfs:range org:Department ;
+    rdfs:label "has department" .
+
+org:isPartOf
+    a owl:ObjectProperty ;
+    rdfs:domain org:Department ;
+    rdfs:range org:Organisation ;
+    rdfs:label "is part of" ;
+    owl:inverseOf org:hasDepartment .
+
+org:memberOf
+    a owl:ObjectProperty ;
+    rdfs:domain org:Employee ;
+    rdfs:range org:Department ;
+    rdfs:label "member of" ;
+    rdfs:comment "Department membership" .
+
+org:collaboratesWith
+    a owl:ObjectProperty ;
+    rdfs:domain org:Person ;
+    rdfs:range org:Person ;
+    rdfs:label "collaborates with" ;
+    a owl:SymmetricProperty .
+
+# ============================================
+# Data Properties
+# ============================================
+
+org:employeeId
+    a owl:DatatypeProperty ;
+    rdfs:domain org:Employee ;
+    rdfs:range xsd:string ;
+    rdfs:label "employee ID" ;
+    a owl:FunctionalProperty .
+
+org:email
+    a owl:DatatypeProperty ;
+    rdfs:domain org:Person ;
+    rdfs:range xsd:string ;
+    rdfs:label "email address" .
+
+org:phoneNumber
+    a owl:DatatypeProperty ;
+    rdfs:domain org:Person ;
+    rdfs:range xsd:string ;
+    rdfs:label "phone number" .
+
+org:salary
+    a owl:DatatypeProperty ;
+    rdfs:domain org:Employee ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "salary" ;
+    rdfs:comment "Annual salary in currency units" .
+
+org:foundedDate
+    a owl:DatatypeProperty ;
+    rdfs:domain org:Organisation ;
+    rdfs:range xsd:date ;
+    rdfs:label "founded date" .
+
+org:numberOfEmployees
+    a owl:DatatypeProperty ;
+    rdfs:domain org:Organisation ;
+    rdfs:range xsd:integer ;
+    rdfs:label "number of employees" .
+
+# ============================================
+# Annotation Properties
+# ============================================
+
+org:acronym
+    a owl:AnnotationProperty ;
+    rdfs:label "acronym" ;
+    rdfs:comment "Short form or abbreviation" .
+
+org:legalName
+    a owl:AnnotationProperty ;
+    rdfs:label "legal name" ;
+    rdfs:comment "Official registered name" .
+
+# ============================================
+# Individuals (Instances)
+# ============================================
+
+org:TechCorpInc
+    a org:Company ;
+    rdfs:label "TechCorp Inc." ;
+    org:legalName "TechCorp Incorporated" ;
+    org:foundedDate "2010-03-15"^^xsd:date ;
+    org:numberOfEmployees 150 .
+
+org:EngineeringDept
+    a org:Engineering ;
+    rdfs:label "Engineering Department" ;
+    org:isPartOf org:TechCorpInc .
+
+org:SalesDept
+    a org:Sales ;
+    rdfs:label "Sales Department" ;
+    org:isPartOf org:TechCorpInc .
+
+org:AliceSmith
+    a org:CEO ;
+    rdfs:label "Alice Smith" ;
+    org:worksFor org:TechCorpInc ;
+    org:employeeId "CEO001" ;
+    org:email "alice@techcorp.example" ;
+    org:salary 250000.00 .
+
+org:BobJones
+    a org:Manager ;
+    rdfs:label "Bob Jones" ;
+    org:worksFor org:TechCorpInc ;
+    org:memberOf org:EngineeringDept ;
+    org:reportsTo org:AliceSmith ;
+    org:employeeId "ENG042" ;
+    org:email "bob@techcorp.example" ;
+    org:salary 120000.00 .
+
+org:CarolDavis
+    a org:Employee ;
+    rdfs:label "Carol Davis" ;
+    org:worksFor org:TechCorpInc ;
+    org:memberOf org:EngineeringDept ;
+    org:reportsTo org:BobJones ;
+    org:employeeId "ENG089" ;
+    org:email "carol@techcorp.example" .
+
+org:DaveWilson
+    a org:Manager ;
+    rdfs:label "Dave Wilson" ;
+    org:worksFor org:TechCorpInc ;
+    org:memberOf org:SalesDept ;
+    org:reportsTo org:AliceSmith ;
+    org:employeeId "SAL011" .

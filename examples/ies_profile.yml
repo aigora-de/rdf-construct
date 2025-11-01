@@ -1,0 +1,122 @@
+# ontology_order.yml
+defaults:
+  tie_breaker: qname_alpha
+  comment_blocks: true         # allow emitting # section dividers
+  preserve_prefix_order: true  # enforce a declared prefix sequence
+  bnode_strategy: skolem       # or "stable"
+
+prefix_order:
+  - rdf
+  - rdfs
+  - owl
+  - xsd
+  - skos
+  - ies
+  - ex
+
+selectors:
+  classes:        "rdf:type owl:Class"
+  obj_props:      "rdf:type owl:ObjectProperty"
+  data_props:     "rdf:type owl:DatatypeProperty"
+  ann_props:      "rdf:type owl:AnnotationProperty"
+  individuals:    "FILTER NOT EXISTS { ?s a owl:Class } FILTER NOT EXISTS { ?s a rdf:Property }"
+
+shared:
+  class_roots: &class_roots [ "ies:Element", "ies:ClassOfElement" ]
+  domain_priority: &domain_priority [ "ies:Element", "ies:PhysicalObject", "ies:System", "ies:Process" ]
+
+profiles:
+
+  alpha:
+    description: "Pure alphabetical by section, stable tie-breakers."
+    sections:
+      - header: {}
+      - classes:
+          select: classes
+          sort: alpha
+      - object_properties:
+          select: obj_props
+          sort: alpha
+      - data_properties:
+          select: data_props
+          sort: alpha
+      - annotation_properties:
+          select: ann_props
+          sort: alpha
+      - individuals:
+          select: individuals
+          sort: alpha
+
+  logical_topo:
+    description: "Parents before children; super-properties before sub-properties."
+    sections:
+      - header: {}
+      - classes:
+          select: classes
+          sort: topological            # over rdfs:subClassOf
+          roots: *class_roots
+          cluster: by_branch           # emit each root lineage contiguously
+          within_level: qname_alpha
+      - object_properties:
+          select: obj_props
+          sort: topological            # over rdfs:subPropertyOf
+          within_level: qname_alpha
+      - data_properties:
+          select: data_props
+          sort: qname_alpha
+      - annotation_properties:
+          select: ann_props
+          sort: qname_alpha
+      - individuals:
+          select: individuals
+          sort: qname_alpha
+
+  props_by_domain:
+    description: "Group object properties by domain; topo within group."
+    sections:
+      - header: {}
+      - classes:
+          select: classes
+          sort: topological
+          roots: *class_roots
+      - object_properties:
+          select: obj_props
+          group_by: domain             # group key is rdfs:domain
+          group_order: explicit_then_alpha
+          explicit_group_sequence: *domain_priority
+          sort: topological
+          within_group_tie: qname_alpha
+      - data_properties:
+          select: data_props
+          group_by: domain
+          group_order: explicit_then_alpha
+          explicit_group_sequence: *domain_priority
+          sort: qname_alpha
+      - individuals:
+          select: individuals
+          sort: qname_alpha
+
+  doc_order:
+    description: "Mirror narrative order; fill gaps with topo+alpha."
+    sections:
+      - header: {}
+      - classes:
+          select: classes
+          anchors:                      # explicit sequence for key concepts
+            - ies:Element
+            - ies:ClassOfElement
+            - ies:Walling
+            - ies:Opening
+          after_anchors: topological_then_alpha
+      - object_properties:
+          select: obj_props
+          anchors:
+            - ies:hasConstituent
+            - ies:hasPart
+          after_anchors: topological_then_alpha
+      - data_properties:
+          select: data_props
+          sort: alpha
+      - individuals:
+          select: individuals
+          sort: alpha

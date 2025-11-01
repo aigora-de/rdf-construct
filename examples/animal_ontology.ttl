@@ -1,0 +1,118 @@
+@prefix ex: <http://example.org/animals#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Ontology metadata
+ex:
+    a owl:Ontology ;
+    rdfs:label "Animal Ontology" ;
+    rdfs:comment "Simple example ontology for testing rdf-construct" .
+
+# Class hierarchy: Animal > Mammal > Dog/Cat
+#                         > Bird > Eagle/Sparrow
+
+ex:Animal
+    a owl:Class ;
+    rdfs:label "Animal" ;
+    rdfs:comment "Any living organism that is not a plant" .
+
+ex:Mammal
+    a owl:Class ;
+    rdfs:subClassOf ex:Animal ;
+    rdfs:label "Mammal" ;
+    rdfs:comment "Warm-blooded vertebrate with hair or fur" .
+
+ex:Bird
+    a owl:Class ;
+    rdfs:subClassOf ex:Animal ;
+    rdfs:label "Bird" ;
+    rdfs:comment "Warm-blooded egg-laying vertebrate with feathers" .
+
+ex:Dog
+    a owl:Class ;
+    rdfs:subClassOf ex:Mammal ;
+    rdfs:label "Dog" ;
+    rdfs:comment "Domesticated carnivorous mammal, Canis familiaris" .
+
+ex:Cat
+    a owl:Class ;
+    rdfs:subClassOf ex:Mammal ;
+    rdfs:label "Cat" ;
+    rdfs:comment "Domesticated carnivorous mammal, Felis catus" .
+
+ex:Eagle
+    a owl:Class ;
+    rdfs:subClassOf ex:Bird ;
+    rdfs:label "Eagle" ;
+    rdfs:comment "Large bird of prey" .
+
+ex:Sparrow
+    a owl:Class ;
+    rdfs:subClassOf ex:Bird ;
+    rdfs:label "Sparrow" ;
+    rdfs:comment "Small passerine bird" .
+
+# Object properties
+
+ex:hasParent
+    a owl:ObjectProperty ;
+    rdfs:domain ex:Animal ;
+    rdfs:range ex:Animal ;
+    rdfs:label "has parent" ;
+    rdfs:comment "Relates an animal to its biological parent" .
+
+ex:eats
+    a owl:ObjectProperty ;
+    rdfs:domain ex:Animal ;
+    rdfs:range ex:Animal ;
+    rdfs:label "eats" ;
+    rdfs:comment "Indicates predator-prey relationship" .
+
+ex:livesIn
+    a owl:ObjectProperty ;
+    rdfs:domain ex:Animal ;
+    rdfs:label "lives in" ;
+    rdfs:comment "Indicates the habitat of an animal" .
+
+# Data properties
+
+ex:lifespan
+    a owl:DatatypeProperty ;
+    rdfs:domain ex:Animal ;
+    rdfs:range xsd:integer ;
+    rdfs:label "lifespan" ;
+    rdfs:comment "Average lifespan in years" .
+
+ex:averageWeight
+    a owl:DatatypeProperty ;
+    rdfs:domain ex:Animal ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "average weight" ;
+    rdfs:comment "Average weight in kilograms" .
+
+# Annotation properties
+
+ex:scientificName
+    a owl:AnnotationProperty ;
+    rdfs:label "scientific name" ;
+    rdfs:comment "Binomial nomenclature for the species" .
+
+# Individuals (instances)
+
+ex:Fido
+    a ex:Dog ;
+    rdfs:label "Fido" ;
+    ex:lifespan 12 ;
+    ex:averageWeight 25.5 .
+
+ex:Whiskers
+    a ex:Cat ;
+    rdfs:label "Whiskers" ;
+    ex:lifespan 15 ;
+    ex:averageWeight 4.2 .
+
+ex:Baldy
+    a ex:Eagle ;
+    rdfs:label "Baldy" ;
+    ex:scientificName "Haliaeetus leucocephalus" .
