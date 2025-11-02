@@ -9,12 +9,12 @@
 
 ## Features
 
-- ** Semantic Ordering**: Serialize RDF/Turtle with intelligent ordering instead of alphabetical chaos
-- ** UML Generation**: Create PlantUML class diagrams from RDF ontologies
-- ** Flexible Styling**: Configure colors, layouts, and visual themes for diagrams
-- ** Profile-Based**: Define multiple ordering strategies in YAML configuration
-- ** Deterministic**: Same input + profile = same output, always
-- ** Hierarchy-Aware**: Respects `rdfs:subClassOf` and `rdfs:subPropertyOf` relationships
+- **Semantic Ordering**: Serialize RDF/Turtle with intelligent ordering instead of alphabetical chaos
+- **UML Generation**: Create PlantUML class diagrams from RDF ontologies
+- **Flexible Styling**: Configure colors, layouts, and visual themes for diagrams
+- **Profile-Based**: Define multiple ordering strategies in YAML configuration
+- **Deterministic**: Same input + profile = same output, always
+- **Hierarchy-Aware**: Respects `rdfs:subClassOf` and `rdfs:subPropertyOf` relationships
 
 ## Why?
 
@@ -197,11 +197,11 @@ properties:
 ✅ RDF semantic ordering  
 ✅ Topological sorting with root-based branches  
 ✅ Custom Turtle serialization (preserves order)  
-✅ UML diagram generation from RDF  
+✅ PlantUML diagram generation from RDF  
 ✅ Configurable styling and layouts  
 ✅ Comprehensive documentation
 
-### Planned
+### (Possible) Roadmap
 - [ ] Semantic diff (compare RDF graphs, generate changesets)
 - [ ] Validation module (check for common ontology issues)
 - [ ] Multi-format support (JSON-LD, RDF/XML input)
@@ -265,6 +265,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Status**: 🚧 Alpha - Active Development  
+**Status**: Alpha - Active Development  
 **Python**: 3.10+ required  
 **Maintainer**: See [CONTRIBUTING.md](CONTRIBUTING.md)
