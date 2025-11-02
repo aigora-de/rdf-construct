@@ -19,13 +19,19 @@ class UMLContext:
     Attributes:
         name: Context identifier
         description: Human-readable description
-        root_classes: List of root class CURIEs to start from
-        focus_classes: Explicit list of classes to include (alternative to roots)
-        include_descendants: Whether to include subclasses
-        max_depth: Maximum depth when traversing hierarchies (None = unlimited)
+        mode: Selection mode ('default' or 'explicit')
+        root_classes: List of root class CURIEs to start from (default mode)
+        focus_classes: Explicit list of classes to include (default mode)
+        include_descendants: Whether to include subclasses (default mode)
+        max_depth: Maximum depth when traversing hierarchies (default mode)
         properties: Property inclusion configuration
         include_instances: Whether to include individuals
-        selector: Selector key for bulk selection (alternative to roots/focus)
+        selector: Selector key for bulk selection (default mode)
+        explicit_classes: Explicit class list (explicit mode)
+        explicit_object_properties: Explicit object property list (explicit mode)
+        explicit_datatype_properties: Explicit datatype property list (explicit mode)
+        explicit_annotation_properties: Explicit annotation property list (explicit mode)
+        explicit_instances: Explicit instance list (explicit mode)
     """
 
     def __init__(self, name: str, config: dict[str, Any]):
@@ -38,42 +44,80 @@ class UMLContext:
         self.name = name
         self.description = config.get("description", "")
 
-        # Class selection strategies
-        self.root_classes = config.get("root_classes", [])
-        self.focus_classes = config.get("focus_classes", [])
-        self.selector = config.get("selector")  # e.g., "classes"
+        # Determine mode (default vs explicit)
+        self.mode = config.get("mode", "default")
 
-        # Traversal settings
-        self.include_descendants = config.get("include_descendants", False)
-        self.max_depth = config.get("max_depth")
+        if self.mode == "explicit":
+            # Explicit mode: directly specify all entities
+            self.explicit_classes = config.get("classes", [])
+            self.explicit_object_properties = config.get("object_properties", [])
+            self.explicit_datatype_properties = config.get("datatype_properties", [])
+            self.explicit_annotation_properties = config.get("annotation_properties", [])
+            self.explicit_instances = config.get("instances", [])
 
-        # Property configuration
-        prop_config = config.get("properties", {})
-        if isinstance(prop_config, dict):
-            self.property_mode = prop_config.get("mode", "domain_based")
-            self.property_include = prop_config.get("include", [])
-            self.property_exclude = prop_config.get("exclude", [])
-        else:
-            # Simple boolean for backward compatibility
-            self.property_mode = "all" if prop_config else "none"
+            # These are not used in explicit mode but set defaults for compatibility
+            self.root_classes = []
+            self.focus_classes = []
+            self.selector = None
+            self.include_descendants = False
+            self.max_depth = None
+            self.property_mode = "explicit"
             self.property_include = []
             self.property_exclude = []
+            self.include_instances = bool(self.explicit_instances)
 
-        # Instances
-        self.include_instances = config.get("include_instances", False)
+        else:
+            # Default mode: existing strategies
+            # Class selection strategies
+            self.root_classes = config.get("root_classes", [])
+            self.focus_classes = config.get("focus_classes", [])
+            self.selector = config.get("selector")  # e.g., "classes"
+
+            # Traversal settings
+            self.include_descendants = config.get("include_descendants", False)
+            self.max_depth = config.get("max_depth")
+
+            # Property configuration
+            prop_config = config.get("properties", {})
+            if isinstance(prop_config, dict):
+                self.property_mode = prop_config.get("mode", "domain_based")
+                self.property_include = prop_config.get("include", [])
+                self.property_exclude = prop_config.get("exclude", [])
+            else:
+                # Simple boolean for backward compatibility
+                self.property_mode = "all" if prop_config else "none"
+                self.property_include = []
+                self.property_exclude = []
+
+            # Instances
+            self.include_instances = config.get("include_instances", False)
+
+            # Explicit mode attributes not used but set for compatibility
+            self.explicit_classes = []
+            self.explicit_object_properties = []
+            self.explicit_datatype_properties = []
+            self.explicit_annotation_properties = []
+            self.explicit_instances = []
 
         # Style reference (will be used later)
         self.style = config.get("style", "default")
 
     def has_class_selection(self) -> bool:
         """Check if context has any class selection criteria."""
+        if self.mode == "explicit":
+            return bool(self.explicit_classes)
         return bool(
             self.root_classes or self.focus_classes or self.selector
         )
 
     def __repr__(self) -> str:
+        if self.mode == "explicit":
+            return (
+                f"UMLContext(name={self.name!r}, mode='explicit', "
+                f"classes={len(self.explicit_classes)})"
+            )
         return (
-            f"UMLContext(name={self.name!r}, "
+            f"UMLContext(name={self.name!r}, mode='default', "
             f"roots={len(self.root_classes)}, "
             f"focus={len(self.focus_classes)})"
         )

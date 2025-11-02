@@ -225,13 +225,113 @@ def select_instances(
     return instances
 
 
+def collect_explicit_entities(
+    graph: Graph, context: UMLContext
+) -> dict[str, set[URIRef]]:
+    """Collect entities explicitly specified in context.
+
+    In explicit mode, all entities are directly listed in the configuration
+    rather than selected via strategies. This provides complete control over
+    diagram contents.
+
+    Args:
+        graph: RDF graph to validate entities against
+        context: UML context with explicit entity lists
+
+    Returns:
+        Dictionary with keys:
+        - 'classes': Explicitly specified class URIRefs
+        - 'object_properties': Explicitly specified object property URIRefs
+        - 'datatype_properties': Explicitly specified datatype property URIRefs
+        - 'annotation_properties': Explicitly specified annotation property URIRefs
+        - 'instances': Explicitly specified instance URIRefs
+
+    Raises:
+        ValueError: If a CURIE cannot be expanded or entity doesn't exist
+    """
+    entities = {
+        "classes": set(),
+        "object_properties": set(),
+        "datatype_properties": set(),
+        "annotation_properties": set(),
+        "instances": set(),
+    }
+
+    # Get all properties by type for validation
+    all_obj_props = {s for s in graph.subjects(RDF.type, OWL.ObjectProperty)}
+    all_data_props = {s for s in graph.subjects(RDF.type, OWL.DatatypeProperty)}
+    all_ann_props = {s for s in graph.subjects(RDF.type, OWL.AnnotationProperty)}
+
+    # Expand and validate classes
+    for curie in context.explicit_classes:
+        uri = expand_curie(graph, curie)
+        if uri is None:
+            raise ValueError(f"Cannot expand CURIE: {curie}")
+
+        # Validate it's actually a class
+        is_class = (
+            (uri, RDF.type, OWL.Class) in graph or
+            (uri, RDF.type, RDFS.Class) in graph
+        )
+        if not is_class:
+            # Warning but don't fail - might be a valid use case
+            pass
+
+        entities["classes"].add(uri)
+
+    # Expand and validate object properties
+    for curie in context.explicit_object_properties:
+        uri = expand_curie(graph, curie)
+        if uri is None:
+            raise ValueError(f"Cannot expand CURIE: {curie}")
+
+        if uri not in all_obj_props:
+            # Warning but don't fail
+            pass
+
+        entities["object_properties"].add(uri)
+
+    # Expand and validate datatype properties
+    for curie in context.explicit_datatype_properties:
+        uri = expand_curie(graph, curie)
+        if uri is None:
+            raise ValueError(f"Cannot expand CURIE: {curie}")
+
+        if uri not in all_data_props:
+            pass
+
+        entities["datatype_properties"].add(uri)
+
+    # Expand and validate annotation properties
+    for curie in context.explicit_annotation_properties:
+        uri = expand_curie(graph, curie)
+        if uri is None:
+            raise ValueError(f"Cannot expand CURIE: {curie}")
+
+        if uri not in all_ann_props:
+            pass
+
+        entities["annotation_properties"].add(uri)
+
+    # Expand instances
+    for curie in context.explicit_instances:
+        uri = expand_curie(graph, curie)
+        if uri is None:
+            raise ValueError(f"Cannot expand CURIE: {curie}")
+
+        entities["instances"].add(uri)
+
+    return entities
+
+
 def collect_diagram_entities(
     graph: Graph, context: UMLContext, selectors: dict[str, str]
 ) -> dict[str, set[URIRef]]:
     """Collect all entities for a UML diagram based on context.
 
     This is the main entry point for entity selection. It orchestrates
-    the selection of classes, properties, and instances.
+    the selection of classes, properties, and instances based on the
+    context mode (default or explicit).
 
     Args:
         graph: RDF graph to select from
@@ -246,6 +346,11 @@ def collect_diagram_entities(
         - 'annotation_properties': Selected annotation property URIRefs
         - 'instances': Selected instance URIRefs
     """
+    # Handle explicit mode (direct specification of classes, properties, attributes, & instances)
+    if context.mode == "explicit":
+        return collect_explicit_entities(graph, context)
+
+    # Default mode: use existing selection strategies
     # Select classes
     classes = select_classes(graph, context, selectors)
 

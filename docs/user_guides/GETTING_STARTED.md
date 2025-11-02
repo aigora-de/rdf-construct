@@ -219,6 +219,86 @@ properties:
   mode: none
 ```
 
+# Getting Started - Explicit Mode Addition
+
+## Section to Add After "Understanding Contexts"
+
+### Selection Modes
+
+rdf-construct supports two modes for specifying diagram contents:
+
+#### Default Mode (Automatic Selection)
+
+Uses strategies to automatically select entities:
+- **Root classes** with descendants
+- **Focus classes** with optional expansion
+- **Property modes** (domain_based, connected, etc.)
+
+**Best for**: Standard hierarchies, complete branches, automatic property inclusion.
+
+```yaml
+animal_taxonomy:
+  root_classes:
+    - ex:Animal
+  include_descendants: true
+  properties:
+    mode: domain_based
+```
+
+#### Explicit Mode (Manual Selection)
+
+Directly list every class, property, and instance:
+
+**Best for**: Cross-branch views, partial hierarchies, precise control.
+
+```yaml
+animal_care:
+  mode: explicit
+  classes:
+    - ex:Animal
+    - ex:Dog
+    - ex:Eagle  # From different branch
+  object_properties:
+    - ex:hasParent
+  datatype_properties:
+    - ex:lifespan
+```
+
+**When to use which**:
+- Default mode: Faster, good for complete hierarchies
+- Explicit mode: Maximum control, cross-cutting views
+
+### Example: Cross-Branch Diagram
+
+Create a diagram with concepts from multiple hierarchies:
+
+```yaml
+contexts:
+  cross_branch:
+    description: "Concepts across taxonomy"
+    mode: explicit
+    
+    classes:
+      - ex:Mammal      # From one branch
+      - ex:Dog         # Deeper in that branch
+      - ex:Eagle       # From different branch
+    
+    object_properties:
+      - ex:hasParent
+      - ex:eats
+    
+    datatype_properties:
+      - ex:lifespan
+```
+
+Generate:
+```bash
+poetry run rdf-construct uml examples/animal_ontology.ttl config.yml \
+  -c cross_branch
+```
+
+Result: Clean diagram with just these concepts, ignoring other hierarchy members.
+
 ## Examples
 
 ### Example 1: Simple Class Hierarchy
@@ -351,6 +431,30 @@ Use the online PlantUML editor for fast iteration:
 4. Adjust config
 5. Repeat
 
+### Choosing Selection Mode
+
+**Use Default Mode when:**
+- Working with a single hierarchy
+- Want all descendants of a root
+- Property modes (domain_based, etc.) work well
+
+**Use Explicit Mode when:**
+- Need concepts from multiple hierarchies
+- Want specific depth that's hard to specify
+- Creating thematic/conceptual views
+- Default modes include too much/too little
+
+### Quick Decision Tree
+
+```
+Do you need classes from multiple hierarchies?
+├─ Yes → Use explicit mode
+└─ No
+   └─ Do you want a complete hierarchy branch?
+      ├─ Yes → Use default mode with root_classes
+      └─ No → Consider explicit mode for precision
+```
+
 ## Troubleshooting
 
 ### "Context not found"
@@ -401,6 +505,21 @@ for cls in classes[:5]:
 - Different PlantUML themes
 - Adjusting window size
 - Manually tweaking `.puml` file (add `!pragma layout` directives)
+
+### Explicit Mode: "Cannot expand CURIE"
+
+**Problem**: `ValueError: Cannot expand CURIE: xyz:Something`
+
+**Solution**: Check that prefix is defined in ontology:
+
+```python
+from rdflib import Graph
+g = Graph().parse("ontology.ttl", format="turtle")
+for pfx, ns in g.namespace_manager.namespaces():
+    if pfx: print(f"{pfx}: {ns}")
+```
+
+Use the actual prefix assigned by rdflib.
 
 ## Next Steps
 

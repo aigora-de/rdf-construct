@@ -1,0 +1,304 @@
+# uml_contexts_explicit_examples.yml
+#
+# Examples demonstrating the new 'explicit' mode for fine-grained diagram control
+# Use with:
+#   poetry run rdf-construct uml examples/animal_ontology.ttl examples/uml_contexts_explicit_examples.yml
+
+defaults:
+  include_properties: true
+  include_instances: false
+
+# Optional selectors (for default mode contexts)
+selectors:
+  classes: "rdf:type owl:Class"
+  obj_props: "rdf:type owl:ObjectProperty"
+  data_props: "rdf:type owl:DatatypeProperty"
+
+contexts:
+
+  # ============================================
+  # USE CASE 1: Cross-Branch Subject Matter
+  # ============================================
+
+  animal_care_explicit:
+    description: "Animal care concepts cutting across taxonomy - explicit mode"
+    mode: explicit
+
+    # Explicitly list classes from different branches
+    classes:
+      - ex:Animal       # Root concept
+      - ex:Mammal       # One branch
+      - ex:Dog          # Deep in mammal branch
+      - ex:Cat          # Also in mammal branch
+      - ex:Eagle        # From bird branch (cross-branch!)
+
+    # Explicitly list relevant properties
+    object_properties:
+      - ex:hasParent    # Relationships between animals
+      - ex:eats         # Feeding relationships
+      - ex:livesIn      # Habitat connections
+
+    # Explicitly list datatype properties
+    datatype_properties:
+      - ex:averageWeight
+      - ex:lifespan
+
+    # Optionally include specific individuals
+    instances:
+      - ex:Fido         # Example dog
+      - ex:Baldy        # Example eagle
+
+  # ============================================
+  # USE CASE 2: Partial Hierarchy Display
+  # ============================================
+
+  mammals_top_level_explicit:
+    description: "Just Mammal and direct subclasses, no deeper - explicit mode"
+    mode: explicit
+
+    classes:
+      - ex:Mammal       # Parent class
+      - ex:Dog          # Direct subclass
+      - ex:Cat          # Direct subclass
+      # Deliberately omit any further descendants
+
+    object_properties:
+      - ex:hasParent
+
+    datatype_properties:
+      - ex:averageWeight
+      - ex:lifespan
+
+  birds_shallow_explicit:
+    description: "Bird taxonomy, limited depth - explicit mode"
+    mode: explicit
+
+    classes:
+      - ex:Bird         # Root of bird branch
+      - ex:Eagle        # One subclass
+      - ex:Sparrow      # Another subclass
+      # No further depth even if it existed
+
+    object_properties:
+      - ex:hasParent
+      - ex:livesIn
+
+    datatype_properties:
+      - ex:lifespan
+
+  # ============================================
+  # USE CASE 3: User-Defined Concept Cluster
+  # ============================================
+
+  predator_relationships:
+    description: "Focus on predator-prey relationships only - explicit mode"
+    mode: explicit
+
+    classes:
+      - ex:Dog
+      - ex:Cat
+      - ex:Eagle
+      - ex:Sparrow      # Prey
+
+    # Only the 'eats' property to show predation
+    object_properties:
+      - ex:eats
+
+    # No datatype properties needed for this view
+    datatype_properties: []
+
+    # Could add instances to show actual predation
+    instances: []
+
+  key_concepts_minimal:
+    description: "Absolute minimum - just a few key classes"
+    mode: explicit
+
+    classes:
+      - ex:Animal
+      - ex:Dog
+      - ex:Eagle
+
+    # No properties at all
+    object_properties: []
+    datatype_properties: []
+    annotation_properties: []
+    instances: []
+
+  # ============================================
+  # COMPARISON: Same diagram in default vs explicit mode
+  # ============================================
+
+  # Default mode approach (for comparison)
+  comparison_default_mode:
+    description: "Using default mode strategies"
+    mode: default
+
+    root_classes:
+      - ex:Mammal
+    include_descendants: true
+    max_depth: 1  # Only direct subclasses
+
+    properties:
+      mode: domain_based
+
+  # Explicit mode equivalent
+  comparison_explicit_mode:
+    description: "Same result using explicit mode"
+    mode: explicit
+
+    classes:
+      - ex:Mammal
+      - ex:Dog
+      - ex:Cat
+
+    object_properties:
+      - ex:hasParent
+      - ex:eats
+      - ex:livesIn
+
+    datatype_properties:
+      - ex:averageWeight
+      - ex:lifespan
+
+  # ============================================
+  # ORGANIZATION ONTOLOGY EXAMPLES
+  # ============================================
+
+  management_structure_explicit:
+    description: "Management hierarchy with explicit control"
+    mode: explicit
+
+    classes:
+      - org:Person
+      - org:Employee
+      - org:Manager
+      - org:CEO
+
+    object_properties:
+      - org:manages
+      - org:reportsTo
+      - org:worksFor
+
+    datatype_properties:
+      - org:salary
+
+    instances:
+      - org:AliceSmith    # CEO
+      - org:BobJones      # Manager
+      - org:CarolDavis    # Employee
+
+  departments_and_people_explicit:
+    description: "Departments and their staff - cross-cutting view"
+    mode: explicit
+
+    classes:
+      - org:Department
+      - org:Engineering
+      - org:Sales
+      - org:Employee
+      - org:Manager
+
+    object_properties:
+      - org:memberOf
+      - org:hasDepartment
+      - org:manages
+
+    datatype_properties: []
+
+    instances:
+      - org:EngineeringDept
+      - org:SalesDept
+      - org:BobJones
+      - org:CarolDavis
+      - org:DaveWilson
+
+  # ============================================
+  # ADVANCED: Mixing explicit entities from multiple branches
+  # ============================================
+
+  ecosystem_view:
+    description: "Cross-domain concepts: animals, habitats, and care"
+    mode: explicit
+
+    classes:
+      # From animal taxonomy
+      - ex:Animal
+      - ex:Mammal
+      - ex:Dog
+      - ex:Bird
+      - ex:Eagle
+      # Could include habitat classes if they existed
+      # - ex:Habitat
+      # - ex:Forest
+      # - ex:Urban
+
+    object_properties:
+      - ex:livesIn
+      - ex:eats
+      - ex:hasParent
+
+    datatype_properties:
+      - ex:lifespan
+      - ex:averageWeight
+
+    annotation_properties:
+      - ex:scientificName
+
+    instances:
+      - ex:Fido
+      - ex:Baldy
+
+  # ============================================
+  # MINIMAL EXAMPLES: Single entity type
+  # ============================================
+
+  classes_only:
+    description: "Just class structure, no properties"
+    mode: explicit
+
+    classes:
+      - ex:Animal
+      - ex:Mammal
+      - ex:Bird
+      - ex:Dog
+      - ex:Cat
+      - ex:Eagle
+
+    object_properties: []
+    datatype_properties: []
+
+  properties_only:
+    description: "Property showcase without class details"
+    mode: explicit
+
+    classes:
+      - ex:Animal  # Need at least domain/range classes
+
+    object_properties:
+      - ex:hasParent
+      - ex:eats
+      - ex:livesIn
+
+    datatype_properties:
+      - ex:averageWeight
+      - ex:lifespan
+
+  instances_only:
+    description: "Specific individuals and their classes"
+    mode: explicit
+
+    classes:
+      - ex:Dog
+      - ex:Cat
+      - ex:Eagle
+
+    object_properties: []
+    datatype_properties:
+      - ex:lifespan
+      - ex:averageWeight
+
+    instances:
+      - ex:Fido
+      - ex:Whiskers
+      - ex:Baldy

@@ -8,7 +8,10 @@ Generate PlantUML class diagrams from RDF ontologies with full control over what
 
 - [Basic Usage](#basic-usage)
 - [Context Configuration](#context-configuration)
-- [Class Selection](#class-selection)
+- [Selection Modes](#selection-modes)
+  - [Default Mode](#default-mode-strategies)
+  - [Explicit Mode](#explicit-mode-complete-control)
+- [Class Selection (Default Mode)](#class-selection-default-mode)
 - [Property Filtering](#property-filtering)
 - [Instance Rendering](#instance-rendering)
 - [Styling](#styling)
@@ -46,27 +49,92 @@ poetry run rdf-construct contexts config.yml
 contexts:
   context_name:
     description: "Human-readable description"
+    mode: default  # or 'explicit'
     
-    # Class selection (choose one strategy)
+    # For default mode:
     root_classes: [...]        # Start from roots
     focus_classes: [...]       # Explicit list
     selector: classes          # Use selector
-    
-    # Options
     include_descendants: true
     max_depth: 3
-    
-    # Properties
     properties:
       mode: domain_based
       include: [...]
       exclude: [...]
-    
-    # Instances
     include_instances: false
+    
+    # For explicit mode:
+    classes: [...]
+    object_properties: [...]
+    datatype_properties: [...]
+    annotation_properties: [...]
+    instances: [...]
 ```
 
-## Class Selection
+## Selection Modes
+
+### Default Mode (Strategies)
+
+**Use When**: You want automatic entity selection based on hierarchies or patterns.
+
+The traditional mode with selection strategies:
+- Root classes with descendants
+- Focus classes
+- Selector-based bulk selection
+- Property modes (domain_based, connected, etc.)
+
+**Best For**:
+- Complete hierarchies
+- Standard ontology views
+- When you want automatic property inclusion
+
+### Explicit Mode (Complete Control)
+
+**Use When**: You need precise control over every entity in the diagram.
+
+Directly list every class, property, and instance to include. No automatic selection.
+
+**Best For**:
+- Cross-branch subject matter diagrams
+- Partial hierarchies (specific depths)
+- Custom concept clusters
+- When hierarchies are too broad or deep
+
+**Example**:
+
+```yaml
+animal_care:
+  description: "Animal care concepts across branches"
+  mode: explicit
+  
+  classes:
+    - ex:Animal
+    - ex:Dog          # From mammal branch
+    - ex:Eagle        # From bird branch (cross-branch!)
+  
+  object_properties:
+    - ex:hasParent
+    - ex:livesIn
+  
+  datatype_properties:
+    - ex:lifespan
+  
+  instances:
+    - ex:Fido
+```
+
+**Key Differences**:
+
+| Feature | Default Mode | Explicit Mode |
+|---------|--------------|---------------|
+| Class selection | Automatic (roots/focus/selector) | Manual list |
+| Descendants | Optional automatic | Must list individually |
+| Property selection | Mode-based (domain/connected) | Manual list |
+| Instance selection | All of selected classes | Manual list |
+| Flexibility | Good for standard views | Maximum control |
+| Verbosity | Concise | More verbose |
+
+## Class Selection (Default Mode)
 
 ### Strategy 1: Root Classes
 
@@ -75,6 +143,7 @@ contexts:
 ```yaml
 animal_taxonomy:
   description: "Complete animal hierarchy"
+  mode: default  # Optional, this is the default
   root_classes:
     - ex:Animal
   include_descendants: true
@@ -142,6 +211,115 @@ all_classes:
 - `classes`: All classes
 - `obj_props`: All object properties
 - `data_props`: All datatype properties
+
+## Explicit Mode (Complete Control)
+
+### Use Case 1: Cross-Branch Subject Matter
+
+**Problem**: Want concepts from multiple hierarchies that aren't naturally grouped.
+
+**Solution**: Explicitly list classes from different branches.
+
+```yaml
+animal_care:
+  description: "Animal care cutting across taxonomy"
+  mode: explicit
+  
+  classes:
+    - ex:Animal       # Root
+    - ex:Mammal       # One branch
+    - ex:Dog          # Deep in that branch
+    - ex:Eagle        # Different branch!
+    - ex:Veterinarian # Related but different hierarchy
+  
+  object_properties:
+    - ex:hasParent
+    - ex:treatedBy
+  
+  datatype_properties:
+    - ex:lifespan
+  
+  instances:
+    - ex:Fido
+```
+
+### Use Case 2: Partial Hierarchy Display
+
+**Problem**: Hierarchy is deep but you only want a specific slice.
+
+**Solution**: List exactly the levels you want.
+
+```yaml
+mammals_top_level:
+  description: "Just Mammal and direct subclasses"
+  mode: explicit
+  
+  classes:
+    - ex:Mammal
+    - ex:Dog
+    - ex:Cat
+    # Deliberately omit deeper descendants
+  
+  object_properties:
+    - ex:hasParent
+  
+  datatype_properties:
+    - ex:averageWeight
+```
+
+**Result**: Clean diagram without explosion of subclasses.
+
+### Use Case 3: Custom Concept Cluster
+
+**Problem**: Want a diagram focused on specific relationships or themes.
+
+**Solution**: Hand-pick relevant concepts and properties.
+
+```yaml
+predator_relationships:
+  description: "Predator-prey relationships only"
+  mode: explicit
+  
+  classes:
+    - ex:Dog
+    - ex:Cat
+    - ex:Eagle
+    - ex:Sparrow  # Prey
+  
+  object_properties:
+    - ex:eats  # Only predation
+  
+  datatype_properties: []  # None needed
+```
+
+### Minimal Diagrams
+
+```yaml
+classes_only:
+  description: "Structure without properties"
+  mode: explicit
+  
+  classes:
+    - ex:Animal
+    - ex:Mammal
+    - ex:Bird
+  
+  object_properties: []
+  datatype_properties: []
+```
+
+### Validation in Explicit Mode
+
+Explicit mode validates that:
+1. CURIEs can be expanded (valid prefixes)
+2. Entities exist in the graph (warnings for missing)
+3. Entity types are correct (class vs property)
+
+**Error Example**:
+```yaml
+classes:
+  - ex:NonexistentClass  # Raises ValueError
+```
 
 ## Property Filtering
 
@@ -214,7 +392,7 @@ properties:
 
 ## Instance Rendering
 
-### Enable Instances
+### Enable Instances (Default Mode)
 
 ```yaml
 with_examples:
@@ -222,6 +400,24 @@ with_examples:
     - ex:Dog
   include_descendants: true
   include_instances: true  # Show individuals
+```
+
+### Explicit Mode Instances
+
+```yaml
+specific_individuals:
+  mode: explicit
+  
+  classes:
+    - ex:Dog
+    - ex:Cat
+  
+  datatype_properties:
+    - ex:lifespan
+  
+  instances:
+    - ex:Fido     # Specific dog
+    - ex:Whiskers # Specific cat
 ```
 
 **Output**:
@@ -444,267 +640,181 @@ layouts:
 
 ## Complete Examples
 
-### Example 1: Animal Taxonomy
+### Example 1: Cross-Branch with Explicit Mode
 
-**Goal**: Show complete animal class hierarchy with properties.
+**Goal**: Show animal care concepts across different taxonomic branches.
 
 **Config**:
 ```yaml
-contexts:
-  animal_taxonomy:
-    description: "Complete animal hierarchy"
-    root_classes:
-      - ex:Animal
-    include_descendants: true
-    properties:
-      mode: domain_based
-    include_instances: false
+animal_care:
+  description: "Care concepts across taxonomy"
+  mode: explicit
+  
+  classes:
+    - ex:Animal
+    - ex:Mammal
+    - ex:Dog
+    - ex:Eagle        # Different branch
+  
+  object_properties:
+    - ex:hasParent
+    - ex:livesIn
+  
+  datatype_properties:
+    - ex:lifespan
+    - ex:averageWeight
+  
+  instances:
+    - ex:Fido
+    - ex:Baldy
 ```
 
 **Generate**:
 ```bash
 poetry run rdf-construct uml examples/animal_ontology.ttl config.yml \
-  -c animal_taxonomy \
-  --style-config examples/uml_styles.yml --style default \
-  --layout-config examples/uml_layouts.yml --layout hierarchy
+  -c animal_care \
+  --style-config examples/uml_styles.yml --style default
 ```
 
 **Result**:
-- 7 classes (Animal, Mammal, Bird, Dog, Cat, Eagle, Sparrow)
-- 5 properties (hasParent, eats, livesIn, averageWeight, lifespan)
-- Clean top-down hierarchy
+- 4 classes (from different branches)
+- 2 object properties
+- 2 datatype properties
+- 2 instances with their values
 
-### Example 2: Management Structure
+### Example 2: Partial Hierarchy
 
-**Goal**: Show management relationships with actual people.
+**Goal**: Show only top levels of a deep hierarchy.
 
 **Config**:
 ```yaml
-contexts:
-  management:
-    description: "Management and reporting"
-    focus_classes:
-      - org:Manager
-      - org:Employee
-      - org:CEO
-    properties:
-      mode: explicit
-      include:
-        - org:manages
-        - org:reportsTo
-    include_instances: true
+mammals_top_level:
+  description: "Mammal with direct subclasses only"
+  mode: explicit
+  
+  classes:
+    - ex:Mammal
+    - ex:Dog
+    - ex:Cat
+    # Stop here - no deeper levels
+  
+  object_properties:
+    - ex:hasParent
+  
+  datatype_properties:
+    - ex:averageWeight
 ```
 
-**Generate**:
-```bash
-poetry run rdf-construct uml examples/organisation_ontology.ttl config.yml \
-  -c management \
-  --style-config examples/uml_styles.yml --style high_contrast \
-  --layout-config examples/uml_layouts.yml --layout compact
-```
+**Result**: Clean 3-class diagram without explosion.
 
-**Result**:
-- 3 classes (Manager, Employee, CEO)
-- 2 properties (manages, reportsTo)
-- 4 instances (Alice, Bob, Carol, Dave with their roles)
+### Example 3: Comparison (Default vs Explicit)
 
-### Example 3: Focused View
+**Same diagram, two approaches:**
 
-**Goal**: Show specific classes with selected relationships.
-
-**Config**:
+**Default Mode**:
 ```yaml
-contexts:
-  key_relationships:
-    description: "Core concepts and relationships"
-    focus_classes:
-      - ex:Animal
-      - ex:Dog
-      - ex:Cat
-    include_descendants: false
-    properties:
-      mode: explicit
-      include:
-        - ex:hasParent
-      exclude:
-        - ex:scientificName
-    include_instances: false
+comparison_default:
+  mode: default
+  root_classes:
+    - ex:Mammal
+  include_descendants: true
+  max_depth: 1
+  properties:
+    mode: domain_based
 ```
 
-**Generate**:
-```bash
-poetry run rdf-construct uml examples/animal_ontology.ttl config.yml \
-  -c key_relationships \
-  --style-config examples/uml_styles.yml --style minimal
+**Explicit Mode**:
+```yaml
+comparison_explicit:
+  mode: explicit
+  classes:
+    - ex:Mammal
+    - ex:Dog
+    - ex:Cat
+  object_properties:
+    - ex:hasParent
+    - ex:eats
+    - ex:livesIn
+  datatype_properties:
+    - ex:averageWeight
+    - ex:lifespan
 ```
 
-**Result**:
-- 3 classes (Animal, Dog, Cat)
-- 1 property (hasParent)
-- Minimal styling for clarity
+**When to use which**:
+- Default: Faster to write, good for standard hierarchies
+- Explicit: More control, better for custom views
 
 ## Advanced Techniques
 
-### Multiple Root Hierarchies
+### Mixing Modes (Future Enhancement)
+
+Not currently supported, but planned:
 
 ```yaml
-org_structure:
-  description: "Multiple hierarchies in one diagram"
+# Future: hybrid mode
+hybrid_view:
+  mode: default
   root_classes:
-    - org:Organisation
-    - org:Person
-    - org:Department
+    - ex:Mammal
   include_descendants: true
+  max_depth: 1
+  
+  # Additional classes to include
+  additional_classes:  # PLANNED
+    - ex:Eagle
+    - ex:Habitat
 ```
 
-**Result**: Three separate hierarchies in one diagram.
+### Empty Entity Lists
 
-### Mixed Selection Strategies
-
-```yaml
-custom_view:
-  description: "Combine root and focus"
-  root_classes:
-    - ex:Mammal  # Include this hierarchy
-  focus_classes:
-    - ex:Eagle   # Plus this specific class
-  include_descendants: true
-  max_depth: 2
-```
-
-**Result**: Mammal hierarchy (2 levels) plus Eagle.
-
-### Property Exclusions
+You can omit entity types you don't need:
 
 ```yaml
-no_metadata:
-  root_classes:
+structure_only:
+  mode: explicit
+  classes:
     - ex:Animal
-  include_descendants: true
-  properties:
-    mode: domain_based
-    exclude:
-      - ex:scientificName
-      - ex:commonName
+    - ex:Mammal
+  object_properties: []  # Explicitly none
+  datatype_properties: []
 ```
-
-**Result**: All domain-based properties except the excluded ones.
 
 ## Tips for Great Diagrams
 
-### Start Small
+### When to Use Explicit Mode
 
-Begin with a single root class:
+✅ **Use explicit mode when:**
+- Diagram crosses multiple hierarchies
+- You need specific hierarchy depth that's hard to specify
+- Creating thematic/conceptual views
+- Standard modes produce too much/too little
+
+❌ **Use default mode when:**
+- Working with single, clean hierarchies
+- Want all descendants of a root
+- Standard property modes work well
+- Want less verbose configuration
+
+### Start Simple
+
+Begin with a basic explicit context:
 ```yaml
 simple_start:
-  root_classes:
-    - your:KeyClass
-  include_descendants: true
-  max_depth: 1
+  mode: explicit
+  classes:
+    - your:KeyClass1
+    - your:KeyClass2
+  object_properties:
+    - your:keyProperty
+  datatype_properties: []
 ```
 
-Generate, view, iterate.
+Generate and view. Then add more entities.
 
-### Use Depth Limiting
+### Check Your Prefixes
 
-For large ontologies:
-```yaml
-limited_depth:
-  root_classes:
-    - ies:Element
-  include_descendants: true
-  max_depth: 3  # Prevent explosion
-```
+Explicit mode requires correct CURIEs. Verify prefixes:
 
-### Choose Property Mode Carefully
-
-- **Quick overview**: `mode: none`
-- **Structure with context**: `mode: domain_based`
-- **Focused relationships**: `mode: explicit`
-- **Complete reference**: `mode: all`
-
-### Match Style to Audience
-
-- **Internal docs**: `default` style
-- **Presentations**: `high_contrast` style
-- **Academic papers**: `grayscale` style
-- **Debugging**: `minimal` style
-
-### Match Layout to Content
-
-- **Hierarchies**: `hierarchy` layout
-- **Networks**: `flat` or `network` layout
-- **Quick reference**: `compact` layout
-- **Detailed docs**: `documentation` layout
-
-## Rendering Diagrams
-
-### Online PlantUML Editor
-
-1. Go to https://www.plantuml.com/plantuml/
-2. Paste `.puml` file contents
-3. View rendered diagram
-4. Download as PNG/SVG
-
-### VS Code
-
-1. Install "PlantUML" extension
-2. Open `.puml` file
-3. Press `Alt+D` to preview
-
-### Command Line
-
-```bash
-# Install PlantUML
-brew install plantuml  # macOS
-apt install plantuml   # Ubuntu
-
-# Render to PNG
-plantuml diagram.puml
-
-# Render to SVG
-plantuml -tsvg diagram.puml
-```
-
-## Troubleshooting
-
-### Classes Not Showing
-
-**Check**:
-1. CURIE format: `ex:Animal` not `Animal`
-2. Namespace prefix matches ontology
-3. Class exists in ontology
-
-**Debug**:
-```python
-from rdflib import Graph, RDF, OWL
-g = Graph().parse("ontology.ttl", format="turtle")
-classes = list(g.subjects(RDF.type, OWL.Class))
-for cls in classes:
-    print(g.namespace_manager.normalizeUri(cls))
-```
-
-### Properties Not Showing
-
-**Check**:
-1. Property mode setting
-2. Domain/range match selected classes
-3. Property exists in ontology
-
-### Layout Issues
-
-**Remember**: PlantUML's layout is heuristic. Arrow direction hints help but don't guarantee.
-
-**Try**:
-- Different `arrow_direction` values
-- Adjusting spacing
-- Different PlantUML renderer
-
-### Namespace Conflicts
-
-**Problem**: `org:` in config doesn't match ontology.
-
-**Solution**: Check actual prefixes:
 ```python
 from rdflib import Graph
 g = Graph().parse("ontology.ttl", format="turtle")
@@ -712,13 +822,72 @@ for pfx, ns in g.namespace_manager.namespaces():
     if pfx: print(f"{pfx}: {ns}")
 ```
 
-Use the assigned prefix.
+### Validate Before Generating
+
+Use the `contexts` command to check configuration:
+
+```bash
+poetry run rdf-construct contexts config.yml
+```
+
+## Troubleshooting
+
+### "Cannot expand CURIE"
+
+**Problem**: `ValueError: Cannot expand CURIE: xyz:Something`
+
+**Cause**: Prefix not defined in ontology.
+
+**Solution**: Check prefix with:
+```python
+from rdflib import Graph
+g = Graph().parse("ontology.ttl", format="turtle")
+print([(p, n) for p, n in g.namespace_manager.namespaces()])
+```
+
+### Empty Diagram in Explicit Mode
+
+**Problem**: Generated .puml has no entities.
+
+**Cause**: CURIEs don't match entities in ontology.
+
+**Debug**:
+```python
+from rdflib import Graph, RDF, OWL
+g = Graph().parse("ontology.ttl", format="turtle")
+from rdflib.namespace import OWL, RDF
+classes = list(g.subjects(RDF.type, OWL.Class))
+for cls in classes:
+    print(g.namespace_manager.normalizeUri(cls))
+```
+
+### Too Verbose
+
+**Problem**: Explicit mode requires listing everything.
+
+**Solution**: 
+1. Use default mode for this diagram, or
+2. Create reusable YAML anchors:
+
+```yaml
+# Define reusable lists
+shared:
+  common_classes: &common_classes
+    - ex:Animal
+    - ex:Mammal
+    - ex:Dog
+
+contexts:
+  view1:
+    mode: explicit
+    classes: *common_classes  # Reuse
+```
 
 ## Next Steps
 
 - **[Getting Started](GETTING_STARTED.md)**: Quick start guide
 - **[CLI Reference](CLI_REFERENCE.md)**: All commands
-- **[Examples](../archive/examples/)**: Sample ontologies and configs
+- **[Examples](examples/)**: Sample ontologies and configs
 
 ## Questions?
 
