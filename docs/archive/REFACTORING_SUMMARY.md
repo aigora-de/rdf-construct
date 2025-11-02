@@ -29,12 +29,13 @@ The UML documentation has been rationalized from **10 scattered files** to **6 f
 docs/
 ├── dev/                          # Developer/maintainer documentation
 │   ├── ARCHITECTURE.md          # System design and module structure
-│   ├── UML_IMPLEMENTATION.md    # UML technical implementation details
-│   └── CONTRIBUTING.md          # Development setup and guidelines
+│   └── UML_IMPLEMENTATION.md    # UML technical implementation details
 └── user_guides/                  # User-facing documentation
     ├── GETTING_STARTED.md       # 5-minute quick start
     ├── UML_GUIDE.md             # Complete UML features and examples
     └── CLI_REFERENCE.md         # Command reference
+
+CONTRIBUTING.md (root)            # Development setup and guidelines
 ```
 
 ## Content Organization
@@ -62,7 +63,7 @@ docs/
 - Testing considerations
 - Extension points
 
-**CONTRIBUTING.md** (~3,000 words)
+**CONTRIBUTING.md** (root folder, ~3,000 words)
 - Getting started with development
 - Project structure
 - Development workflow (tests, code quality)
@@ -143,10 +144,10 @@ docs/
 ### For Developers
 
 **Old**: "Where do I find X?"  
-**New**: Check the three dev docs:
+**New**: Check the dev docs:
 - Architecture → `docs/dev/ARCHITECTURE.md`
 - Implementation → `docs/dev/UML_IMPLEMENTATION.md`
-- Development setup → `docs/dev/CONTRIBUTING.md`
+- Development setup → `CONTRIBUTING.md` (root folder)
 
 ### For Users
 
@@ -179,7 +180,7 @@ docs/
 - `docs_UML_PIPELINE_SUMMARY.md` → `docs/dev/UML_IMPLEMENTATION.md`
 - `docs_UML_STYLING_SUMMARY.md` → `docs/dev/UML_IMPLEMENTATION.md`
 - `docs_UML_STYLING_README.md` → `docs/dev/UML_IMPLEMENTATION.md`
-- Parts of `docs_QUICK_REFERENCE.md` → `docs/dev/CONTRIBUTING.md`
+- Parts of `docs_QUICK_REFERENCE.md` → `CONTRIBUTING.md` (root)
 
 ### Merged Into User Docs
 

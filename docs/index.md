@@ -5,11 +5,12 @@
 **New User?** → [Getting Started](user_guides/GETTING_STARTED.md)  
 **Need Feature Details?** → [UML Guide](user_guides/UML_GUIDE.md)  
 **Need Command Syntax?** → [CLI Reference](user_guides/CLI_REFERENCE.md)  
-**Contributing?** → [Contributing Guide](dev/CONTRIBUTING.md)
+**Contributing?** → [Contributing Guide](../CONTRIBUTING.md)  
+**Code Reference?** → [Code Index](../CODE_INDEX.md)
 
 ## Documentation Structure
 
-### 📘 User Guides (docs/user_guides/)
+### User Guides (docs/user_guides/)
 
 For users of rdf-construct who want to generate diagrams and work with RDF ontologies.
 
@@ -35,7 +36,7 @@ For users of rdf-construct who want to generate diagrams and work with RDF ontol
   - Common workflows
   - Troubleshooting
 
-### 🛠️ Developer Documentation (docs/dev/)
+### Developer Documentation (docs/dev/)
 
 For contributors and maintainers who want to understand or extend rdf-construct.
 
@@ -54,7 +55,7 @@ For contributors and maintainers who want to understand or extend rdf-construct.
   - Layout system
   - Known issues
 
-- **[Contributing](dev/CONTRIBUTING.md)** - Development guide
+- **[Contributing](../CONTRIBUTING.md)** - Development guide
   - Setting up development environment
   - Coding standards
   - Testing guidelines
@@ -103,6 +104,11 @@ poetry run rdf-construct order ontology.ttl order.yml -p logical_topo
 - **GitHub**: https://github.com/aigora-de/rdf-construct
 - **Issues**: https://github.com/aigora-de/rdf-construct/issues
 - **Discussions**: https://github.com/aigora-de/rdf-construct/discussions
+
+## Additional References
+
+- **[Code Index](../CODE_INDEX.md)**: Complete project file inventory and structure
+- **[Contributing](../CONTRIBUTING.md)**: Development setup and guidelines
 
 ## License
 
