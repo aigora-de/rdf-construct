@@ -20,7 +20,8 @@ from .uml import (
     collect_diagram_entities,
     render_plantuml,
 )
-
+from .uml.uml_style import load_style_config
+from .uml.uml_layout import load_layout_config
 
 @click.group()
 @click.version_option()
@@ -190,24 +191,68 @@ def profiles(config: Path):
     default="diagrams",
     help="Output directory (default: diagrams)",
 )
-def uml(source: Path, config: Path, context: tuple[str, ...], outdir: Path):
-    """Generate PlantUML diagrams from RDF ontologies.
+@click.option(
+    "--style-config",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to style configuration YAML (e.g., examples/uml_styles.yml)"
+)
+@click.option(
+    "--style", "-s",
+    help="Style scheme name to use (e.g., 'default', 'ies_semantic')"
+)
+@click.option(
+    "--layout-config",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to layout configuration YAML (e.g., examples/uml_layouts.yml)"
+)
+@click.option(
+    "--layout", "-l",
+    help="Layout name to use (e.g., 'hierarchy', 'compact')"
+)
+def uml(source, config, context, outdir, style_config, style, layout_config, layout):
+    """Generate UML class diagrams from RDF ontologies.
 
     SOURCE: Input RDF Turtle file (.ttl)
     CONFIG: YAML configuration file defining UML contexts
 
     Examples:
 
-        # Generate all contexts defined in config
-        rdf-construct uml ontology.ttl uml_contexts.yml
+        # Basic usage (no styling)
+        rdf-construct uml ontology.ttl example/uml_contexts.yml
 
         # Generate only specific contexts
-        rdf-construct uml ontology.ttl uml_contexts.yml -c animal_taxonomy
+        rdf-construct uml ontology.ttl example/uml_contexts.yml -c animal_taxonomy
 
-        # Custom output directory
-        rdf-construct uml ontology.ttl uml_contexts.yml -o output/diagrams/
+        # With default style and hierarchy layout
+        rdf-construct uml ontology.ttl example/uml_contexts.yml \\
+            --style-config examples/uml_styles.yml --style default \\
+            --layout-config examples/uml_layouts.yml --layout hierarchy
     """
-    # Load configuration
+    # Load style if provided
+    style_scheme = None
+    if style_config and style:
+        style_cfg = load_style_config(style_config)
+        try:
+            style_scheme = style_cfg.get_scheme(style)
+            click.echo(f"Using style: {style}")
+        except KeyError as e:
+            click.secho(str(e), fg="red", err=True)
+            click.echo(f"Available styles: {', '.join(style_cfg.list_schemes())}")
+            raise click.Abort()
+
+    # Load layout if provided
+    layout_cfg = None
+    if layout_config and layout:
+        layout_mgr = load_layout_config(layout_config)
+        try:
+            layout_cfg = layout_mgr.get_layout(layout)
+            click.echo(f"Using layout: {layout}")
+        except KeyError as e:
+            click.secho(str(e), fg="red", err=True)
+            click.echo(f"Available layouts: {', '.join(layout_mgr.list_layouts())}")
+            raise click.Abort()
+
+    # Load UML configuration
     uml_config = load_uml_config(config)
 
     # Determine which contexts to generate
@@ -227,6 +272,8 @@ def uml(source: Path, config: Path, context: tuple[str, ...], outdir: Path):
             raise click.Abort()
 
     # Create output directory
+    # ToDo - handle exceptions properly
+    outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
     # Parse source RDF
@@ -242,27 +289,21 @@ def uml(source: Path, config: Path, context: tuple[str, ...], outdir: Path):
         click.echo(f"Generating diagram: {ctx_name}")
         ctx = uml_config.get_context(ctx_name)
 
-        # Collect entities for this context
+        # Select entities
         entities = collect_diagram_entities(graph, ctx, selectors)
 
-        # Count selected entities
-        num_classes = len(entities["classes"])
-        num_props = (
-            len(entities["object_properties"])
-            + len(entities["datatype_properties"])
-            + len(entities["annotation_properties"])
-        )
-        num_instances = len(entities["instances"])
-
-        click.echo(
-            f"  Selected: {num_classes} classes, {num_props} properties, "
-            f"{num_instances} instances"
-        )
-
-        # Render to PlantUML
+        # Build output filename
         out_file = outdir / f"{source.stem}-{ctx_name}.puml"
-        render_plantuml(graph, entities, out_file)
+
+        # Render with optional style and layout
+        render_plantuml(graph, entities, out_file, style_scheme, layout_cfg)
+
         click.secho(f"  ✓ {out_file}", fg="green")
+        click.echo(
+            f"    Classes: {len(entities['classes'])}, "
+            f"Properties: {len(entities['object_properties']) + len(entities['datatype_properties'])}, "
+            f"Instances: {len(entities['instances'])}"
+        )
 
     click.secho(
         f"\nGenerated {len(contexts_to_gen)} diagram(s) in {outdir}/", fg="cyan"

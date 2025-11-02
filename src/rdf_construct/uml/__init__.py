@@ -14,4 +14,6 @@ __all__ = [
     "load_uml_config",
     "collect_diagram_entities",
     "render_plantuml",
+    "uml_layout",
+    "uml_style",
 ]

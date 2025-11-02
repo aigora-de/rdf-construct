@@ -1,0 +1,107 @@
+# uml_layouts.yml
+#
+# PlantUML layout definitions for rdf-construct
+# Control diagram direction, arrow orientation, spacing, and grouping
+
+defaults:
+  layout: hierarchy  # Default layout to use
+  show_arrows: true
+  hide_empty_members: false
+
+layouts:
+
+  # ============================================
+  # Hierarchy Layout: Top-down for class hierarchies
+  # ============================================
+  hierarchy:
+    description: "Top-down layout with parents above children"
+    direction: top_to_bottom
+    arrow_direction: up  # Children point up to parents
+    hide_empty_members: false
+    show_arrows: true
+    group_by_namespace: false
+    spacing:
+      classMarginTop: 10
+      classMarginBottom: 10
+
+  # ============================================
+  # Flat Layout: Left-to-right for network diagrams
+  # ============================================
+  flat:
+    description: "Left-to-right layout for showing relationships"
+    direction: left_to_right
+    arrow_direction: right
+    hide_empty_members: false
+    show_arrows: true
+    group_by_namespace: false
+
+  # ============================================
+  # Compact Layout: Minimal spacing, hide empty
+  # ============================================
+  compact:
+    description: "Compact layout with minimal spacing"
+    direction: top_to_bottom
+    arrow_direction: up
+    hide_empty_members: true  # Hide classes with no attributes
+    show_arrows: true
+    group_by_namespace: false
+    spacing:
+      classMarginTop: 5
+      classMarginBottom: 5
+      padding: 5
+
+  # ============================================
+  # Documentation Layout: Grouped by namespace
+  # ============================================
+  documentation:
+    description: "Documentation-friendly with namespace grouping"
+    direction: top_to_bottom
+    arrow_direction: up
+    hide_empty_members: false
+    show_arrows: true
+    group_by_namespace: true  # Group classes by namespace prefix
+    spacing:
+      packageMargin: 15
+      classMarginTop: 10
+
+  # ============================================
+  # Presentation Layout: Large spacing for slides
+  # ============================================
+  presentation:
+    description: "Large spacing suitable for presentations"
+    direction: top_to_bottom
+    arrow_direction: up
+    hide_empty_members: false
+    show_arrows: true
+    group_by_namespace: false
+    spacing:
+      classMarginTop: 20
+      classMarginBottom: 20
+      padding: 15
+      nodesep: 30
+      ranksep: 50
+
+  # ============================================
+  # Reverse Hierarchy: Bottom-up (less common)
+  # ============================================
+  reverse:
+    description: "Bottom-up layout with children below parents"
+    direction: bottom_to_top
+    arrow_direction: down
+    hide_empty_members: false
+    show_arrows: true
+    group_by_namespace: false
+
+  # ============================================
+  # Network Layout: For showing object properties
+  # ============================================
+  network:
+    description: "Network-style layout emphasizing relationships"
+    direction: left_to_right
+    arrow_direction: right
+    hide_empty_members: true
+    show_arrows: true
+    group_by_namespace: false
+    spacing:
+      nodesep: 20
+      ranksep: 40

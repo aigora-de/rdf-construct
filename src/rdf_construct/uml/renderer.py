@@ -1,7 +1,7 @@
-"""Render RDF entities as PlantUML class diagrams.
+"""PlantUML renderer with styling and layout support.
 
-Converts selected RDF classes, properties, and instances into PlantUML
-syntax for visualization.
+Renders RDF entities as PlantUML class diagrams with configurable
+colours, arrow styles, stereotypes, and layout control.
 """
 
 from pathlib import Path
@@ -9,6 +9,17 @@ from typing import Optional
 
 from rdflib import Graph, URIRef, RDF, RDFS, Literal
 from rdflib.namespace import OWL, XSD
+
+# ToDo - remove try block, if unnecessary after development
+try:
+    from .uml_style import StyleScheme, StyleConfig
+    from .uml_layout import LayoutConfig, LayoutConfigManager
+except ImportError:
+    # Fallback for testing/development
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent))
+    from uml_style import StyleScheme, StyleConfig
+    from uml_layout import LayoutConfig, LayoutConfigManager
 
 
 def qname(graph: Graph, uri: URIRef) -> str:
@@ -74,28 +85,42 @@ def escape_plantuml(text: str) -> str:
 
 
 class PlantUMLRenderer:
-    """Renders RDF entities as PlantUML class diagrams.
+    """Renders RDF entities as styled PlantUML class diagrams.
 
     Generates PlantUML syntax for classes, properties, and relationships
-    without styling (basic version for pipeline step 1).
+    with configurable styling and layout.
 
     Attributes:
         graph: RDF graph being rendered
         entities: Dictionary of selected entities to render
+        style: Style scheme to apply (optional)
+        layout: Layout configuration to apply (optional)
     """
 
-    def __init__(self, graph: Graph, entities: dict[str, set[URIRef]]):
-        """Initialize renderer with graph and selected entities.
+    def __init__(
+        self,
+        graph: Graph,
+        entities: dict[str, set[URIRef]],
+        style: Optional[StyleScheme] = None,
+        layout: Optional[LayoutConfig] = None,
+    ):
+        """Initialise renderer with graph, entities, and optional styling.
 
         Args:
             graph: RDF graph containing the entities
             entities: Dictionary of entity sets (classes, properties, instances)
+            style: Optional style scheme to apply
+            layout: Optional layout configuration to apply
         """
         self.graph = graph
         self.entities = entities
+        self.style = style
+        self.layout = layout
 
     def render_class(self, cls: URIRef) -> list[str]:
         """Render a class with its datatype properties as attributes.
+
+        Applies colour styling and stereotypes if configured.
 
         Args:
             cls: Class URI to render
@@ -109,6 +134,20 @@ class PlantUMLRenderer:
         # Quote class name if it contains a colon
         if ":" in class_name:
             class_name = f'"{class_name}"'
+
+        # Get stereotype if enabled
+        stereotype = ""
+        if self.style and self.style.show_stereotypes:
+            stereo = self.style.get_stereotype(self.graph, cls)
+            if stereo:
+                stereotype = f" {stereo}"
+
+        # Get color styling
+        color_spec = ""
+        if self.style:
+            palette = self.style.get_class_style(self.graph, cls, is_instance=False)
+            if palette:
+                color_spec = f" #{palette.to_plantuml()}"
 
         # Collect datatype properties as attributes
         datatype_props = self.entities["datatype_properties"]
@@ -134,18 +173,25 @@ class PlantUMLRenderer:
             else:
                 attributes.append(f"  +{prop_label}")
 
+        # Render class with styling
         # Only add braces if there are attributes
         if attributes:
-            lines.append(f"class {class_name} {{")
+            lines.append(f"class {class_name}{stereotype}{color_spec} {{")
             lines.extend(attributes)
             lines.append("}")
         else:
-            lines.append(f"class {class_name}")
+            # Check if we should hide empty classes
+            if self.layout and self.layout.hide_empty_members:
+                # Don't render, but still return empty list
+                return []
+            lines.append(f"class {class_name}{stereotype}{color_spec}")
 
         return lines
 
     def render_instance(self, instance: URIRef) -> list[str]:
         """Render an instance as a PlantUML object.
+
+        Applies instance styling based on configuration.
 
         Args:
             instance: Instance URI to render
@@ -162,8 +208,15 @@ class PlantUMLRenderer:
         if ":" in instance_name:
             instance_name = f'"{instance_name}"'
 
+        # Get colour styling for instances
+        color_spec = ""
+        if self.style:
+            palette = self.style.get_class_style(self.graph, instance, is_instance=True)
+            if palette:
+                color_spec = f" #{palette.to_plantuml()}"
+
         # Start object definition
-        lines.append(f'object "{instance_label}" as {instance_name} {{')
+        lines.append(f'object "{instance_label}" as {instance_name}{color_spec} {{')
 
         # Add datatype property values (use camelCase for property names)
         for prop in sorted(
@@ -184,11 +237,19 @@ class PlantUMLRenderer:
     def render_subclass_relationships(self) -> list[str]:
         """Render rdfs:subClassOf relationships as inheritance arrows.
 
+        Uses layout-configured arrow direction if available.
+
         Returns:
             List of PlantUML lines for class inheritance
         """
         lines = []
         classes = self.entities["classes"]
+
+        # Get arrow syntax from layout config
+        if self.layout:
+            arrow = self.layout.get_arrow_syntax("subclass")
+        else:
+            arrow = "-|>"  # Default: simple inheritance
 
         for cls in sorted(classes, key=lambda c: qname(self.graph, c)):
             # Get direct superclasses
@@ -204,12 +265,14 @@ class PlantUMLRenderer:
                     if ":" in superclass_name:
                         superclass_name = f'"{superclass_name}"'
 
-                    lines.append(f"{subclass_name} --|> {superclass_name}")
+                    lines.append(f"{subclass_name} {arrow} {superclass_name}")
 
         return lines
 
     def render_instance_relationships(self) -> list[str]:
         """Render rdf:type relationships from instances to classes.
+
+        Uses styled arrows based on configuration.
 
         Returns:
             List of PlantUML lines for instance-class relationships
@@ -217,6 +280,14 @@ class PlantUMLRenderer:
         lines = []
         instances = self.entities["instances"]
         classes = self.entities["classes"]
+
+        # Get arrow syntax - dotted for instances
+        if self.layout:
+            base_arrow = self.layout.get_arrow_syntax("instance")
+            # Make it dotted
+            arrow = base_arrow.replace("-", ".")
+        else:
+            arrow = "..|>"  # Default: dotted inheritance
 
         for instance in sorted(instances, key=lambda i: qname(self.graph, i)):
             # Get classes this instance belongs to
@@ -232,12 +303,14 @@ class PlantUMLRenderer:
                     if ":" in class_name:
                         class_name = f'"{class_name}"'
 
-                    lines.append(f"{instance_name} ..|> {class_name}")
+                    lines.append(f"{instance_name} {arrow} {class_name}")
 
         return lines
 
     def render_object_properties(self) -> list[str]:
         """Render object properties as associations between classes.
+
+        Uses layout-configured arrow direction if available.
 
         Returns:
             List of PlantUML lines for object property associations
@@ -245,6 +318,12 @@ class PlantUMLRenderer:
         lines = []
         object_props = self.entities["object_properties"]
         classes = self.entities["classes"]
+
+        # Get arrow syntax
+        if self.layout:
+            arrow = self.layout.get_arrow_syntax("object_property")
+        else:
+            arrow = "-->"  # Default: simple arrow
 
         for prop in sorted(object_props, key=lambda p: qname(self.graph, p)):
             # Use camelCase for property labels
@@ -274,22 +353,37 @@ class PlantUMLRenderer:
                     if ":" in range_name:
                         range_name = f'"{range_name}"'
 
-                    lines.append(f"{domain_name} --> {range_name} : {prop_label}")
+                    lines.append(f"{domain_name} {arrow} {range_name} : {prop_label}")
 
         return lines
 
     def render(self) -> str:
-        """Render complete PlantUML diagram.
+        """Render complete PlantUML diagram with styling and layout.
 
         Returns:
             Complete PlantUML diagram as string
         """
         lines = ["@startuml", ""]
 
+        # Add layout directives
+        if self.layout:
+            layout_directives = self.layout.get_plantuml_directives()
+            if layout_directives:
+                lines.extend(layout_directives)
+                lines.append("")
+
+        # Add style directives (if any)
+        if self.style:
+            # Could add skinparam directives here for global styling
+            # For now, styles are applied inline on each element
+            pass
+
         # Render classes
         for cls in sorted(self.entities["classes"], key=lambda c: qname(self.graph, c)):
-            lines.extend(self.render_class(cls))
-            lines.append("")
+            class_lines = self.render_class(cls)
+            if class_lines:  # Only add if not filtered out
+                lines.extend(class_lines)
+                lines.append("")
 
         # Render instances
         for instance in sorted(
@@ -299,14 +393,20 @@ class PlantUMLRenderer:
             lines.append("")
 
         # Render relationships
-        lines.extend(self.render_subclass_relationships())
-        lines.append("")
+        subclass_lines = self.render_subclass_relationships()
+        if subclass_lines:
+            lines.extend(subclass_lines)
+            lines.append("")
 
-        lines.extend(self.render_instance_relationships())
-        lines.append("")
+        instance_lines = self.render_instance_relationships()
+        if instance_lines:
+            lines.extend(instance_lines)
+            lines.append("")
 
-        lines.extend(self.render_object_properties())
-        lines.append("")
+        property_lines = self.render_object_properties()
+        if property_lines:
+            lines.extend(property_lines)
+            lines.append("")
 
         lines.append("@enduml")
 
@@ -314,16 +414,22 @@ class PlantUMLRenderer:
 
 
 def render_plantuml(
-    graph: Graph, entities: dict[str, set[URIRef]], output_path: Path | str
+    graph: Graph,
+    entities: dict[str, set[URIRef]],
+    output_path: Path | str,
+    style: Optional[StyleScheme] = None,
+    layout: Optional[LayoutConfig] = None,
 ) -> None:
-    """Render entities to a PlantUML file.
+    """Render entities to a PlantUML file with optional styling.
 
     Args:
         graph: RDF graph containing the entities
         entities: Dictionary of selected entities to render
         output_path: Path to write .puml file to
+        style: Optional style scheme to apply
+        layout: Optional layout configuration to apply
     """
-    renderer = PlantUMLRenderer(graph, entities)
+    renderer = PlantUMLRenderer(graph, entities, style, layout)
     puml_text = renderer.render()
 
     output_path = Path(output_path)
