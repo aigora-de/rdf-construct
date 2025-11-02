@@ -229,8 +229,8 @@ examples/animal_ontology.ttl
 examples/uml_contexts.yml
 
 # 3. Generate diagrams
-cd /home/claude
-export PYTHONPATH=/home/claude/src:$PYTHONPATH
+cd $PROJECT_ROOT
+export PYTHONPATH=$PROJECT_ROOT/src:$PYTHONPATH
 python -m rdf_construct.cli uml examples/animal_ontology.ttl examples/uml_contexts.yml
 
 # 4. View/render with PlantUML

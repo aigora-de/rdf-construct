@@ -3,7 +3,7 @@
 ## Installation
 
 ```bash
-cd /home/claude
+cd $PROJECT_ROOT
 pip install -e .                 # Install package
 pip install -e ".[dev]"          # Install with dev dependencies
 ```
@@ -184,22 +184,22 @@ rdf-construct profiles order.yml
 
 ## Examples Location
 
-- `/home/claude/examples/basic_ordering.py` - Programmatic usage
-- `/home/claude/examples/sample_config.yml` - Complete YAML example
+- `$PROJECT_ROOT/examples/basic_ordering.py` - Programmatic usage
+- `$PROJECT_ROOT/examples/sample_config.yml` - Complete YAML example
 
 ## File Locations
 
-- **Source code**: `/home/claude/src/rdf_construct/`
-- **Tests**: `/home/claude/tests/`
-- **Config**: `/home/claude/pyproject.toml`
-- **Original script**: `/mnt/project/order_turtle.py` (reference only)
+- **Source code**: `$PROJECT_ROOT/src/rdf_construct/`
+- **Tests**: `$PROJECT_ROOT/tests/`
+- **Config**: `$PROJECT_ROOT/pyproject.toml`
+- **Original script**: `$PROJECT_ROOT/order_turtle.py` (reference only)
 
 ## Project Files
 
 The original files from your project are still available:
-- `/mnt/project/order_turtle.py` - Original monolithic script
-- `/mnt/project/ontology_order.yml` - Example YAML config
-- `/mnt/project/project-dev.md` - Development instructions
+- `$PROJECT_ROO/order_turtle.py` - Original monolithic script
+- `$PROJECT_ROOT/ontology_order.yml` - Example YAML config
+- `$PROJECT_ROOT/project-dev.md` - Development instructions
 
 ## Status Check
 
@@ -208,10 +208,10 @@ The original files from your project are still available:
 rdf-construct --version
 
 # Run a simple test
-rdf-construct profiles /mnt/project/ontology_order.yml
+rdf-construct profiles $PROJECT_ROOT/ontology_order.yml
 
 # Test ordering (requires an ontology file)
-# rdf-construct order your_ontology.ttl /mnt/project/ontology_order.yml -p alpha
+# rdf-construct order your_ontology.ttl $PROJECT_ROOT/ontology_order.yml -p alpha
 ```
 
 ## Next Steps
@@ -225,6 +225,6 @@ rdf-construct profiles /mnt/project/ontology_order.yml
 ## Getting Help
 
 - Check docstrings: `python -c "from rdf_construct import OrderingConfig; help(OrderingConfig)"`
-- Read README: `/home/claude/README.md`
-- See examples: `/home/claude/examples/`
+- Read README: `$PROJECT_ROO/README.md`
+- See examples: `$PROJECT_ROOT/examples/`
 - Review code: All modules have comprehensive docstrings

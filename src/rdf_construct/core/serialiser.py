@@ -110,7 +110,8 @@ def serialise_turtle(
 
         # Write predicate-object pairs
         for i, (pred, objects) in enumerate(sorted_preds):
-            pred_str = format_term(graph, pred)
+            # Use 'a' shorthand for rdf:type
+            pred_str = "a" if pred == RDF.type else format_term(graph, pred)
             objects_sorted = sorted(objects, key=lambda x: format_term(graph, x))
 
             if len(objects_sorted) == 1:

@@ -289,13 +289,13 @@ mypy src/
 
 ## Verifying Against Original
 
-The original `order_turtle.py` is in `/mnt/project/order_turtle.py` for reference.
+The original `order_turtle.py` is in `$PROJECT_ROOT/order_turtle.py` for reference.
 
 To verify the refactored code produces identical output:
 
 ```bash
 # Using original script
-python /mnt/project/order_turtle.py ontology.ttl config.yml --outdir original/
+python $PROJECT_ROOT/order_turtle.py ontology.ttl config.yml --outdir original/
 
 # Using refactored package
 rdf-construct order ontology.ttl config.yml -o refactored/

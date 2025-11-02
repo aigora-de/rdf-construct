@@ -27,7 +27,7 @@ def qname(graph: Graph, uri: URIRef) -> str:
         return str(uri)
 
 
-def safe_label(graph: Graph, uri: URIRef) -> str:
+def safe_label(graph: Graph, uri: URIRef, camelcase: bool = False) -> str:
     """Get a safe label for display in PlantUML.
 
     Uses rdfs:label if available, otherwise falls back to QName.
@@ -36,6 +36,7 @@ def safe_label(graph: Graph, uri: URIRef) -> str:
     Args:
         graph: RDF graph containing the entity
         uri: URI to get label for
+        camelcase: Whether to convert spaces to camelCase (for property names)
 
     Returns:
         Safe string for use in PlantUML
@@ -46,6 +47,13 @@ def safe_label(graph: Graph, uri: URIRef) -> str:
         label = str(labels[0])
         # Clean up label for PlantUML
         label = label.replace('"', "'").replace("\n", " ").strip()
+
+        # Convert spaces to camelCase only if requested (for property names)
+        if camelcase:
+            words = label.split()
+            if len(words) > 1:
+                label = words[0].lower() + "".join(word.capitalize() for word in words[1:])
+
         return label
 
     # Fallback to QName
@@ -98,10 +106,11 @@ class PlantUMLRenderer:
         lines = []
         class_name = qname(self.graph, cls)
 
-        # Start class definition
-        lines.append(f"class {class_name} {{")
+        # Quote class name if it contains a colon
+        if ":" in class_name:
+            class_name = f'"{class_name}"'
 
-        # Add datatype properties as attributes
+        # Collect datatype properties as attributes
         datatype_props = self.entities["datatype_properties"]
         attributes = []
 
@@ -111,8 +120,8 @@ class PlantUMLRenderer:
             if cls not in domains:
                 continue
 
-            prop_name = qname(self.graph, prop)
-            prop_label = safe_label(self.graph, prop)
+            # Use camelCase for property names
+            prop_label = safe_label(self.graph, prop, camelcase=True)
 
             # Try to get range for type hint
             ranges = list(self.graph.objects(prop, RDFS.range))
@@ -121,12 +130,17 @@ class PlantUMLRenderer:
                 # Simplify XSD types
                 if range_type.startswith("xsd:"):
                     range_type = range_type[4:]  # Remove 'xsd:' prefix
-                attributes.append(f"  +{prop_label}: {range_type}")
+                attributes.append(f"  +{prop_label} : {range_type}")
             else:
                 attributes.append(f"  +{prop_label}")
 
-        lines.extend(attributes)
-        lines.append("}")
+        # Only add braces if there are attributes
+        if attributes:
+            lines.append(f"class {class_name} {{")
+            lines.extend(attributes)
+            lines.append("}")
+        else:
+            lines.append(f"class {class_name}")
 
         return lines
 
@@ -141,18 +155,23 @@ class PlantUMLRenderer:
         """
         lines = []
         instance_name = qname(self.graph, instance)
-        instance_label = safe_label(self.graph, instance)
+        # Don't camelCase instance display labels - keep original
+        instance_label = safe_label(self.graph, instance, camelcase=False)
+
+        # Quote instance name if it contains a colon
+        if ":" in instance_name:
+            instance_name = f'"{instance_name}"'
 
         # Start object definition
         lines.append(f'object "{instance_label}" as {instance_name} {{')
 
-        # Add datatype property values
+        # Add datatype property values (use camelCase for property names)
         for prop in sorted(
             self.entities["datatype_properties"], key=lambda p: qname(self.graph, p)
         ):
             values = list(self.graph.objects(instance, prop))
             if values:
-                prop_label = safe_label(self.graph, prop)
+                prop_label = safe_label(self.graph, prop, camelcase=True)
                 for val in values:
                     if isinstance(val, Literal):
                         val_str = escape_plantuml(str(val))
@@ -178,6 +197,13 @@ class PlantUMLRenderer:
                 if superclass in classes and isinstance(superclass, URIRef):
                     subclass_name = qname(self.graph, cls)
                     superclass_name = qname(self.graph, superclass)
+
+                    # Quote names with colons
+                    if ":" in subclass_name:
+                        subclass_name = f'"{subclass_name}"'
+                    if ":" in superclass_name:
+                        superclass_name = f'"{superclass_name}"'
+
                     lines.append(f"{subclass_name} --|> {superclass_name}")
 
         return lines
@@ -199,6 +225,13 @@ class PlantUMLRenderer:
                 if cls in classes and isinstance(cls, URIRef):
                     instance_name = qname(self.graph, instance)
                     class_name = qname(self.graph, cls)
+
+                    # Quote names with colons
+                    if ":" in instance_name:
+                        instance_name = f'"{instance_name}"'
+                    if ":" in class_name:
+                        class_name = f'"{class_name}"'
+
                     lines.append(f"{instance_name} ..|> {class_name}")
 
         return lines
@@ -214,7 +247,8 @@ class PlantUMLRenderer:
         classes = self.entities["classes"]
 
         for prop in sorted(object_props, key=lambda p: qname(self.graph, p)):
-            prop_label = safe_label(self.graph, prop)
+            # Use camelCase for property labels
+            prop_label = safe_label(self.graph, prop, camelcase=True)
 
             # Get domain and range
             domains = list(self.graph.objects(prop, RDFS.domain))
@@ -233,6 +267,12 @@ class PlantUMLRenderer:
 
                     domain_name = qname(self.graph, domain)
                     range_name = qname(self.graph, range_cls)
+
+                    # Quote names with colons
+                    if ":" in domain_name:
+                        domain_name = f'"{domain_name}"'
+                    if ":" in range_name:
+                        range_name = f'"{range_name}"'
 
                     lines.append(f"{domain_name} --> {range_name} : {prop_label}")
 

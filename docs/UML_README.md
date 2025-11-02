@@ -1,38 +1,109 @@
 # RDF-Construct UML Module
 
-This directory contains the complete implementation of the RDF → PlantUML pipeline.
+## 🎯 Latest Update: PlantUML Syntax Fixes
 
-## Contents
+The PlantUML renderer has been updated to generate correct, standards-compliant PlantUML syntax.
 
-- `src/rdf_construct/` - Source code for the UML module and core
-- `examples/` - Example ontologies and UML context configurations
-- `diagrams/` - Generated PlantUML diagrams
-- `UML_PIPELINE_SUMMARY.md` - Detailed implementation documentation
+### Key Improvements
+✅ **Quoted identifiers** - Class/object names with colons properly quoted  
+✅ **Clean syntax** - No empty braces for classes without attributes  
+✅ **CamelCase properties** - Technical identifiers follow conventions  
+✅ **Human-readable labels** - Instance names stay readable  
+✅ **Standards compliant** - Works with all PlantUML tools  
 
-## Quick Start
+## 📦 What's Included
+
+Complete RDF → PlantUML class diagram generator with:
+- YAML-based context configuration
+- Multiple selection strategies (roots, focus, selectors)
+- Flexible property filtering modes
+- Instance rendering with data values
+- Hierarchy traversal with depth control
+- Clean, valid PlantUML output
+
+## 🚀 Quick Start
 
 ```bash
-# Install dependencies
-pip install rdflib pyyaml click
-
-# Run from this directory
-export PYTHONPATH=./src:$PYTHONPATH
-
 # List available contexts
-python -m rdf_construct.cli contexts examples/uml_contexts.yml
+poetry run rdf-construct contexts examples/uml_contexts.yml
 
 # Generate diagrams
-python -m rdf_construct.cli uml examples/animal_ontology.ttl examples/uml_contexts.yml -o output/
+poerty run rdf-construct uml examples/animal_ontology.ttl examples/uml_contexts.yml
 
 # Generate specific context
-python -m rdf_construct.cli uml examples/organisation_ontology.ttl examples/uml_contexts.yml -c management
+poetry run rdf-construct uml examples/organisation_ontology.ttl examples/uml_contexts.yml -c management
 ```
 
-## Documentation
+**Output**: Valid `.puml` files ready for PlantUML rendering.
 
-See `UML_PIPELINE_SUMMARY.md` for complete documentation including:
-- Architecture overview
-- Feature descriptions
-- Configuration examples
-- Known issues
-- Next steps for Phase 2 (styling)
+## 📋 Example Output
+
+```plantuml
+@startuml
+
+class "ex:Animal" {
+  +averageWeight : decimal
+  +lifespan : integer
+}
+
+class "ex:Bird"
+
+"ex:Bird" --|> "ex:Animal"
+"ex:Animal" --> "ex:Animal" : hasParent
+
+@enduml
+```
+
+## 📖 Documentation
+
+- **[QUICKSTART.md](./docs/QUICKSTART.md)** - Get started in 5 minutes
+- **[EXAMPLES_SHOWCASE.md](./docs/EXAMPLES_SHOWCASE.md)** - Visual examples
+- **[UML_PIPELINE_SUMMARY.md](./docsUML_PIPELINE_SUMMARY.md)** - Technical details
+- **[INDEX.md](./docs/INDEX.md)** - Complete overview
+
+## 🎨 Generated Diagrams
+
+All `.puml` files in `diagrams/` have been regenerated with correct syntax:
+- `animal_ontology-*.puml` - Various animal taxonomy views
+- `organisation_ontology-*.puml` - Management and people diagrams
+
+Test them with:
+- PlantUML online editor: https://www.plantuml.com/plantuml/
+- VS Code PlantUML extension
+- PlantUML CLI
+
+## 🛠️ Usage
+
+```bash
+# List available contexts
+poetry run rdf-construct contexts examples/uml_contexts.yml
+
+# Generate specific diagram
+poetry run rdf-construct uml ontology.ttl config.yml -c context_name
+
+# Generate all diagrams
+poetry run rdf-construct uml ontology.ttl config.yml
+```
+
+## 🔧 Create Custom Contexts
+
+```yaml
+contexts:
+  my_view:
+    description: "My custom diagram"
+    root_classes:
+      - ex:MyRootClass
+    include_descendants: true
+    properties:
+      mode: domain_based
+    include_instances: false
+```
+
+## ✅ Testing Status
+
+- [x] Valid PlantUML syntax
+- [x] Class hierarchy visualization
+- [x] Property filtering (multiple modes)
+- [x] Instance rendering with data
+- [x] Namespace prefix handling
+- [x] Works with PlantUML tools
