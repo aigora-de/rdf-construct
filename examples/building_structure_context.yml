@@ -178,6 +178,7 @@ contexts:
       # Structure as Entity
       - building:Structure
       - building:Building
+      - building:PhysicallyBoundedSpace
       - building:ClassOfStructure
 
       # StructureState as State
@@ -187,6 +188,7 @@ contexts:
 
       # Built entities
       - building:BuiltEntity
+      - building:BuiltEntitySection
       - building:Wall
       - building:ClassOfBuiltEntity
       - building:ClassOfWall
@@ -199,13 +201,17 @@ contexts:
     object_properties:
       - rdfs:subClassOf
       - ies:powertype
+      - building:isBoundedBy
 
     datatype_properties: []
 
     annotation_properties:
       - rdfs:label
 
-    instances: []
+    instances:
+        - building:MyBuilding
+        - building:Wall_001
+        - building:WallState_001
 
 # Usage examples for each context:
 #

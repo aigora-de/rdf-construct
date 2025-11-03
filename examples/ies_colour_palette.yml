@@ -113,6 +113,16 @@ schemes:
           fill: "#C49BF9"        # RGB: 196, 155, 249 (lighter purple)
           text: "#000000"
 
+        owl:ObjectProperty:
+          border: "#666666"
+          fill: "#CCCCCC"
+          text: "#000000"
+
+        owl:DatatypeProperty:
+          border: "#666666"
+          fill: "#CCCCCC"
+          text: "#000000"
+
       # Namespace-based defaults for non-IES classes
       by_namespace:
         # Standard ontologies - neutral styling
@@ -212,6 +222,16 @@ schemes:
           fill: "#F3B169"
           text: "#000000"
 
+        owl:ObjectProperty:
+          border: "#666666"
+          fill: "#CCCCCC"
+          text: "#000000"
+
+        owl:DatatypeProperty:
+          border: "#666666"
+          fill: "#CCCCCC"
+          text: "#000000"
+
       by_namespace:
         ies:
           border: "#0066CC"
@@ -239,6 +259,12 @@ schemes:
         color: "#000000"
         thickness: 1
         style: dashed
+
+    arrow_colors:
+      type: "#FF0000"     # Red for rdf:type
+      iespowertype: "#FF0000" # Red for ies:powertype
+      subclass: "#000000" # Black
+      subproperty: "#000000" # Black
 
     show_stereotypes: false
 
@@ -319,6 +345,16 @@ schemes:
           text: "#000000"
           line_style: bold
 
+        owl:ObjectProperty:
+          border: "#666666"
+          fill: "#CCCCCC"
+          text: "#000000"
+
+        owl:DatatypeProperty:
+          border: "#666666"
+          fill: "#CCCCCC"
+          text: "#000000"
+
       default:
         border: "#CCCCCC"
         fill: "#FFFFFF"
@@ -340,6 +376,12 @@ schemes:
         color: "#0066CC"
         thickness: 2
         style: bold
+
+    arrow_colors:
+      type: "#FF0000"     # Red for rdf:type
+      ies_powertype: "#FF0000" # Red for ies:powertype
+      subclass: "#000000" # Black
+      subproperty: "#000000" # Black
 
     show_stereotypes: true
     stereotype_map:

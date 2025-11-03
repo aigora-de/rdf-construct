@@ -23,10 +23,10 @@ class ColorPalette:
     """
 
     def __init__(self, config: dict[str, Any]):
-        """Initialize color palette from configuration.
+        """Initialise colour palette from configuration.
 
         Args:
-            config: Dictionary with color specifications
+            config: Dictionary with colour specifications
         """
         self.border = config.get("border", "#000000")
         self.fill = config.get("fill", "#FFFFFF")
@@ -34,51 +34,29 @@ class ColorPalette:
         self.line_style = config.get("line_style")
 
     def to_plantuml(self) -> str:
-        """Generate PlantUML color specification string.
+        """Generate PlantUML color specification.
 
-        Creates properly formatted PlantUML color syntax following the pattern:
-        #back:RRGGBB;line:RRGGBB;line.STYLE;text:RRGGBB
-
-        The method handles:
-        - Fill color (background) with 'back:' prefix
-        - Border color (line) with 'line:' prefix
-        - Line style (e.g., 'bold', 'dashed') with 'line.' prefix
-        - Text color with 'text:' prefix
-
-        All hex color values have any leading '#' stripped, as PlantUML
-        doesn't use '#' after the colon in color specifications.
+        Returns string in format: #back:FILL;line:BORDER;line.STYLE;text:TEXT
+        Not just #FILL
 
         Returns:
-            Complete PlantUML color specification starting with '#',
-            or empty string if no colors are defined.
-
-        Examples:
-            >>> palette = ColorPalette({"fill": "#FEFE54", "border": "#968584"})
-            >>> palette.to_plantuml()
-            '#back:FEFE54;line:968584'
-
-            >>> palette = ColorPalette({
-            ...     "fill": "#FFFFFF",
-            ...     "border": "#000000",
-            ...     "text": "#000000",
-            ...     "line_style": "bold"
-            ... })
-            >>> palette.to_plantuml()
-            '#back:FFFFFF;line:000000;line.bold;text:000000'
+            PlantUML color spec string with # prefix, or empty if no styling
         """
+        if not self.fill and not self.border and not self.text:
+            return ""
+
         parts = []
 
-        # Fill/background colour
+        # Background fill (note: PlantUML uses 'back:', not just fill)
         if self.fill:
             fill_hex = self.fill.lstrip('#')
             parts.append(f"back:{fill_hex}")
 
-        # Border/line colour
+        # Border colour and style
         if self.border:
             border_hex = self.border.lstrip('#')
             parts.append(f"line:{border_hex}")
 
-        # Line style
         if self.line_style:
             parts.append(f"line.{self.line_style}")
 
@@ -87,7 +65,6 @@ class ColorPalette:
             text_hex = self.text.lstrip('#')
             parts.append(f"text:{text_hex}")
 
-        # Return with # prefix, or empty if no styling
         return f"#{';'.join(parts)}" if parts else ""
 
 
@@ -131,6 +108,49 @@ class ArrowStyle:
 
     def __repr__(self) -> str:
         return f"ArrowStyle(color={self.color}, style={self.style})"
+
+
+class ArrowColorConfig:
+    """Configuration for arrow colors based on relationship type.
+
+    Attributes:
+        type_arrow_color: Color for rdf:type relationships (default red)
+        subclass_arrow_color: Color for rdfs:subClassOf relationships
+        property_arrow_color: Color for object property relationships
+        domain_range_arrow_color: Color for domain/range relationships
+        datatype_arrow_color: Color for datatype property relationships
+    """
+
+    def __init__(self, config: dict[str, str]):
+        """Initialize arrow colors from configuration.
+
+        Args:
+            config: Dictionary mapping relationship types to hex colors
+        """
+        self.type_arrow_color = config.get("type", "#FF0000")  # Red
+        self.subclass_arrow_color = config.get("subclass", "#000000")  # Black
+        self.property_arrow_color = config.get("property", "#000000")  # Black
+        self.domain_range_arrow_color = config.get("domain_range", "#000000")  # Black
+        self.datatype_arrow_color = config.get("datatype", "#000000")  # Black
+
+    def get_color(self, relationship_type: str) -> str:
+        """Get color for a specific relationship type.
+
+        Args:
+            relationship_type: Type of relationship
+                ('type', 'subclass', 'property', 'domain_range', 'datatype')
+
+        Returns:
+            Hex color code
+        """
+        color_map = {
+            "type": self.type_arrow_color,
+            "subclass": self.subclass_arrow_color,
+            "property": self.property_arrow_color,
+            "domain_range": self.domain_range_arrow_color,
+            "datatype": self.datatype_arrow_color,
+        }
+        return color_map.get(relationship_type, "#000000")
 
 
 class StyleScheme:
@@ -186,6 +206,10 @@ class StyleScheme:
         self.arrow_styles = {}
         for arrow_type, arrow_cfg in arrow_config.items():
             self.arrow_styles[arrow_type] = ArrowStyle(arrow_cfg)
+
+        # Arrow color configuration
+        arrow_color_config = config.get("arrow_colors", {})
+        self.arrow_colors = ArrowColorConfig(arrow_color_config)
 
         # Stereotype configuration
         self.show_stereotypes = config.get("show_stereotypes", False)
@@ -288,6 +312,50 @@ class StyleScheme:
         # No styled superclass found
         return None
 
+    def get_property_style(
+            self, graph: Graph, prop: URIRef
+    ) -> Optional[ColorPalette]:
+        """Get colour palette for property class.
+
+        Properties render as classes with specific styling (typically gray).
+        Can be customised by namespace or specific property types.
+
+        Args:
+            graph: RDF graph containing the property
+            prop: Property URI
+
+        Returns:
+            Color palette for the property, or None for default styling
+        """
+        # Check for property-specific styling first
+        # Get QName using graph's namespace manager
+        prop_qname = graph.namespace_manager.normalizeUri(prop)
+        if prop_qname in self.class_styles:
+            return self.class_styles[prop_qname]
+
+        # Check namespace-based styling
+        if ":" in prop_qname:
+            ns_prefix = prop_qname.split(":")[0]
+            ns_key = f"ns:{ns_prefix}"
+            if ns_key in self.class_styles:
+                return self.class_styles[ns_key]
+
+        # Check for property type styling
+        # (e.g., different colors for ObjectProperty vs DatatypeProperty)
+        for prop_type in graph.objects(prop, RDF.type):
+            # Get QName using graph's namespace manager
+            type_qname = graph.namespace_manager.normalizeUri(prop_type)
+            type_key = f"type:{type_qname}"
+            if type_key in self.class_styles:
+                return self.class_styles[type_key]
+
+        # Default: gray for all properties
+        return ColorPalette({
+            "fill": "#CCCCCC",
+            "border": "#666666",
+            "text": "#000000"
+        })
+
     def get_arrow_style(self, relationship_type: str) -> Optional[ArrowStyle]:
         """Get arrow style for a relationship type.
 
@@ -300,24 +368,43 @@ class StyleScheme:
         """
         return self.arrow_styles.get(relationship_type)
 
-    def get_stereotype(self, graph: Graph, cls: URIRef) -> Optional[str]:
-        """Get UML stereotype label for a class based on its RDF types.
-
-        Args:
-            graph: RDF graph containing the class
-            cls: Class URI
-
-        Returns:
-            Stereotype string or None if stereotypes disabled or not found
-        """
+    def get_stereotype(
+            self, graph: Graph, entity: URIRef, is_instance: bool = False
+    ) -> Optional[str]:
+        """Get stereotype label for entity."""
         if not self.show_stereotypes:
             return None
 
-        # Check RDF types of this class
-        for rdf_type in graph.objects(cls, RDF.type):
+        # Handle instances with multiple types
+        if is_instance:
+            types = []
+            metaclass_types = {
+                "owl:Class", "rdfs:Class",
+                "owl:ObjectProperty", "owl:DatatypeProperty",
+                "owl:AnnotationProperty", "rdf:Property"
+            }
+
+            for rdf_type in graph.objects(entity, RDF.type):
+                # Get QName using graph's namespace manager
+                type_qname = graph.namespace_manager.normalizeUri(rdf_type)
+                if type_qname not in metaclass_types:
+                    types.append(type_qname)
+
+            if types:
+                types.sort()
+                return f"<<{', '.join(types)}>>"
+            return "<<owl:NamedIndividual>>"
+
+        # Handle classes/properties (existing logic)
+        for rdf_type in graph.objects(entity, RDF.type):
+            # Get QName using graph's namespace manager
             type_qname = graph.namespace_manager.normalizeUri(rdf_type)
             if type_qname in self.stereotype_map:
                 return self.stereotype_map[type_qname]
+            if type_qname in ("owl:Class", "rdfs:Class",
+                              "owl:ObjectProperty", "owl:DatatypeProperty",
+                              "owl:AnnotationProperty", "rdf:Property"):
+                return f"<<{type_qname}>>"
 
         return None
 
