@@ -1,0 +1,226 @@
+# IES (Information Exchange Standard) Colour Palette
+# Enhanced with instance-specific styling support
+#
+# This demonstrates the new `instances.by_type` structure that allows
+# different styling for instances based on their rdf:type hierarchy.
+
+schemes:
+  ies_core_with_instances:
+    description: "IES core entities with instance-specific styling"
+
+    # Class styling (unchanged)
+    classes:
+      by_type:
+        # Core IES types
+        ies:Element:
+          border: "#EDEDED"      # RGB: 252, 252, 252 (off-white)
+          fill: "#EDEDED"        # RGB: 252, 252, 252
+          text: "#000000"
+
+        ies:Entity:
+          border: "#FEFE54"      # RGB: 254, 254, 84 (yellow)
+          fill: "#FEFE54"        # RGB: 254, 254, 84
+          text: "#000000"
+
+        ies:State:
+          border: "#F7D748"      # RGB: 247, 215, 72 (golden)
+          fill: "#F7D748"        # RGB: 247, 215, 72
+          text: "#000000"
+
+        ies:Event:
+          border: "#F5C2CB"      # RGB: 245, 194, 203 (pink)
+          fill: "#F5C2CB"        # RGB: 245, 194, 203
+          text: "#000000"
+
+        # Metaclasses - cyan fill with colored borders
+        ies:ClassOfElement:
+          border: "#FCFCFC"      # RGB: 252, 252, 252
+          fill: "#5CC9FA"        # RGB: 92, 201, 250 (cyan)
+          text: "#000000"
+
+        ies:ClassOfEntity:
+          border: "#FEFE54"      # RGB: 254, 254, 84 (Entity yellow)
+          fill: "#5CC9FA"        # RGB: 92, 201, 250
+          text: "#000000"
+
+        ies:ClassOfState:
+          border: "#F7D748"      # RGB: 247, 215, 72 (State golden)
+          fill: "#5CC9FA"        # RGB: 92, 201, 250
+          text: "#000000"
+
+        ies:ClassOfEvent:
+          border: "#F5C2CB"      # RGB: 245, 194, 203 (Event pink)
+          fill: "#5CC9FA"        # RGB: 92, 201, 250
+          text: "#000000"
+
+      # Namespace fallbacks
+      by_namespace:
+        ies:
+          border: "#000000"
+          fill: "#FFFFFF"
+          text: "#000000"
+
+        building:
+          border: "#0066CC"
+          fill: "#E8F4F8"
+          text: "#000000"
+
+      # Default for unmatched classes
+      default:
+        border: "#000000"
+        fill: "#FFFFFF"
+        text: "#000000"
+
+    # Instance styling - ENHANCED with by_type
+    instances:
+      # Type-specific instance styling
+      # These match the rdf:type of instances, not the class definitions
+      by_type:
+        # Entity instances - yellow border, black fill
+        ies:Entity:
+          border: "#FEFE54"      # RGB: 254, 254, 84 (yellow)
+          fill: "#000000"        # RGB: 0, 0, 0 (black)
+          text: "#FEFE54"        # Yellow text matches border
+
+        # State instances - golden border, black fill
+        ies:State:
+          border: "#F7D748"      # RGB: 247, 215, 72 (golden)
+          fill: "#000000"        # RGB: 0, 0, 0 (black)
+          text: "#F7D748"        # Golden text matches border
+
+        # Event instances - pink border, black fill
+        ies:Event:
+          border: "#F5C2CB"      # RGB: 245, 194, 203 (pink)
+          fill: "#000000"        # RGB: 0, 0, 0 (black)
+          text: "#F5C2CB"        # Pink text matches border
+
+        # Building-specific instance types
+        building:Structure:
+          border: "#FEFE54"      # Inherits Entity color (Structure is subclass of Entity)
+          fill: "#000000"
+          text: "#FEFE54"
+
+        building:StructureState:
+          border: "#F7D748"      # Inherits State color
+          fill: "#000000"
+          text: "#F7D748"
+
+        building:BuiltEntity:
+          border: "#FEFE54"      # Entity-based
+          fill: "#000000"
+          text: "#FEFE54"
+
+        building:BuiltEntityState:
+          border: "#F7D748"      # State-based
+          fill: "#000000"
+          text: "#F7D748"
+
+      # Default fallback for instances without specific styling
+      default:
+        border: "#FFFFFF"        # RGB: 255, 255, 255 (white)
+        fill: "#000000"          # RGB: 0, 0, 0 (black)
+        text: "#FFFFFF"          # White text for visibility
+
+      # Optional: Inherit class text color (applied if by_type doesn't match)
+      # When true, text color will match the class's border color
+      inherit_class_text: false
+
+    # Arrow styling
+    arrows:
+      subclass:
+        color: "#000000"
+        thickness: 1
+        style: bold
+
+      rdf_type:
+        color: "#000000"
+        thickness: 1
+        style: dashed
+
+      object_property:
+        color: "#333333"
+        thickness: 1
+        style: solid
+
+      ies_powertype:
+        color: "#5CC9FA"         # Cyan to indicate metaclass relationship
+        thickness: 2
+        style: bold
+
+    show_stereotypes: false
+
+  # Alternative: Automatic instance coloring from class hierarchy
+  ies_auto_instance_colors:
+    description: "Instances automatically inherit colors from their class hierarchy"
+
+    classes:
+      by_type:
+        ies:Entity:
+          border: "#FEFE54"
+          fill: "#FEFE54"
+          text: "#000000"
+
+        ies:State:
+          border: "#F7D748"
+          fill: "#F7D748"
+          text: "#000000"
+
+        ies:Event:
+          border: "#F5C2CB"
+          fill: "#F5C2CB"
+          text: "#000000"
+
+      by_namespace:
+        building:
+          border: "#0066CC"
+          fill: "#E8F4F8"
+          text: "#000000"
+
+      default:
+        border: "#000000"
+        fill: "#FFFFFF"
+        text: "#000000"
+
+    # Simpler instance configuration - uses class hierarchy
+    instances:
+      # No by_type - instances will walk up their rdf:type's class hierarchy
+      # and use the first styled superclass they find
+      default:
+        border: "#000000"        # Override: always black border
+        fill: "#000000"          # Always black fill
+        text: "#FFFFFF"          # Default white text
+
+      # Enable automatic text color inheritance from class
+      inherit_class_text: true   # Text color matches the class's border color
+
+    arrows:
+      subclass:
+        color: "#000000"
+        style: bold
+
+      rdf_type:
+        color: "#FF0000"         # Red for rdf:type relationships
+        style: dashed
+
+    show_stereotypes: true
+
+
+# Usage Examples:
+#
+# 1. With explicit instance type styling:
+# rdf-construct uml building.ttl building_structure_context.yml \
+#   --context structure_cross_hierarchy \
+#   --style-config ies_instance_palette.yml \
+#   --style ies_core_with_instances
+#
+# Result: data:MyBuilding (an ies:Entity instance) gets yellow border/text
+#         data:WallState_001 (a building:WallState instance) gets golden border/text
+#
+# 2. With automatic class hierarchy colouring:
+# rdf-construct uml building.ttl building_structure_context.yml \
+#   --context structure_cross_hierarchy \
+#   --style-config ies_instance_palette.yml \
+#   --style ies_auto_instance_colors
+#
+# Result: Instances automatically get text colours matching their class hierarchy
+#         e.g., data:MyBuilding -> building:Building -> ies:Entity (yellow)

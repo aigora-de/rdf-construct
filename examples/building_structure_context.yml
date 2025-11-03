@@ -17,6 +17,7 @@ contexts:
 
     # IES foundation classes
     classes:
+      - ies:Element
       - ies:Entity
       - ies:State
       - ies:ClassOfEntity
@@ -48,16 +49,16 @@ contexts:
       - building:ClassOfWindow
 
     # Object properties showing relationships
-    object_properties:
-      - rdfs:subClassOf
+    object_properties: []
+      #- rdfs:subClassOf
 
     # Datatype properties (none for this structural view)
     datatype_properties: []
 
     # Annotation properties for labels
-    annotation_properties:
-      - rdfs:label
-      - rdfs:comment
+    annotation_properties: []
+      #- rdfs:label
+      #- rdfs:comment
 
     # No instances in this structural view
     instances: []
@@ -70,6 +71,7 @@ contexts:
 
     classes:
       # IES pattern
+      - ies:Element
       - ies:Entity
       - ies:State
 
@@ -89,14 +91,14 @@ contexts:
       - building:Roof
       - building:RoofState
 
-    object_properties:
-      - rdfs:subClassOf
+    object_properties: []
+      #- rdfs:subClassOf
 
     datatype_properties: []
 
-    annotation_properties:
-      - rdfs:label
-      - rdfs:comment
+    annotation_properties: []
+      #- rdfs:label
+      #- rdfs:comment
 
     instances: []
 
@@ -108,6 +110,7 @@ contexts:
 
     classes:
       # IES metaclass hierarchy
+      - ies:Element
       - ies:Entity
       - ies:ClassOfEntity
 
@@ -126,14 +129,14 @@ contexts:
       - building:Roof
       - building:ClassOfRoof
 
-    object_properties:
-      - rdfs:subClassOf
-      - ies:powertype
+    object_properties: []
+      #- rdfs:subClassOf
+      #- ies:powertype
 
     datatype_properties: []
 
-    annotation_properties:
-      - rdfs:label
+    annotation_properties: []
+      #- rdfs:label
 
     instances: []
 
@@ -144,6 +147,7 @@ contexts:
     mode: explicit
 
     classes:
+      - ies:Element
       - ies:Entity
       - building:Structure
       - building:Building
@@ -152,13 +156,13 @@ contexts:
       - building:Floor
       - building:Roof
 
-    object_properties:
-      - rdfs:subClassOf
+    object_properties: []
+      #- rdfs:subClassOf
 
     datatype_properties: []
 
-    annotation_properties:
-      - rdfs:label
+    annotation_properties: []
+      #- rdfs:label
 
     instances: []
 
@@ -170,6 +174,7 @@ contexts:
 
     classes:
       # IES foundation
+      - ies:Element
       - ies:Entity
       - ies:State
       - ies:ClassOfEntity
@@ -199,19 +204,21 @@ contexts:
       - building:ClassOfBuiltEntityState
 
     object_properties:
-      - rdfs:subClassOf
+      #- rdfs:subClassOf
       - ies:powertype
       - building:isBoundedBy
+      - ies:isPartOf
+      - ies:isStateOf
 
     datatype_properties: []
 
-    annotation_properties:
-      - rdfs:label
+    annotation_properties: []
+      #- rdfs:label
 
     instances:
-        - building:MyBuilding
-        - building:Wall_001
-        - building:WallState_001
+        - data:MyBuilding
+        - data:MyWall
+        - data:MyWallState_2025
 
 # Usage examples for each context:
 #

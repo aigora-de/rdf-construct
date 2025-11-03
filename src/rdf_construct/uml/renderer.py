@@ -278,7 +278,7 @@ class PlantUMLRenderer:
         class_name = plantuml_identifier(self.graph, cls)
         stereotype = self._get_class_stereotype(cls)
 
-        # Get color styling if configured
+        # Get colour styling if configured
         color_spec = ""
         if self.style:
             # Use style system if available
@@ -334,7 +334,7 @@ class PlantUMLRenderer:
         instance_label = safe_label(self.graph, instance, camelcase=False)
         stereotype = self._get_instance_stereotype(instance)
 
-        # Get color styling for instances
+        # Get colour styling for instances
         color_spec = ""
         if self.style:
             palette = self.style.get_class_style(self.graph, instance, is_instance=True)
@@ -417,16 +417,19 @@ class PlantUMLRenderer:
             for cls in self.graph.objects(instance, RDF.type):
                 # Skip metaclass types
                 type_qn = qname(self.graph, cls)
-                # ToDo - make hard-coded types a config item
                 if type_qn in ("owl:Class", "rdfs:Class", "owl:ObjectProperty",
-                             "owl:DatatypeProperty", "owl:AnnotationProperty"):
+                               "owl:DatatypeProperty", "owl:AnnotationProperty"):
                     continue
 
                 if cls in self.entities.get("classes", set()):
                     class_name = plantuml_identifier(self.graph, cls)
 
-                    arrow_color = self.style.arrow_colors.get_color("type")
-                    lines.append(f"{instance} -{direction}[{arrow_color}]-> {cls} : <<rdf:type>> [{arrow_color}]")
+                    # Get arrow color from style
+                    arrow_color = "#FF0000"  # Default red
+                    if self.style and hasattr(self.style, 'arrow_colors'):
+                        arrow_color = self.style.arrow_colors.get_color("type")
+
+                    lines.append(f"{instance_name} -{direction}[{arrow_color}]-> {class_name} : <<rdf:type>>")
 
         return lines
 

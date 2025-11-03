@@ -2,6 +2,8 @@
 
 Provides color schemes, arrow styles, and visual formatting for different
 RDF entity types based on their semantic roles.
+
+Added instance-specific styling based on rdf:type hierarchy.
 """
 
 from pathlib import Path
@@ -160,14 +162,15 @@ class StyleScheme:
         name: Scheme identifier
         description: Human-readable description
         class_styles: Mapping of class patterns to color palettes
-        instance_style: Style for instances (individuals)
+        instance_styles: Mapping of instance type patterns to colour palettes
+        instance_style_default: Default style for instances (fallback)
         arrow_styles: Mapping of relationship types to arrow styles
         show_stereotypes: Whether to display UML stereotypes
         stereotype_map: Mapping of RDF types to stereotype labels
     """
 
     def __init__(self, name: str, config: dict[str, Any]):
-        """Initialize style scheme from configuration.
+        """Initialise style scheme from configuration.
 
         Args:
             name: Scheme identifier
@@ -196,9 +199,31 @@ class StyleScheme:
 
         # Instance styling
         instance_config = config.get("instances", {})
-        self.instance_style = ColorPalette(instance_config) if instance_config else None
+        self.instance_styles = {}
+
+        # Load by_type instance styles
+        by_type_instances = instance_config.get("by_type", {})
+        for type_key, palette_config in by_type_instances.items():
+            self.instance_styles[f"type:{type_key}"] = ColorPalette(palette_config)
+
+        # Default instance style (fallback if no by_type match)
+        if "default" in instance_config:
+            self.instance_style_default = ColorPalette(instance_config["default"])
+        else:
+            # Legacy support: if no 'default' key but instance_config has color keys
+            # treat the whole config as a palette
+            if any(k in instance_config for k in ["border", "fill", "text"]):
+                self.instance_style_default = ColorPalette(instance_config)
+            else:
+                self.instance_style_default = None
+
+        # Legacy support for inherit_class_border flag
         self.instance_inherit_class_border = instance_config.get(
             "inherit_class_border", False
+        )
+        # Inherit_class_text flag (for text colour matching class fill)
+        self.instance_inherit_class_text = instance_config.get(
+            "inherit_class_text", False
         )
 
         # Arrow styling
@@ -221,7 +246,7 @@ class StyleScheme:
         """Get color palette for a specific class or instance.
 
         Selection priority:
-        1. Instance style (if is_instance=True)
+        1. Instance-specific styling (if is_instance=True) via get_instance_style()
         2. Explicit type mapping (by_type)
         3. Inheritance-based lookup (traverse rdfs:subClassOf)
         4. Namespace-based coloring (by_namespace)
@@ -235,18 +260,17 @@ class StyleScheme:
         Returns:
             ColorPalette or None if no style defined
         """
-        # Priority 1: Instance style
-        if is_instance and self.instance_style:
-            return self.instance_style
+        # Priority 1: Instance-specific styling
+        if is_instance:
+            return self.get_instance_style(graph, cls)
 
         # Priority 2: Check for explicit type mapping
-        # (e.g., for specific classes like ies:Entity, ies:State)
         qn = graph.namespace_manager.normalizeUri(cls)
         type_key = f"type:{qn}"
         if type_key in self.class_styles:
             return self.class_styles[type_key]
 
-        # Priority 3: INHERITANCE-BASED LOOKUP (NEW!)
+        # Priority 3: INHERITANCE-BASED LOOKUP
         # Walk up rdfs:subClassOf hierarchy to find styled superclass
         style = self._get_inherited_style(graph, cls)
         if style:
@@ -261,6 +285,109 @@ class StyleScheme:
 
         # Priority 5: Default
         return self.class_styles.get("default")
+
+    def get_instance_style(
+            self, graph: Graph, instance: URIRef
+    ) -> Optional[ColorPalette]:
+        """Get color palette for an instance based on its rdf:type hierarchy.
+
+        Selection priority:
+        1. Explicit type mapping in instances.by_type (using first rdf:type)
+        2. Walk up rdf:type's superclass hierarchy to find styled class
+        3. Default instance style
+        4. Fall back to None
+
+        If inherit_class_text is enabled, text color matches the class border color.
+
+        Args:
+            graph: RDF graph containing the instance
+            instance: Instance URI
+
+        Returns:
+            ColorPalette for the instance, or None if no style defined
+        """
+        # Get all rdf:type declarations for this instance
+        instance_types = list(graph.objects(instance, RDF.type))
+
+        # Filter out metaclass types that shouldn't affect instance styling
+        metaclass_types = {
+            OWL.Class, RDFS.Class,
+            OWL.ObjectProperty, OWL.DatatypeProperty,
+            OWL.AnnotationProperty, RDF.Property
+        }
+        valid_types = [t for t in instance_types if t not in metaclass_types]
+
+        if not valid_types:
+            # No valid types - use default
+            return self.instance_style_default
+
+        # Use the first declared type as primary
+        primary_type = valid_types[0]
+        primary_type_qn = graph.namespace_manager.normalizeUri(primary_type)
+
+        # Priority 1: Check for explicit instance type styling
+        type_key = f"type:{primary_type_qn}"
+        if type_key in self.instance_styles:
+            palette = self.instance_styles[type_key]
+
+            # Apply text color inheritance if enabled
+            if self.instance_inherit_class_text and palette:
+                return self._apply_class_text_inheritance(
+                    graph, primary_type, palette
+                )
+            return palette
+
+        # Priority 2: Walk up the type's class hierarchy to find styled class
+        # This allows instances to inherit colors from their class hierarchy
+        styled_class_palette = self._get_inherited_style(graph, primary_type)
+        if styled_class_palette:
+            # Create instance-specific palette based on class colors
+            instance_palette = ColorPalette({
+                "border": styled_class_palette.border,
+                "fill": "#000000",  # Instances have black fill
+                "text": styled_class_palette.border
+            })
+            return instance_palette
+
+        # Priority 3: Default instance style
+        if self.instance_style_default:
+            if self.instance_inherit_class_text:
+                return self._apply_class_text_inheritance(
+                    graph, primary_type, self.instance_style_default
+                )
+            return self.instance_style_default
+
+        # No styling found
+        return None
+
+    def _apply_class_text_inheritance(
+            self, graph: Graph, class_uri: URIRef, base_palette: ColorPalette
+    ) -> ColorPalette:
+        """Apply class text color inheritance to an instance palette.
+
+        Looks up the class's border color and applies it as text color.
+
+        Args:
+            graph: RDF graph
+            class_uri: Class URI to get colors from
+            base_palette: Base instance palette to modify
+
+        Returns:
+            New ColorPalette with inherited text color
+        """
+        # Get the class's styling
+        class_palette = self.get_class_style(graph, class_uri, is_instance=False)
+
+        if class_palette and class_palette.border:
+            # Use class border color as instance text color
+            return ColorPalette({
+                "border": base_palette.border,
+                "fill": base_palette.fill,
+                "text": class_palette.border,
+                "line_style": base_palette.line_style
+            })
+
+        return base_palette
 
     def _get_inherited_style(
             self, graph: Graph, cls: URIRef, visited: Optional[set] = None
@@ -409,7 +536,11 @@ class StyleScheme:
         return None
 
     def __repr__(self) -> str:
-        return f"StyleScheme(name={self.name!r}, classes={len(self.class_styles)})"
+        return (
+            f"StyleScheme(name={self.name!r}, "
+            f"classes={len(self.class_styles)}, "
+            f"instances={len(self.instance_styles)})"
+        )
 
 
 class StyleConfig:
