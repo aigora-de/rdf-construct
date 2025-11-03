@@ -36,24 +36,59 @@ class ColorPalette:
     def to_plantuml(self) -> str:
         """Generate PlantUML color specification string.
 
+        Creates properly formatted PlantUML color syntax following the pattern:
+        #back:RRGGBB;line:RRGGBB;line.STYLE;text:RRGGBB
+
+        The method handles:
+        - Fill color (background) with 'back:' prefix
+        - Border color (line) with 'line:' prefix
+        - Line style (e.g., 'bold', 'dashed') with 'line.' prefix
+        - Text color with 'text:' prefix
+
+        All hex color values have any leading '#' stripped, as PlantUML
+        doesn't use '#' after the colon in color specifications.
+
         Returns:
-            PlantUML color directive (e.g., '#E8F4F8;line:#0066CC;line.bold')
+            Complete PlantUML color specification starting with '#',
+            or empty string if no colors are defined.
+
+        Examples:
+            >>> palette = ColorPalette({"fill": "#FEFE54", "border": "#968584"})
+            >>> palette.to_plantuml()
+            '#back:FEFE54;line:968584'
+
+            >>> palette = ColorPalette({
+            ...     "fill": "#FFFFFF",
+            ...     "border": "#000000",
+            ...     "text": "#000000",
+            ...     "line_style": "bold"
+            ... })
+            >>> palette.to_plantuml()
+            '#back:FFFFFF;line:000000;line.bold;text:000000'
         """
-        parts = [self.fill]
+        parts = []
 
+        # Fill/background colour
+        if self.fill:
+            fill_hex = self.fill.lstrip('#')
+            parts.append(f"back:{fill_hex}")
+
+        # Border/line colour
         if self.border:
-            parts.append(f"line:{self.border}")
+            border_hex = self.border.lstrip('#')
+            parts.append(f"line:{border_hex}")
 
+        # Line style
         if self.line_style:
             parts.append(f"line.{self.line_style}")
 
+        # Text colour
         if self.text:
-            parts.append(f"text:{self.text}")
+            text_hex = self.text.lstrip('#')
+            parts.append(f"text:{text_hex}")
 
-        return ";".join(parts)
-
-    def __repr__(self) -> str:
-        return f"ColorPalette(border={self.border}, fill={self.fill})"
+        # Return with # prefix, or empty if no styling
+        return f"#{';'.join(parts)}" if parts else ""
 
 
 class ArrowStyle:
@@ -157,15 +192,16 @@ class StyleScheme:
         self.stereotype_map = config.get("stereotype_map", {})
 
     def get_class_style(
-        self, graph: Graph, cls: URIRef, is_instance: bool = False
+            self, graph: Graph, cls: URIRef, is_instance: bool = False
     ) -> Optional[ColorPalette]:
         """Get color palette for a specific class or instance.
 
         Selection priority:
-        1. Explicit type mapping (for metaclasses, powertype classes)
-        2. Namespace-based coloring
-        3. Default class style
-        4. Instance style (if is_instance=True)
+        1. Instance style (if is_instance=True)
+        2. Explicit type mapping (by_type)
+        3. Inheritance-based lookup (traverse rdfs:subClassOf)
+        4. Namespace-based coloring (by_namespace)
+        5. Default class style
 
         Args:
             graph: RDF graph containing the class
@@ -175,27 +211,82 @@ class StyleScheme:
         Returns:
             ColorPalette or None if no style defined
         """
+        # Priority 1: Instance style
         if is_instance and self.instance_style:
             return self.instance_style
 
-        # Check for type-specific styles
-        # (e.g., for ies:ClassOfElement, use metaclass style)
-        for type_key in self.class_styles.keys():
-            if type_key.startswith("type:"):
-                # This could match RDF types or specific URIs
-                # Implementation depends on your needs
-                pass
+        # Priority 2: Check for explicit type mapping
+        # (e.g., for specific classes like ies:Entity, ies:State)
+        qn = graph.namespace_manager.normalizeUri(cls)
+        type_key = f"type:{qn}"
+        if type_key in self.class_styles:
+            return self.class_styles[type_key]
 
-        # Check namespace
-        qname = graph.namespace_manager.normalizeUri(cls)
-        if ":" in qname:
-            ns_prefix = qname.split(":")[0]
+        # Priority 3: INHERITANCE-BASED LOOKUP (NEW!)
+        # Walk up rdfs:subClassOf hierarchy to find styled superclass
+        style = self._get_inherited_style(graph, cls)
+        if style:
+            return style
+
+        # Priority 4: Namespace-based coloring
+        if ":" in qn:
+            ns_prefix = qn.split(":")[0]
             ns_key = f"ns:{ns_prefix}"
             if ns_key in self.class_styles:
                 return self.class_styles[ns_key]
 
-        # Default
+        # Priority 5: Default
         return self.class_styles.get("default")
+
+    def _get_inherited_style(
+            self, graph: Graph, cls: URIRef, visited: Optional[set] = None
+    ) -> Optional[ColorPalette]:
+        """Walk up rdfs:subClassOf hierarchy to find styled superclass.
+
+        This enables classes to inherit styles from their superclasses.
+        For example, building:Structure inherits from ies:Entity,
+        so it should get Entity's yellow color.
+
+        Args:
+            graph: RDF graph containing the class hierarchy
+            cls: Class URI to find style for
+            visited: Set of already-visited classes (prevents infinite loops)
+
+        Returns:
+            ColorPalette from nearest styled superclass, or None
+        """
+        if visited is None:
+            visited = set()
+
+        # Prevent infinite loops in case of circular inheritance
+        if cls in visited:
+            return None
+        visited.add(cls)
+
+        # Get all direct superclasses
+        superclasses = list(graph.objects(cls, RDFS.subClassOf))
+
+        # Check each superclass
+        for superclass in superclasses:
+            # Skip if not a proper URI (could be blank node)
+            if not isinstance(superclass, URIRef):
+                continue
+
+            # Check if this superclass has explicit styling
+            super_qn = graph.namespace_manager.normalizeUri(superclass)
+            type_key = f"type:{super_qn}"
+
+            if type_key in self.class_styles:
+                # Found a styled superclass!
+                return self.class_styles[type_key]
+
+            # Recursively check this superclass's parents
+            inherited = self._get_inherited_style(graph, superclass, visited)
+            if inherited:
+                return inherited
+
+        # No styled superclass found
+        return None
 
     def get_arrow_style(self, relationship_type: str) -> Optional[ArrowStyle]:
         """Get arrow style for a relationship type.

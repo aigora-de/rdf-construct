@@ -20,7 +20,7 @@ def test_context_loading():
     print("=" * 60)
 
     # Simulated test - actual implementation would use:
-    # config = load_uml_config("examples/uml_contexts_explicit_examples.yml")
+    # config = load_uml_config("examples/uml_contexts_explicit.yml")
 
     # Expected contexts
     expected_contexts = [

@@ -1,0 +1,240 @@
+# Building Structure Context - Explicit Mode Example
+#
+# This demonstrates using explicit mode to create a focused diagram
+# showing core Structure concepts from the building ontology.
+#
+# Usage:
+#   rdf-construct uml building.ttl building_structure_context.yml \
+#     --style-config ies_colour_palette.yml \
+#     --style ies_core
+
+contexts:
+  # Context 1: Core Structure Hierarchy
+  # Shows the main Structure class and its immediate subclasses
+  structure_core:
+    description: "Core building structure hierarchy with key built entities"
+    mode: explicit
+
+    # IES foundation classes
+    classes:
+      - ies:Entity
+      - ies:State
+      - ies:ClassOfEntity
+
+      # Structure hierarchy
+      - building:Structure
+      - building:Building
+      - building:StructureState
+      - building:BuildingState
+
+      # Key built entities
+      - building:BuiltEntity
+      - building:Wall
+      - building:Floor
+      - building:Roof
+      - building:Window
+      - building:BuiltEntityState
+      - building:WallState
+      - building:FloorState
+      - building:RoofState
+      - building:WindowState
+
+      # Metaclasses to show powertype pattern
+      - building:ClassOfStructure
+      - building:ClassOfBuiltEntity
+      - building:ClassOfWall
+      - building:ClassOfFloor
+      - building:ClassOfRoof
+      - building:ClassOfWindow
+
+    # Object properties showing relationships
+    object_properties:
+      - rdfs:subClassOf
+
+    # Datatype properties (none for this structural view)
+    datatype_properties: []
+
+    # Annotation properties for labels
+    annotation_properties:
+      - rdfs:label
+      - rdfs:comment
+
+    # No instances in this structural view
+    instances: []
+
+  # Context 2: Structure with State Pattern
+  # Emphasizes the temporal state pattern (Entity → State)
+  structure_with_states:
+    description: "Building structures showing temporal state pattern"
+    mode: explicit
+
+    classes:
+      # IES pattern
+      - ies:Entity
+      - ies:State
+
+      # Structure and its states
+      - building:Structure
+      - building:StructureState
+      - building:Building
+      - building:BuildingState
+
+      # Built entities and their states
+      - building:BuiltEntity
+      - building:BuiltEntityState
+      - building:Wall
+      - building:WallState
+      - building:Floor
+      - building:FloorState
+      - building:Roof
+      - building:RoofState
+
+    object_properties:
+      - rdfs:subClassOf
+
+    datatype_properties: []
+
+    annotation_properties:
+      - rdfs:label
+      - rdfs:comment
+
+    instances: []
+
+  # Context 3: Structure with Metaclasses
+  # Shows the powertype relationships between types and metatypes
+  structure_metaclass_tower:
+    description: "Building structure with metaclass (ClassOf...) relationships"
+    mode: explicit
+
+    classes:
+      # IES metaclass hierarchy
+      - ies:Entity
+      - ies:ClassOfEntity
+
+      # Structure hierarchy with metaclasses
+      - building:Structure
+      - building:ClassOfStructure
+      - building:Building
+
+      # Built entity hierarchy with metaclasses
+      - building:BuiltEntity
+      - building:ClassOfBuiltEntity
+      - building:Wall
+      - building:ClassOfWall
+      - building:Floor
+      - building:ClassOfFloor
+      - building:Roof
+      - building:ClassOfRoof
+
+    object_properties:
+      - rdfs:subClassOf
+      - ies:powertype
+
+    datatype_properties: []
+
+    annotation_properties:
+      - rdfs:label
+
+    instances: []
+
+  # Context 4: Minimal - Just Structure and BuiltEntity
+  # Simplest possible view for introduction
+  structure_minimal:
+    description: "Minimal structure view - just core concepts"
+    mode: explicit
+
+    classes:
+      - ies:Entity
+      - building:Structure
+      - building:Building
+      - building:BuiltEntity
+      - building:Wall
+      - building:Floor
+      - building:Roof
+
+    object_properties:
+      - rdfs:subClassOf
+
+    datatype_properties: []
+
+    annotation_properties:
+      - rdfs:label
+
+    instances: []
+
+  # Context 5: Cross-hierarchy example
+  # Shows Structure (Entity) with StructureState (State) relationships
+  structure_cross_hierarchy:
+    description: "Structure entities with their state classes"
+    mode: explicit
+
+    classes:
+      # IES foundation
+      - ies:Entity
+      - ies:State
+      - ies:ClassOfEntity
+      - ies:ClassOfState
+
+      # Structure as Entity
+      - building:Structure
+      - building:Building
+      - building:ClassOfStructure
+
+      # StructureState as State
+      - building:StructureState
+      - building:BuildingState
+      - building:ClassOfStructureState
+
+      # Built entities
+      - building:BuiltEntity
+      - building:Wall
+      - building:ClassOfBuiltEntity
+      - building:ClassOfWall
+
+      # Built entity states
+      - building:BuiltEntityState
+      - building:WallState
+      - building:ClassOfBuiltEntityState
+
+    object_properties:
+      - rdfs:subClassOf
+      - ies:powertype
+
+    datatype_properties: []
+
+    annotation_properties:
+      - rdfs:label
+
+    instances: []
+
+# Usage examples for each context:
+#
+# 1. Structure Core (basic hierarchy):
+# rdf-construct uml building.ttl building_structure_context.yml \
+#   --context structure_core \
+#   --style-config ies_colour_palette.yml \
+#   --style ies_core
+#
+# 2. With States (temporal pattern):
+# rdf-construct uml building.ttl building_structure_context.yml \
+#   --context structure_with_states \
+#   --style-config ies_colour_palette.yml \
+#   --style ies_full
+#
+# 3. With Metaclasses (powertype pattern):
+# rdf-construct uml building.ttl building_structure_context.yml \
+#   --context structure_metaclass_tower \
+#   --style-config ies_colour_palette.yml \
+#   --style ies_metaclass
+#
+# 4. Minimal (introduction):
+# rdf-construct uml building.ttl building_structure_context.yml \
+#   --context structure_minimal \
+#   --style-config ies_colour_palette.yml \
+#   --style ies_core
+#
+# 5. Cross-hierarchy (Entity/State):
+# rdf-construct uml building.ttl building_structure_context.yml \
+#   --context structure_cross_hierarchy \
+#   --style-config ies_colour_palette.yml \
+#   --style ies_full

@@ -6,7 +6,7 @@ import click
 from rdflib import Graph, RDF
 from rdflib.namespace import OWL
 
-from .core import (
+from src.rdf_construct.core import (
     OrderingConfig,
     build_section_graph,
     extract_prefix_map,
@@ -15,13 +15,13 @@ from .core import (
     serialise_turtle,
     sort_subjects,
 )
-from .uml import (
+from src.rdf_construct.uml import (
     load_uml_config,
     collect_diagram_entities,
     render_plantuml,
 )
-from .uml.uml_style import load_style_config
-from .uml.uml_layout import load_layout_config
+from src.rdf_construct.uml.uml_style import load_style_config
+from src.rdf_construct.uml.uml_layout import load_layout_config
 
 @click.group()
 @click.version_option()

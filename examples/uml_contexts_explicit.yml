@@ -1,8 +1,8 @@
-# uml_contexts_explicit_examples.yml
+# uml_contexts_explicit.yml
 #
 # Examples demonstrating the new 'explicit' mode for fine-grained diagram control
 # Use with:
-#   poetry run rdf-construct uml examples/animal_ontology.ttl examples/uml_contexts_explicit_examples.yml
+#   poetry run rdf-construct uml examples/animal_ontology.ttl examples/uml_contexts_explicit.yml
 
 defaults:
   include_properties: true

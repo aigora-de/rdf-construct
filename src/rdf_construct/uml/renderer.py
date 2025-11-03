@@ -83,6 +83,33 @@ def escape_plantuml(text: str) -> str:
     # PlantUML is generally forgiving, but we'll handle basic escaping
     return text.replace('"', "'")
 
+def plantuml_identifier(graph: Graph, uri: URIRef) -> str:
+    """Convert RDF URI to PlantUML identifier using dot notation.
+
+    PlantUML uses package.Class notation, not prefix:Class notation.
+    This function converts RDF QNames to proper PlantUML identifiers.
+
+    Examples:
+        "building:Building" → "building.Building"
+        "ies:Entity" → "ies.Entity"
+        "ex:MyClass" → "ex.MyClass"
+
+    Args:
+        graph: RDF graph with namespace bindings
+        uri: URI to convert to PlantUML identifier
+
+    Returns:
+        PlantUML identifier string with dot notation
+    """
+    qn = qname(graph, uri)
+
+    # Convert prefix:local to prefix.local for PlantUML
+    if ":" in qn:
+        prefix, local = qn.split(":", 1)
+        return f"{prefix}.{local}"
+
+    # No namespace prefix - return as is
+    return qn
 
 class PlantUMLRenderer:
     """Renders RDF entities as styled PlantUML class diagrams.
@@ -121,6 +148,7 @@ class PlantUMLRenderer:
         """Render a class with its datatype properties as attributes.
 
         Applies colour styling and stereotypes if configured.
+        Uses proper PlantUML syntax with dot notation.
 
         Args:
             cls: Class URI to render
@@ -129,11 +157,10 @@ class PlantUMLRenderer:
             List of PlantUML lines for this class
         """
         lines = []
-        class_name = qname(self.graph, cls)
 
-        # Quote class name if it contains a colon
-        if ":" in class_name:
-            class_name = f'"{class_name}"'
+        # Use dot notation for PlantUML
+        class_name = plantuml_identifier(self.graph, cls)
+        # No quoting needed with dot notation
 
         # Get stereotype if enabled
         stereotype = ""
@@ -147,7 +174,8 @@ class PlantUMLRenderer:
         if self.style:
             palette = self.style.get_class_style(self.graph, cls, is_instance=False)
             if palette:
-                color_spec = f" #{palette.to_plantuml()}"
+                # to_plantuml() now returns complete spec with # prefix
+                color_spec = f" {palette.to_plantuml()}"
 
         # Collect datatype properties as attributes
         datatype_props = self.entities["datatype_properties"]
@@ -168,13 +196,12 @@ class PlantUMLRenderer:
                 range_type = qname(self.graph, ranges[0])
                 # Simplify XSD types
                 if range_type.startswith("xsd:"):
-                    range_type = range_type[4:]  # Remove 'xsd:' prefix
+                    range_type = range_type[4:]
                 attributes.append(f"  +{prop_label} : {range_type}")
             else:
                 attributes.append(f"  +{prop_label}")
 
         # Render class with styling
-        # Only add braces if there are attributes
         if attributes:
             lines.append(f"class {class_name}{stereotype}{color_spec} {{")
             lines.extend(attributes)
@@ -182,7 +209,6 @@ class PlantUMLRenderer:
         else:
             # Check if we should hide empty classes
             if self.layout and self.layout.hide_empty_members:
-                # Don't render, but still return empty list
                 return []
             lines.append(f"class {class_name}{stereotype}{color_spec}")
 
@@ -192,6 +218,7 @@ class PlantUMLRenderer:
         """Render an instance as a PlantUML object.
 
         Applies instance styling based on configuration.
+        Uses proper PlantUML syntax with dot notation.
 
         Args:
             instance: Instance URI to render
@@ -200,27 +227,28 @@ class PlantUMLRenderer:
             List of PlantUML lines for this instance
         """
         lines = []
-        instance_name = qname(self.graph, instance)
-        # Don't camelCase instance display labels - keep original
-        instance_label = safe_label(self.graph, instance, camelcase=False)
 
-        # Quote instance name if it contains a colon
-        if ":" in instance_name:
-            instance_name = f'"{instance_name}"'
+        # Use dot notation for identifier
+        instance_name = plantuml_identifier(self.graph, instance)
+
+        # Keep original label for display (still quoted for readability)
+        instance_label = safe_label(self.graph, instance, camelcase=False)
 
         # Get colour styling for instances
         color_spec = ""
         if self.style:
             palette = self.style.get_class_style(self.graph, instance, is_instance=True)
             if palette:
-                color_spec = f" #{palette.to_plantuml()}"
+                # to_plantuml() now returns complete spec with # prefix
+                color_spec = f" {palette.to_plantuml()}"
 
         # Start object definition
+        # Label is quoted, identifier uses dot notation
         lines.append(f'object "{instance_label}" as {instance_name}{color_spec} {{')
 
         # Add datatype property values (use camelCase for property names)
         for prop in sorted(
-            self.entities["datatype_properties"], key=lambda p: qname(self.graph, p)
+                self.entities["datatype_properties"], key=lambda p: qname(self.graph, p)
         ):
             values = list(self.graph.objects(instance, prop))
             if values:
@@ -238,122 +266,91 @@ class PlantUMLRenderer:
         """Render rdfs:subClassOf relationships as inheritance arrows.
 
         Uses layout-configured arrow direction if available.
+        Uses proper PlantUML syntax with dot notation.
 
         Returns:
-            List of PlantUML lines for class inheritance
+            List of PlantUML relationship lines
         """
         lines = []
-        classes = self.entities["classes"]
 
-        # Get arrow syntax from layout config
-        if self.layout:
-            arrow = self.layout.get_arrow_syntax("subclass")
-        else:
-            arrow = "-|>"  # Default: simple inheritance
+        # Determine arrow syntax based on layout
+        arrow_syntax = "-|>"  # Default
+        if self.layout and self.layout.arrow_direction:
+            direction = self.layout.arrow_direction
+            if direction == "up":
+                arrow_syntax = "-up-|>"
+            elif direction == "down":
+                arrow_syntax = "-down-|>"
+            elif direction == "left":
+                arrow_syntax = "-left-|>"
+            elif direction == "right":
+                arrow_syntax = "-right-|>"
 
-        for cls in sorted(classes, key=lambda c: qname(self.graph, c)):
-            # Get direct superclasses
-            for superclass in self.graph.objects(cls, RDFS.subClassOf):
-                # Only include if superclass is also in our selected classes
-                if superclass in classes and isinstance(superclass, URIRef):
-                    subclass_name = qname(self.graph, cls)
-                    superclass_name = qname(self.graph, superclass)
+        # Render subclass relationships
+        for cls in self.entities["classes"]:
+            for parent in self.graph.objects(cls, RDFS.subClassOf):
+                if parent in self.entities["classes"]:
+                    # Use dot notation - no quoting needed
+                    child_name = plantuml_identifier(self.graph, cls)
+                    parent_name = plantuml_identifier(self.graph, parent)
 
-                    # Quote names with colons
-                    if ":" in subclass_name:
-                        subclass_name = f'"{subclass_name}"'
-                    if ":" in superclass_name:
-                        superclass_name = f'"{superclass_name}"'
-
-                    lines.append(f"{subclass_name} {arrow} {superclass_name}")
+                    lines.append(f"{child_name} {arrow_syntax} {parent_name}")
 
         return lines
 
     def render_instance_relationships(self) -> list[str]:
-        """Render rdf:type relationships from instances to classes.
+        """Render rdf:type relationships as dashed instance arrows.
 
-        Uses styled arrows based on configuration.
+        Uses proper PlantUML syntax with dot notation.
 
         Returns:
-            List of PlantUML lines for instance-class relationships
+            List of PlantUML relationship lines
         """
         lines = []
-        instances = self.entities["instances"]
-        classes = self.entities["classes"]
 
-        # Get arrow syntax - dotted for instances
-        if self.layout:
-            base_arrow = self.layout.get_arrow_syntax("instance")
-            # Make it dotted
-            arrow = base_arrow.replace("-", ".")
-        else:
-            arrow = "..|>"  # Default: dotted inheritance
+        for instance in self.entities["instances"]:
+            # Use dot notation - no quoting needed
+            instance_name = plantuml_identifier(self.graph, instance)
 
-        for instance in sorted(instances, key=lambda i: qname(self.graph, i)):
-            # Get classes this instance belongs to
             for cls in self.graph.objects(instance, RDF.type):
-                # Only include if class is in our selected classes
-                if cls in classes and isinstance(cls, URIRef):
-                    instance_name = qname(self.graph, instance)
-                    class_name = qname(self.graph, cls)
+                if cls in self.entities["classes"]:
+                    class_name = plantuml_identifier(self.graph, cls)
 
-                    # Quote names with colons
-                    if ":" in instance_name:
-                        instance_name = f'"{instance_name}"'
-                    if ":" in class_name:
-                        class_name = f'"{class_name}"'
-
-                    lines.append(f"{instance_name} {arrow} {class_name}")
+                    # Dashed arrow for instance-of relationship
+                    lines.append(f'{instance_name} ..|> {class_name}')
 
         return lines
 
     def render_object_properties(self) -> list[str]:
         """Render object properties as associations between classes.
 
-        Uses layout-configured arrow direction if available.
+        Uses proper PlantUML syntax with dot notation.
 
         Returns:
-            List of PlantUML lines for object property associations
+            List of PlantUML association lines
         """
         lines = []
-        object_props = self.entities["object_properties"]
-        classes = self.entities["classes"]
 
-        # Get arrow syntax
-        if self.layout:
-            arrow = self.layout.get_arrow_syntax("object_property")
-        else:
-            arrow = "-->"  # Default: simple arrow
+        object_props = self.entities.get("object_properties", set())
 
         for prop in sorted(object_props, key=lambda p: qname(self.graph, p)):
-            # Use camelCase for property labels
+            # Get property label
             prop_label = safe_label(self.graph, prop, camelcase=True)
 
             # Get domain and range
             domains = list(self.graph.objects(prop, RDFS.domain))
             ranges = list(self.graph.objects(prop, RDFS.range))
 
-            if not domains or not ranges:
-                continue
-
-            # Only render if both domain and range are in selected classes
+            # Render associations for domain-range pairs
             for domain in domains:
-                if domain not in classes:
-                    continue
-                for range_cls in ranges:
-                    if range_cls not in classes:
-                        continue
+                if domain in self.entities["classes"]:
+                    for rng in ranges:
+                        if rng in self.entities["classes"]:
+                            # Use dot notation - no quoting needed
+                            domain_name = plantuml_identifier(self.graph, domain)
+                            range_name = plantuml_identifier(self.graph, rng)
 
-                    domain_name = qname(self.graph, domain)
-                    range_name = qname(self.graph, range_cls)
-
-                    # Quote names with colons
-                    if ":" in domain_name:
-                        domain_name = f'"{domain_name}"'
-                    if ":" in range_name:
-                        range_name = f'"{range_name}"'
-
-                    lines.append(f"{domain_name} {arrow} {range_name} : {prop_label}")
+                            lines.append(f'{domain_name} --> {range_name} : {prop_label}')
 
         return lines
 
