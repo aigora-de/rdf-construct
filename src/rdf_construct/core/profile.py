@@ -5,6 +5,8 @@ from typing import Any
 
 import yaml
 
+from .predicate_order import PredicateOrderConfig
+
 
 class OrderingProfile:
     """Represents an ordering profile from a YAML configuration.
@@ -17,6 +19,7 @@ class OrderingProfile:
         name: Profile identifier
         description: Human-readable description
         sections: List of section configurations
+        predicate_order: Optional predicate ordering configuration
     """
 
     def __init__(self, name: str, config: dict[str, Any]):
@@ -29,6 +32,9 @@ class OrderingProfile:
         self.name = name
         self.description = config.get("description", "")
         self.sections = config.get("sections", [])
+        self.predicate_order = PredicateOrderConfig.from_dict(
+            config.get("predicate_order")
+        )
 
     def __repr__(self) -> str:
         return f"OrderingProfile(name={self.name!r}, sections={len(self.sections)})"
@@ -46,6 +52,7 @@ class OrderingConfig:
         selectors: Named selector definitions
         prefix_order: Preferred order for namespace prefixes
         profiles: Dictionary of available ordering profiles
+        predicate_order: Default predicate ordering (can be overridden per profile)
     """
 
     def __init__(self, yaml_path: Path | str):
@@ -60,6 +67,11 @@ class OrderingConfig:
         self.defaults = self.config.get("defaults", {}) or {}
         self.selectors = self.config.get("selectors", {}) or {}
         self.prefix_order = self.config.get("prefix_order", []) or []
+
+        # Load default predicate ordering (can be overridden per profile)
+        self.predicate_order = PredicateOrderConfig.from_dict(
+            self.config.get("predicate_order")
+        )
 
         # Load profiles
         self.profiles = {}
@@ -84,6 +96,41 @@ class OrderingConfig:
                 f"{', '.join(self.profiles.keys())}"
             )
         return self.profiles[name]
+
+    def get_predicate_order(self, profile_name: str) -> PredicateOrderConfig | None:
+        """Get the effective predicate ordering for a profile.
+
+        Profile-level predicate_order takes precedence over config-level.
+
+        Args:
+            profile_name: Profile identifier
+
+        Returns:
+            PredicateOrderConfig or None if no ordering configured
+        """
+        profile = self.get_profile(profile_name)
+
+        # Profile-level overrides config-level
+        if profile.predicate_order.classes.first or profile.predicate_order.classes.last:
+            return profile.predicate_order
+        if profile.predicate_order.properties.first or profile.predicate_order.properties.last:
+            return profile.predicate_order
+        if profile.predicate_order.individuals.first or profile.predicate_order.individuals.last:
+            return profile.predicate_order
+        if profile.predicate_order.default.first or profile.predicate_order.default.last:
+            return profile.predicate_order
+
+        # Fall back to config-level
+        if self.predicate_order.classes.first or self.predicate_order.classes.last:
+            return self.predicate_order
+        if self.predicate_order.properties.first or self.predicate_order.properties.last:
+            return self.predicate_order
+        if self.predicate_order.individuals.first or self.predicate_order.individuals.last:
+            return self.predicate_order
+        if self.predicate_order.default.first or self.predicate_order.default.last:
+            return self.predicate_order
+
+        return None
 
     def list_profiles(self) -> list[str]:
         """Get list of available profile names.
