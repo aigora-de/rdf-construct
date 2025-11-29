@@ -1,0 +1,351 @@
+# IES Building Ontology - UML Context Definitions
+#
+# This config defines focused diagram views for the IES Building ontology.
+# Each context produces a separate PlantUML diagram showing a specific aspect.
+#
+# Usage:
+#   # Generate all contexts
+#   poetry run rdf-construct uml examples/ies-building.ttl ies_building_contexts.yml
+#
+#   # Generate specific context with IES styling
+#   poetry run rdf-construct uml examples/ies-building.ttl ies_building_contexts.yml \
+#     --context building_core \
+#     --style-config examples/ies_colour_palette.yml --style ies_core
+#
+#   # Output to specific directory
+#   poetry run rdf-construct uml examples/ies-building.ttl ies_building_contexts.yml \
+#     --context envelope_components -o docs/diagrams/
+
+# Namespace prefixes used in this config
+# (These match the prefixes defined in the TTL file)
+prefixes:
+  building: "http://informationexchangestandard.org/ont/ies-building#"
+  ies: "http://ies.data.gov.uk/ontology/ies4#"
+  owl: "http://www.w3.org/2002/07/owl#"
+  rdfs: "http://www.w3.org/2000/01/rdf-schema#"
+
+contexts:
+
+  # ============================================
+  # Context 1: Core Building Hierarchy
+  # ============================================
+  # Shows the main Building classes and their relationship to IES foundation
+  building_core:
+    description: "Core building concepts - Building, BuildingUnit, Envelope, Storey"
+    mode: explicit
+
+    classes:
+      # IES foundation (for context)
+      - ies:Location
+      - ies:ArtificialFeature
+      - ies:Space
+
+      # Core building classes
+      - building:Building
+      - building:BuildingUnit
+      - building:Envelope
+      - building:Storey
+
+      # Metaclasses for the core concepts
+      - ies:ClassOfArtificialFeature
+      - building:ClassOfBuilding
+      - building:ClassOfBuildingUnit
+      - building:ClassOfEnvelope
+
+    object_properties: []
+    datatype_properties: []
+    annotation_properties: []
+    instances: []
+
+  # ============================================
+  # Context 2: Space Types
+  # ============================================
+  # Shows the different types of spaces within buildings
+  space_types:
+    description: "Building space classifications - enclosed, open, sheltered, zones"
+    mode: explicit
+
+    classes:
+      # IES foundation
+      - ies:Location
+      - ies:Space
+
+      # Space types
+      - building:EnclosedSpace
+      - building:OpenSpace
+      - building:PartiallyEnclosedSpace
+      - building:ShelteredSpace
+      - building:Zone
+
+    object_properties: []
+    datatype_properties: []
+    annotation_properties: []
+    instances: []
+
+  # ============================================
+  # Context 3: Envelope Components
+  # ============================================
+  # The physical elements that make up a building envelope
+  envelope_components:
+    description: "Envelope composition - Walling, Roofing, Flooring, Glazing, DoorWork"
+    mode: explicit
+
+    classes:
+      # IES foundation
+      - ies:Location
+      - ies:ArtificialFeature
+
+      # The envelope itself
+      - building:Envelope
+      - building:ClassOfEnvelope
+
+      # Envelope component classes (note: these inherit from building:ArtificialFeature
+      # which isn't explicitly declared in the TTL but implied)
+      - building:Walling
+      - building:Roofing
+      - building:Flooring
+      - building:FlooringCeilingWork
+      - building:Glazing
+      - building:DoorWork
+
+      # Classification metaclasses for envelope components
+      - building:ClassOfWalling
+      - building:ClassOfRoofing
+      - building:ClassOfFlooring
+      - building:ClassOfFlooringCeilingWork
+      - building:ClassOfGlazing
+      - building:ClassOfDoorWork
+
+    object_properties: []
+    datatype_properties: []
+    annotation_properties: []
+    instances: []
+
+  # ============================================
+  # Context 4: Building Variants
+  # ============================================
+  # Different types/states of buildings
+  building_variants:
+    description: "Building subtypes and states"
+    mode: explicit
+
+    classes:
+      # Parent
+      - ies:Location
+      - ies:ArtificialFeature
+      - building:Building
+
+      # Building variants
+      - building:BuildingWithMadeSurface
+      - building:BuildingUnderConstruction
+      - building:RuinedBuilding
+      - building:BuildingWithCarParkOnRoof
+      - building:BuildingWithPathOnRoof
+      - building:BuildingWithDovecot
+      - building:BuildingWithLight
+
+    object_properties: []
+    datatype_properties: []
+    annotation_properties: []
+    instances: []
+
+  # ============================================
+  # Context 5: Built Infrastructure
+  # ============================================
+  # Non-building structures like bridges, towers, wells
+  built_infrastructure:
+    description: "Infrastructure structures - bridges, towers, masts, utilities"
+    mode: explicit
+
+    classes:
+      # Parent
+      - ies:Location
+      - ies:ArtificialFeature
+
+      # Vertical structures
+      - building:Tower
+      - building:TelecommunicationsMast
+
+      # Horizontal/spanning structures
+      - building:Bridge
+      - building:Gantry
+
+      # Water-related structures
+      - building:Well
+      - building:RoofedWell
+      - building:BoreHole
+      - building:Weir
+      - building:WaterPumpingChamber
+      - building:WindPump
+
+      # Transportation/industrial
+      - building:TravellingCrane
+      - building:MotorVehicleWeighbridge
+      - building:RailVehicleWeighbridge
+
+    object_properties: []
+    datatype_properties: []
+    annotation_properties: []
+    instances: []
+
+  # ============================================
+  # Context 6: Roofing Classification Hierarchy
+  # ============================================
+  # Shows the powertype pattern for roof classification
+  roof_classification:
+    description: "Roof classification metaclass hierarchy"
+    mode: explicit
+
+    classes:
+      # IES metaclass foundation
+      - ies:ClassOfEntity
+
+      # The Roof class itself (if present - using Roofing as main class)
+      - building:Roofing
+      - building:ClassOfRoofing
+
+      # Roof classification dimensions
+      - building:RoofByConstruction
+      - building:RoofByInsulationLocation
+      - building:RoofByInsulationThickness
+      - building:RoofByCompassOrientation
+      - building:RoofByShape
+
+    object_properties: []
+    datatype_properties: []
+    annotation_properties: []
+    instances: []
+
+  # ============================================
+  # Context 7: Envelope Classification
+  # ============================================
+  # Classification metaclasses for envelope
+  envelope_classification:
+    description: "Envelope classification by boundary type"
+    mode: explicit
+
+    classes:
+      # Foundation
+      - ies:Location
+      - ies:ClassOfArtificialFeature
+
+      # Envelope metaclasses
+      - building:ClassOfEnvelope
+      - building:ClassOfEnvelopeByTopBoundary
+      - building:ClassOfEnvelopeByBottomBoundary
+      - building:ClassOfEnvelopeBySideBoundary
+      - building:ClassOfEnvelopeByTopBoundaryConstruction
+
+    object_properties: []
+    datatype_properties: []
+    annotation_properties: []
+    instances: []
+
+  # ============================================
+  # Context 8: Minimal Overview
+  # ============================================
+  # A very simple view for introduction/overview
+  minimal_overview:
+    description: "Simplified overview - just the key concepts"
+    mode: explicit
+
+    classes:
+      # Just the essentials
+      - ies:Location
+      - ies:ArtificialFeature
+      - ies:Space
+      - building:Building
+      - building:BuildingUnit
+      - building:Envelope
+      - building:Storey
+
+    object_properties: []
+    datatype_properties: []
+    annotation_properties: []
+    instances: []
+
+  # ============================================
+  # Context 9: Full Ontology
+  # ============================================
+  # Everything (use with caution - may be very large!)
+  full:
+    description: "Complete ontology view (may be large)"
+    mode: explicit
+
+    classes:
+      # IES foundation
+      - ies:Location
+      - ies:ArtificialFeature
+      - ies:Space
+      - ies:ClassOfArtificialFeature
+      - ies:ClassOfEntity
+
+      # Core building
+      - building:Building
+      - building:BuildingUnit
+      - building:Envelope
+      - building:Storey
+
+      # Spaces
+      - building:EnclosedSpace
+      - building:OpenSpace
+      - building:PartiallyEnclosedSpace
+      - building:ShelteredSpace
+      - building:Zone
+
+      # Envelope components
+      - building:Walling
+      - building:Roofing
+      - building:Flooring
+      - building:FlooringCeilingWork
+      - building:Glazing
+      - building:DoorWork
+
+      # Building variants
+      - building:BuildingWithMadeSurface
+      - building:BuildingUnderConstruction
+      - building:RuinedBuilding
+      - building:FloatingStructure
+
+      # Core metaclasses
+      - building:ClassOfBuilding
+      - building:ClassOfBuildingUnit
+      - building:ClassOfEnvelope
+      - building:ClassOfWalling
+      - building:ClassOfRoofing
+      - building:ClassOfFlooring
+      - building:ClassOfFlooringCeilingWork
+      - building:ClassOfGlazing
+      - building:ClassOfDoorWork
+
+    object_properties:
+      - building:hasProjectedRoofArea
+
+    datatype_properties: []
+    annotation_properties: []
+    instances: []
+
+
+# ============================================
+# Usage Examples
+# ============================================
+#
+# 1. Generate the core building diagram:
+#    poetry run rdf-construct uml examples/ies-building.ttl ies_building_contexts.yml \
+#      --context building_core \
+#      --style-config examples/ies_colour_palette.yml --style ies_core
+#
+# 2. Generate envelope components with metaclass emphasis:
+#    poetry run rdf-construct uml examples/ies-building.ttl ies_building_contexts.yml \
+#      --context envelope_components \
+#      --style-config examples/ies_colour_palette.yml --style ies_metaclass
+#
+# 3. Generate all contexts to a specific directory:
+#    poetry run rdf-construct uml examples/ies-building.ttl ies_building_contexts.yml \
+#      --style-config examples/ies_colour_palette.yml --style ies_full \
+#      -o docs/diagrams/building/
+#
+# 4. Generate minimal overview for presentations:
+#    poetry run rdf-construct uml examples/ies-building.ttl ies_building_contexts.yml \
+#      --context minimal_overview \
+#      --layout-config examples/uml_layouts.yml --layout presentation

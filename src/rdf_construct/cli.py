@@ -6,7 +6,7 @@ import click
 from rdflib import Graph, RDF
 from rdflib.namespace import OWL
 
-from src.rdf_construct.core import (
+from .core import (
     OrderingConfig,
     build_section_graph,
     extract_prefix_map,
@@ -15,13 +15,18 @@ from src.rdf_construct.core import (
     serialise_turtle,
     sort_subjects,
 )
-from src.rdf_construct.uml import (
+from .uml import (
     load_uml_config,
     collect_diagram_entities,
     render_plantuml,
 )
-from src.rdf_construct.uml.uml_style import load_style_config
-from src.rdf_construct.uml.uml_layout import load_layout_config
+from .uml.uml_style import load_style_config
+from .uml.uml_layout import load_layout_config
+from .uml.odm_renderer import render_odm_plantuml
+
+
+# Valid rendering modes
+RENDERING_MODES = ["default", "odm"]
 
 @click.group()
 @click.version_option()
@@ -179,8 +184,14 @@ def profiles(config: Path):
 
 
 @cli.command()
-@click.argument("source", type=click.Path(exists=True, path_type=Path))
-@click.argument("config", type=click.Path(exists=True, path_type=Path))
+@click.argument("sources", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--config",
+    "-C",
+    required=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="YAML configuration file defining UML contexts",
+)
 @click.option(
     "--context",
     "-c",
@@ -212,24 +223,33 @@ def profiles(config: Path):
     "--layout", "-l",
     help="Layout name to use (e.g., 'hierarchy', 'compact')"
 )
-def uml(source, config, context, outdir, style_config, style, layout_config, layout):
+@click.option(
+    "--rendering-mode", "-r",
+    type=click.Choice(RENDERING_MODES, case_sensitive=False),
+    default="default",
+    help="Rendering mode: 'default' (custom stereotypes) or 'odm' (OMG ODM RDF Profile compliant)"
+)
+def uml(sources, config, context, outdir, style_config, style, layout_config, layout, rendering_mode):
     """Generate UML class diagrams from RDF ontologies.
 
-    SOURCE: Input RDF Turtle file (.ttl)
-    CONFIG: YAML configuration file defining UML contexts
+    SOURCES: One or more RDF Turtle files (.ttl). The first file is the primary
+    source; additional files provide supporting definitions (e.g., imported
+    ontologies for complete class hierarchies).
 
     Examples:
 
-        # Basic usage (no styling)
-        rdf-construct uml ontology.ttl example/uml_contexts.yml
+        # Basic usage - single source
+        rdf-construct uml ontology.ttl -C contexts.yml
 
-        # Generate only specific contexts
-        rdf-construct uml ontology.ttl example/uml_contexts.yml -c animal_taxonomy
+        # Multiple sources - primary + supporting ontology
+        rdf-construct uml building.ttl ies4.ttl -C contexts.yml
 
-        # With default style and hierarchy layout
-        rdf-construct uml ontology.ttl example/uml_contexts.yml \\
-            --style-config examples/uml_styles.yml --style default \\
-            --layout-config examples/uml_layouts.yml --layout hierarchy
+        # Multiple sources with styling (hierarchy inheritance works!)
+        rdf-construct uml building.ttl ies4.ttl -C contexts.yml \\
+            --style-config ies_colours.yml --style ies_full
+
+        # Generate specific context with ODM mode
+        rdf-construct uml building.ttl ies4.ttl -C contexts.yml -c core -r odm
     """
     # Load style if provided
     style_scheme = None
@@ -255,6 +275,12 @@ def uml(source, config, context, outdir, style_config, style, layout_config, lay
             click.echo(f"Available layouts: {', '.join(layout_mgr.list_layouts())}")
             raise click.Abort()
 
+    # Display rendering mode
+    if rendering_mode == "odm":
+        click.echo("Using rendering mode: ODM RDF Profile (OMG compliant)")
+    else:
+        click.echo("Using rendering mode: default")
+
     # Load UML configuration
     uml_config = load_uml_config(config)
 
@@ -279,10 +305,32 @@ def uml(source, config, context, outdir, style_config, style, layout_config, lay
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    # Parse source RDF
-    click.echo(f"Loading {source}...")
+    # Parse source RDF files into a single graph
+    # The first source is considered the "primary" (used for output naming)
+    primary_source = sources[0]
     graph = Graph()
-    graph.parse(source.as_posix(), format="turtle")
+
+    for source in sources:
+        click.echo(f"Loading {source}...")
+        # Guess format from extension
+        suffix = source.suffix.lower()
+        if suffix in (".ttl", ".turtle"):
+            fmt = "turtle"
+        elif suffix in (".rdf", ".xml", ".owl"):
+            fmt = "xml"
+        elif suffix in (".nt", ".ntriples"):
+            fmt = "nt"
+        elif suffix in (".n3",):
+            fmt = "n3"
+        elif suffix in (".jsonld", ".json"):
+            fmt = "json-ld"
+        else:
+            fmt = "turtle"  # Default to turtle
+
+        graph.parse(source.as_posix(), format=fmt)
+
+    if len(sources) > 1:
+        click.echo(f"  Merged {len(sources)} source files ({len(graph)} triples total)")
 
     # Get selectors from defaults (if any)
     selectors = uml_config.defaults.get("selectors", {})
@@ -295,11 +343,17 @@ def uml(source, config, context, outdir, style_config, style, layout_config, lay
         # Select entities
         entities = collect_diagram_entities(graph, ctx, selectors)
 
-        # Build output filename
-        out_file = outdir / f"{source.stem}-{ctx_name}.puml"
+        # Build output filename (include mode suffix for ODM)
+        if rendering_mode == "odm":
+            out_file = outdir / f"{primary_source.stem}-{ctx_name}-odm.puml"
+        else:
+            out_file = outdir / f"{primary_source.stem}-{ctx_name}.puml"
 
         # Render with optional style and layout
-        render_plantuml(graph, entities, out_file, style_scheme, layout_cfg)
+        if rendering_mode == "odm":
+            render_odm_plantuml(graph, entities, out_file, style_scheme, layout_cfg)
+        else:
+            render_plantuml(graph, entities, out_file, style_scheme, layout_cfg)
 
         click.secho(f"  ✓ {out_file}", fg="green")
         click.echo(
