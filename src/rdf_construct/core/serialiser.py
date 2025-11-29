@@ -10,6 +10,21 @@ from pathlib import Path
 from rdflib import Graph, URIRef, Literal, RDF
 from rdflib.namespace import RDFS, OWL, XSD
 
+try:
+    from .predicate_order import (
+        PredicateOrderConfig,
+        PredicateOrderSpec,
+        classify_subject,
+        order_predicates,
+    )
+except ImportError:
+    from predicate_order import (
+        PredicateOrderConfig,
+        PredicateOrderSpec,
+        classify_subject,
+        order_predicates,
+    )
+
 
 def format_term(graph: Graph, term, use_prefixes: bool = True) -> str:
     """Format an RDF term as a Turtle string.
@@ -54,7 +69,10 @@ def format_term(graph: Graph, term, use_prefixes: bool = True) -> str:
 
 
 def serialise_turtle(
-        graph: Graph, subjects_ordered: list, output_path: Path | str
+    graph: Graph,
+    subjects_ordered: list,
+    output_path: Path | str,
+    predicate_order: PredicateOrderConfig | None = None,
 ) -> None:
     """Serialise RDF graph to Turtle format with preserved subject ordering.
 
@@ -65,7 +83,7 @@ def serialise_turtle(
     - Prefixes sorted alphabetically at top
     - Subjects in specified order
     - rdf:type predicate listed first for each subject
-    - Predicates sorted alphabetically (except rdf:type)
+    - Predicates ordered according to predicate_order config (or alphabetically)
     - Objects sorted alphabetically within each predicate
     - Proper indentation and punctuation
 
@@ -73,6 +91,7 @@ def serialise_turtle(
         graph: RDF graph to serialise
         subjects_ordered: List of subjects in desired output order
         output_path: Path to write Turtle file to
+        predicate_order: Optional predicate ordering configuration
     """
     lines = []
 
@@ -94,19 +113,16 @@ def serialise_turtle(
         lines.append(f"{subj_str}")
 
         # Group predicates
-        pred_dict = {}
+        pred_dict: dict[URIRef, list] = {}
         for p, o in preds:
             if p not in pred_dict:
                 pred_dict[p] = []
             pred_dict[p].append(o)
 
-        # Sort predicates: rdf:type first, then others alphabetically
-        sorted_preds = []
-        if RDF.type in pred_dict:
-            sorted_preds.append((RDF.type, pred_dict[RDF.type]))
-        for p in sorted(pred_dict.keys(), key=lambda x: format_term(graph, x)):
-            if p != RDF.type:
-                sorted_preds.append((p, pred_dict[p]))
+        # Order predicates
+        sorted_preds = _order_subject_predicates(
+            graph, subject, pred_dict, predicate_order
+        )
 
         # Write predicate-object pairs
         for i, (pred, objects) in enumerate(sorted_preds):
@@ -138,6 +154,54 @@ def serialise_turtle(
     # Write to file
     output_path = Path(output_path)
     output_path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _order_subject_predicates(
+    graph: Graph,
+    subject: URIRef,
+    pred_dict: dict[URIRef, list],
+    predicate_order: PredicateOrderConfig | None,
+) -> list[tuple[URIRef, list]]:
+    """Order predicates for a subject according to configuration.
+
+    Args:
+        graph: RDF graph
+        subject: The subject being serialised
+        pred_dict: Dictionary of predicate -> objects
+        predicate_order: Predicate ordering configuration
+
+    Returns:
+        List of (predicate, objects) tuples in desired order
+    """
+    sorted_preds = []
+
+    # rdf:type always first
+    if RDF.type in pred_dict:
+        sorted_preds.append((RDF.type, pred_dict[RDF.type]))
+
+    # Get remaining predicates (excluding rdf:type)
+    remaining = [p for p in pred_dict.keys() if p != RDF.type]
+
+    if predicate_order:
+        # Use configured ordering
+        subject_type = classify_subject(graph, subject)
+        spec = predicate_order.get_spec_for_type(subject_type)
+
+        ordered = order_predicates(
+            graph,
+            remaining,
+            spec,
+            lambda x: format_term(graph, x),
+        )
+    else:
+        # Default: alphabetical ordering
+        ordered = sorted(remaining, key=lambda x: format_term(graph, x))
+
+    # Add ordered predicates
+    for pred in ordered:
+        sorted_preds.append((pred, pred_dict[pred]))
+
+    return sorted_preds
 
 
 def build_section_graph(base: Graph, subjects_ordered: list) -> Graph:

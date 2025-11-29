@@ -21,6 +21,47 @@ selectors:
   ann_props:      "rdf:type owl:AnnotationProperty"
   individuals:    "FILTER NOT EXISTS { ?s a owl:Class } FILTER NOT EXISTS { ?s a rdf:Property }"
 
+# =============================================================================
+# Predicate Ordering
+# =============================================================================
+# Controls the order of predicates when serialising subjects.
+# rdf:type is always first, then:
+#   1. 'first' predicates in listed order
+#   2. Remaining predicates alphabetically by QName
+#   3. 'last' predicates in listed order
+#
+# Can be overridden per-profile if needed.
+
+predicate_order:
+  classes:
+    first:
+      - rdfs:label
+      - rdfs:comment
+      - rdfs:isDefinedBy
+    last:
+      - rdfs:subClassOf
+
+  properties:
+    first:
+      - rdfs:label
+      - rdfs:comment
+      - rdfs:domain
+      - rdfs:range
+    last:
+      - rdfs:subPropertyOf
+
+  individuals:
+    first:
+      - rdfs:label
+      - rdfs:comment
+    last: []
+
+  default:
+    first:
+      - rdfs:label
+      - rdfs:comment
+    last: []
+
 shared:
   class_roots: &class_roots [ "ies:Element", "ies:ClassOfElement" ]
   domain_priority: &domain_priority [ "ies:Element", "ies:PhysicalObject", "ies:System", "ies:Process" ]
