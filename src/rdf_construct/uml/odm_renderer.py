@@ -360,6 +360,22 @@ class ODMRenderer:
         # Default grey for properties
         return " #CCCCCC"
 
+    def _curie_to_plantuml_id(self, curie: str) -> str:
+        """Convert a CURIE (e.g., 'building:Building') to PlantUML identifier.
+
+        This is used by layout together/hints which use CURIEs in config.
+
+        Args:
+            curie: CURIE string like 'building:Building'
+
+        Returns:
+            PlantUML identifier like 'building.Building'
+        """
+        if ":" in curie:
+            prefix, local = curie.split(":", 1)
+            return f"{prefix}.{local}"
+        return curie
+
     def render_class(self, cls: URIRef) -> list[str]:
         """Render a class as an ODM-compliant PlantUML class.
 
@@ -585,6 +601,38 @@ class ODMRenderer:
 
         return lines
 
+    def render_together_blocks(self) -> list[str]:
+        """Render PlantUML 'together' blocks from layout config.
+
+        Together blocks group classes so they are placed adjacent
+        in the diagram.
+
+        Returns:
+            List of PlantUML lines for together blocks
+        """
+        if not self.layout or not hasattr(self.layout, 'get_together_blocks'):
+            return []
+
+        return self.layout.get_together_blocks(
+            id_resolver=self._curie_to_plantuml_id
+        )
+
+    def render_layout_hints(self) -> list[str]:
+        """Render hidden links from layout hints.
+
+        Hidden links influence PlantUML's layout engine without
+        being visible in the diagram.
+
+        Returns:
+            List of PlantUML hidden link lines
+        """
+        if not self.layout or not hasattr(self.layout, 'get_hidden_links'):
+            return []
+
+        return self.layout.get_hidden_links(
+            id_resolver=self._curie_to_plantuml_id
+        )
+
     def render_datatype_property_notes(self) -> list[str]:
         """Render datatype property values as notes.
 
@@ -639,6 +687,12 @@ class ODMRenderer:
                 lines.extend(directives)
                 lines.append("")
 
+        # Add together blocks (grouping hints - must come before class definitions)
+        together_blocks = self.render_together_blocks()
+        if together_blocks:
+            lines.append("' Layout groupings")
+            lines.extend(together_blocks)
+
         # Render classes
         classes = sorted(
             self.entities.get("classes", set()),
@@ -680,6 +734,13 @@ class ODMRenderer:
         lines.extend(self.render_type_relationships())
         lines.extend(self.render_domain_range_relationships())
         lines.extend(self.render_instance_properties())
+
+        # Add hidden layout hints (after visible relationships)
+        layout_hints = self.render_layout_hints()
+        if layout_hints:
+            lines.append("")
+            lines.append("' Hidden layout hints")
+            lines.extend(layout_hints)
 
         if any([classes, all_props, instances]):
             lines.append("")

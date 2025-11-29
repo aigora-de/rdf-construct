@@ -2,6 +2,12 @@
 #
 # PlantUML layout definitions for rdf-construct
 # Control diagram direction, arrow orientation, spacing, and grouping
+#
+# New features:
+# - linetype: Control edge routing (ortho, polyline, spline)
+# - group_inheritance: Merge arrow heads when multiple subclasses
+# - together: Group classes to be placed adjacent
+# - layout_hints: Hidden links to influence positioning
 
 defaults:
   layout: hierarchy  # Default layout to use
@@ -17,12 +23,14 @@ layouts:
     description: "Top-down layout with parents above children"
     direction: top_to_bottom
     arrow_direction: up  # Children point up to parents
+    linetype: ortho
+    group_inheritance: 3
     hide_empty_members: false
     show_arrows: true
     group_by_namespace: false
     spacing:
-      classMarginTop: 10
-      classMarginBottom: 10
+      nodesep: 40
+      ranksep: 60
 
   # ============================================
   # Flat Layout: Left-to-right for network diagrams
@@ -34,6 +42,9 @@ layouts:
     hide_empty_members: false
     show_arrows: true
     group_by_namespace: false
+    spacing:
+      nodesep: 30
+      ranksep: 50
 
   # ============================================
   # Compact Layout: Minimal spacing, hide empty
@@ -45,9 +56,10 @@ layouts:
     hide_empty_members: true  # Hide classes with no attributes
     show_arrows: true
     group_by_namespace: false
+    group_inheritance: 3  # Merge arrows when 3+ subclasses
     spacing:
-      classMarginTop: 5
-      classMarginBottom: 5
+      nodesep: 20
+      ranksep: 30
       padding: 5
 
   # ============================================
@@ -60,9 +72,11 @@ layouts:
     hide_empty_members: false
     show_arrows: true
     group_by_namespace: true  # Group classes by namespace prefix
+    linetype: ortho  # Right-angle lines for cleaner look
     spacing:
+      nodesep: 50
+      ranksep: 70
       packageMargin: 15
-      classMarginTop: 10
 
   # ============================================
   # Presentation Layout: Large spacing for slides
@@ -74,22 +88,51 @@ layouts:
     hide_empty_members: false
     show_arrows: true
     group_by_namespace: false
+    linetype: ortho
+    group_inheritance: 2  # Merge arrows when 2+ subclasses
     spacing:
-      classMarginTop: 20
-      classMarginBottom: 20
+      nodesep: 60
+      ranksep: 80
       padding: 15
-      nodesep: 30
+      minClassWidth: 150
+      sameClassWidth: true
+
+  # ============================================
+  # Orthogonal Layout: Right-angle connections
+  # ============================================
+  orthogonal:
+    description: "Orthogonal (right-angle) line routing"
+    direction: top_to_bottom
+    arrow_direction: up
+    hide_empty_members: false
+    show_arrows: true
+    linetype: ortho
+    spacing:
+      nodesep: 50
+      ranksep: 60
+
+  # ============================================
+  # Polyline Layout: Straight line segments
+  # ============================================
+  polyline:
+    description: "Polyline (straight segment) routing"
+    direction: top_to_bottom
+    arrow_direction: up
+    hide_empty_members: false
+    show_arrows: true
+    linetype: polyline
+    spacing:
+      nodesep: 40
       ranksep: 50
 
   # ============================================
-  # Reverse Hierarchy: NOT SUPPORTED
+  # Reverse Hierarchy: NOT FULLY SUPPORTED
   # ============================================
   # Note: PlantUML does not reliably support 'bottom to top direction'.
-  # This layout is kept for reference but will render as top-to-bottom.
-  # Use arrow_direction: down with top_to_bottom to achieve similar effect.
+  # This layout uses down arrows to hint at reversed hierarchy.
   reverse:
-    description: "DEPRECATED - PlantUML doesn't support bottom-to-top"
-    direction: top_to_bottom  # Changed from bottom_to_top (unsupported)
+    description: "WORKAROUND - uses down arrows to hint at reversed layout"
+    direction: top_to_bottom  # PlantUML doesn't support bottom_to_top
     arrow_direction: down     # Use down arrows to hint at reversed hierarchy
     hide_empty_members: false
     show_arrows: true
@@ -105,6 +148,93 @@ layouts:
     hide_empty_members: true
     show_arrows: true
     group_by_namespace: false
+    linetype: polyline
     spacing:
-      nodesep: 20
-      ranksep: 40
+      nodesep: 30
+      ranksep: 50
+
+  # ============================================
+  # IES Building Layout: Example with together groups
+  # ============================================
+  # This demonstrates using 'together' to group related classes
+  # and 'layout_hints' to influence positioning
+  ies_building:
+    description: "Layout optimised for IES Building ontology"
+    direction: top_to_bottom
+    arrow_direction: up
+    hide_empty_members: false
+    show_arrows: true
+    linetype: ortho
+    group_inheritance: 3
+
+    spacing:
+      nodesep: 50
+      ranksep: 70
+      minClassWidth: 120
+
+    # Group related classes together
+    together:
+      # Core building concepts should be adjacent
+      - [building:Building, building:BuildingUnit, building:Envelope]
+      # Metaclasses grouped
+      - [building:ClassOfBuilding, building:ClassOfBuildingUnit, building:ClassOfEnvelope]
+      # Space types grouped
+      - [building:EnclosedSpace, building:OpenSpace, building:PartiallyEnclosedSpace]
+
+    # Hidden links to influence positioning
+    layout_hints:
+      # IES foundation above building classes
+      - from: ies:ArtificialFeature
+        to: building:Building
+        direction: down
+        weight: 2
+      - from: ies:ArtificialFeature
+        to: building:Envelope
+        direction: down
+      # Metaclasses to the right of their instances
+      - from: building:Building
+        to: building:ClassOfBuilding
+        direction: right
+
+  # ============================================
+  # Grouped Inheritance Layout
+  # ============================================
+  # Merges inheritance arrows when multiple subclasses
+  grouped:
+    description: "Merges inheritance arrows for cleaner hierarchies"
+    direction: top_to_bottom
+    arrow_direction: up
+    hide_empty_members: false
+    show_arrows: true
+    group_inheritance: 2  # Merge when 2+ subclasses
+    linetype: ortho
+    spacing:
+      nodesep: 40
+      ranksep: 60
+
+
+# ============================================
+# Usage Examples
+# ============================================
+#
+# 1. Basic hierarchy layout:
+#    poetry run rdf-construct uml ontology.ttl -C contexts.yml \
+#      --layout-config uml_layouts.yml --layout hierarchy
+#
+# 2. Presentation-ready with large spacing:
+#    poetry run rdf-construct uml ontology.ttl -C contexts.yml \
+#      --layout-config uml_layouts.yml --layout presentation
+#
+# 3. Compact for large diagrams:
+#    poetry run rdf-construct uml ontology.ttl -C contexts.yml \
+#      --layout-config uml_layouts.yml --layout compact
+#
+# 4. Orthogonal lines for documentation:
+#    poetry run rdf-construct uml ontology.ttl -C contexts.yml \
+#      --layout-config uml_layouts.yml --layout orthogonal
+#
+# 5. IES Building with custom grouping:
+#    poetry run rdf-construct uml examples/ies-building.ttl examples/ies-common.ttl \
+#      -C ies_building_contexts.yml \
+#      --layout-config uml_layouts.yml --layout ies_building \
+#      --style-config examples/ies_colour_palette.yml --style ies_full
