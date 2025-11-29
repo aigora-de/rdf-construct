@@ -4,7 +4,7 @@ import pytest
 from rdflib import Graph, Namespace, RDF, RDFS, URIRef
 from rdflib.namespace import OWL
 
-from predicate_order import (
+from rdf_construct.core.predicate_order import (
     PredicateOrderSpec,
     PredicateOrderConfig,
     classify_subject,
