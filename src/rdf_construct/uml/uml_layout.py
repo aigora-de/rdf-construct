@@ -146,17 +146,22 @@ class LayoutConfig:
     def get_plantuml_directives(self) -> list[str]:
         """Generate PlantUML directives for layout control.
 
+        Note: PlantUML only reliably supports 'top to bottom direction' and
+        'left to right direction'. Other directions may not work as expected.
+
         Returns:
             List of PlantUML directive strings (skinparam, etc.)
         """
         directives = []
 
         # Layout direction
+        # Note: Only top_to_bottom and left_to_right are reliably supported
         direction_map = {
             "top_to_bottom": "top to bottom direction",
-            "bottom_to_top": "bottom to top direction",
             "left_to_right": "left to right direction",
-            "right_to_left": "right to left direction",
+            # These are not reliably supported by PlantUML:
+            # "bottom_to_top": "bottom to top direction",
+            # "right_to_left": "right to left direction",
         }
         if self.direction in direction_map:
             directives.append(direction_map[self.direction])

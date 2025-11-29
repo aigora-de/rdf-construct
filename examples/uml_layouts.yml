@@ -82,12 +82,15 @@ layouts:
       ranksep: 50
 
   # ============================================
-  # Reverse Hierarchy: Bottom-up (less common)
+  # Reverse Hierarchy: NOT SUPPORTED
   # ============================================
+  # Note: PlantUML does not reliably support 'bottom to top direction'.
+  # This layout is kept for reference but will render as top-to-bottom.
+  # Use arrow_direction: down with top_to_bottom to achieve similar effect.
   reverse:
-    description: "Bottom-up layout with children below parents"
-    direction: bottom_to_top
-    arrow_direction: down
+    description: "DEPRECATED - PlantUML doesn't support bottom-to-top"
+    direction: top_to_bottom  # Changed from bottom_to_top (unsupported)
+    arrow_direction: down     # Use down arrows to hint at reversed hierarchy
     hide_empty_members: false
     show_arrows: true
     group_by_namespace: false

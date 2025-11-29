@@ -52,7 +52,8 @@ contexts:
       - building:ClassOfBuildingUnit
       - building:ClassOfEnvelope
 
-    object_properties: []
+    object_properties:
+        - building:hasProjectedRoofArea
     datatype_properties: []
     annotation_properties: []
     instances: []
@@ -107,6 +108,7 @@ contexts:
       - building:FlooringCeilingWork
       - building:Glazing
       - building:DoorWork
+      - quantitykind:Area
 
       # Classification metaclasses for envelope components
       - building:ClassOfWalling
@@ -116,7 +118,8 @@ contexts:
       - building:ClassOfGlazing
       - building:ClassOfDoorWork
 
-    object_properties: []
+    object_properties:
+      - building:hasProjectedRoofArea
     datatype_properties: []
     annotation_properties: []
     instances: []
