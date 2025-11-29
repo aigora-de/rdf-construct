@@ -138,9 +138,12 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path):
             if ordering_config.prefix_order:
                 rebind_prefixes(out_graph, ordering_config.prefix_order, prefix_map)
 
-        # Serialise
+        # Get predicate ordering for this profile
+        predicate_order = ordering_config.get_predicate_order(prof_name)
+
+        # Serialise with predicate ordering
         out_file = outdir / f"{source.stem}-{prof_name}.ttl"
-        serialise_turtle(out_graph, ordered_subjects, out_file)
+        serialise_turtle(out_graph, ordered_subjects, out_file, predicate_order)
         click.secho(f"  ✓ {out_file}", fg="green")
 
     click.secho(
