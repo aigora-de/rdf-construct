@@ -24,6 +24,18 @@ from .uml.uml_style import load_style_config
 from .uml.uml_layout import load_layout_config
 from .uml.odm_renderer import render_odm_plantuml
 
+from .lint import (
+    LintEngine,
+    LintConfig,
+    load_lint_config,
+    find_config_file,
+    get_formatter,
+    list_rules,
+    get_all_rules,
+)
+
+LINT_LEVELS = ["strict", "standard", "relaxed"]
+LINT_FORMATS = ["text", "json"]
 
 # Valid rendering modes
 RENDERING_MODES = ["default", "odm"]
@@ -399,6 +411,211 @@ def contexts(config: Path):
 
         click.echo(f"    Properties: {ctx.property_mode}")
         click.echo()
+
+
+@cli.command()
+@click.argument("sources", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--level",
+    "-l",
+    type=click.Choice(["strict", "standard", "relaxed"], case_sensitive=False),
+    default="standard",
+    help="Strictness level (default: standard)",
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",  # Renamed to avoid shadowing builtin
+    type=click.Choice(["text", "json"], case_sensitive=False),
+    default="text",
+    help="Output format (default: text)",
+)
+@click.option(
+    "--config",
+    "-c",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to .rdf-lint.yml configuration file",
+)
+@click.option(
+    "--enable",
+    "-e",
+    multiple=True,
+    help="Enable specific rules (can be used multiple times)",
+)
+@click.option(
+    "--disable",
+    "-d",
+    multiple=True,
+    help="Disable specific rules (can be used multiple times)",
+)
+@click.option(
+    "--no-colour",
+    "--no-color",
+    is_flag=True,
+    help="Disable coloured output",
+)
+@click.option(
+    "--list-rules",
+    is_flag=True,
+    help="List available rules and exit",
+)
+@click.option(
+    "--init",
+    "init_config",
+    is_flag=True,
+    help="Generate a default .rdf-lint.yml config file and exit",
+)
+def lint(
+        sources: tuple[Path, ...],
+        level: str,
+        output_format: str,
+        config: Path | None,
+        enable: tuple[str, ...],
+        disable: tuple[str, ...],
+        no_colour: bool,
+        list_rules_flag: bool,  # Renamed from list_rules to avoid shadowing import
+        init_config: bool,
+):
+    """Check RDF ontologies for quality issues.
+
+    Performs static analysis to detect structural problems, missing
+    documentation, and best practice violations.
+
+    \b
+    SOURCES: One or more RDF files to check (.ttl, .rdf, .owl, etc.)
+
+    \b
+    Exit codes:
+      0 - No issues found
+      1 - Warnings found (no errors)
+      2 - Errors found
+
+    \b
+    Examples:
+      # Basic usage
+      rdf-construct lint ontology.ttl
+
+      # Multiple files
+      rdf-construct lint core.ttl domain.ttl
+
+      # Strict mode (warnings become errors)
+      rdf-construct lint ontology.ttl --level strict
+
+      # JSON output for CI
+      rdf-construct lint ontology.ttl --format json
+
+      # Use config file
+      rdf-construct lint ontology.ttl --config .rdf-lint.yml
+
+      # Enable/disable specific rules
+      rdf-construct lint ontology.ttl --enable orphan-class --disable missing-comment
+
+      # List available rules
+      rdf-construct lint --list-rules
+    """
+    # Handle --init flag
+    if init_config:
+        from .lint import create_default_config
+
+        config_path = Path(".rdf-lint.yml")
+        if config_path.exists():
+            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
+            raise click.Abort()
+
+        config_content = create_default_config()
+        config_path.write_text(config_content)
+        click.secho(f"Created {config_path}", fg="green")
+        return
+
+    # Handle --list-rules flag
+    if list_rules_flag:
+        from .lint import get_all_rules
+
+        rules = get_all_rules()
+        click.secho("Available lint rules:", fg="cyan", bold=True)
+        click.echo()
+
+        # Group by category
+        categories: dict[str, list] = {}
+        for rule_id, spec in sorted(rules.items()):
+            cat = spec.category
+            if cat not in categories:
+                categories[cat] = []
+            categories[cat].append(spec)
+
+        for category, specs in sorted(categories.items()):
+            click.secho(f"  {category.title()}", fg="yellow", bold=True)
+            for spec in specs:
+                severity_color = {
+                    "error": "red",
+                    "warning": "yellow",
+                    "info": "blue",
+                }[spec.default_severity.value]
+                click.echo(
+                    f"    {spec.rule_id}: "
+                    f"{click.style(spec.default_severity.value, fg=severity_color)} - "
+                    f"{spec.description}"
+                )
+            click.echo()
+
+        return
+
+    # Validate we have sources for actual linting
+    if not sources:
+        click.secho("Error: No source files specified.", fg="red", err=True)
+        raise click.Abort()
+
+    # Build configuration
+    from .lint import LintConfig, LintEngine, load_lint_config, find_config_file, get_formatter
+
+    lint_config: LintConfig
+
+    if config:
+        # Load from specified config file
+        try:
+            lint_config = load_lint_config(config)
+            click.echo(f"Using config: {config}")
+        except (FileNotFoundError, ValueError) as e:
+            click.secho(f"Error loading config: {e}", fg="red", err=True)
+            raise click.Abort()
+    else:
+        # Try to find config file automatically
+        found_config = find_config_file()
+        if found_config:
+            try:
+                lint_config = load_lint_config(found_config)
+                click.echo(f"Using config: {found_config}")
+            except (FileNotFoundError, ValueError) as e:
+                click.secho(f"Error loading config: {e}", fg="red", err=True)
+                raise click.Abort()
+        else:
+            lint_config = LintConfig()
+
+    # Apply CLI overrides
+    lint_config.level = level
+
+    if enable:
+        lint_config.enabled_rules = set(enable)
+    if disable:
+        lint_config.disabled_rules.update(disable)
+
+    # Create engine and run
+    engine = LintEngine(lint_config)
+
+    click.echo(f"Scanning {len(sources)} file(s)...")
+    click.echo()
+
+    summary = engine.lint_files(list(sources))
+
+    # Format and output results
+    use_colour = not no_colour and output_format == "text"
+    formatter = get_formatter(output_format, use_colour=use_colour)
+
+    output = formatter.format_summary(summary)
+    click.echo(output)
+
+    # Exit with appropriate code
+    raise SystemExit(summary.exit_code)
 
 
 if __name__ == "__main__":
