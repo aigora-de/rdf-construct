@@ -10,8 +10,43 @@ import json
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+from rdflib import Graph, URIRef
+
 from rdf_construct.lint.engine import LintResult, LintSummary
 from rdf_construct.lint.rules import LintIssue, Severity
+
+
+def format_entity_name(entity: URIRef, graph: Graph | None = None) -> str:
+    """Format an entity URI for display.
+
+    Tries to use a prefixed form (e.g., ies:Building) if possible,
+    otherwise falls back to the local name.
+
+    Args:
+        entity: The entity URI.
+        graph: Optional graph to get namespace bindings from.
+
+    Returns:
+        Formatted entity name string.
+    """
+    uri_str = str(entity)
+
+    # Try to get QName from graph's namespace bindings
+    if graph is not None:
+        try:
+            qname = graph.qname(entity)
+            if qname and ":" in qname:
+                return qname
+        except Exception:
+            pass
+
+    # Fall back to extracting local name
+    if "#" in uri_str:
+        return uri_str.split("#")[-1]
+    elif "/" in uri_str:
+        return uri_str.rsplit("/", 1)[-1]
+
+    return uri_str
 
 
 class Formatter(ABC):
@@ -46,8 +81,8 @@ class TextFormatter(Formatter):
     """Plain text formatter for terminal output.
 
     Produces output like:
-        file.ttl:12: error[orphan-class]: Class 'ex:Building' has no superclass
-        file.ttl:18: warning[missing-label]: Property 'ex:hasFloor' lacks rdfs:label
+        file.ttl:12: error[orphan-class]: ies:Building - Class has no superclass
+        file.ttl:18: warning[missing-label]: ies:hasFloor - Property lacks rdfs:label
 
         Found 1 error, 1 warning, 0 info messages
     """
@@ -83,31 +118,20 @@ class TextFormatter(Formatter):
         """Get colour code for a severity level."""
         return self.COLOURS.get(severity, "")
 
-    def _format_entity(self, entity) -> str:
-        """Format an entity URI for display."""
-        if entity is None:
-            return ""
-        uri = str(entity)
-        # Try to extract a readable local name
-        if "#" in uri:
-            return uri.split("#")[-1]
-        elif "/" in uri:
-            return uri.split("/")[-1]
-        return uri
-
-    def format_issue(self, issue: LintIssue, file_path: Path) -> str:
+    def format_issue(self, issue: LintIssue, file_path: Path, graph: Graph | None = None) -> str:
         """Format a single issue.
 
         Args:
             issue: The issue to format.
             file_path: Path to the file containing the issue.
+            graph: Optional graph for namespace resolution.
 
         Returns:
             Formatted issue line.
         """
         parts = []
 
-        # File location
+        # File location with line number
         location = str(file_path)
         if issue.line:
             location = f"{location}:{issue.line}"
@@ -120,10 +144,10 @@ class TextFormatter(Formatter):
             self._colour(rule_part, self.COLOURS["bold"], self._severity_colour(issue.severity))
         )
 
-        # Entity (if present)
+        # Entity (if present) - use formatted name with namespace
         if issue.entity:
-            entity_name = self._format_entity(issue.entity)
-            parts.append(f"'{entity_name}':")
+            entity_name = format_entity_name(issue.entity, graph)
+            parts.append(f"{entity_name}:")
 
         # Message
         parts.append(issue.message)
@@ -136,8 +160,13 @@ class TextFormatter(Formatter):
             return ""
 
         lines = []
-        for issue in sorted(result.issues, key=lambda i: (i.line or 0, i.severity)):
-            lines.append(self.format_issue(issue, result.file_path))
+        # Sort by line number (issues without lines go last)
+        sorted_issues = sorted(
+            result.issues,
+            key=lambda i: (i.line or float('inf'), i.severity)
+        )
+        for issue in sorted_issues:
+            lines.append(self.format_issue(issue, result.file_path, result.graph))
 
         return "\n".join(lines)
 
@@ -194,6 +223,7 @@ class JsonFormatter(Formatter):
                         "rule": "orphan-class",
                         "severity": "error",
                         "entity": "http://example.org/Building",
+                        "entity_name": "ies:Building",
                         "message": "Class has no superclass",
                         "line": 12
                     }
@@ -213,9 +243,9 @@ class JsonFormatter(Formatter):
         """
         self.pretty = pretty
 
-    def _issue_to_dict(self, issue: LintIssue) -> dict:
+    def _issue_to_dict(self, issue: LintIssue, graph: Graph | None = None) -> dict:
         """Convert an issue to a dictionary."""
-        return {
+        result = {
             "rule": issue.rule_id,
             "severity": issue.severity.value,
             "entity": str(issue.entity) if issue.entity else None,
@@ -223,11 +253,17 @@ class JsonFormatter(Formatter):
             "line": issue.line,
         }
 
+        # Add formatted entity name if available
+        if issue.entity:
+            result["entity_name"] = format_entity_name(issue.entity, graph)
+
+        return result
+
     def format_result(self, result: LintResult) -> str:
         """Format a single file's lint result as JSON."""
         data = {
             "path": str(result.file_path),
-            "issues": [self._issue_to_dict(i) for i in result.issues],
+            "issues": [self._issue_to_dict(i, result.graph) for i in result.issues],
             "summary": {
                 "errors": result.error_count,
                 "warnings": result.warning_count,
@@ -245,7 +281,7 @@ class JsonFormatter(Formatter):
             "files": [
                 {
                     "path": str(r.file_path),
-                    "issues": [self._issue_to_dict(i) for i in r.issues],
+                    "issues": [self._issue_to_dict(i, r.graph) for i in r.issues],
                     "summary": {
                         "errors": r.error_count,
                         "warnings": r.warning_count,

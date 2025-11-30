@@ -6,11 +6,12 @@ and collects results for reporting.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
-from rdflib import Graph
+from rdflib import Graph, URIRef
 
 from rdf_construct.lint.rules import (
     get_all_rules,
@@ -19,6 +20,61 @@ from rdf_construct.lint.rules import (
     RuleSpec,
     Severity,
 )
+
+
+def find_line_number(file_path: Path, entity: URIRef) -> int | None:
+    """Find approximate line number for an entity's definition in a Turtle file.
+
+    Prioritises finding the entity as a subject (its definition) rather than
+    as a predicate or object.
+    """
+    if not file_path.exists():
+        return None
+
+    uri_str = str(entity)
+
+    # Extract local name
+    if "#" in uri_str:
+        local_name = uri_str.split("#")[-1]
+    elif "/" in uri_str:
+        local_name = uri_str.rsplit("/", 1)[-1]
+    else:
+        local_name = uri_str
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except (IOError, UnicodeDecodeError):
+        return None
+
+    # First pass: look for entity as a SUBJECT (definition)
+    # Pattern: entity at start of line (after optional whitespace), followed by 'a' or predicate
+    subject_patterns = [
+        # Full URI as subject
+        rf"^\s*<{re.escape(uri_str)}>\s+",
+        # Prefixed form as subject at start of line
+        rf"^\s*\w+:{re.escape(local_name)}\s+",
+    ]
+
+    for pattern in subject_patterns:
+        regex = re.compile(pattern)
+        for i, line in enumerate(lines, start=1):
+            if regex.match(line):
+                return i
+
+    # Second pass: find any occurrence (fallback)
+    fallback_patterns = [
+        re.escape(f"<{uri_str}>"),
+        rf"\b\w+:{re.escape(local_name)}\b",
+    ]
+
+    for pattern in fallback_patterns:
+        regex = re.compile(pattern)
+        for i, line in enumerate(lines, start=1):
+            if regex.search(line):
+                return i
+
+    return None
 
 
 @dataclass
@@ -100,6 +156,7 @@ class LintResult:
 
     Attributes:
         file_path: Path to the linted file.
+        graph: The parsed RDF graph (for namespace resolution).
         issues: List of issues found.
         error_count: Number of error-level issues.
         warning_count: Number of warning-level issues.
@@ -107,6 +164,7 @@ class LintResult:
     """
 
     file_path: Path
+    graph: Graph | None = None
     issues: list[LintIssue] = field(default_factory=list)
     error_count: int = 0
     warning_count: int = 0
@@ -195,6 +253,12 @@ class LintEngine:
         """
         self.config = config or LintConfig()
 
+    def _populate_line_numbers(self, result: LintResult, file_path: Path) -> None:
+        """Add line numbers to issues by searching the source file."""
+        for issue in result.issues:
+            if issue.entity and issue.line is None:
+                issue.line = find_line_number(file_path, issue.entity)
+
     def lint_file(self, file_path: Path) -> LintResult:
         """Lint a single RDF file.
 
@@ -229,6 +293,7 @@ class LintEngine:
                 fmt = "turtle"  # Default
 
             graph.parse(file_path.as_posix(), format=fmt)
+            result.graph = graph  # Store for namespace resolution
         except Exception as e:
             # Return result with parse error
             result.add_issue(
@@ -269,6 +334,9 @@ class LintEngine:
                     )
                 )
 
+        # Populate line numbers
+        self._populate_line_numbers(result, file_path)
+
         return result
 
     def lint_files(self, file_paths: Sequence[Path]) -> LintSummary:
@@ -298,7 +366,7 @@ class LintEngine:
         Returns:
             LintResult containing all issues found.
         """
-        result = LintResult(file_path=Path(source_name))
+        result = LintResult(file_path=Path(source_name), graph=graph)
 
         rules = self.config.get_effective_rules()
 
