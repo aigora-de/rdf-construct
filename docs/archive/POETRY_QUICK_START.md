@@ -204,7 +204,7 @@ poetry run python -c "import rdf_construct; print('OK')"
 
 ✅ Everything works if:
 ```bash
-poetry run rdf-construct --version     # Shows 0.1.0
+poetry run rdf-construct --version     # Shows 0.2.0
 poetry run pytest                      # Tests pass
 poetry run mypy src/                   # Type check passes
 poetry show rdflib                     # Shows installed version
