@@ -167,6 +167,45 @@ def get_superclasses(graph: Graph, cls: URIRef) -> set[URIRef]:
     return {o for o in graph.objects(cls, RDFS.subClassOf) if isinstance(o, URIRef)}
 
 
+def get_superproperties(graph: Graph, prop: URIRef) -> set[URIRef]:
+    """Get direct superproperties of a property."""
+    return {o for o in graph.objects(prop, RDFS.subPropertyOf) if isinstance(o, URIRef)}
+
+
+def has_inherited_domain(graph: Graph, prop: URIRef, visited: set[URIRef] | None = None) -> bool:
+    """Check if property has domain (directly or inherited from superproperty)."""
+    if visited is None:
+        visited = set()
+    if prop in visited:
+        return False
+    visited.add(prop)
+
+    if (prop, RDFS.domain, None) in graph:
+        return True
+
+    for superprop in get_superproperties(graph, prop):
+        if has_inherited_domain(graph, superprop, visited):
+            return True
+    return False
+
+
+def has_inherited_range(graph: Graph, prop: URIRef, visited: set[URIRef] | None = None) -> bool:
+    """Check if property has range (directly or inherited from superproperty)."""
+    if visited is None:
+        visited = set()
+    if prop in visited:
+        return False
+    visited.add(prop)
+
+    if (prop, RDFS.range, None) in graph:
+        return True
+
+    for superprop in get_superproperties(graph, prop):
+        if has_inherited_range(graph, superprop, visited):
+            return True
+    return False
+
+
 def get_all_referenced_uris(graph: Graph) -> set[URIRef]:
     """Get all URIs referenced in the graph (subjects, predicates, objects)."""
     uris: set[URIRef] = set()
@@ -559,55 +598,53 @@ def _is_ancestor(graph: Graph, potential_ancestor: URIRef, cls: URIRef) -> bool:
 
 @lint_rule(
     rule_id="property-no-domain",
-    description="Object property has no rdfs:domain declaration",
+    description="Object property has no rdfs:domain declaration (direct or inherited)",
     category="best-practice",
     default_severity=Severity.INFO,
 )
 def check_property_no_domain(graph: Graph) -> list[LintIssue]:
-    """Check for object properties without domain."""
+    """Check for object properties without domain (including inherited)."""
     issues = []
 
     for prop in get_object_properties(graph):
         if is_builtin(prop):
             continue
-        if (prop, RDFS.domain, None) not in graph:
+        if not has_inherited_domain(graph, prop):
             issues.append(
                 LintIssue(
                     rule_id="property-no-domain",
                     severity=Severity.INFO,
                     entity=prop,
-                    message="Object property has no rdfs:domain",
+                    message="Object property has no rdfs:domain (direct or inherited)",
                 )
             )
 
     return issues
 
-
 @lint_rule(
     rule_id="property-no-range",
-    description="Object property has no rdfs:range declaration",
+    description="Object property has no rdfs:range declaration (direct or inherited)",
     category="best-practice",
     default_severity=Severity.INFO,
 )
 def check_property_no_range(graph: Graph) -> list[LintIssue]:
-    """Check for object properties without range."""
+    """Check for object properties without range (including inherited)."""
     issues = []
 
     for prop in get_object_properties(graph):
         if is_builtin(prop):
             continue
-        if (prop, RDFS.range, None) not in graph:
+        if not has_inherited_range(graph, prop):
             issues.append(
                 LintIssue(
                     rule_id="property-no-range",
                     severity=Severity.INFO,
                     entity=prop,
-                    message="Object property has no rdfs:range",
+                    message="Object property has no rdfs:range (direct or inherited)",
                 )
             )
 
     return issues
-
 
 @lint_rule(
     rule_id="inconsistent-naming",

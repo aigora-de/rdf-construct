@@ -456,6 +456,7 @@ def contexts(config: Path):
 )
 @click.option(
     "--list-rules",
+    "list_rules_flag",
     is_flag=True,
     help="List available rules and exit",
 )
@@ -466,15 +467,15 @@ def contexts(config: Path):
     help="Generate a default .rdf-lint.yml config file and exit",
 )
 def lint(
-        sources: tuple[Path, ...],
-        level: str,
-        output_format: str,
-        config: Path | None,
-        enable: tuple[str, ...],
-        disable: tuple[str, ...],
-        no_colour: bool,
-        list_rules_flag: bool,  # Renamed from list_rules to avoid shadowing import
-        init_config: bool,
+    sources: tuple[Path, ...],
+    level: str,
+    output_format: str,
+    config: Path | None,
+    enable: tuple[str, ...],
+    disable: tuple[str, ...],
+    no_colour: bool,
+    list_rules_flag: bool,  # Must match the name above
+    init_config: bool,
 ):
     """Check RDF ontologies for quality issues.
 
