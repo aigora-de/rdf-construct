@@ -1,0 +1,108 @@
+# rdf-construct UML Context Configuration
+# =========================================
+# This starter template defines diagram contexts for your ontology.
+# Copy to your project and customise for your needs.
+#
+# Documentation: https://github.com/aigora-de/rdf-construct/docs/user_guides/UML_GUIDE.md
+# Full examples: https://github.com/aigora-de/rdf-construct/tree/main/examples
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 1: Define namespace prefixes used in your ontology
+# ─────────────────────────────────────────────────────────────────────────────
+# These must match the prefixes in your .ttl file or rdflib's assigned prefixes.
+# Run this to check your ontology's actual prefixes:
+#   python -c "from rdflib import Graph; g = Graph().parse('your.ttl'); [print(f'{p}: {n}') for p,n in g.namespaces() if p]"
+
+prefixes:
+  ex: "http://example.org/ontology#"
+  # your_prefix: "http://your-namespace.org/"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 2: Define diagram contexts
+# ─────────────────────────────────────────────────────────────────────────────
+# Each context produces one .puml diagram file.
+
+contexts:
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # OPTION A: Hierarchy from a root class
+  # ───────────────────────────────────────────────────────────────────────────
+  # Use when: You want to show a class and all its subclasses
+
+  main_hierarchy:
+    description: "Complete class hierarchy from root"
+
+    root_classes:
+      - ex:YourRootClass          # Change to your root class
+
+    include_descendants: true      # Include all subclasses
+    max_depth: null                # null = unlimited, or 2, 3, etc.
+
+    properties:
+      mode: domain_based           # Show properties with domain in these classes
+      # Other options: connected, explicit, all, none
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # OPTION B: Specific classes only
+  # ───────────────────────────────────────────────────────────────────────────
+  # Use when: You want to hand-pick which classes appear
+
+  # selected_classes:
+  #   description: "Specific classes of interest"
+  #
+  #   focus_classes:
+  #     - ex:ClassA
+  #     - ex:ClassB
+  #     - ex:ClassC
+  #
+  #   include_descendants: false    # Just these classes, no children
+  #
+  #   properties:
+  #     mode: connected             # Only properties linking these classes
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # OPTION C: Explicit mode (maximum control)
+  # ───────────────────────────────────────────────────────────────────────────
+  # Use when: You need precise control over every element
+
+  # custom_view:
+  #   description: "Manually specified diagram contents"
+  #   mode: explicit
+  #
+  #   classes:
+  #     - ex:ClassA
+  #     - ex:ClassB
+  #
+  #   object_properties:
+  #     - ex:hasRelation
+  #
+  #   datatype_properties:
+  #     - ex:hasName
+  #
+  #   instances:
+  #     - ex:Instance1
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # OPTION D: Limited depth (for large ontologies)
+  # ───────────────────────────────────────────────────────────────────────────
+
+  # shallow_view:
+  #   description: "Top two levels only"
+  #   root_classes:
+  #     - ex:TopLevelClass
+  #   include_descendants: true
+  #   max_depth: 2                  # Only 2 levels of subclasses
+  #   properties:
+  #     mode: domain_based
+
+# ─────────────────────────────────────────────────────────────────────────────
+# USAGE
+# ─────────────────────────────────────────────────────────────────────────────
+# Generate all diagrams:
+#   rdf-construct uml your_ontology.ttl this_config.yml
+#
+# Generate specific context:
+#   rdf-construct uml your_ontology.ttl this_config.yml -c main_hierarchy
+#
+# List available contexts:
+#   rdf-construct contexts this_config.yml

@@ -1,0 +1,110 @@
+# rdf-construct UML Style Configuration
+# ======================================
+# This starter template defines visual styling for UML diagrams.
+# Copy to your project and customise for your needs.
+#
+# Documentation: https://github.com/aigora-de/rdf-construct/docs/user_guides/UML_GUIDE.md
+# IES Colour Guide: https://github.com/aigora-de/rdf-construct/docs/user_guides/IES_COLOUR_PALETTE_GUIDE.md
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Define colour schemes
+# ─────────────────────────────────────────────────────────────────────────────
+
+schemes:
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Default scheme - clean, professional
+  # ───────────────────────────────────────────────────────────────────────────
+
+  default:
+    description: "Clean, professional styling"
+
+    # Class styling
+    classes:
+      # Style by namespace prefix
+      by_namespace:
+        ex:
+          border: "#336699"        # Steel blue border
+          fill: "#E8F4F8"          # Light blue fill
+        # Add more namespace styles:
+        # your_prefix:
+        #   border: "#669933"
+        #   fill: "#F0F8E8"
+
+      # Default for unmatched classes
+      default:
+        border: "#666666"
+        fill: "#FFFFFF"
+
+    # Instance styling (individuals)
+    instances:
+      border: "#333333"
+      fill: "#333333"
+      text: "#FFFFFF"
+      inherit_class_border: true   # Use class border colour
+
+    # Arrow styling
+    arrows:
+      subclass:
+        color: "#336699"
+        style: bold
+      object_property:
+        color: "#666666"
+        style: plain
+      rdf_type:
+        color: "#D32F2F"           # Red for instance-of
+        style: dashed
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # High contrast scheme - for presentations
+  # ───────────────────────────────────────────────────────────────────────────
+
+  # presentation:
+  #   description: "High contrast for slides"
+  #
+  #   classes:
+  #     by_namespace:
+  #       ex:
+  #         border: "#0066CC"
+  #         fill: "#CCE5FF"
+  #     default:
+  #       border: "#000000"
+  #       fill: "#FFFFFF"
+  #
+  #   arrows:
+  #     subclass:
+  #       color: "#0066CC"
+  #       style: bold
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Monochrome scheme - for print
+  # ───────────────────────────────────────────────────────────────────────────
+
+  # print:
+  #   description: "Monochrome for printing"
+  #
+  #   classes:
+  #     default:
+  #       border: "#000000"
+  #       fill: "#F5F5F5"
+  #
+  #   instances:
+  #     border: "#000000"
+  #     fill: "#E0E0E0"
+  #     text: "#000000"
+  #
+  #   arrows:
+  #     subclass:
+  #       color: "#000000"
+  #       style: plain
+
+# ─────────────────────────────────────────────────────────────────────────────
+# USAGE
+# ─────────────────────────────────────────────────────────────────────────────
+# Apply styling to diagram generation:
+#   rdf-construct uml ontology.ttl contexts.yml --style-config this_file.yml --style default
+#
+# Combine with layout:
+#   rdf-construct uml ontology.ttl contexts.yml \
+#     --style-config styles.yml --style default \
+#     --layout-config layouts.yml --layout hierarchy

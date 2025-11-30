@@ -1,0 +1,135 @@
+# rdf-construct Ordering Profile Configuration
+# =============================================
+# This starter template defines how to reorder RDF/Turtle files semantically.
+# Copy to your project and customise for your needs.
+#
+# Documentation: https://github.com/aigora-de/rdf-construct/docs/user_guides/CLI_REFERENCE.md
+# Full examples: https://github.com/aigora-de/rdf-construct/tree/main/examples
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 1: Prefix ordering (optional but recommended)
+# ─────────────────────────────────────────────────────────────────────────────
+# Controls the order prefixes appear at the top of the output file.
+# Standard prefixes first, then your domain prefixes.
+
+prefix_order:
+  - rdf
+  - rdfs
+  - owl
+  - xsd
+  - skos
+  # Add your domain prefixes here, e.g.:
+  # - ex
+  # - your_prefix
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 2: Default settings
+# ─────────────────────────────────────────────────────────────────────────────
+
+defaults:
+  preserve_prefix_order: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 3: Define entity selectors
+# ─────────────────────────────────────────────────────────────────────────────
+# These identify different types of RDF entities for sectioning.
+
+selectors:
+  classes:
+    - owl:Class
+    - rdfs:Class
+  obj_props:
+    - owl:ObjectProperty
+  data_props:
+    - owl:DatatypeProperty
+  ann_props:
+    - owl:AnnotationProperty
+  individuals:
+    - owl:NamedIndividual
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 4: Define ordering profiles
+# ─────────────────────────────────────────────────────────────────────────────
+# Each profile produces a differently-ordered output file.
+
+profiles:
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Hierarchical ordering - parents before children
+  # ───────────────────────────────────────────────────────────────────────────
+  # Use when: You want to read the file top-to-bottom following the hierarchy
+
+  hierarchical:
+    description: "Topological order - parents before children"
+    sections:
+      - header: {}                 # Ontology metadata first
+      - classes:
+          select: classes
+          sort: topological        # rdfs:subClassOf ordering
+      - object_properties:
+          select: obj_props
+          sort: topological        # rdfs:subPropertyOf ordering
+      - data_properties:
+          select: data_props
+          sort: alpha
+      - annotation_properties:
+          select: ann_props
+          sort: alpha
+      - individuals:
+          select: individuals
+          sort: alpha
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Alphabetical ordering - stable for version control
+  # ───────────────────────────────────────────────────────────────────────────
+  # Use when: You want minimal diffs between versions
+
+  alphabetical:
+    description: "Alphabetical order - stable for version control diffs"
+    sections:
+      - header: {}
+      - classes:
+          select: classes
+          sort: alpha              # A-Z by qname
+      - object_properties:
+          select: obj_props
+          sort: alpha
+      - data_properties:
+          select: data_props
+          sort: alpha
+      - annotation_properties:
+          select: ann_props
+          sort: alpha
+      - individuals:
+          select: individuals
+          sort: alpha
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Anchored ordering - key concepts first
+  # ───────────────────────────────────────────────────────────────────────────
+  # Use when: You want important classes at the top, then hierarchy
+
+  # anchored:
+  #   description: "Key concepts first, then hierarchical"
+  #   sections:
+  #     - header: {}
+  #     - classes:
+  #         select: classes
+  #         anchors:               # These appear first, in order
+  #           - ex:ImportantClass
+  #           - ex:AnotherKey
+  #         after_anchors: topological_then_alpha
+
+# ─────────────────────────────────────────────────────────────────────────────
+# USAGE
+# ─────────────────────────────────────────────────────────────────────────────
+# Generate all profiles:
+#   rdf-construct order your_ontology.ttl this_config.yml
+#
+# Generate specific profile:
+#   rdf-construct order your_ontology.ttl this_config.yml -p hierarchical
+#
+# List available profiles:
+#   rdf-construct profiles this_config.yml
+#
+# Output files will be named: your_ontology-hierarchical.ttl, etc.
