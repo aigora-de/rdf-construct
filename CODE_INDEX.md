@@ -274,7 +274,7 @@ rdf-construct contexts CONFIG
 **Purpose**: Modern Python packaging configuration  
 **Package Info**:
 - Name: rdf-construct
-- Version: 0.1.0
+- Version: 0.2.0
 - License: MIT
 - Python: ^3.10
 

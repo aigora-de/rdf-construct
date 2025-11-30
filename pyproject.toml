@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "rdf-construct"
-version = "0.1.0"
+version = "0.2.0"
 description = "Semantic RDF manipulation toolkit - order, serialize, and diff RDF ontologies"
 authors = ["Dave Dyke <23141680+aigora-de@users.noreply.github.com>"]
 maintainers = ["Dave Dyke <23141680+aigora-de@users.noreply.github.com>"]
