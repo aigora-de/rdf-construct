@@ -1,0 +1,426 @@
+# IES (Information Exchange Standard) Colour Palette
+# Comprehensive styling for IES ontology class diagrams
+#
+# Design principles:
+# - Colour coding by semantic role (Entity/State/Event hierarchies)
+# - Metaclass distinction through consistent border inheritance
+# - Instance styling uses black base with inherited class colours for text
+# - All colours specified in RGB hex format
+#
+# Usage:
+#   rdf-construct uml ontology.ttl contexts.yml \
+#     --style-config ies_colour_palette.yml --style ies_full
+
+schemes:
+  ies_full:
+    description: "Complete IES ontology colour scheme with semantic hierarchy"
+
+    classes:
+      # Explicit class-by-class styling for IES hierarchy
+      by_type:
+        # Top-level foundational classes
+        ies:Thing:
+          border: "#000000"      # RGB: 0, 0, 0 (black)
+          fill: "#FFFFFF"        # RGB: 255, 255, 255 (white)
+          text: "#000000"
+
+        ies:Element:
+          border: "#000000"      # RGB: 0, 0, 0 (black)
+          fill: "#FFFFFF"        # RGB: 255, 255, 255 (white)
+          text: "#000000"
+
+        # Entity hierarchy - yellow tones
+        ies:Entity:
+          border: "#968584"      # RGB: 150, 133, 132
+          fill: "#FEFE54"        # RGB: 254, 254, 84
+          text: "#000000"
+
+        # State hierarchy - golden yellow
+        ies:State:
+          border: "#000000"      # RGB: 0, 0, 0 (black)
+          fill: "#F7D748"        # RGB: 247, 215, 72
+          text: "#000000"
+
+        # Event hierarchy - pink/rose
+        ies:Event:
+          border: "#968584"      # RGB: 150, 133, 132
+          fill: "#F5C2CB"        # RGB: 245, 194, 203
+          text: "#000000"
+
+        # Temporal hierarchy - orange
+        ies:PeriodOfTime:
+          border: "#968584"      # RGB: 150, 133, 132
+          fill: "#F3B169"        # RGB: 243, 177, 105
+          text: "#000000"
+
+        # Meta-level classes - cyan/turquoise tones
+        # First-order metaclasses (ClassOf...)
+        ies:ClassOfElement:
+          border: "#FCFCFC"      # RGB: 252, 252, 252 (off-white)
+          fill: "#5CC9FA"        # RGB: 92, 201, 250
+          text: "#000000"
+
+        ies:ClassOfEntity:
+          border: "#FEFE54"      # RGB: 254, 254, 84 (Entity yellow)
+          fill: "#5CC9FA"        # RGB: 92, 201, 250
+          text: "#000000"
+
+        ies:ClassOfState:
+          border: "#F7D748"      # RGB: 247, 215, 72 (State golden)
+          fill: "#5CC9FA"        # RGB: 92, 201, 250
+          text: "#000000"
+
+        ies:ClassOfEvent:
+          border: "#F5C2CB"      # RGB: 245, 194, 203 (Event pink)
+          fill: "#5CC9FA"        # RGB: 92, 201, 250
+          text: "#000000"
+
+        # Second-order metaclasses (ClassOfClassOf...)
+        ies:ClassOfClassOfElement:
+          border: "#FCFCFC"      # RGB: 252, 252, 252
+          fill: "#74FAFC"        # RGB: 116, 250, 252 (lighter cyan)
+          text: "#000000"
+
+        ies:ClassOfClassOfEntity:
+          border: "#FEFE54"      # RGB: 254, 254, 84
+          fill: "#74FAFC"        # RGB: 116, 250, 252
+          text: "#000000"
+
+        ies:ClassOfClassOfState:
+          border: "#F7D748"      # RGB: 247, 215, 72
+          fill: "#74FAFC"        # RGB: 116, 250, 252
+          text: "#000000"
+
+        ies:ClassOfClassOfEvent:
+          border: "#F5C2CB"      # RGB: 245, 194, 203
+          fill: "#74FAFC"        # RGB: 116, 250, 252
+          text: "#000000"
+
+        # Time-bounded metaclass
+        ies:TimeBoundedClass:
+          border: "#FFFFFF"      # RGB: 255, 255, 255 (white)
+          fill: "#5CC9FA"        # RGB: 92, 201, 250
+          text: "#000000"
+
+        # Participation classes - purple tones
+        ies:EventParticipant:
+          border: "#000000"      # RGB: 0, 0, 0 (black)
+          fill: "#7D30D7"        # RGB: 125, 48, 215
+          text: "#000000"
+
+        ies:ActiveEventParticipant:
+          border: "#000000"      # RGB: 0, 0, 0 (black)
+          fill: "#C49BF9"        # RGB: 196, 155, 249 (lighter purple)
+          text: "#000000"
+
+        owl:ObjectProperty:
+          border: "#666666"
+          fill: "#CCCCCC"
+          text: "#000000"
+
+        owl:DatatypeProperty:
+          border: "#666666"
+          fill: "#CCCCCC"
+          text: "#000000"
+
+      # Namespace-based defaults for non-IES classes
+      by_namespace:
+        # Standard ontologies - neutral styling
+        owl:
+          border: "#666666"
+          fill: "#F5F5F5"
+          text: "#000000"
+
+        rdfs:
+          border: "#666666"
+          fill: "#F5F5F5"
+          text: "#000000"
+
+        # User/example namespaces - distinct but neutral
+        ex:
+          border: "#0066CC"
+          fill: "#E8F4F8"
+          text: "#000000"
+
+      # Default fallback for any unmatched classes
+      default:
+        border: "#000000"
+        fill: "#FFFFFF"
+        text: "#000000"
+
+    # Instance (individual) styling
+    # Instances have black border and fill, with text colour matching their class hierarchy
+    instances:
+      border: "#000000"          # RGB: 0, 0, 0 (black)
+      fill: "#000000"            # RGB: 0, 0, 0 (black)
+      text: "#FFFFFF"            # Default white text (overridden by inherit_class_text)
+      inherit_class_text: true   # Text colour matches class infill colour
+
+    # Arrow styling for relationships
+    arrows:
+      # Inheritance arrows (rdfs:subClassOf)
+      subclass:
+        color: "#000000"
+        thickness: 1
+        style: bold
+
+      # Instance typing arrows (rdf:type)
+      rdf_type:
+        color: "#000000"
+        thickness: 1
+        style: dashed
+
+      # Object property relationships
+      object_property:
+        color: "#333333"
+        thickness: 1
+        style: solid
+
+      # IES-specific: powertype relationships
+      ies_powertype:
+        color: "#5CC9FA"         # Cyan to indicate metaclass relationship
+        thickness: 2
+        style: bold
+
+    # Stereotype display
+    show_stereotypes: false      # IES diagrams typically don't use stereotypes
+    stereotype_map:
+      owl:Class: "«class»"
+      ies:ClassOfElement: "«meta»"
+      ies:ClassOfEntity: "«meta»"
+      ies:ClassOfState: "«meta»"
+      ies:ClassOfEvent: "«meta»"
+
+  # Simplified IES scheme - just core hierarchy colours
+  ies_core:
+    description: "Simplified IES scheme showing only main hierarchies"
+
+    classes:
+      by_type:
+        ies:Element:
+          border: "#000000"
+          fill: "#FFFFFF"
+          text: "#000000"
+
+        ies:Entity:
+          border: "#968584"
+          fill: "#FEFE54"
+          text: "#000000"
+
+        ies:State:
+          border: "#000000"
+          fill: "#F7D748"
+          text: "#000000"
+
+        ies:Event:
+          border: "#968584"
+          fill: "#F5C2CB"
+          text: "#000000"
+
+        ies:PeriodOfTime:
+          border: "#968584"
+          fill: "#F3B169"
+          text: "#000000"
+
+        owl:ObjectProperty:
+          border: "#666666"
+          fill: "#CCCCCC"
+          text: "#000000"
+
+        owl:DatatypeProperty:
+          border: "#666666"
+          fill: "#CCCCCC"
+          text: "#000000"
+
+      by_namespace:
+        ies:
+          border: "#0066CC"
+          fill: "#E8F4F8"
+          text: "#000000"
+
+      default:
+        border: "#000000"
+        fill: "#FFFFFF"
+        text: "#000000"
+
+    instances:
+      border: "#000000"
+      fill: "#000000"
+      text: "#FFFFFF"
+      inherit_class_text: true
+
+    arrows:
+      subclass:
+        color: "#000000"
+        thickness: 1
+        style: bold
+
+      rdf_type:
+        color: "#000000"
+        thickness: 1
+        style: dashed
+
+    arrow_colors:
+      type: "#FF0000"     # Red for rdf:type
+      iespowertype: "#FF0000" # Red for ies:powertype
+      subclass: "#000000" # Black
+      subproperty: "#000000" # Black
+
+    show_stereotypes: false
+
+  # Metaclass-focused scheme - highlights type/meta-type relationships
+  ies_metaclass:
+    description: "IES scheme emphasising metaclass (ClassOf...) hierarchies"
+
+    classes:
+      by_type:
+        # Base classes - muted
+        ies:Element:
+          border: "#999999"
+          fill: "#F5F5F5"
+          text: "#000000"
+
+        ies:Entity:
+          border: "#999999"
+          fill: "#FFFFCC"        # Pale yellow
+          text: "#000000"
+
+        ies:State:
+          border: "#999999"
+          fill: "#FFFFDD"        # Pale gold
+          text: "#000000"
+
+        ies:Event:
+          border: "#999999"
+          fill: "#FFE6E6"        # Pale pink
+          text: "#000000"
+
+        # Metaclasses - bright and prominent
+        ies:ClassOfElement:
+          border: "#0066CC"
+          fill: "#5CC9FA"
+          text: "#000000"
+          line_style: bold
+
+        ies:ClassOfEntity:
+          border: "#0066CC"
+          fill: "#5CC9FA"
+          text: "#000000"
+          line_style: bold
+
+        ies:ClassOfState:
+          border: "#0066CC"
+          fill: "#5CC9FA"
+          text: "#000000"
+          line_style: bold
+
+        ies:ClassOfEvent:
+          border: "#0066CC"
+          fill: "#5CC9FA"
+          text: "#000000"
+          line_style: bold
+
+        # Second-order metaclasses - even brighter
+        ies:ClassOfClassOfElement:
+          border: "#0066CC"
+          fill: "#74FAFC"
+          text: "#000000"
+          line_style: bold
+
+        ies:ClassOfClassOfEntity:
+          border: "#0066CC"
+          fill: "#74FAFC"
+          text: "#000000"
+          line_style: bold
+
+        ies:ClassOfClassOfState:
+          border: "#0066CC"
+          fill: "#74FAFC"
+          text: "#000000"
+          line_style: bold
+
+        ies:ClassOfClassOfEvent:
+          border: "#0066CC"
+          fill: "#74FAFC"
+          text: "#000000"
+          line_style: bold
+
+        owl:ObjectProperty:
+          border: "#666666"
+          fill: "#CCCCCC"
+          text: "#000000"
+
+        owl:DatatypeProperty:
+          border: "#666666"
+          fill: "#CCCCCC"
+          text: "#000000"
+
+      default:
+        border: "#CCCCCC"
+        fill: "#FFFFFF"
+        text: "#000000"
+
+    instances:
+      border: "#000000"
+      fill: "#000000"
+      text: "#FFFFFF"
+      inherit_class_text: true
+
+    arrows:
+      subclass:
+        color: "#666666"
+        thickness: 1
+        style: solid
+
+      ies_powertype:
+        color: "#0066CC"
+        thickness: 2
+        style: bold
+
+    arrow_colors:
+      type: "#FF0000"     # Red for rdf:type
+      ies_powertype: "#FF0000" # Red for ies:powertype
+      subclass: "#000000" # Black
+      subproperty: "#000000" # Black
+
+    show_stereotypes: true
+    stereotype_map:
+      ies:ClassOfElement: "«meta»"
+      ies:ClassOfEntity: "«meta»"
+      ies:ClassOfState: "«meta»"
+      ies:ClassOfEvent: "«meta»"
+      ies:ClassOfClassOfElement: "«meta²»"
+      ies:ClassOfClassOfEntity: "«meta²»"
+      ies:ClassOfClassOfState: "«meta²»"
+      ies:ClassOfClassOfEvent: "«meta²»"
+
+# Colour reference chart for documentation
+# ==========================================
+# This section documents the RGB values for quick reference
+# (not processed by the tool)
+#
+# IES Core Hierarchy:
+#   Thing/Element:    border #000000 (black),        fill #FFFFFF (white)
+#   Entity:           border #968584 (brown-grey),   fill #FEFE54 (bright yellow)
+#   State:            border #000000 (black),        fill #F7D748 (golden yellow)
+#   Event:            border #968584 (brown-grey),   fill #F5C2CB (pink)
+#   PeriodOfTime:     border #968584 (brown-grey),   fill #F3B169 (orange)
+#
+# Metaclass Hierarchy (1st order - ClassOf...):
+#   ClassOfElement:   border #FCFCFC (off-white),    fill #5CC9FA (cyan)
+#   ClassOfEntity:    border #FEFE54 (Entity yellow), fill #5CC9FA (cyan)
+#   ClassOfState:     border #F7D748 (State gold),   fill #5CC9FA (cyan)
+#   ClassOfEvent:     border #F5C2CB (Event pink),   fill #5CC9FA (cyan)
+#
+# Metaclass Hierarchy (2nd order - ClassOfClassOf...):
+#   All use same fill: #74FAFC (lighter cyan)
+#   Borders inherit from 1st order
+#
+# Special Classes:
+#   TimeBoundedClass:        border #FFFFFF (white), fill #5CC9FA (cyan)
+#   EventParticipant:        border #000000 (black), fill #7D30D7 (dark purple)
+#   ActiveEventParticipant:  border #000000 (black), fill #C49BF9 (light purple)
+#
+# Instance Styling:
+#   All instances:  border #000000 (black), fill #000000 (black)
+#   Text colour:    Inherits from class hierarchy infill colour

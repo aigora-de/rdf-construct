@@ -1,0 +1,259 @@
+# uml_styles.yml
+#
+# PlantUML styling definitions for rdf-construct
+# Define color schemes, arrow styles, and stereotypes for RDF class diagrams
+
+defaults:
+  scheme: default  # Default style scheme to use
+
+# Reusable color definitions (YAML anchors)
+colors:
+  # Standard colors
+  white: &color_white "#FFFFFF"
+  black: &color_black "#000000"
+
+  # Blues (for standard classes)
+  light_blue: &color_light_blue "#E8F4F8"
+  blue_border: &color_blue_border "#0066CC"
+
+  # Reds (for meta-level/powertype)
+  light_red: &color_light_red "#FFE6E6"
+  red_border: &color_red_border "#CC0000"
+
+  # Greens (for validated/closed classes)
+  light_green: &color_light_green "#E8F5E9"
+  green_border: &color_green_border "#2E7D32"
+
+  # Yellows (for experimental/draft)
+  light_yellow: &color_light_yellow "#FFF9C4"
+  yellow_border: &color_yellow_border "#F57F17"
+
+  # Greys (for deprecated)
+  light_grey: &color_light_grey "#F5F5F5"
+  grey_border: &color_grey_border "#9E9E9E"
+
+schemes:
+
+  # ============================================
+  # Default Scheme: Professional and clean
+  # ============================================
+  default:
+    description: "Clean professional style for general use"
+
+    classes:
+      default:
+        border: *color_blue_border
+        fill: *color_light_blue
+        line_style: bold
+
+      # By namespace - assign colors to different vocabularies
+      by_namespace:
+        ies:
+          border: *color_blue_border
+          fill: *color_light_blue
+          line_style: bold
+        ex:
+          border: *color_green_border
+          fill: *color_light_green
+        org:
+          border: "#7B1FA2"  # Purple
+          fill: "#F3E5F5"
+
+    instances:
+      border: *color_black
+      fill: *color_black
+      text: *color_white
+      inherit_class_border: true  # Use parent class border color
+
+    arrows:
+      subclass:  # rdfs:subClassOf relationships
+        color: *color_blue_border
+        style: bold
+
+      rdf_type:  # rdf:type (instance-to-class)
+        color: "#D32F2F"  # Red
+        style: bold
+
+      object_property:  # Object properties
+        color: *color_black
+        style: normal
+
+    show_stereotypes: false
+
+  # ============================================
+  # IES Semantic Scheme: Colored by semantic role
+  # ============================================
+  ies_semantic:
+    description: "IES ontology with semantic role coloring"
+
+    classes:
+      default:
+        border: *color_blue_border
+        fill: *color_light_blue
+
+      # Namespace-based
+      by_namespace:
+        ies:
+          border: *color_blue_border
+          fill: *color_light_blue
+          line_style: bold
+
+      # Type-based (for special RDF types)
+      by_type:
+        meta_class:  # For ies:ClassOfElement and similar
+          border: *color_red_border
+          fill: *color_light_red
+          line_style: bold
+
+        representation:  # For representation classes
+          border: "#F57F17"
+          fill: "#FFF9C4"
+
+    instances:
+      border: *color_black
+      fill: *color_black
+      text: *color_white
+      inherit_class_border: true
+
+    arrows:
+      subclass:
+        color: *color_blue_border
+        style: bold
+
+      rdf_type:
+        color: "#D32F2F"
+        style: bold
+
+      object_property:
+        color: *color_black
+
+      powertype:  # For ies:powertype relationships
+        color: *color_red_border
+        style: dashed
+
+    show_stereotypes: true
+    stereotype_map:
+      ies:ClassOfElement: "«meta»"
+      ies:RepresentationClass: "«representation»"
+      owl:Class: "«class»"
+
+  # ============================================
+  # High Contrast Scheme: For presentations
+  # ============================================
+  high_contrast:
+    description: "High contrast colors for presentations and printouts"
+
+    classes:
+      default:
+        border: *color_black
+        fill: *color_white
+        line_style: bold
+
+      by_namespace:
+        ies:
+          border: *color_black
+          fill: "#FFEB3B"  # Bright yellow
+          line_style: bold
+        ex:
+          border: *color_black
+          fill: "#4CAF50"  # Bright green
+          line_style: bold
+        org:
+          border: *color_black
+          fill: "#2196F3"  # Bright blue
+          line_style: bold
+
+    instances:
+      border: *color_black
+      fill: "#FF9800"  # Orange
+      text: *color_black
+      line_style: bold
+
+    arrows:
+      subclass:
+        color: *color_black
+        thickness: 2
+
+      rdf_type:
+        color: "#D32F2F"
+        thickness: 2
+        style: bold
+
+      object_property:
+        color: *color_black
+        thickness: 1
+
+    show_stereotypes: false
+
+  # ============================================
+  # Grayscale Scheme: For academic publications
+  # ============================================
+  grayscale:
+    description: "Grayscale for academic papers and documents"
+
+    classes:
+      default:
+        border: "#000000"
+        fill: "#E0E0E0"
+        line_style: bold
+
+      by_namespace:
+        ies:
+          border: "#000000"
+          fill: "#BDBDBD"  # Medium grey
+        ex:
+          border: "#000000"
+          fill: "#EEEEEE"  # Light grey
+        org:
+          border: "#000000"
+          fill: "#9E9E9E"  # Darker grey
+
+    instances:
+      border: "#000000"
+      fill: "#FFFFFF"
+      text: "#000000"
+      line_style: dashed
+
+    arrows:
+      subclass:
+        color: "#000000"
+        style: bold
+
+      rdf_type:
+        color: "#000000"
+        style: dashed
+
+      object_property:
+        color: "#000000"
+
+    show_stereotypes: true
+    stereotype_map:
+      ies:ClassOfElement: "«meta»"
+      owl:Class: "«class»"
+
+  # ============================================
+  # Minimal Scheme: Bare-bones for debugging
+  # ============================================
+  minimal:
+    description: "Minimal styling for debugging and quick views"
+
+    classes:
+      default:
+        border: *color_black
+        fill: *color_white
+
+    instances:
+      border: *color_black
+      fill: *color_light_grey
+
+    arrows:
+      subclass:
+        color: *color_black
+
+      rdf_type:
+        color: *color_black
+
+      object_property:
+        color: *color_black
+
+    show_stereotypes: false

@@ -15,7 +15,18 @@ from .core import (
     serialise_turtle,
     sort_subjects,
 )
+from .uml import (
+    load_uml_config,
+    collect_diagram_entities,
+    render_plantuml,
+)
+from .uml.uml_style import load_style_config
+from .uml.uml_layout import load_layout_config
+from .uml.odm_renderer import render_odm_plantuml
 
+
+# Valid rendering modes
+RENDERING_MODES = ["default", "odm"]
 
 @click.group()
 @click.version_option()
@@ -169,6 +180,224 @@ def profiles(config: Path):
         if prof.description:
             click.echo(f"    {prof.description}")
         click.echo(f"    Sections: {len(prof.sections)}")
+        click.echo()
+
+
+@cli.command()
+@click.argument("sources", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--config",
+    "-C",
+    required=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="YAML configuration file defining UML contexts",
+)
+@click.option(
+    "--context",
+    "-c",
+    multiple=True,
+    help="Context(s) to generate (default: all contexts in config)",
+)
+@click.option(
+    "--outdir",
+    "-o",
+    type=click.Path(path_type=Path),
+    default="diagrams",
+    help="Output directory (default: diagrams)",
+)
+@click.option(
+    "--style-config",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to style configuration YAML (e.g., examples/uml_styles.yml)"
+)
+@click.option(
+    "--style", "-s",
+    help="Style scheme name to use (e.g., 'default', 'ies_semantic')"
+)
+@click.option(
+    "--layout-config",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to layout configuration YAML (e.g., examples/uml_layouts.yml)"
+)
+@click.option(
+    "--layout", "-l",
+    help="Layout name to use (e.g., 'hierarchy', 'compact')"
+)
+@click.option(
+    "--rendering-mode", "-r",
+    type=click.Choice(RENDERING_MODES, case_sensitive=False),
+    default="default",
+    help="Rendering mode: 'default' (custom stereotypes) or 'odm' (OMG ODM RDF Profile compliant)"
+)
+def uml(sources, config, context, outdir, style_config, style, layout_config, layout, rendering_mode):
+    """Generate UML class diagrams from RDF ontologies.
+
+    SOURCES: One or more RDF Turtle files (.ttl). The first file is the primary
+    source; additional files provide supporting definitions (e.g., imported
+    ontologies for complete class hierarchies).
+
+    Examples:
+
+        # Basic usage - single source
+        rdf-construct uml ontology.ttl -C contexts.yml
+
+        # Multiple sources - primary + supporting ontology
+        rdf-construct uml building.ttl ies4.ttl -C contexts.yml
+
+        # Multiple sources with styling (hierarchy inheritance works!)
+        rdf-construct uml building.ttl ies4.ttl -C contexts.yml \\
+            --style-config ies_colours.yml --style ies_full
+
+        # Generate specific context with ODM mode
+        rdf-construct uml building.ttl ies4.ttl -C contexts.yml -c core -r odm
+    """
+    # Load style if provided
+    style_scheme = None
+    if style_config and style:
+        style_cfg = load_style_config(style_config)
+        try:
+            style_scheme = style_cfg.get_scheme(style)
+            click.echo(f"Using style: {style}")
+        except KeyError as e:
+            click.secho(str(e), fg="red", err=True)
+            click.echo(f"Available styles: {', '.join(style_cfg.list_schemes())}")
+            raise click.Abort()
+
+    # Load layout if provided
+    layout_cfg = None
+    if layout_config and layout:
+        layout_mgr = load_layout_config(layout_config)
+        try:
+            layout_cfg = layout_mgr.get_layout(layout)
+            click.echo(f"Using layout: {layout}")
+        except KeyError as e:
+            click.secho(str(e), fg="red", err=True)
+            click.echo(f"Available layouts: {', '.join(layout_mgr.list_layouts())}")
+            raise click.Abort()
+
+    # Display rendering mode
+    if rendering_mode == "odm":
+        click.echo("Using rendering mode: ODM RDF Profile (OMG compliant)")
+    else:
+        click.echo("Using rendering mode: default")
+
+    # Load UML configuration
+    uml_config = load_uml_config(config)
+
+    # Determine which contexts to generate
+    if context:
+        contexts_to_gen = list(context)
+    else:
+        contexts_to_gen = uml_config.list_contexts()
+
+    # Validate requested contexts exist
+    for ctx_name in contexts_to_gen:
+        if ctx_name not in uml_config.contexts:
+            click.secho(
+                f"Error: Context '{ctx_name}' not found in config.", fg="red", err=True
+            )
+            available = ", ".join(uml_config.list_contexts())
+            click.echo(f"Available contexts: {available}", err=True)
+            raise click.Abort()
+
+    # Create output directory
+    # ToDo - handle exceptions properly
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    # Parse source RDF files into a single graph
+    # The first source is considered the "primary" (used for output naming)
+    primary_source = sources[0]
+    graph = Graph()
+
+    for source in sources:
+        click.echo(f"Loading {source}...")
+        # Guess format from extension
+        suffix = source.suffix.lower()
+        if suffix in (".ttl", ".turtle"):
+            fmt = "turtle"
+        elif suffix in (".rdf", ".xml", ".owl"):
+            fmt = "xml"
+        elif suffix in (".nt", ".ntriples"):
+            fmt = "nt"
+        elif suffix in (".n3",):
+            fmt = "n3"
+        elif suffix in (".jsonld", ".json"):
+            fmt = "json-ld"
+        else:
+            fmt = "turtle"  # Default to turtle
+
+        graph.parse(source.as_posix(), format=fmt)
+
+    if len(sources) > 1:
+        click.echo(f"  Merged {len(sources)} source files ({len(graph)} triples total)")
+
+    # Get selectors from defaults (if any)
+    selectors = uml_config.defaults.get("selectors", {})
+
+    # Generate each context
+    for ctx_name in contexts_to_gen:
+        click.echo(f"Generating diagram: {ctx_name}")
+        ctx = uml_config.get_context(ctx_name)
+
+        # Select entities
+        entities = collect_diagram_entities(graph, ctx, selectors)
+
+        # Build output filename (include mode suffix for ODM)
+        if rendering_mode == "odm":
+            out_file = outdir / f"{primary_source.stem}-{ctx_name}-odm.puml"
+        else:
+            out_file = outdir / f"{primary_source.stem}-{ctx_name}.puml"
+
+        # Render with optional style and layout
+        if rendering_mode == "odm":
+            render_odm_plantuml(graph, entities, out_file, style_scheme, layout_cfg)
+        else:
+            render_plantuml(graph, entities, out_file, style_scheme, layout_cfg)
+
+        click.secho(f"  ✓ {out_file}", fg="green")
+        click.echo(
+            f"    Classes: {len(entities['classes'])}, "
+            f"Properties: {len(entities['object_properties']) + len(entities['datatype_properties'])}, "
+            f"Instances: {len(entities['instances'])}"
+        )
+
+    click.secho(
+        f"\nGenerated {len(contexts_to_gen)} diagram(s) in {outdir}/", fg="cyan"
+    )
+
+
+@cli.command()
+@click.argument("config", type=click.Path(exists=True, path_type=Path))
+def contexts(config: Path):
+    """List available UML contexts in a configuration file.
+
+    CONFIG: YAML configuration file to inspect
+    """
+    uml_config = load_uml_config(config)
+
+    click.secho("Available UML contexts:", fg="cyan", bold=True)
+    click.echo()
+
+    for ctx_name in uml_config.list_contexts():
+        ctx = uml_config.get_context(ctx_name)
+        click.secho(f"  {ctx_name}", fg="green", bold=True)
+        if ctx.description:
+            click.echo(f"    {ctx.description}")
+
+        # Show selection strategy
+        if ctx.root_classes:
+            click.echo(f"    Roots: {', '.join(ctx.root_classes)}")
+        elif ctx.focus_classes:
+            click.echo(f"    Focus: {', '.join(ctx.focus_classes)}")
+        elif ctx.selector:
+            click.echo(f"    Selector: {ctx.selector}")
+
+        if ctx.include_descendants:
+            depth_str = f"depth={ctx.max_depth}" if ctx.max_depth else "unlimited"
+            click.echo(f"    Includes descendants ({depth_str})")
+
+        click.echo(f"    Properties: {ctx.property_mode}")
         click.echo()
 
 

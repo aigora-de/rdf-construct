@@ -1,0 +1,245 @@
+# IES Colour Palette - Example Contexts
+#
+# Demonstration contexts showing how the IES colour palette
+# enhances understanding of different aspects of the IES ontology.
+#
+# Usage:
+#   rdf-construct uml ies.ttl ies_colour_examples.yml \
+#     --style-config ies_colour_palette.yml \
+#     --style ies_full
+
+contexts:
+  # Context 1: Core hierarchy overview
+  # Shows the fundamental IES class structure with colour coding
+  ies_core_hierarchy:
+    description: "Core IES hierarchy showing Entity, State, Event families"
+    root_classes:
+      - ies:Element
+    include_descendants: true
+    max_depth: 2
+    properties:
+      mode: none
+    include_instances: false
+
+  # Context 2: Entity hierarchy with properties
+  # Yellow colour family demonstrates Entity-based concepts
+  entity_family:
+    description: "Entity hierarchy with domain properties"
+    root_classes:
+      - ies:Entity
+    include_descendants: true
+    max_depth: 3
+    properties:
+      mode: domain_based
+    include_instances: false
+
+  # Context 3: State hierarchy with properties
+  # Golden colour family demonstrates State-based concepts
+  state_family:
+    description: "State hierarchy with domain properties"
+    root_classes:
+      - ies:State
+    include_descendants: true
+    max_depth: 3
+    properties:
+      mode: domain_based
+    include_instances: false
+
+  # Context 4: Event hierarchy with properties
+  # Pink colour family demonstrates Event-based concepts
+  event_family:
+    description: "Event hierarchy with domain properties"
+    root_classes:
+      - ies:Event
+    include_descendants: true
+    max_depth: 3
+    properties:
+      mode: domain_based
+    include_instances: false
+
+  # Context 5: Metaclass tower
+  # Shows powertype pattern with border inheritance
+  metaclass_tower:
+    description: "Entity → ClassOfEntity → ClassOfClassOfEntity"
+    focus_classes:
+      - ies:Entity
+      - ies:ClassOfEntity
+      - ies:ClassOfClassOfEntity
+    properties:
+      mode: explicit
+      include:
+        - ies:powertype
+    include_instances: false
+
+  # Context 6: Cross-hierarchy relationships
+  # Shows how colours help distinguish interacting concepts
+  cross_hierarchy:
+    description: "Entity-State-Event interactions"
+    focus_classes:
+      - ies:Entity
+      - ies:State
+      - ies:Event
+      - ies:PeriodOfTime
+    include_descendants: true
+    max_depth: 1
+    properties:
+      mode: connected
+    include_instances: false
+
+  # Context 7: With instances
+  # Demonstrates instance colouring (black fill, coloured text)
+  entity_with_instances:
+    description: "Entity classes with example instances"
+    root_classes:
+      - ies:Person
+      - ies:Organisation
+      - ies:Location
+    include_descendants: true
+    max_depth: 2
+    properties:
+      mode: domain_based
+    include_instances: true
+
+  # Context 8: Participation pattern
+  # Purple colours for EventParticipant family
+  participation_pattern:
+    description: "Event participation relationships"
+    focus_classes:
+      - ies:Event
+      - ies:EventParticipant
+      - ies:ActiveEventParticipant
+      - ies:Entity
+    properties:
+      mode: explicit
+      include:
+        - ies:isParticipantIn
+        - ies:isParticipationOf
+    include_instances: false
+
+  # Context 9: Temporal relationships
+  # Orange colours for time-related concepts
+  temporal_concepts:
+    description: "Temporal classes and relationships"
+    root_classes:
+      - ies:PeriodOfTime
+    include_descendants: true
+    max_depth: 3
+    properties:
+      mode: explicit
+      include:
+        - ies:inPeriod
+        - ies:startsIn
+        - ies:endsIn
+        - ies:before
+        - ies:after
+    include_instances: false
+
+  # Context 10: Full metaclass hierarchy
+  # Shows all three levels with progressive cyan shading
+  complete_metaclass:
+    description: "Complete metaclass hierarchy for Entity, State, Event"
+    focus_classes:
+      # Base
+      - ies:Entity
+      - ies:State
+      - ies:Event
+      # First order
+      - ies:ClassOfEntity
+      - ies:ClassOfState
+      - ies:ClassOfEvent
+      # Second order
+      - ies:ClassOfClassOfEntity
+      - ies:ClassOfClassOfState
+      - ies:ClassOfClassOfEvent
+    properties:
+      mode: explicit
+      include:
+        - ies:powertype
+    include_instances: false
+
+  # Context 11: Minimal - just Thing and Element
+  # Shows base white colouring
+  foundation:
+    description: "Foundation classes Thing and Element"
+    focus_classes:
+      - ies:Thing
+      - ies:Element
+    include_descendants: false
+    properties:
+      mode: none
+    include_instances: false
+
+  # Context 12: Domain extension example
+  # Shows how custom classes can inherit IES colours
+  domain_extension:
+    description: "Custom domain classes extending IES"
+    focus_classes:
+      - ies:Entity
+      - ex:Animal           # Would be styled as Entity (yellow)
+      - ex:Building         # Would be styled as Entity (yellow)
+      - ies:State
+      - ex:Temperature      # Would be styled as State (golden)
+      - ies:Event
+      - ex:Purchase         # Would be styled as Event (pink)
+    properties:
+      mode: connected
+    include_instances: true
+
+# Suggested rendering combinations for each context:
+#
+# Core hierarchy (ies_core_hierarchy):
+#   --style ies_full --layout hierarchy
+#   Purpose: Overview documentation
+#
+# Family hierarchies (entity_family, state_family, event_family):
+#   --style ies_full --layout hierarchy
+#   Purpose: Detailed documentation of each branch
+#
+# Metaclass tower (metaclass_tower):
+#   --style ies_metaclass --layout hierarchy
+#   Purpose: Explaining powertype pattern
+#
+# Cross-hierarchy (cross_hierarchy):
+#   --style ies_full --layout flat
+#   Purpose: Showing interactions between branches
+#
+# With instances (entity_with_instances):
+#   --style ies_full --layout hierarchy
+#   Purpose: Example data with schema
+#
+# Participation (participation_pattern):
+#   --style ies_full --layout left_to_right
+#   Purpose: Event-centric view
+#
+# Temporal (temporal_concepts):
+#   --style ies_full --layout left_to_right
+#   Purpose: Timeline-oriented view
+#
+# Complete metaclass (complete_metaclass):
+#   --style ies_metaclass --layout hierarchy
+#   Purpose: Full type tower documentation
+#
+# Foundation (foundation):
+#   --style ies_full --layout compact
+#   Purpose: Minimal starting point
+#
+# Domain extension (domain_extension):
+#   --style ies_full --layout hierarchy
+#   Purpose: Tutorial on extending IES
+
+# Example commands:
+#
+# Generate all contexts:
+# rdf-construct uml ies.ttl ies_colour_examples.yml \
+#   --style-config ies_colour_palette.yml --style ies_full
+#
+# Generate specific context:
+# rdf-construct uml ies.ttl ies_colour_examples.yml \
+#   --context metaclass_tower \
+#   --style-config ies_colour_palette.yml --style ies_metaclass
+#
+# With custom layout:
+# rdf-construct uml ies.ttl ies_colour_examples.yml \
+#   --context cross_hierarchy \
+#   --style-config ies_colour_palette.yml --style ies_full \
+#   --layout-config ies_layouts.yml --layout flat

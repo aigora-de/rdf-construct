@@ -1,0 +1,129 @@
+# uml_contexts.yml
+#
+# UML diagram context definitions for rdf-construct
+# Use with:
+#   rdf-construct uml examples/animal_ontology.ttl examples/uml_contexts.yml
+
+defaults:
+  include_properties: true
+  include_instances: false
+
+# Optional selectors (can reuse from ordering configs)
+selectors:
+  classes: "rdf:type owl:Class"
+  obj_props: "rdf:type owl:ObjectProperty"
+  data_props: "rdf:type owl:DatatypeProperty"
+
+contexts:
+
+  # ============================================
+  # Context 1: Animal Taxonomy
+  # ============================================
+  animal_taxonomy:
+    description: "Complete animal class hierarchy with properties"
+    root_classes:
+      - ex:Animal
+    include_descendants: true
+    max_depth: null  # No limit, include all descendants
+    properties:
+      mode: domain_based  # Include properties where domain is selected classes
+    include_instances: false
+
+  # ============================================
+  # Context 2: Mammals Only
+  # ============================================
+  mammals_only:
+    description: "Focus on mammal classes and relationships"
+    root_classes:
+      - ex:Mammal
+    include_descendants: true
+    max_depth: 2  # Only 2 levels deep (Mammal -> Dog/Cat)
+    properties:
+      mode: domain_based
+    include_instances: true  # Show Fido and Whiskers
+
+  # ============================================
+  # Context 3: Explicit Focus Classes
+  # ============================================
+  key_classes:
+    description: "Manually selected important classes"
+    focus_classes:
+      - ex:Animal
+      - ex:Dog
+      - ex:Eagle
+    include_descendants: false  # Only these specific classes
+    properties:
+      mode: connected  # Only properties connecting these classes
+    include_instances: false
+
+  # ============================================
+  # Context 4: Properties Only
+  # ============================================
+  properties_focus:
+    description: "Show specific properties and their domains/ranges"
+    selector: classes  # Select all classes
+    properties:
+      mode: explicit  # Only specific properties
+      include:
+        - ex:hasParent
+        - ex:eats
+      exclude:
+        - ex:scientificName
+    include_instances: false
+
+  # ============================================
+  # Context 5: Full Ontology
+  # ============================================
+  full:
+    description: "Everything in the ontology (may be large)"
+    selector: classes
+    properties:
+      mode: all
+    include_instances: true
+
+  # ============================================
+  # Context 6: Organisation Structure (for org ontology)
+  # ============================================
+  org_hierarchy:
+    description: "Organisation and department structure"
+    root_classes:
+      - org1:Organisation
+      - org1:Department
+    include_descendants: true
+    properties:
+      mode: domain_based
+    include_instances: true
+
+  # ============================================
+  # Context 7: People and Roles (for org ontology)
+  # ============================================
+  people_roles:
+    description: "People, employees, and management hierarchy"
+    root_classes:
+      - org1:Person
+    include_descendants: true
+    properties:
+      mode: domain_based
+      exclude:
+        - org1:email  # Exclude contact details
+        - org1:phoneNumber
+    include_instances: true
+
+  # ============================================
+  # Context 8: Management Relationships
+  # ============================================
+  management:
+    description: "Focus on management and reporting relationships"
+    focus_classes:
+      - org1:Manager
+      - org1:Employee
+      - org1:Executive
+      - org1:CEO
+    include_descendants: false
+    properties:
+      mode: explicit
+      include:
+        - org1:manages
+        - org1:reportsTo
+        - org1:worksFor
+    include_instances: true

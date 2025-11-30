@@ -22,8 +22,8 @@ __all__ = [
     "load_yaml",
     # Selector
     "select_subjects",
-    # Serializer
-    "serialize_turtle",
+    # Serialiser
+    "serialise_turtle",
     "build_section_graph",
     # Utils
     "expand_curie",
