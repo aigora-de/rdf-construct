@@ -5,13 +5,16 @@ import pytest
 from rdflib import Graph, Namespace, RDF, RDFS, Literal
 from rdflib.namespace import OWL
 
-# Import the modules to test
-# Note: Adjust imports based on actual package structure
-from src_rdf_construct_lint_rules import (
+from rdf_construct.lint import (
     Severity,
     LintIssue,
     get_all_rules,
     list_rules,
+    LintConfig,
+    LintEngine,
+    LintResult,
+)
+from rdf_construct.lint.rules import (
     check_orphan_class,
     check_dangling_reference,
     check_circular_subclass,
@@ -24,7 +27,7 @@ from src_rdf_construct_lint_rules import (
     check_property_no_range,
     check_inconsistent_naming,
 )
-from src_rdf_construct_lint_engine import LintConfig, LintEngine, LintResult
+
 
 # Test namespace
 EX = Namespace("http://example.org/")
@@ -280,7 +283,7 @@ class TestInconsistentNamingRule:
 
         issues = check_inconsistent_naming(g)
         assert len(issues) == 1
-        assert "lowercase" not in issues[0].message.lower() or "uppercase" in issues[0].message.lower()
+        assert "uppercase" in issues[0].message
 
     def test_detects_uppercase_property(self):
         """Property starting with uppercase should be flagged."""
@@ -289,6 +292,7 @@ class TestInconsistentNamingRule:
 
         issues = check_inconsistent_naming(g)
         assert len(issues) == 1
+        assert "lowercase" in issues[0].message
 
 
 class TestLintConfig:

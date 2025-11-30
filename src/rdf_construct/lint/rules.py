@@ -197,6 +197,16 @@ def is_builtin(uri: URIRef) -> bool:
     return any(uri_str.startswith(ns) for ns in builtin_namespaces)
 
 
+def get_namespace(uri: URIRef) -> str:
+    """Extract namespace from a URI (everything before the local name)."""
+    uri_str = str(uri)
+    if "#" in uri_str:
+        return uri_str.rsplit("#", 1)[0] + "#"
+    elif "/" in uri_str:
+        return uri_str.rsplit("/", 1)[0] + "/"
+    return uri_str
+
+
 # -----------------------------------------------------------------------------
 # Structural Rules (default: ERROR)
 # -----------------------------------------------------------------------------
@@ -246,13 +256,16 @@ def check_dangling_reference(graph: Graph) -> list[LintIssue]:
     defined = get_defined_entities(graph)
     referenced = get_all_referenced_uris(graph)
 
+    # Get namespaces of all defined entities
+    defined_namespaces = {get_namespace(d) for d in defined}
+
     for uri in referenced:
         if is_builtin(uri):
             continue
         if uri not in defined:
-            # Only report if it looks like a local entity (same namespace as defined ones)
-            # This avoids false positives for external references
-            if any(str(uri).startswith(str(d).rsplit("#", 1)[0]) for d in defined if "#" in str(d)):
+            # Only report if it's in a namespace we define things in
+            uri_namespace = get_namespace(uri)
+            if uri_namespace in defined_namespaces:
                 issues.append(
                     LintIssue(
                         rule_id="dangling-reference",
