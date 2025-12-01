@@ -45,7 +45,14 @@ RENDERING_MODES = ["default", "odm"]
 def cli():
     """rdf-construct: Semantic RDF manipulation toolkit.
 
-    Reorder, serialise, and manipulate RDF ontologies with semantic awareness.
+    Tools for working with RDF ontologies:
+
+    \b
+    - lint: Check ontology quality (structural issues, documentation, best practices)
+    - uml: Generate PlantUML class diagrams
+    - order: Reorder Turtle files with semantic awareness
+
+    Use COMMAND --help for detailed options.
     """
     pass
 
