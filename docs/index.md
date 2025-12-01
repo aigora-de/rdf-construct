@@ -4,6 +4,7 @@
 
 **New User?** → [Getting Started](user_guides/GETTING_STARTED.md)  
 **Need Feature Details?** → [UML Guide](user_guides/UML_GUIDE.md)  
+**Check Ontology Quality?** → [Lint Guide](user_guides/LINT_GUIDE.md)  
 **Compare Ontologies?** → [Diff Guide](user_guides/DIFF_GUIDE.md)  
 **Need Command Syntax?** → [CLI Reference](user_guides/CLI_REFERENCE.md)  
 **Contributing?** → [Contributing Guide](../CONTRIBUTING.md)  
@@ -31,11 +32,18 @@ For users of rdf-construct who want to generate diagrams and work with RDF ontol
   - Complete examples
   - Tips and techniques
 
-- **[Diff Guide](user_guides/DIFF_GUIDE.md)** - Semantic ontology comparison
-  - Comparing ontology versions
-  - Output formats (text, markdown, JSON)
-  - Filtering changes
+- **[Lint Guide](user_guides/LINT_GUIDE.md)** - Ontology quality checking
+  - Rule categories (structural, documentation, best-practice)
+  - Strictness levels
+  - Configuration files
   - CI integration
+  - Available rules reference
+
+- **[Diff Guide](user_guides/DIFF_GUIDE.md)** - Semantic ontology comparison
+    - Comparing ontology versions
+    - Output formats (text, markdown, JSON)
+    - Filtering changes
+    - CI integration
 
 - **[CLI Reference](user_guides/CLI_REFERENCE.md)** - Command reference
   - All commands with options
@@ -75,12 +83,29 @@ A Python CLI toolkit for RDF operations:
 
 - **Semantic Ordering**: Serialize RDF/Turtle with meaningful order (not alphabetical)
 - **UML Generation**: Create PlantUML class diagrams from ontologies
+- **Ontology Linting**: Check for quality issues, missing documentation, and structural problems
 - **Semantic Diff**: Compare ontologies and identify meaningful changes
 - **Flexible Configuration**: YAML-based control without code changes
 
 Named after the ROM construct from William Gibson's *Neuromancer*—preserved, structured knowledge.
 
 ## Quick Examples
+
+### Check Ontology Quality
+
+```bash
+# Basic lint check
+poetry run rdf-construct lint ontology.ttl
+
+# Strict mode for CI (warnings become errors)
+poetry run rdf-construct lint ontology.ttl --level strict
+
+# JSON output for tooling
+poetry run rdf-construct lint ontology.ttl --format json
+
+# List available rules
+poetry run rdf-construct lint --list-rules
+```
 
 ### Generate UML Diagrams
 

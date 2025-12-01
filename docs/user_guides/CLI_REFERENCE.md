@@ -27,6 +27,77 @@ rdf-construct --help       # Show help
 
 ## Commands
 
+### lint - Check Ontology Quality
+
+Check RDF ontologies for quality issues, structural problems, and best practice violations.
+
+```bash
+poetry run rdf-construct lint SOURCES [OPTIONS]
+```
+
+**Arguments**:
+- `SOURCES`: One or more RDF files to check (.ttl, .rdf, .owl, etc.)
+
+**Options**:
+- `-l, --level LEVEL`: Strictness level: `strict`, `standard` (default), or `relaxed`
+- `-f, --format FORMAT`: Output format: `text` (default) or `json`
+- `-c, --config PATH`: Path to `.rdf-lint.yml` configuration file
+- `-e, --enable RULE`: Enable specific rule (can specify multiple)
+- `-d, --disable RULE`: Disable specific rule (can specify multiple)
+- `--no-colour`: Disable coloured output
+- `--list-rules`: List available rules and exit
+- `--init`: Generate a default `.rdf-lint.yml` config file and exit
+
+**Exit Codes**:
+- `0`: No issues found
+- `1`: Warnings found (no errors)
+- `2`: Errors found
+
+**Examples**:
+
+```bash
+# Basic usage
+poetry run rdf-construct lint ontology.ttl
+
+# Multiple files
+poetry run rdf-construct lint core.ttl domain.ttl
+
+# Strict mode (warnings become errors) - good for CI
+poetry run rdf-construct lint ontology.ttl --level strict
+
+# Relaxed mode (skip info-level rules)
+poetry run rdf-construct lint ontology.ttl --level relaxed
+
+# JSON output for tooling
+poetry run rdf-construct lint ontology.ttl --format json
+
+# Use config file
+poetry run rdf-construct lint ontology.ttl --config .rdf-lint.yml
+
+# Enable/disable specific rules
+poetry run rdf-construct lint ontology.ttl \
+  --enable orphan-class \
+  --disable missing-comment \
+  --disable inconsistent-naming
+
+# List available rules
+poetry run rdf-construct lint --list-rules
+
+# Generate default config
+poetry run rdf-construct lint --init
+```
+
+**Output**:
+```
+examples/ontology.ttl:42 info[redundant-subclass] ies:MyClass: Redundant subclass...
+examples/ontology.ttl:156 warning[missing-label] ies:myProperty: Property lacks rdfs:label
+examples/ontology.ttl:892 error[dangling-reference] ies:Feature: Referenced entity is not defined
+
+Found 1 error, 1 warning, 1 info in 1 file
+```
+
+For full documentation, see **[Lint Guide](LINT_GUIDE.md)**.
+
 ### uml - Generate UML Diagrams
 
 Generate PlantUML class diagrams from RDF ontologies.
@@ -259,6 +330,45 @@ Summary: 2 added, 1 removed, 1 modified
 
 ## Configuration Files
 
+### Lint Configuration
+
+**File**: `.rdf-lint.yml`
+
+```yaml
+# Strictness level: strict | standard | relaxed
+level: standard
+
+# Enable only specific rules (empty = all rules)
+enable:
+  - orphan-class
+  - missing-label
+
+# Disable specific rules
+disable:
+  - inconsistent-naming
+
+# Override severity for specific rules
+severity:
+  missing-comment: info
+  property-no-domain: warning
+```
+
+**Available Rules**:
+
+| Rule | Category | Default | Description |
+|------|----------|---------|-------------|
+| `orphan-class` | structural | error | Class has no superclass |
+| `dangling-reference` | structural | error | Reference to undefined entity |
+| `circular-subclass` | structural | error | Circular inheritance |
+| `property-no-type` | structural | error | Property missing rdf:type |
+| `empty-ontology` | structural | error | Ontology has no metadata |
+| `missing-label` | documentation | warning | Entity lacks rdfs:label |
+| `missing-comment` | documentation | warning | Entity lacks rdfs:comment |
+| `redundant-subclass` | best-practice | info | Redundant inheritance |
+| `property-no-domain` | best-practice | info | Property missing domain |
+| `property-no-range` | best-practice | info | Property missing range |
+| `inconsistent-naming` | best-practice | info | Naming convention violations |
+
 ### UML Context Configuration
 
 **File**: `uml_contexts.yml`
@@ -387,9 +497,13 @@ profiles:
 
 ## Exit Codes
 
-- `0`: Success
-- `1`: General error
-- `2`: Command line usage error
+| Code | Command | Meaning |
+|------|---------|---------|
+| `0` | All | Success / No issues |
+| `1` | `lint` | Warnings found (no errors) |
+| `1` | Others | General error |
+| `2` | `lint` | Errors found |
+| `2` | Others | Command line usage error |
 
 ## Environment Variables
 
@@ -400,6 +514,7 @@ None currently used.
 **Input Files**:
 - `.ttl` - RDF/Turtle ontology files
 - `.yml` - YAML configuration files
+- `.rdf-lint.yml` - Lint configuration (auto-discovered)
 
 **Output Files**:
 - `.puml` - PlantUML diagram files (from `uml` command)
@@ -410,6 +525,16 @@ None currently used.
 - `src/ontology/` - Ordered RDF output
 
 ## Common Workflows
+
+### CI/CD Ontology Validation
+
+```bash
+# Strict lint check - fail on any warning or error
+poetry run rdf-construct lint ontology.ttl --level strict
+
+# JSON output for parsing
+poetry run rdf-construct lint ontology.ttl --format json > lint-results.json
+```
 
 ### Generate Documentation Diagrams
 
@@ -433,6 +558,16 @@ poetry run rdf-construct order v2.ttl order.yml -p canonical -o output/v2/
 
 # Diff them
 diff output/v1/v1-canonical.ttl output/v2/v2-canonical.ttl
+```
+
+### Pre-commit Ontology Check
+
+```bash
+# Quick lint before committing
+poetry run rdf-construct lint ontology.ttl
+
+# If errors, fix and re-run
+poetry run rdf-construct lint ontology.ttl --level strict
 ```
 
 ### Generate Presentation Diagrams
@@ -462,6 +597,7 @@ Before generating, list available contexts/profiles:
 ```bash
 poetry run rdf-construct contexts config.yml
 poetry run rdf-construct profiles order.yml
+poetry run rdf-construct lint --list-rules
 ```
 
 ### Start Simple
@@ -487,6 +623,19 @@ Use subdirectories for different versions or audiences:
 ```bash
 poetry run rdf-construct uml ontology.ttl config.yml -o docs/diagrams/public/
 poetry run rdf-construct uml ontology.ttl config.yml -o docs/diagrams/internal/
+```
+
+### Configure Lint Rules Per Project
+
+Create a `.rdf-lint.yml` in your project root:
+
+```bash
+# Generate default config
+poetry run rdf-construct lint --init
+
+# Edit to suit your project
+# Then just run:
+poetry run rdf-construct lint ontology.ttl
 ```
 
 ## Troubleshooting
@@ -544,11 +693,30 @@ for pfx, ns in g.namespace_manager.namespaces():
     if pfx: print(f"{pfx}: {ns}")
 ```
 
+### Lint Finds Too Many Issues
+
+**Problem**: Hundreds of `missing-label` or `missing-comment` warnings.
+
+**Solutions**:
+1. Use `--level relaxed` during early development
+2. Disable specific rules: `--disable missing-comment`
+3. Create a `.rdf-lint.yml` config to tune rules
+
+### Lint Reports Dangling References for External Imports
+
+**Problem**: References to imported ontologies flagged as dangling.
+
+**Solution**: Load imported ontologies too:
+```bash
+poetry run rdf-construct lint domain.ttl foundation.ttl
+```
+
 ## Getting Help
 
 ```bash
 # Command help
 poetry run rdf-construct --help
+poetry run rdf-construct lint --help
 poetry run rdf-construct uml --help
 poetry run rdf-construct order --help
 
@@ -561,4 +729,5 @@ poetry run rdf-construct order --help
 
 - **[Getting Started](GETTING_STARTED.md)**: Quick start guide
 - **[UML Guide](UML_GUIDE.md)**: Complete UML features
+- **[Lint Guide](LINT_GUIDE.md)**: Ontology quality checking
 - **[Examples](../archive/examples/)**: Sample configurations
