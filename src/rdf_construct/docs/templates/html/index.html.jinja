@@ -1,0 +1,110 @@
+{% extends "base.html.jinja" %}
+
+{% block title %}{{ ontology.title or "Ontology Documentation" }}{% endblock %}
+
+{% block content %}
+<section class="stats">
+    <div class="stat-card">
+        <div class="number">{{ total_classes }}</div>
+        <div class="label">Classes</div>
+    </div>
+    <div class="stat-card">
+        <div class="number">{{ total_properties }}</div>
+        <div class="label">Properties</div>
+    </div>
+    {% if instances %}
+    <div class="stat-card">
+        <div class="number">{{ total_instances }}</div>
+        <div class="label">Instances</div>
+    </div>
+    {% endif %}
+</section>
+
+{% if classes %}
+<section class="section">
+    <h2>Classes</h2>
+    <ul class="entity-list">
+        {% for class in classes %}
+        <li>
+            <a href="{{ class.qname | entity_url('class') }}">
+                {{ class.label or class.qname }}
+            </a>
+            {% if class.definition %}
+            <span class="definition">— {{ class.definition[:100] }}{% if class.definition|length > 100 %}...{% endif %}</span>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+{% if object_properties %}
+<section class="section">
+    <h2>Object Properties</h2>
+    <ul class="entity-list">
+        {% for prop in object_properties %}
+        <li>
+            <a href="{{ prop.qname | entity_url('object_property') }}">
+                {{ prop.label or prop.qname }}
+            </a>
+            <span class="entity-type object">Object</span>
+            {% if prop.definition %}
+            <span class="definition">— {{ prop.definition[:80] }}{% if prop.definition|length > 80 %}...{% endif %}</span>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+{% if datatype_properties %}
+<section class="section">
+    <h2>Datatype Properties</h2>
+    <ul class="entity-list">
+        {% for prop in datatype_properties %}
+        <li>
+            <a href="{{ prop.qname | entity_url('datatype_property') }}">
+                {{ prop.label or prop.qname }}
+            </a>
+            <span class="entity-type datatype">Datatype</span>
+            {% if prop.definition %}
+            <span class="definition">— {{ prop.definition[:80] }}{% if prop.definition|length > 80 %}...{% endif %}</span>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+{% if annotation_properties %}
+<section class="section">
+    <h2>Annotation Properties</h2>
+    <ul class="entity-list">
+        {% for prop in annotation_properties %}
+        <li>
+            <a href="{{ prop.qname | entity_url('annotation_property') }}">
+                {{ prop.label or prop.qname }}
+            </a>
+            <span class="entity-type annotation">Annotation</span>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+{% if instances and config.include_instances %}
+<section class="section">
+    <h2>Instances</h2>
+    <ul class="entity-list">
+        {% for inst in instances %}
+        <li>
+            <a href="{{ inst.qname | entity_url('instance') }}">
+                {{ inst.label or inst.qname }}
+            </a>
+            <span class="entity-type instance">Instance</span>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+{% endblock %}
