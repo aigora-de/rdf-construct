@@ -7,10 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Nothing yet
+- **New `lint` command** for ontology quality checking with 11 rules across three categories:
+  - Structural (error): `orphan-class`, `dangling-reference`, `circular-subclass`, `property-no-type`, `empty-ontology`
+  - Documentation (warning): `missing-label`, `missing-comment`
+  - Best Practice (info): `redundant-subclass`, `property-no-domain`, `property-no-range`, `inconsistent-naming`
+- Strictness levels (`--level strict|standard|relaxed`) for flexible enforcement
+- Configuration file support (`.rdf-lint.yml`) with auto-discovery
+- JSON output format (`--format json`) for CI/tooling integration
+- Exit codes for CI integration: 0 (clean), 1 (warnings), 2 (errors)
+- Rule enable/disable via CLI (`--enable`, `--disable`) and config file
+- `--list-rules` option to display available rules
+- `--init` option to generate default `.rdf-lint.yml` config
+- Line number detection in lint output (best-effort source file search)
+- Namespace-aware entity formatting in output (e.g., `ies:Building` not just `Building`)
+- Inheritance-aware checking for `property-no-domain` and `property-no-range` (respects `rdfs:subPropertyOf`)
+- New documentation: `docs/user_guides/LINT_GUIDE.md`
 
-## [0.2.0] - 2025-11-30
+### Changed
+
+- Updated `docs/index.md` to reference lint functionality
+- Updated `docs/user_guides/CLI_REFERENCE.md` with full lint command documentation## [0.2.0] - 2025-11-30
 
 ### Added
 - User configuration templates
