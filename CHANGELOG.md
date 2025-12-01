@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **New `docs` command** for generating documentation from RDF ontologies
+  - Three output formats: `html` (navigable website), `markdown` (GitHub/GitLab compatible), `json` (structured data)
+  - Comprehensive entity extraction: classes, object/datatype/annotation properties, instances
+  - Class hierarchy visualisation with tree structure
+  - Individual pages for each entity with cross-references
+  - Client-side search functionality for HTML output (search.json index)
+  - Custom Jinja2 template support for branding/customisation
+  - Single-page documentation mode (`--single-page`)
+  - Entity type filtering (`--include`, `--exclude`): classes, properties, instances
+  - Configuration file support for complex setups
+  - Namespace filtering: only displays namespaces actually used in triples
+  - Inherited property detection for class documentation
+  - Circular hierarchy protection (handles malformed ontologies gracefully)
+  - Responsive CSS styling with property-type colour coding
+  - YAML frontmatter for Markdown output (Jekyll/Hugo compatible)
+- New dependency: `jinja2 >= 3.1.0`
+- New documentation: `docs/user_guides/DOCS_GUIDE.md`
+- Example configuration: `examples/docs-config.yml`
+
 - **New `diff` command** for semantic ontology comparison
   - Compares two RDF graphs and reports meaningful changes
   - Ignores cosmetic differences (statement order, prefix bindings, whitespace)
@@ -42,8 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Updated `README.md` with semantic diff feature and examples
-- Updated `docs/index.md` to reference diff and lint functionality
-- Updated `docs/user_guides/CLI_REFERENCE.md` with full diff and lint command documentation
+- Updated `docs/index.md` to reference docs, diff, and lint functionality
+- Updated `docs/user_guides/CLI_REFERENCE.md` with full docs, diff, and lint command documentation
 
 ## [0.1.0] - 2025-11-30
 

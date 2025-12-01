@@ -27,88 +27,74 @@ rdf-construct --help       # Show help
 
 ## Commands
 
-### lint - Check Ontology Quality
+### docs - Generate Documentation
 
-Check RDF ontologies for quality issues, structural problems, and best practice violations.
+Generate comprehensive HTML, Markdown, or JSON documentation from RDF ontologies.
 
 ```bash
-poetry run rdf-construct lint SOURCES [OPTIONS]
+poetry run rdf-construct docs SOURCES... [OPTIONS]
 ```
 
 **Arguments**:
-- `SOURCES`: One or more RDF files to check (.ttl, .rdf, .owl, etc.)
+- `SOURCES`: One or more RDF files (Turtle, RDF/XML, etc.)
 
 **Options**:
-- `-l, --level LEVEL`: Strictness level: `strict`, `standard` (default), or `relaxed`
-- `-f, --format FORMAT`: Output format: `text` (default) or `json`
-- `-c, --config PATH`: Path to `.rdf-lint.yml` configuration file
-- `-e, --enable RULE`: Enable specific rule (can specify multiple)
-- `-d, --disable RULE`: Disable specific rule (can specify multiple)
-- `--no-colour`: Disable coloured output
-- `--list-rules`: List available rules and exit
-- `--init`: Generate a default `.rdf-lint.yml` config file and exit
-
-**Exit Codes**:
-- `0`: No issues found
-- `1`: Warnings found (no errors)
-- `2`: Errors found
+- `-o, --output PATH`: Output directory (default: `docs/`)
+- `-f, --format FORMAT`: Output format: `html`, `markdown`, `json` (default: `html`)
+- `-C, --config PATH`: Path to configuration YAML file
+- `-t, --template PATH`: Path to custom template directory
+- `--single-page`: Generate single-page documentation
+- `--title TEXT`: Override ontology title
+- `--no-search`: Disable search index (HTML only)
+- `--no-instances`: Exclude instances from output
+- `--include TYPES`: Include only these types (comma-separated)
+- `--exclude TYPES`: Exclude these types (comma-separated)
 
 **Examples**:
 
 ```bash
-# Basic usage
-poetry run rdf-construct lint ontology.ttl
+# Basic HTML documentation
+poetry run rdf-construct docs ontology.ttl
 
-# Multiple files
-poetry run rdf-construct lint core.ttl domain.ttl
+# Markdown output to custom directory
+poetry run rdf-construct docs ontology.ttl --format markdown -o wiki/
 
-# Strict mode (warnings become errors) - good for CI
-poetry run rdf-construct lint ontology.ttl --level strict
+# Single-page HTML with custom title
+poetry run rdf-construct docs ontology.ttl --single-page --title "My Ontology"
 
-# Relaxed mode (skip info-level rules)
-poetry run rdf-construct lint ontology.ttl --level relaxed
+# JSON output for custom rendering
+poetry run rdf-construct docs ontology.ttl --format json
 
-# JSON output for tooling
-poetry run rdf-construct lint ontology.ttl --format json
+# Generate from multiple sources (merged)
+poetry run rdf-construct docs domain.ttl foundation.ttl -o docs/
 
-# Use config file
-poetry run rdf-construct lint ontology.ttl --config .rdf-lint.yml
+# Use custom templates
+poetry run rdf-construct docs ontology.ttl --template my-templates/
 
-# Enable/disable specific rules
-poetry run rdf-construct lint ontology.ttl \
-  --enable orphan-class \
-  --disable missing-comment \
-  --disable inconsistent-naming
+# Only classes and properties (no instances)
+poetry run rdf-construct docs ontology.ttl --exclude instances
 
-# List available rules
-poetry run rdf-construct lint --list-rules
-
-# Generate default config
-poetry run rdf-construct lint --init
+# With configuration file
+poetry run rdf-construct docs ontology.ttl --config docs-config.yml
 ```
 
 **Output**:
-```
-examples/ontology.ttl:42 info[redundant-subclass] ies:MyClass: Redundant subclass...
-examples/ontology.ttl:156 warning[missing-label] ies:myProperty: Property lacks rdfs:label
-examples/ontology.ttl:892 error[dangling-reference] ies:Feature: Referenced entity is not defined
-
-Found 1 error, 1 warning, 1 info in 1 file
-```
-
-For full documentation, see **[Lint Guide](LINT_GUIDE.md)**.
+- Creates documentation files in output directory
+- HTML: navigable pages with search
+- Markdown: GitHub/GitLab compatible with frontmatter
+- JSON: structured data for custom rendering
 
 ### uml - Generate UML Diagrams
 
 Generate PlantUML class diagrams from RDF ontologies.
 
 ```bash
-poetry run rdf-construct uml SOURCE CONFIG [OPTIONS]
+poetry run rdf-construct uml SOURCES... -C CONFIG [OPTIONS]
 ```
 
 **Arguments**:
-- `SOURCE`: Input RDF/Turtle file (.ttl)
-- `CONFIG`: YAML configuration file defining contexts
+- `SOURCES`: One or more RDF files (.ttl, .rdf, etc.)
+- `-C, --config CONFIG`: YAML configuration file defining contexts (required)
 
 **Options**:
 - `-c, --context NAME`: Generate specific context(s) (can specify multiple)
@@ -117,44 +103,130 @@ poetry run rdf-construct uml SOURCE CONFIG [OPTIONS]
 - `-s, --style NAME`: Style scheme name to use
 - `--layout-config PATH`: Path to layout configuration YAML
 - `-l, --layout NAME`: Layout name to use
+- `-r, --rendering-mode MODE`: Rendering mode: `default` or `odm`
 
 **Examples**:
 
 ```bash
 # Generate all contexts
-poetry run rdf-construct uml ontology.ttl config.yml
+poetry run rdf-construct uml ontology.ttl -C config.yml
 
 # Specific context
-poetry run rdf-construct uml ontology.ttl config.yml -c animal_taxonomy
+poetry run rdf-construct uml ontology.ttl -C config.yml -c animal_taxonomy
 
 # Multiple contexts
-poetry run rdf-construct uml ontology.ttl config.yml -c context1 -c context2
+poetry run rdf-construct uml ontology.ttl -C config.yml -c context1 -c context2
 
 # Custom output directory
-poetry run rdf-construct uml ontology.ttl config.yml -o my-diagrams/
+poetry run rdf-construct uml ontology.ttl -C config.yml -o my-diagrams/
 
 # With styling
-poetry run rdf-construct uml ontology.ttl config.yml \
+poetry run rdf-construct uml ontology.ttl -C config.yml \
   --style-config examples/uml_styles.yml \
   --style default
 
 # With styling and layout
-poetry run rdf-construct uml ontology.ttl config.yml \
+poetry run rdf-construct uml ontology.ttl -C config.yml \
   --style-config examples/uml_styles.yml --style default \
   --layout-config examples/uml_layouts.yml --layout hierarchy
 
-# Full example
-poetry run rdf-construct uml examples/animal_ontology.ttl examples/uml_contexts.yml \
-  -c animal_taxonomy \
-  -o output/diagrams/ \
-  --style-config examples/uml_styles.yml --style high_contrast \
-  --layout-config examples/uml_layouts.yml --layout compact
+# Multiple source files (merged)
+poetry run rdf-construct uml domain.ttl foundation.ttl -C config.yml
+
+# ODM-compliant rendering
+poetry run rdf-construct uml ontology.ttl -C config.yml --rendering-mode odm
 ```
 
 **Output**:
 - Creates `.puml` files in output directory
 - One file per context: `SOURCE-CONTEXT.puml`
 - Shows summary: number of classes, properties, instances
+
+### diff - Compare RDF Files
+
+Compare two RDF files and show semantic differences, ignoring cosmetic changes.
+
+```bash
+poetry run rdf-construct diff OLD_FILE NEW_FILE [OPTIONS]
+```
+
+**Arguments**:
+- `OLD_FILE`: Original RDF file
+- `NEW_FILE`: Modified RDF file
+
+**Options**:
+- `-o, --output PATH`: Write output to file instead of stdout
+- `-f, --format FORMAT`: Output format: `text`, `markdown`, `json` (default: `text`)
+- `--show TYPES`: Show only these change types (comma-separated: `added`, `removed`, `modified`)
+- `--hide TYPES`: Hide these change types
+- `--entities TYPES`: Show only these entity types (comma-separated: `classes`, `properties`, `instances`)
+- `--ignore-predicates PREDS`: Ignore these predicates in comparison (comma-separated CURIEs)
+
+**Examples**:
+
+```bash
+# Basic comparison
+poetry run rdf-construct diff v1.0.ttl v1.1.ttl
+
+# Generate markdown changelog
+poetry run rdf-construct diff v1.0.ttl v1.1.ttl --format markdown -o CHANGELOG.md
+
+# Show only additions and removals
+poetry run rdf-construct diff old.ttl new.ttl --show added,removed
+
+# Focus on class changes only
+poetry run rdf-construct diff old.ttl new.ttl --entities classes
+
+# Ignore timestamp predicates
+poetry run rdf-construct diff old.ttl new.ttl --ignore-predicates dcterms:modified
+```
+
+**Exit Codes**:
+- `0`: Graphs are semantically identical
+- `1`: Differences found
+- `2`: Error occurred
+
+### lint - Check Ontology Quality
+
+Check RDF ontologies for common issues and best practice violations.
+
+```bash
+poetry run rdf-construct lint SOURCES... [OPTIONS]
+```
+
+**Arguments**:
+- `SOURCES`: One or more RDF files to check
+
+**Options**:
+- `--level LEVEL`: Checking level: `strict`, `standard`, `relaxed` (default: `standard`)
+- `-f, --format FORMAT`: Output format: `text`, `json` (default: `text`)
+- `--enable RULES`: Enable specific rules (comma-separated)
+- `--disable RULES`: Disable specific rules (comma-separated)
+- `-C, --config PATH`: Path to lint configuration file
+
+**Examples**:
+
+```bash
+# Basic lint check
+poetry run rdf-construct lint ontology.ttl
+
+# Strict checking
+poetry run rdf-construct lint ontology.ttl --level strict
+
+# JSON output for CI
+poetry run rdf-construct lint ontology.ttl --format json
+
+# Disable specific rules
+poetry run rdf-construct lint ontology.ttl --disable missing-comment
+
+# With configuration
+poetry run rdf-construct lint ontology.ttl --config .rdf-lint.yml
+```
+
+**Exit Codes**:
+- `0`: No issues found
+- `1`: Warnings only
+- `2`: Errors found
 
 ### contexts - List UML Contexts
 
@@ -189,8 +261,6 @@ Available UML contexts:
     Roots: ex:Mammal
     Includes descendants (depth=2)
     Properties: domain_based
-
-  ...
 ```
 
 ### order - Reorder RDF Files
@@ -218,9 +288,6 @@ poetry run rdf-construct order ontology.ttl order.yml
 # Specific profiles
 poetry run rdf-construct order ontology.ttl order.yml -p alpha -p logical_topo
 
-# Multiple profiles
-poetry run rdf-construct order ontology.ttl order.yml -p profile1 -p profile2
-
 # Custom output directory
 poetry run rdf-construct order ontology.ttl order.yml -o output/
 ```
@@ -228,7 +295,6 @@ poetry run rdf-construct order ontology.ttl order.yml -o output/
 **Output**:
 - Creates ordered `.ttl` files in output directory
 - One file per profile: `SOURCE-PROFILE.ttl`
-- Preserves semantic ordering in output
 
 ### profiles - List Ordering Profiles
 
@@ -241,133 +307,36 @@ poetry run rdf-construct profiles CONFIG
 **Arguments**:
 - `CONFIG`: YAML configuration file to inspect
 
-**Examples**:
-
-```bash
-# List profiles
-poetry run rdf-construct profiles order.yml
-```
-
-**Output**:
-```
-Available profiles:
-
-  alpha
-    Alphabetical ordering - good for diffs
-    Sections: 6
-
-  logical_topo
-    Parents before children - preserves hierarchy
-    Sections: 6
-
-  ...
-```
-
-### diff - Compare RDF Files
-
-Compare two RDF files and show semantic differences, ignoring cosmetic changes like statement order and prefix bindings.
-```bash
-poetry run rdf-construct diff OLD_FILE NEW_FILE [OPTIONS]
-```
-
-**Arguments**:
-- `OLD_FILE`: Baseline/original RDF file
-- `NEW_FILE`: New/updated RDF file
-
-**Options**:
-- `-o, --output PATH`: Write output to file instead of stdout
-- `-f, --format FORMAT`: Output format: `text` (default), `markdown`, `json`
-- `--show TYPES`: Show only these change types (comma-separated: added,removed,modified)
-- `--hide TYPES`: Hide these change types (comma-separated)
-- `--entities TYPES`: Show only these entity types (comma-separated: classes,properties,instances)
-- `--ignore-predicates PREDS`: Ignore predicates in comparison (comma-separated CURIEs)
-
-**Exit Codes**:
-- `0`: Graphs are semantically identical
-- `1`: Differences were found
-- `2`: Error occurred
-
-**Examples**:
-```bash
-# Basic comparison
-poetry run rdf-construct diff v1.0.ttl v1.1.ttl
-
-# Generate markdown changelog
-poetry run rdf-construct diff v1.0.ttl v1.1.ttl --format markdown -o CHANGELOG.md
-
-# JSON output for scripting
-poetry run rdf-construct diff old.ttl new.ttl --format json | jq '.summary'
-
-# Show only additions and removals
-poetry run rdf-construct diff old.ttl new.ttl --show added,removed
-
-# Focus on class changes only
-poetry run rdf-construct diff old.ttl new.ttl --entities classes
-
-# Ignore timestamp predicates
-poetry run rdf-construct diff old.ttl new.ttl --ignore-predicates dcterms:modified
-```
-
-**Output** (text format):
-```
-Comparing v1.0.ttl → v1.1.ttl
-
-ADDED (2 entities):
-  + Class ex:SmartBuilding (subclass of ex:Building)
-  + DataProperty ex:energyRating
-
-REMOVED (1 entity):
-  - Class ex:DeprecatedStructure
-
-MODIFIED (1 entity):
-  ~ Class ex:Building
-    + rdfs:comment "A constructed physical structure."@en
-
-Summary: 2 added, 1 removed, 1 modified
-```
-
-**See also**: [Diff Guide](DIFF_GUIDE.md) for complete documentation.
-
 ## Configuration Files
 
-### Lint Configuration
+### Documentation Configuration
 
-**File**: `.rdf-lint.yml`
+**File**: `docs-config.yml`
 
 ```yaml
-# Strictness level: strict | standard | relaxed
-level: standard
+output_dir: docs/
+format: html
+title: "My Ontology Documentation"
+language: en
 
-# Enable only specific rules (empty = all rules)
-enable:
-  - orphan-class
-  - missing-label
+include_classes: true
+include_object_properties: true
+include_datatype_properties: true
+include_annotation_properties: false
+include_instances: true
 
-# Disable specific rules
-disable:
-  - inconsistent-naming
+include_search: true
+include_hierarchy: true
+include_statistics: true
 
-# Override severity for specific rules
-severity:
-  missing-comment: info
-  property-no-domain: warning
+# Custom templates
+template_dir: my-templates/
+
+# Exclude standard namespaces
+exclude_namespaces:
+  - http://www.w3.org/2002/07/owl#
+  - http://www.w3.org/2000/01/rdf-schema#
 ```
-
-**Available Rules**:
-
-| Rule | Category | Default | Description |
-|------|----------|---------|-------------|
-| `orphan-class` | structural | error | Class has no superclass |
-| `dangling-reference` | structural | error | Reference to undefined entity |
-| `circular-subclass` | structural | error | Circular inheritance |
-| `property-no-type` | structural | error | Property missing rdf:type |
-| `empty-ontology` | structural | error | Ontology has no metadata |
-| `missing-label` | documentation | warning | Entity lacks rdfs:label |
-| `missing-comment` | documentation | warning | Entity lacks rdfs:comment |
-| `redundant-subclass` | best-practice | info | Redundant inheritance |
-| `property-no-domain` | best-practice | info | Property missing domain |
-| `property-no-range` | best-practice | info | Property missing range |
-| `inconsistent-naming` | best-practice | info | Naming convention violations |
 
 ### UML Context Configuration
 
@@ -406,44 +375,24 @@ schemes:
   scheme_name:
     description: "Visual theme description"
     
-    # Class styling
     classes:
       by_namespace:
         prefix:
           border: "#0066CC"
           fill: "#E8F4F8"
-          line_style: bold
-      
-      by_type:
-        type_key:
-          border: "#CC0000"
-          fill: "#FFE6E6"
-      
       default:
         border: "#000000"
         fill: "#FFFFFF"
     
-    # Instance styling
     instances:
       border: "#000000"
       fill: "#000000"
       text: "#FFFFFF"
-      inherit_class_border: true
     
-    # Arrow styling
     arrows:
       subclass:
         color: "#0066CC"
         style: bold
-      rdf_type:
-        color: "#D32F2F"
-        style: bold
-    
-    # Stereotypes
-    show_stereotypes: true
-    stereotype_map:
-      owl:Class: "«class»"
-      prefix:MetaClass: "«meta»"
 ```
 
 ### Layout Configuration
@@ -454,13 +403,27 @@ schemes:
 layouts:
   layout_name:
     description: "Layout arrangement description"
-    direction: top_to_bottom  # or left_to_right, etc.
-    arrow_direction: up  # or down, left, right
+    direction: top_to_bottom
+    arrow_direction: up
     hide_empty_members: false
     group_by_namespace: false
-    spacing:
-      classMarginTop: 10
-      classMarginBottom: 10
+```
+
+### Lint Configuration
+
+**File**: `.rdf-lint.yml`
+
+```yaml
+level: standard
+
+rules:
+  orphan-class: error
+  missing-label: warning
+  missing-comment: info
+  property-no-domain: warning
+
+exclude_namespaces:
+  - http://www.w3.org/2002/07/owl#
 ```
 
 ### Ordering Profile Configuration
@@ -468,19 +431,15 @@ layouts:
 **File**: `order.yml`
 
 ```yaml
-# Optional: control prefix ordering
 prefix_order:
   - rdf
   - rdfs
   - owl
 
-# Define subject selectors
 selectors:
   classes: "rdf:type owl:Class"
   obj_props: "rdf:type owl:ObjectProperty"
-  data_props: "rdf:type owl:DatatypeProperty"
 
-# Define ordering profiles
 profiles:
   profile_name:
     description: "Human-readable description"
@@ -488,246 +447,151 @@ profiles:
       - header: {}
       - classes:
           select: classes
-          sort: alpha  # or topological
-          roots: [prefix:RootClass, ...]
-      - object_properties:
-          select: obj_props
           sort: topological
 ```
 
 ## Exit Codes
 
-| Code | Command | Meaning |
-|------|---------|---------|
-| `0` | All | Success / No issues |
-| `1` | `lint` | Warnings found (no errors) |
-| `1` | Others | General error |
-| `2` | `lint` | Errors found |
-| `2` | Others | Command line usage error |
-
-## Environment Variables
-
-None currently used.
+| Command | Code | Meaning |
+|---------|------|---------|
+| All | `0` | Success |
+| All | `1` | General error / warnings only (lint) / differences found (diff) |
+| All | `2` | Command error / errors found (lint) / file error (diff) |
 
 ## Files and Directories
 
 **Input Files**:
 - `.ttl` - RDF/Turtle ontology files
+- `.rdf`, `.xml`, `.owl` - RDF/XML files
 - `.yml` - YAML configuration files
-- `.rdf-lint.yml` - Lint configuration (auto-discovered)
 
 **Output Files**:
+- `.html`, `.md`, `.json` - Documentation (from `docs` command)
 - `.puml` - PlantUML diagram files (from `uml` command)
 - `.ttl` - Ordered RDF/Turtle files (from `order` command)
 
 **Default Output Directories**:
+- `docs/` - Documentation output
 - `diagrams/` - UML diagram output
 - `src/ontology/` - Ordered RDF output
 
+**Configuration Files**:
+- `docs-config.yml` - Documentation settings
+- `uml_contexts.yml` - UML context definitions
+- `uml_styles.yml` - UML styling
+- `uml_layouts.yml` - UML layout settings
+- `.rdf-lint.yml` - Lint rule configuration
+- `order.yml` - Ordering profile definitions
+
 ## Common Workflows
+
+### Generate Complete Documentation Set
+
+```bash
+# HTML docs with diagrams
+poetry run rdf-construct docs ontology.ttl -o docs/
+
+# Generate UML diagrams
+poetry run rdf-construct uml ontology.ttl -C contexts.yml -o docs/diagrams/
+
+# Run quality check
+poetry run rdf-construct lint ontology.ttl
+```
 
 ### CI/CD Ontology Validation
 
 ```bash
-# Strict lint check - fail on any warning or error
-poetry run rdf-construct lint ontology.ttl --level strict
-
-# JSON output for parsing
+#!/bin/bash
+# Lint check (fails on errors)
 poetry run rdf-construct lint ontology.ttl --format json > lint-results.json
+if [ $? -eq 2 ]; then
+  echo "Lint errors found!"
+  exit 1
+fi
+
+# Generate documentation
+poetry run rdf-construct docs ontology.ttl -o public/docs/
 ```
 
-### Generate Documentation Diagrams
+### Version Comparison Workflow
 
 ```bash
-# Create multiple views of an ontology
-poetry run rdf-construct uml ontology.ttl config.yml \
-  -c overview \
-  -c detailed \
-  -c examples \
-  -o docs/diagrams/ \
-  --style-config styles.yml --style default \
-  --layout-config layouts.yml --layout hierarchy
-```
+# Compare versions
+poetry run rdf-construct diff v1.0.ttl v1.1.ttl --format markdown > CHANGES.md
 
-### Compare Ontology Versions
-
-```bash
-# Generate ordered versions
-poetry run rdf-construct order v1.ttl order.yml -p canonical -o output/v1/
-poetry run rdf-construct order v2.ttl order.yml -p canonical -o output/v2/
-
-# Diff them
-diff output/v1/v1-canonical.ttl output/v2/v2-canonical.ttl
-```
-
-### Pre-commit Ontology Check
-
-```bash
-# Quick lint before committing
-poetry run rdf-construct lint ontology.ttl
-
-# If errors, fix and re-run
-poetry run rdf-construct lint ontology.ttl --level strict
-```
-
-### Generate Presentation Diagrams
-
-```bash
-# High contrast, large spacing
-poetry run rdf-construct uml ontology.ttl config.yml \
-  --style-config styles.yml --style high_contrast \
-  --layout-config layouts.yml --layout presentation
-```
-
-### Generate Academic Paper Diagrams
-
-```bash
-# Grayscale, documentation layout
-poetry run rdf-construct uml ontology.ttl config.yml \
-  --style-config styles.yml --style grayscale \
-  --layout-config layouts.yml --layout documentation
+# Generate docs for new version
+poetry run rdf-construct docs v1.1.ttl -o docs/v1.1/
 ```
 
 ## Tips
 
-### Check Configuration
-
-Before generating, list available contexts/profiles:
+### Check Configuration First
 
 ```bash
 poetry run rdf-construct contexts config.yml
 poetry run rdf-construct profiles order.yml
-poetry run rdf-construct lint --list-rules
 ```
 
 ### Start Simple
 
-Generate without styling first:
+Generate without styling first, then add customisation:
 
 ```bash
-poetry run rdf-construct uml ontology.ttl config.yml -c simple_context
-```
+# Basic docs
+poetry run rdf-construct docs ontology.ttl
 
-Then add styling once you're happy with the structure.
+# Then add templates
+poetry run rdf-construct docs ontology.ttl --template custom/
+```
 
 ### Use Descriptive Names
 
 In YAML configs:
-- **Good**: `animal_taxonomy`, `management_structure`, `key_relationships`
+- **Good**: `animal_taxonomy`, `management_structure`
 - **Bad**: `context1`, `test`, `temp`
-
-### Organize Output
-
-Use subdirectories for different versions or audiences:
-
-```bash
-poetry run rdf-construct uml ontology.ttl config.yml -o docs/diagrams/public/
-poetry run rdf-construct uml ontology.ttl config.yml -o docs/diagrams/internal/
-```
-
-### Configure Lint Rules Per Project
-
-Create a `.rdf-lint.yml` in your project root:
-
-```bash
-# Generate default config
-poetry run rdf-construct lint --init
-
-# Edit to suit your project
-# Then just run:
-poetry run rdf-construct lint ontology.ttl
-```
 
 ## Troubleshooting
 
 ### "Command not found"
 
-**Problem**: `rdf-construct: command not found`
-
-**Solution**:
 ```bash
-# With poetry
+# Use poetry run
 poetry run rdf-construct --version
 
-# Or activate poetry shell
+# Or activate shell
 poetry shell
 rdf-construct --version
 ```
 
 ### "Context/Profile not found"
 
-**Problem**: `Error: Context 'xyz' not found`
-
-**Solution**: List available contexts/profiles:
 ```bash
+# List available options
 poetry run rdf-construct contexts config.yml
 poetry run rdf-construct profiles order.yml
 ```
 
-### "File not found"
-
-**Problem**: `Error: Path 'file.ttl' does not exist`
-
-**Solution**: Check file path is correct:
-```bash
-ls -la file.ttl
-# Use absolute path if needed
-poetry run rdf-construct uml /full/path/to/file.ttl config.yml
-```
-
 ### Empty Output
 
-**Problem**: Generated file has no classes/properties.
-
-**Solutions**:
-1. Check CURIE format in config
-2. Verify namespace prefixes match ontology
-3. Check class/property selection criteria
-
-**Debug**:
-```python
-from rdflib import Graph, RDF, OWL
-g = Graph().parse("ontology.ttl", format="turtle")
-print(f"Classes: {len(list(g.subjects(RDF.type, OWL.Class)))}")
-for pfx, ns in g.namespace_manager.namespaces():
-    if pfx: print(f"{pfx}: {ns}")
-```
-
-### Lint Finds Too Many Issues
-
-**Problem**: Hundreds of `missing-label` or `missing-comment` warnings.
-
-**Solutions**:
-1. Use `--level relaxed` during early development
-2. Disable specific rules: `--disable missing-comment`
-3. Create a `.rdf-lint.yml` config to tune rules
-
-### Lint Reports Dangling References for External Imports
-
-**Problem**: References to imported ontologies flagged as dangling.
-
-**Solution**: Load imported ontologies too:
-```bash
-poetry run rdf-construct lint domain.ttl foundation.ttl
-```
+Check:
+1. CURIE format in config matches ontology prefixes
+2. Namespace prefixes are bound in ontology
+3. Selection criteria match entities in ontology
 
 ## Getting Help
 
 ```bash
-# Command help
 poetry run rdf-construct --help
-poetry run rdf-construct lint --help
+poetry run rdf-construct docs --help
 poetry run rdf-construct uml --help
-poetry run rdf-construct order --help
-
-# Online resources
-# - Issues: https://github.com/aigora-de/rdf-construct/issues
-# - Discussions: https://github.com/aigora-de/rdf-construct/discussions
+poetry run rdf-construct diff --help
+poetry run rdf-construct lint --help
 ```
 
 ## See Also
 
 - **[Getting Started](GETTING_STARTED.md)**: Quick start guide
+- **[Docs Guide](DOCS_GUIDE.md)**: Documentation generation details
 - **[UML Guide](UML_GUIDE.md)**: Complete UML features
+- **[Diff Guide](DIFF_GUIDE.md)**: Semantic comparison details
 - **[Lint Guide](LINT_GUIDE.md)**: Ontology quality checking
-- **[Examples](../archive/examples/)**: Sample configurations
