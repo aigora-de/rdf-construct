@@ -766,5 +766,197 @@ def diff(
         click.secho(f"Error: {e}", fg="red", err=True)
         sys.exit(2)
 
+
+@cli.command()
+@click.argument("sources", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    default="docs",
+    help="Output directory (default: docs)",
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["html", "markdown", "md", "json"], case_sensitive=False),
+    default="html",
+    help="Output format (default: html)",
+)
+@click.option(
+    "--config",
+    "-C",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to configuration YAML file",
+)
+@click.option(
+    "--template",
+    "-t",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to custom template directory",
+)
+@click.option(
+    "--single-page",
+    is_flag=True,
+    help="Generate single-page documentation",
+)
+@click.option(
+    "--title",
+    help="Override ontology title",
+)
+@click.option(
+    "--no-search",
+    is_flag=True,
+    help="Disable search index generation (HTML only)",
+)
+@click.option(
+    "--no-instances",
+    is_flag=True,
+    help="Exclude instances from documentation",
+)
+@click.option(
+    "--include",
+    type=str,
+    help="Include only these entity types (comma-separated: classes,properties,instances)",
+)
+@click.option(
+    "--exclude",
+    type=str,
+    help="Exclude these entity types (comma-separated: classes,properties,instances)",
+)
+def docs(
+    sources: tuple[Path, ...],
+    output: Path,
+    output_format: str,
+    config: Path | None,
+    template: Path | None,
+    single_page: bool,
+    title: str | None,
+    no_search: bool,
+    no_instances: bool,
+    include: str | None,
+    exclude: str | None,
+):
+    """Generate documentation from RDF ontologies.
+
+    SOURCES: One or more RDF files to generate documentation from.
+
+    \b
+    Examples:
+        # Basic HTML documentation
+        rdf-construct docs ontology.ttl
+
+        # Markdown output to custom directory
+        rdf-construct docs ontology.ttl --format markdown -o api-docs/
+
+        # Single-page HTML with custom title
+        rdf-construct docs ontology.ttl --single-page --title "My Ontology"
+
+        # JSON output for custom rendering
+        rdf-construct docs ontology.ttl --format json
+
+        # Use custom templates
+        rdf-construct docs ontology.ttl --template my-templates/
+
+        # Generate from multiple sources (merged)
+        rdf-construct docs domain.ttl foundation.ttl -o docs/
+
+    \b
+    Output formats:
+        html      - Navigable HTML pages with search (default)
+        markdown  - GitHub/GitLab compatible Markdown
+        json      - Structured JSON for custom rendering
+    """
+    from rdflib import Graph
+
+    from rdf_construct.docs import DocsConfig, DocsGenerator, load_docs_config
+
+    # Load or create configuration
+    if config:
+        doc_config = load_docs_config(config)
+    else:
+        doc_config = DocsConfig()
+
+    # Apply CLI overrides
+    doc_config.output_dir = output
+    doc_config.format = "markdown" if output_format == "md" else output_format
+    doc_config.single_page = single_page
+    doc_config.include_search = not no_search
+    doc_config.include_instances = not no_instances
+
+    if template:
+        doc_config.template_dir = template
+    if title:
+        doc_config.title = title
+
+    # Parse include/exclude filters
+    if include:
+        types = [t.strip().lower() for t in include.split(",")]
+        doc_config.include_classes = "classes" in types
+        doc_config.include_object_properties = "properties" in types or "object_properties" in types
+        doc_config.include_datatype_properties = "properties" in types or "datatype_properties" in types
+        doc_config.include_annotation_properties = "properties" in types or "annotation_properties" in types
+        doc_config.include_instances = "instances" in types
+
+    if exclude:
+        types = [t.strip().lower() for t in exclude.split(",")]
+        if "classes" in types:
+            doc_config.include_classes = False
+        if "properties" in types:
+            doc_config.include_object_properties = False
+            doc_config.include_datatype_properties = False
+            doc_config.include_annotation_properties = False
+        if "instances" in types:
+            doc_config.include_instances = False
+
+    # Load RDF sources
+    click.echo(f"Loading {len(sources)} source file(s)...")
+    graph = Graph()
+
+    for source in sources:
+        click.echo(f"  Parsing {source.name}...")
+
+        # Determine format from extension
+        suffix = source.suffix.lower()
+        format_map = {
+            ".ttl": "turtle",
+            ".turtle": "turtle",
+            ".rdf": "xml",
+            ".xml": "xml",
+            ".owl": "xml",
+            ".nt": "nt",
+            ".ntriples": "nt",
+            ".n3": "n3",
+            ".jsonld": "json-ld",
+            ".json": "json-ld",
+        }
+        rdf_format = format_map.get(suffix, "turtle")
+
+        graph.parse(str(source), format=rdf_format)
+
+    click.echo(f"  Total: {len(graph)} triples")
+    click.echo()
+
+    # Generate documentation
+    click.echo(f"Generating {doc_config.format} documentation...")
+
+    generator = DocsGenerator(doc_config)
+    result = generator.generate(graph)
+
+    # Summary
+    click.echo()
+    click.secho(f"✓ Generated {result.total_pages} files to {result.output_dir}/", fg="green")
+    click.echo(f"  Classes: {result.classes_count}")
+    click.echo(f"  Properties: {result.properties_count}")
+    click.echo(f"  Instances: {result.instances_count}")
+
+    # Show entry point
+    if doc_config.format == "html":
+        index_path = result.output_dir / "index.html"
+        click.echo()
+        click.secho(f"Open {index_path} in your browser to view the documentation.", fg="cyan")
+
+
 if __name__ == "__main__":
     cli()
