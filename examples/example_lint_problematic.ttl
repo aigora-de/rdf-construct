@@ -1,0 +1,69 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <http://example.org/> .
+
+# Ontology with no metadata - triggers empty-ontology
+ex:problematic a owl:Ontology .
+
+# Orphan class - no rdfs:subClassOf - triggers orphan-class
+# Also missing label and comment - triggers missing-label, missing-comment
+ex:Building a owl:Class .
+
+# Class with documentation - should not trigger missing-label/missing-comment
+ex:Structure a owl:Class ;
+    rdfs:label "Structure"@en ;
+    rdfs:comment "A physical structure of any kind."@en .
+
+# Lowercase class name - triggers inconsistent-naming
+ex:room a owl:Class ;
+    rdfs:label "Room"@en ;
+    rdfs:subClassOf ex:Space .
+
+# Dangling reference - ex:Space is not defined - triggers dangling-reference
+ex:Floor a owl:Class ;
+    rdfs:label "Floor"@en ;
+    rdfs:subClassOf ex:Building .
+
+# Property with uppercase name - triggers inconsistent-naming
+ex:HasFloor a owl:ObjectProperty ;
+    rdfs:domain ex:Building ;
+    rdfs:range ex:Floor ;
+    rdfs:label "has floor"@en .
+
+# Property missing domain - triggers property-no-domain
+ex:hasRoof a owl:ObjectProperty ;
+    rdfs:range ex:Roof ;
+    rdfs:label "has roof"@en .
+
+# Property missing range - triggers property-no-range
+ex:hasFoundation a owl:ObjectProperty ;
+    rdfs:domain ex:Building ;
+    rdfs:label "has foundation"@en .
+
+# Property with no type declaration but has domain - triggers property-no-type
+ex:hasWindow rdfs:domain ex:Building ;
+    rdfs:range ex:Window .
+
+# Redundant inheritance - triggers redundant-subclass
+# Wall -> Structure, Wall -> Building, but Building -> Structure
+ex:Wall a owl:Class ;
+    rdfs:label "Wall"@en ;
+    rdfs:subClassOf ex:Building ;
+    rdfs:subClassOf ex:Structure .
+
+ex:Building rdfs:subClassOf ex:Structure .
+
+# This class is well-formed - should not trigger any issues
+ex:Roof a owl:Class ;
+    rdfs:label "Roof"@en ;
+    rdfs:comment "The covering of a building."@en ;
+    rdfs:subClassOf ex:Structure .
+
+# This property is well-formed - should not trigger any issues
+ex:covers a owl:ObjectProperty ;
+    rdfs:label "covers"@en ;
+    rdfs:comment "Indicates what an element covers."@en ;
+    rdfs:domain ex:Roof ;
+    rdfs:range ex:Building .

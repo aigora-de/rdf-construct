@@ -1,12 +1,13 @@
 """Command-line interface for rdf-construct."""
 
+import sys
 from pathlib import Path
 
 import click
-from rdflib import Graph, RDF
+from rdflib import Graph, RDF, URIRef
 from rdflib.namespace import OWL
 
-from .core import (
+from rdf_construct.core import (
     OrderingConfig,
     build_section_graph,
     extract_prefix_map,
@@ -14,16 +15,31 @@ from .core import (
     select_subjects,
     serialise_turtle,
     sort_subjects,
+    expand_curie,
 )
-from .uml import (
+from rdf_construct.uml import (
     load_uml_config,
     collect_diagram_entities,
     render_plantuml,
 )
-from .uml.uml_style import load_style_config
-from .uml.uml_layout import load_layout_config
-from .uml.odm_renderer import render_odm_plantuml
+from rdf_construct.uml.uml_style import load_style_config
+from rdf_construct.uml.uml_layout import load_layout_config
+from rdf_construct.uml.odm_renderer import render_odm_plantuml
 
+from .lint import (
+    LintEngine,
+    LintConfig,
+    load_lint_config,
+    find_config_file,
+    get_formatter,
+    list_rules,
+    get_all_rules,
+)
+
+LINT_LEVELS = ["strict", "standard", "relaxed"]
+LINT_FORMATS = ["text", "json"]
+
+from rdf_construct.diff import compare_files, format_diff, filter_diff, parse_filter_string
 
 # Valid rendering modes
 RENDERING_MODES = ["default", "odm"]
@@ -33,7 +49,14 @@ RENDERING_MODES = ["default", "odm"]
 def cli():
     """rdf-construct: Semantic RDF manipulation toolkit.
 
-    Reorder, serialise, and manipulate RDF ontologies with semantic awareness.
+    Tools for working with RDF ontologies:
+
+    \b
+    - lint: Check ontology quality (structural issues, documentation, best practices)
+    - uml: Generate PlantUML class diagrams
+    - order: Reorder Turtle files with semantic awareness
+
+    Use COMMAND --help for detailed options.
     """
     pass
 
@@ -399,6 +422,540 @@ def contexts(config: Path):
 
         click.echo(f"    Properties: {ctx.property_mode}")
         click.echo()
+
+
+@cli.command()
+@click.argument("sources", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--level",
+    "-l",
+    type=click.Choice(["strict", "standard", "relaxed"], case_sensitive=False),
+    default="standard",
+    help="Strictness level (default: standard)",
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",  # Renamed to avoid shadowing builtin
+    type=click.Choice(["text", "json"], case_sensitive=False),
+    default="text",
+    help="Output format (default: text)",
+)
+@click.option(
+    "--config",
+    "-c",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to .rdf-lint.yml configuration file",
+)
+@click.option(
+    "--enable",
+    "-e",
+    multiple=True,
+    help="Enable specific rules (can be used multiple times)",
+)
+@click.option(
+    "--disable",
+    "-d",
+    multiple=True,
+    help="Disable specific rules (can be used multiple times)",
+)
+@click.option(
+    "--no-colour",
+    "--no-color",
+    is_flag=True,
+    help="Disable coloured output",
+)
+@click.option(
+    "--list-rules",
+    "list_rules_flag",
+    is_flag=True,
+    help="List available rules and exit",
+)
+@click.option(
+    "--init",
+    "init_config",
+    is_flag=True,
+    help="Generate a default .rdf-lint.yml config file and exit",
+)
+def lint(
+    sources: tuple[Path, ...],
+    level: str,
+    output_format: str,
+    config: Path | None,
+    enable: tuple[str, ...],
+    disable: tuple[str, ...],
+    no_colour: bool,
+    list_rules_flag: bool,  # Must match the name above
+    init_config: bool,
+):
+    """Check RDF ontologies for quality issues.
+
+    Performs static analysis to detect structural problems, missing
+    documentation, and best practice violations.
+
+    \b
+    SOURCES: One or more RDF files to check (.ttl, .rdf, .owl, etc.)
+
+    \b
+    Exit codes:
+      0 - No issues found
+      1 - Warnings found (no errors)
+      2 - Errors found
+
+    \b
+    Examples:
+      # Basic usage
+      rdf-construct lint ontology.ttl
+
+      # Multiple files
+      rdf-construct lint core.ttl domain.ttl
+
+      # Strict mode (warnings become errors)
+      rdf-construct lint ontology.ttl --level strict
+
+      # JSON output for CI
+      rdf-construct lint ontology.ttl --format json
+
+      # Use config file
+      rdf-construct lint ontology.ttl --config .rdf-lint.yml
+
+      # Enable/disable specific rules
+      rdf-construct lint ontology.ttl --enable orphan-class --disable missing-comment
+
+      # List available rules
+      rdf-construct lint --list-rules
+    """
+    # Handle --init flag
+    if init_config:
+        from .lint import create_default_config
+
+        config_path = Path(".rdf-lint.yml")
+        if config_path.exists():
+            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
+            raise click.Abort()
+
+        config_content = create_default_config()
+        config_path.write_text(config_content)
+        click.secho(f"Created {config_path}", fg="green")
+        return
+
+    # Handle --list-rules flag
+    if list_rules_flag:
+        from .lint import get_all_rules
+
+        rules = get_all_rules()
+        click.secho("Available lint rules:", fg="cyan", bold=True)
+        click.echo()
+
+        # Group by category
+        categories: dict[str, list] = {}
+        for rule_id, spec in sorted(rules.items()):
+            cat = spec.category
+            if cat not in categories:
+                categories[cat] = []
+            categories[cat].append(spec)
+
+        for category, specs in sorted(categories.items()):
+            click.secho(f"  {category.title()}", fg="yellow", bold=True)
+            for spec in specs:
+                severity_color = {
+                    "error": "red",
+                    "warning": "yellow",
+                    "info": "blue",
+                }[spec.default_severity.value]
+                click.echo(
+                    f"    {spec.rule_id}: "
+                    f"{click.style(spec.default_severity.value, fg=severity_color)} - "
+                    f"{spec.description}"
+                )
+            click.echo()
+
+        return
+
+    # Validate we have sources for actual linting
+    if not sources:
+        click.secho("Error: No source files specified.", fg="red", err=True)
+        raise click.Abort()
+
+    # Build configuration
+    from .lint import LintConfig, LintEngine, load_lint_config, find_config_file, get_formatter
+
+    lint_config: LintConfig
+
+    if config:
+        # Load from specified config file
+        try:
+            lint_config = load_lint_config(config)
+            click.echo(f"Using config: {config}")
+        except (FileNotFoundError, ValueError) as e:
+            click.secho(f"Error loading config: {e}", fg="red", err=True)
+            raise click.Abort()
+    else:
+        # Try to find config file automatically
+        found_config = find_config_file()
+        if found_config:
+            try:
+                lint_config = load_lint_config(found_config)
+                click.echo(f"Using config: {found_config}")
+            except (FileNotFoundError, ValueError) as e:
+                click.secho(f"Error loading config: {e}", fg="red", err=True)
+                raise click.Abort()
+        else:
+            lint_config = LintConfig()
+
+    # Apply CLI overrides
+    lint_config.level = level
+
+    if enable:
+        lint_config.enabled_rules = set(enable)
+    if disable:
+        lint_config.disabled_rules.update(disable)
+
+    # Create engine and run
+    engine = LintEngine(lint_config)
+
+    click.echo(f"Scanning {len(sources)} file(s)...")
+    click.echo()
+
+    summary = engine.lint_files(list(sources))
+
+    # Format and output results
+    use_colour = not no_colour and output_format == "text"
+    formatter = get_formatter(output_format, use_colour=use_colour)
+
+    output = formatter.format_summary(summary)
+    click.echo(output)
+
+    # Exit with appropriate code
+    raise SystemExit(summary.exit_code)
+
+
+@cli.command()
+@click.argument("old_file", type=click.Path(exists=True, path_type=Path))
+@click.argument("new_file", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Write output to file instead of stdout",
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["text", "markdown", "md", "json"], case_sensitive=False),
+    default="text",
+    help="Output format (default: text)",
+)
+@click.option(
+    "--show",
+    type=str,
+    help="Show only these change types (comma-separated: added,removed,modified)",
+)
+@click.option(
+    "--hide",
+    type=str,
+    help="Hide these change types (comma-separated: added,removed,modified)",
+)
+@click.option(
+    "--entities",
+    type=str,
+    help="Show only these entity types (comma-separated: classes,properties,instances)",
+)
+@click.option(
+    "--ignore-predicates",
+    type=str,
+    help="Ignore these predicates in comparison (comma-separated CURIEs)",
+)
+def diff(
+    old_file: Path,
+    new_file: Path,
+    output: Path | None,
+    output_format: str,
+    show: str | None,
+    hide: str | None,
+    entities: str | None,
+    ignore_predicates: str | None,
+):
+    """Compare two RDF files and show semantic differences.
+
+    Compares OLD_FILE to NEW_FILE and reports changes, ignoring cosmetic
+    differences like statement order, prefix bindings, and whitespace.
+
+    \b
+    Examples:
+        rdf-construct diff v1.0.ttl v1.1.ttl
+        rdf-construct diff v1.0.ttl v1.1.ttl --format markdown -o CHANGELOG.md
+        rdf-construct diff old.ttl new.ttl --show added,removed
+        rdf-construct diff old.ttl new.ttl --entities classes
+
+    \b
+    Exit codes:
+        0 - Graphs are semantically identical
+        1 - Differences were found
+        2 - Error occurred
+    """
+
+    try:
+        # Parse ignored predicates
+        ignore_preds: set[URIRef] | None = None
+        if ignore_predicates:
+            temp_graph = Graph()
+            temp_graph.parse(str(old_file), format="turtle")
+
+            ignore_preds = set()
+            for pred_str in ignore_predicates.split(","):
+                pred_str = pred_str.strip()
+                uri = expand_curie(temp_graph, pred_str)
+                if uri:
+                    ignore_preds.add(uri)
+                else:
+                    click.secho(
+                        f"Warning: Could not expand predicate '{pred_str}'",
+                        fg="yellow",
+                        err=True,
+                    )
+
+        # Perform comparison
+        click.echo(f"Comparing {old_file.name} → {new_file.name}...", err=True)
+        diff_result = compare_files(old_file, new_file, ignore_predicates=ignore_preds)
+
+        # Apply filters
+        if show or hide or entities:
+            show_types = parse_filter_string(show) if show else None
+            hide_types = parse_filter_string(hide) if hide else None
+            entity_types = parse_filter_string(entities) if entities else None
+
+            diff_result = filter_diff(
+                diff_result,
+                show_types=show_types,
+                hide_types=hide_types,
+                entity_types=entity_types,
+            )
+
+        # Load graph for CURIE formatting
+        graph_for_format = None
+        if output_format in ("text", "markdown", "md"):
+            graph_for_format = Graph()
+            graph_for_format.parse(str(new_file), format="turtle")
+
+        # Format output
+        formatted = format_diff(diff_result, format_name=output_format, graph=graph_for_format)
+
+        # Write output
+        if output:
+            output.write_text(formatted)
+            click.secho(f"✓ Wrote diff to {output}", fg="green", err=True)
+        else:
+            click.echo(formatted)
+
+        # Exit code: 0 if identical, 1 if different
+        if diff_result.is_identical:
+            click.secho("Graphs are semantically identical.", fg="green", err=True)
+            sys.exit(0)
+        else:
+            sys.exit(1)
+
+    except FileNotFoundError as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(2)
+    except ValueError as e:
+        click.secho(f"Error parsing RDF: {e}", fg="red", err=True)
+        sys.exit(2)
+    except Exception as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(2)
+
+
+@cli.command()
+@click.argument("sources", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    default="docs",
+    help="Output directory (default: docs)",
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["html", "markdown", "md", "json"], case_sensitive=False),
+    default="html",
+    help="Output format (default: html)",
+)
+@click.option(
+    "--config",
+    "-C",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to configuration YAML file",
+)
+@click.option(
+    "--template",
+    "-t",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to custom template directory",
+)
+@click.option(
+    "--single-page",
+    is_flag=True,
+    help="Generate single-page documentation",
+)
+@click.option(
+    "--title",
+    help="Override ontology title",
+)
+@click.option(
+    "--no-search",
+    is_flag=True,
+    help="Disable search index generation (HTML only)",
+)
+@click.option(
+    "--no-instances",
+    is_flag=True,
+    help="Exclude instances from documentation",
+)
+@click.option(
+    "--include",
+    type=str,
+    help="Include only these entity types (comma-separated: classes,properties,instances)",
+)
+@click.option(
+    "--exclude",
+    type=str,
+    help="Exclude these entity types (comma-separated: classes,properties,instances)",
+)
+def docs(
+    sources: tuple[Path, ...],
+    output: Path,
+    output_format: str,
+    config: Path | None,
+    template: Path | None,
+    single_page: bool,
+    title: str | None,
+    no_search: bool,
+    no_instances: bool,
+    include: str | None,
+    exclude: str | None,
+):
+    """Generate documentation from RDF ontologies.
+
+    SOURCES: One or more RDF files to generate documentation from.
+
+    \b
+    Examples:
+        # Basic HTML documentation
+        rdf-construct docs ontology.ttl
+
+        # Markdown output to custom directory
+        rdf-construct docs ontology.ttl --format markdown -o api-docs/
+
+        # Single-page HTML with custom title
+        rdf-construct docs ontology.ttl --single-page --title "My Ontology"
+
+        # JSON output for custom rendering
+        rdf-construct docs ontology.ttl --format json
+
+        # Use custom templates
+        rdf-construct docs ontology.ttl --template my-templates/
+
+        # Generate from multiple sources (merged)
+        rdf-construct docs domain.ttl foundation.ttl -o docs/
+
+    \b
+    Output formats:
+        html      - Navigable HTML pages with search (default)
+        markdown  - GitHub/GitLab compatible Markdown
+        json      - Structured JSON for custom rendering
+    """
+    from rdflib import Graph
+
+    from rdf_construct.docs import DocsConfig, DocsGenerator, load_docs_config
+
+    # Load or create configuration
+    if config:
+        doc_config = load_docs_config(config)
+    else:
+        doc_config = DocsConfig()
+
+    # Apply CLI overrides
+    doc_config.output_dir = output
+    doc_config.format = "markdown" if output_format == "md" else output_format
+    doc_config.single_page = single_page
+    doc_config.include_search = not no_search
+    doc_config.include_instances = not no_instances
+
+    if template:
+        doc_config.template_dir = template
+    if title:
+        doc_config.title = title
+
+    # Parse include/exclude filters
+    if include:
+        types = [t.strip().lower() for t in include.split(",")]
+        doc_config.include_classes = "classes" in types
+        doc_config.include_object_properties = "properties" in types or "object_properties" in types
+        doc_config.include_datatype_properties = "properties" in types or "datatype_properties" in types
+        doc_config.include_annotation_properties = "properties" in types or "annotation_properties" in types
+        doc_config.include_instances = "instances" in types
+
+    if exclude:
+        types = [t.strip().lower() for t in exclude.split(",")]
+        if "classes" in types:
+            doc_config.include_classes = False
+        if "properties" in types:
+            doc_config.include_object_properties = False
+            doc_config.include_datatype_properties = False
+            doc_config.include_annotation_properties = False
+        if "instances" in types:
+            doc_config.include_instances = False
+
+    # Load RDF sources
+    click.echo(f"Loading {len(sources)} source file(s)...")
+    graph = Graph()
+
+    for source in sources:
+        click.echo(f"  Parsing {source.name}...")
+
+        # Determine format from extension
+        suffix = source.suffix.lower()
+        format_map = {
+            ".ttl": "turtle",
+            ".turtle": "turtle",
+            ".rdf": "xml",
+            ".xml": "xml",
+            ".owl": "xml",
+            ".nt": "nt",
+            ".ntriples": "nt",
+            ".n3": "n3",
+            ".jsonld": "json-ld",
+            ".json": "json-ld",
+        }
+        rdf_format = format_map.get(suffix, "turtle")
+
+        graph.parse(str(source), format=rdf_format)
+
+    click.echo(f"  Total: {len(graph)} triples")
+    click.echo()
+
+    # Generate documentation
+    click.echo(f"Generating {doc_config.format} documentation...")
+
+    generator = DocsGenerator(doc_config)
+    result = generator.generate(graph)
+
+    # Summary
+    click.echo()
+    click.secho(f"✓ Generated {result.total_pages} files to {result.output_dir}/", fg="green")
+    click.echo(f"  Classes: {result.classes_count}")
+    click.echo(f"  Properties: {result.properties_count}")
+    click.echo(f"  Instances: {result.instances_count}")
+
+    # Show entry point
+    if doc_config.format == "html":
+        index_path = result.output_dir / "index.html"
+        click.echo()
+        click.secho(f"Open {index_path} in your browser to view the documentation.", fg="cyan")
 
 
 if __name__ == "__main__":

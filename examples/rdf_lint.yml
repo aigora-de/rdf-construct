@@ -1,0 +1,45 @@
+# Example rdf-construct lint configuration
+# Copy this to your project root as .rdf-lint.yml
+
+# Strictness level
+# - strict: warnings become errors, all rules run
+# - standard: default severities apply (default)
+# - relaxed: warnings become info, INFO rules skipped
+level: standard
+
+# Enable only specific rules (empty = all rules)
+# Uncomment to enable selective linting
+# enable:
+#   - orphan-class
+#   - missing-label
+#   - dangling-reference
+
+# Disable specific rules
+# Useful for suppressing noise during early development
+disable:
+  - inconsistent-naming  # Allow flexible naming during prototyping
+
+# Override default severity for specific rules
+# Values: error, warning, info
+severity:
+  missing-comment: info     # Downgrade to info - comments nice-to-have
+  property-no-domain: warning  # Upgrade from info - domains important
+
+# Available rules:
+#
+# Structural (default: error):
+#   - orphan-class: Class has no rdfs:subClassOf
+#   - dangling-reference: Reference to undefined entity
+#   - circular-subclass: Class is subclass of itself
+#   - property-no-type: Property lacks rdf:type declaration
+#   - empty-ontology: owl:Ontology has no metadata
+#
+# Documentation (default: warning):
+#   - missing-label: Entity lacks rdfs:label
+#   - missing-comment: Entity lacks rdfs:comment
+#
+# Best Practice (default: info):
+#   - redundant-subclass: Redundant inheritance
+#   - property-no-domain: Object property has no domain
+#   - property-no-range: Object property has no range
+#   - inconsistent-naming: Naming convention violations
