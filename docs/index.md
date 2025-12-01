@@ -4,6 +4,7 @@
 
 **New User?** → [Getting Started](user_guides/GETTING_STARTED.md)  
 **Need Feature Details?** → [UML Guide](user_guides/UML_GUIDE.md)  
+**Compare Ontologies?** → [Diff Guide](user_guides/DIFF_GUIDE.md)  
 **Need Command Syntax?** → [CLI Reference](user_guides/CLI_REFERENCE.md)  
 **Contributing?** → [Contributing Guide](../CONTRIBUTING.md)  
 **Code Reference?** → [Code Index](../CODE_INDEX.md)
@@ -29,6 +30,12 @@ For users of rdf-construct who want to generate diagrams and work with RDF ontol
   - Styling and layout
   - Complete examples
   - Tips and techniques
+
+- **[Diff Guide](user_guides/DIFF_GUIDE.md)** - Semantic ontology comparison
+  - Comparing ontology versions
+  - Output formats (text, markdown, JSON)
+  - Filtering changes
+  - CI integration
 
 - **[CLI Reference](user_guides/CLI_REFERENCE.md)** - Command reference
   - All commands with options
@@ -68,6 +75,7 @@ A Python CLI toolkit for RDF operations:
 
 - **Semantic Ordering**: Serialize RDF/Turtle with meaningful order (not alphabetical)
 - **UML Generation**: Create PlantUML class diagrams from ontologies
+- **Semantic Diff**: Compare ontologies and identify meaningful changes
 - **Flexible Configuration**: YAML-based control without code changes
 
 Named after the ROM construct from William Gibson's *Neuromancer*—preserved, structured knowledge.

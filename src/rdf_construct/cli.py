@@ -1,12 +1,13 @@
 """Command-line interface for rdf-construct."""
 
+import sys
 from pathlib import Path
 
 import click
-from rdflib import Graph, RDF
+from rdflib import Graph, RDF, URIRef
 from rdflib.namespace import OWL
 
-from .core import (
+from rdf_construct.core import (
     OrderingConfig,
     build_section_graph,
     extract_prefix_map,
@@ -14,16 +15,18 @@ from .core import (
     select_subjects,
     serialise_turtle,
     sort_subjects,
+    expand_curie,
 )
-from .uml import (
+from rdf_construct.uml import (
     load_uml_config,
     collect_diagram_entities,
     render_plantuml,
 )
-from .uml.uml_style import load_style_config
-from .uml.uml_layout import load_layout_config
-from .uml.odm_renderer import render_odm_plantuml
+from rdf_construct.uml.uml_style import load_style_config
+from rdf_construct.uml.uml_layout import load_layout_config
+from rdf_construct.uml.odm_renderer import render_odm_plantuml
 
+from rdf_construct.diff import compare_files, format_diff, filter_diff, parse_filter_string
 
 # Valid rendering modes
 RENDERING_MODES = ["default", "odm"]
@@ -400,6 +403,142 @@ def contexts(config: Path):
         click.echo(f"    Properties: {ctx.property_mode}")
         click.echo()
 
+
+@cli.command()
+@click.argument("old_file", type=click.Path(exists=True, path_type=Path))
+@click.argument("new_file", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Write output to file instead of stdout",
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["text", "markdown", "md", "json"], case_sensitive=False),
+    default="text",
+    help="Output format (default: text)",
+)
+@click.option(
+    "--show",
+    type=str,
+    help="Show only these change types (comma-separated: added,removed,modified)",
+)
+@click.option(
+    "--hide",
+    type=str,
+    help="Hide these change types (comma-separated: added,removed,modified)",
+)
+@click.option(
+    "--entities",
+    type=str,
+    help="Show only these entity types (comma-separated: classes,properties,instances)",
+)
+@click.option(
+    "--ignore-predicates",
+    type=str,
+    help="Ignore these predicates in comparison (comma-separated CURIEs)",
+)
+def diff(
+    old_file: Path,
+    new_file: Path,
+    output: Path | None,
+    output_format: str,
+    show: str | None,
+    hide: str | None,
+    entities: str | None,
+    ignore_predicates: str | None,
+):
+    """Compare two RDF files and show semantic differences.
+
+    Compares OLD_FILE to NEW_FILE and reports changes, ignoring cosmetic
+    differences like statement order, prefix bindings, and whitespace.
+
+    \b
+    Examples:
+        rdf-construct diff v1.0.ttl v1.1.ttl
+        rdf-construct diff v1.0.ttl v1.1.ttl --format markdown -o CHANGELOG.md
+        rdf-construct diff old.ttl new.ttl --show added,removed
+        rdf-construct diff old.ttl new.ttl --entities classes
+
+    \b
+    Exit codes:
+        0 - Graphs are semantically identical
+        1 - Differences were found
+        2 - Error occurred
+    """
+
+    try:
+        # Parse ignored predicates
+        ignore_preds: set[URIRef] | None = None
+        if ignore_predicates:
+            temp_graph = Graph()
+            temp_graph.parse(str(old_file), format="turtle")
+
+            ignore_preds = set()
+            for pred_str in ignore_predicates.split(","):
+                pred_str = pred_str.strip()
+                uri = expand_curie(temp_graph, pred_str)
+                if uri:
+                    ignore_preds.add(uri)
+                else:
+                    click.secho(
+                        f"Warning: Could not expand predicate '{pred_str}'",
+                        fg="yellow",
+                        err=True,
+                    )
+
+        # Perform comparison
+        click.echo(f"Comparing {old_file.name} → {new_file.name}...", err=True)
+        diff_result = compare_files(old_file, new_file, ignore_predicates=ignore_preds)
+
+        # Apply filters
+        if show or hide or entities:
+            show_types = parse_filter_string(show) if show else None
+            hide_types = parse_filter_string(hide) if hide else None
+            entity_types = parse_filter_string(entities) if entities else None
+
+            diff_result = filter_diff(
+                diff_result,
+                show_types=show_types,
+                hide_types=hide_types,
+                entity_types=entity_types,
+            )
+
+        # Load graph for CURIE formatting
+        graph_for_format = None
+        if output_format in ("text", "markdown", "md"):
+            graph_for_format = Graph()
+            graph_for_format.parse(str(new_file), format="turtle")
+
+        # Format output
+        formatted = format_diff(diff_result, format_name=output_format, graph=graph_for_format)
+
+        # Write output
+        if output:
+            output.write_text(formatted)
+            click.secho(f"✓ Wrote diff to {output}", fg="green", err=True)
+        else:
+            click.echo(formatted)
+
+        # Exit code: 0 if identical, 1 if different
+        if diff_result.is_identical:
+            click.secho("Graphs are semantically identical.", fg="green", err=True)
+            sys.exit(0)
+        else:
+            sys.exit(1)
+
+    except FileNotFoundError as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(2)
+    except ValueError as e:
+        click.secho(f"Error parsing RDF: {e}", fg="red", err=True)
+        sys.exit(2)
+    except Exception as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(2)
 
 if __name__ == "__main__":
     cli()
