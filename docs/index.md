@@ -5,6 +5,7 @@
 **New User?** → [Getting Started](user_guides/GETTING_STARTED.md)  
 **Generate Documentation?** → [Docs Guide](user_guides/DOCS_GUIDE.md)  
 **Generate Diagrams?** → [UML Guide](user_guides/UML_GUIDE.md)  
+**Generate SHACL Shapes?** → [SHACL Guide](user_guides/SHACL_GUIDE.md)  
 **Compare Ontologies?** → [Diff Guide](user_guides/DIFF_GUIDE.md)  
 **Check Quality?** → [Lint Guide](user_guides/LINT_GUIDE.md)  
 **Need Command Syntax?** → [CLI Reference](user_guides/CLI_REFERENCE.md)  
@@ -38,6 +39,14 @@ For users of rdf-construct who want to generate diagrams and work with RDF ontol
   - Styling and layout
   - Complete examples
   - Tips and techniques
+
+- **[SHACL Guide](user_guides/SHACL_GUIDE.md)** - SHACL shape generation
+  - Generating shapes from OWL
+  - Strictness levels (minimal, standard, strict)
+  - Configuration options
+  - OWL pattern coverage
+  - Validation with pySHACL
+  - CI integration
 
 - **[Diff Guide](user_guides/DIFF_GUIDE.md)** - Semantic ontology comparison
   - Comparing ontology versions
@@ -89,6 +98,7 @@ A Python CLI toolkit for RDF operations:
 - **Semantic Ordering**: Serialise RDF/Turtle with meaningful order (not alphabetical)
 - **Documentation Generation**: Create navigable HTML/Markdown docs from ontologies
 - **UML Generation**: Create PlantUML class diagrams from ontologies
+- **SHACL Generation**: Generate validation shapes from OWL definitions
 - **Semantic Diff**: Compare ontologies and identify meaningful changes
 - **Ontology Linting**: Check ontology quality with configurable rules
 - **Flexible Configuration**: YAML-based control without code changes
@@ -123,6 +133,19 @@ poetry run rdf-construct uml ontology.ttl -C config.yml -c animal_taxonomy
 poetry run rdf-construct uml ontology.ttl -C config.yml \
   --style-config styles.yml --style default \
   --layout-config layouts.yml --layout hierarchy
+```
+
+### Generate SHACL Shapes
+
+```bash
+# Basic generation
+poetry run rdf-construct shacl-gen ontology.ttl -o shapes.ttl
+
+# Strict mode with closed shapes
+poetry run rdf-construct shacl-gen ontology.ttl --level strict --closed
+
+# With configuration file
+poetry run rdf-construct shacl-gen ontology.ttl --config shacl-config.yml
 ```
 
 ### Compare Ontology Versions

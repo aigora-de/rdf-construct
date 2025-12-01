@@ -17,16 +17,18 @@ from rdf_construct.core import (
     sort_subjects,
     expand_curie,
 )
+
 from rdf_construct.uml import (
     load_uml_config,
     collect_diagram_entities,
     render_plantuml,
 )
+
 from rdf_construct.uml.uml_style import load_style_config
 from rdf_construct.uml.uml_layout import load_layout_config
 from rdf_construct.uml.odm_renderer import render_odm_plantuml
 
-from .lint import (
+from rdf_construct.lint import (
     LintEngine,
     LintConfig,
     load_lint_config,
@@ -577,9 +579,6 @@ def lint(
         click.secho("Error: No source files specified.", fg="red", err=True)
         raise click.Abort()
 
-    # Build configuration
-    from .lint import LintConfig, LintEngine, load_lint_config, find_config_file, get_formatter
-
     lint_config: LintConfig
 
     if config:
@@ -956,6 +955,196 @@ def docs(
         index_path = result.output_dir / "index.html"
         click.echo()
         click.secho(f"Open {index_path} in your browser to view the documentation.", fg="cyan")
+
+
+@cli.command("shacl-gen")
+@click.argument("source", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Output file path (default: <source>-shapes.ttl)",
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["turtle", "ttl", "json-ld", "jsonld"], case_sensitive=False),
+    default="turtle",
+    help="Output format (default: turtle)",
+)
+@click.option(
+    "--level",
+    "-l",
+    type=click.Choice(["minimal", "standard", "strict"], case_sensitive=False),
+    default="standard",
+    help="Strictness level for constraint generation (default: standard)",
+)
+@click.option(
+    "--config",
+    "-C",
+    type=click.Path(exists=True, path_type=Path),
+    help="YAML configuration file",
+)
+@click.option(
+    "--classes",
+    type=str,
+    help="Comma-separated list of classes to generate shapes for",
+)
+@click.option(
+    "--closed",
+    is_flag=True,
+    help="Generate closed shapes (no extra properties allowed)",
+)
+@click.option(
+    "--default-severity",
+    type=click.Choice(["violation", "warning", "info"], case_sensitive=False),
+    default="violation",
+    help="Default severity for generated constraints",
+)
+@click.option(
+    "--no-labels",
+    is_flag=True,
+    help="Don't include rdfs:label as sh:name",
+)
+@click.option(
+    "--no-descriptions",
+    is_flag=True,
+    help="Don't include rdfs:comment as sh:description",
+)
+@click.option(
+    "--no-inherit",
+    is_flag=True,
+    help="Don't inherit constraints from superclasses",
+)
+def shacl_gen(
+        source: Path,
+        output: Path | None,
+        output_format: str,
+        level: str,
+        config: Path | None,
+        classes: str | None,
+        closed: bool,
+        default_severity: str,
+        no_labels: bool,
+        no_descriptions: bool,
+        no_inherit: bool,
+):
+    """Generate SHACL validation shapes from OWL ontology.
+
+    Converts OWL class definitions to SHACL NodeShapes, extracting
+    constraints from domain/range declarations, cardinality restrictions,
+    functional properties, and other OWL patterns.
+
+    SOURCE: Input RDF ontology file (.ttl, .rdf, .owl, etc.)
+
+    \b
+    Strictness levels:
+      minimal   - Basic type constraints only (sh:class, sh:datatype)
+      standard  - Adds cardinality and functional property constraints
+      strict    - Maximum constraints including sh:closed, enumerations
+
+    \b
+    Examples:
+        # Basic generation
+        rdf-construct shacl-gen ontology.ttl
+
+        # Generate with strict constraints
+        rdf-construct shacl-gen ontology.ttl --level strict --closed
+
+        # Custom output path and format
+        rdf-construct shacl-gen ontology.ttl -o shapes.ttl --format turtle
+
+        # Focus on specific classes
+        rdf-construct shacl-gen ontology.ttl --classes "ex:Building,ex:Floor"
+
+        # Use configuration file
+        rdf-construct shacl-gen ontology.ttl --config shacl-config.yml
+
+        # Generate warnings instead of violations
+        rdf-construct shacl-gen ontology.ttl --default-severity warning
+    """
+    from rdf_construct.shacl import (
+        generate_shapes_to_file,
+        load_shacl_config,
+        ShaclConfig,
+        StrictnessLevel,
+        Severity,
+    )
+
+    # Determine output path
+    if output is None:
+        suffix = ".json" if "json" in output_format.lower() else ".ttl"
+        output = source.with_stem(f"{source.stem}-shapes").with_suffix(suffix)
+
+    # Normalise format string
+    if output_format.lower() in ("ttl", "turtle"):
+        output_format = "turtle"
+    elif output_format.lower() in ("json-ld", "jsonld"):
+        output_format = "json-ld"
+
+    try:
+        # Load configuration from file or build from CLI options
+        if config:
+            shacl_config = load_shacl_config(config)
+            click.echo(f"Loaded configuration from {config}")
+        else:
+            shacl_config = ShaclConfig()
+
+        # Apply CLI overrides
+        shacl_config.level = StrictnessLevel(level.lower())
+
+        if classes:
+            shacl_config.target_classes = [c.strip() for c in classes.split(",")]
+
+        if closed:
+            shacl_config.closed = True
+
+        shacl_config.default_severity = Severity(default_severity.lower())
+
+        if no_labels:
+            shacl_config.include_labels = False
+
+        if no_descriptions:
+            shacl_config.include_descriptions = False
+
+        if no_inherit:
+            shacl_config.inherit_constraints = False
+
+        # Generate shapes
+        click.echo(f"Generating SHACL shapes from {source}...")
+        click.echo(f"  Level: {shacl_config.level.value}")
+
+        if shacl_config.target_classes:
+            click.echo(f"  Target classes: {', '.join(shacl_config.target_classes)}")
+
+        shapes_graph = generate_shapes_to_file(
+            source,
+            output,
+            shacl_config,
+            output_format,
+        )
+
+        # Count generated shapes
+        from rdf_construct.shacl import SH
+        num_shapes = len(list(shapes_graph.subjects(
+            predicate=None, object=SH.NodeShape
+        )))
+
+        click.secho(f"✓ Generated {num_shapes} shape(s) to {output}", fg="green")
+
+        if shacl_config.closed:
+            click.echo("  (closed shapes enabled)")
+
+    except FileNotFoundError as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        raise SystemExit(1)
+    except ValueError as e:
+        click.secho(f"Configuration error: {e}", fg="red", err=True)
+        raise SystemExit(1)
+    except Exception as e:
+        click.secho(f"Error generating shapes: {e}", fg="red", err=True)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

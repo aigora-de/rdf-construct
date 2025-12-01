@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+Added
+
+- **New SHACL Shape Generator** (`shacl-gen` command)
+
+  - Generate SHACL NodeShapes from OWL ontology definitions
+  - Convert domain/range to sh:property with sh:class/sh:datatype
+  - Convert cardinality restrictions to sh:minCount/sh:maxCount
+  - Convert owl:FunctionalProperty to sh:maxCount 1
+  - Convert owl:someValuesFrom/allValuesFrom to type constraints
+  - Convert owl:oneOf enumerations to sh:in
+  - Support for qualified cardinality restrictions
+  - Three strictness levels: minimal, standard, strict
+  - Constraint inheritance from superclasses
+  - Closed shape generation with configurable ignored properties
+  - YAML configuration file support
+  - Include rdfs:label as sh:name and rdfs:comment as sh:description
+  - Output formats: Turtle, JSON-LD
+- Documentation
+  - Added SHACL Guide (docs/user_guides/SHACL_GUIDE.md)
+  - Updated CLI Reference with shacl-gen command
+  - Updated documentation index with SHACL module
+
 - **New `docs` command** for generating documentation from RDF ontologies
   - Three output formats: `html` (navigable website), `markdown` (GitHub/GitLab compatible), `json` (structured data)
   - Comprehensive entity extraction: classes, object/datatype/annotation properties, instances
