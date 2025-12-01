@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **New `diff` command** for semantic ontology comparison
+  - Compares two RDF graphs and reports meaningful changes
+  - Ignores cosmetic differences (statement order, prefix bindings, whitespace)
+  - Three output formats: `text` (terminal), `markdown` (release notes), `json` (scripting)
+  - Change type filtering (`--show`, `--hide`): added, removed, modified
+  - Entity type filtering (`--entities`): classes, properties, instances
+  - Predicate exclusion (`--ignore-predicates`): skip timestamps, version info, etc.
+  - Exit codes for CI: 0 (identical), 1 (differences found), 2 (error)
+  - Entity classification: classes, object/datatype/annotation properties, individuals
+  - Superclass detection for added classes
+  - Blank node warning (detected but not deeply analysed)
+- New documentation: `docs/user_guides/DIFF_GUIDE.md`
+- Test fixtures: `tests/fixtures/diff/v1.0.ttl`, `v1.1.ttl`
+
 - **New `lint` command** for ontology quality checking with 11 rules across three categories:
   - Structural (error): `orphan-class`, `dangling-reference`, `circular-subclass`, `property-no-type`, `empty-ontology`
   - Documentation (warning): `missing-label`, `missing-comment`
@@ -25,13 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Updated `docs/index.md` to reference lint functionality
-- Updated `docs/user_guides/CLI_REFERENCE.md` with full lint command documentation## [0.2.0] - 2025-11-30
-
-### Added
-- User configuration templates
-- PROJECT_SETUP.md guide
-- QUICK_REFERENCE.md card
+- Updated `README.md` with semantic diff feature and examples
+- Updated `docs/index.md` to reference diff and lint functionality
+- Updated `docs/user_guides/CLI_REFERENCE.md` with full diff and lint command documentation
 
 ## [0.1.0] - 2025-11-30
 
