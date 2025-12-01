@@ -263,6 +263,71 @@ Available profiles:
   ...
 ```
 
+### diff - Compare RDF Files
+
+Compare two RDF files and show semantic differences, ignoring cosmetic changes like statement order and prefix bindings.
+```bash
+poetry run rdf-construct diff OLD_FILE NEW_FILE [OPTIONS]
+```
+
+**Arguments**:
+- `OLD_FILE`: Baseline/original RDF file
+- `NEW_FILE`: New/updated RDF file
+
+**Options**:
+- `-o, --output PATH`: Write output to file instead of stdout
+- `-f, --format FORMAT`: Output format: `text` (default), `markdown`, `json`
+- `--show TYPES`: Show only these change types (comma-separated: added,removed,modified)
+- `--hide TYPES`: Hide these change types (comma-separated)
+- `--entities TYPES`: Show only these entity types (comma-separated: classes,properties,instances)
+- `--ignore-predicates PREDS`: Ignore predicates in comparison (comma-separated CURIEs)
+
+**Exit Codes**:
+- `0`: Graphs are semantically identical
+- `1`: Differences were found
+- `2`: Error occurred
+
+**Examples**:
+```bash
+# Basic comparison
+poetry run rdf-construct diff v1.0.ttl v1.1.ttl
+
+# Generate markdown changelog
+poetry run rdf-construct diff v1.0.ttl v1.1.ttl --format markdown -o CHANGELOG.md
+
+# JSON output for scripting
+poetry run rdf-construct diff old.ttl new.ttl --format json | jq '.summary'
+
+# Show only additions and removals
+poetry run rdf-construct diff old.ttl new.ttl --show added,removed
+
+# Focus on class changes only
+poetry run rdf-construct diff old.ttl new.ttl --entities classes
+
+# Ignore timestamp predicates
+poetry run rdf-construct diff old.ttl new.ttl --ignore-predicates dcterms:modified
+```
+
+**Output** (text format):
+```
+Comparing v1.0.ttl → v1.1.ttl
+
+ADDED (2 entities):
+  + Class ex:SmartBuilding (subclass of ex:Building)
+  + DataProperty ex:energyRating
+
+REMOVED (1 entity):
+  - Class ex:DeprecatedStructure
+
+MODIFIED (1 entity):
+  ~ Class ex:Building
+    + rdfs:comment "A constructed physical structure."@en
+
+Summary: 2 added, 1 removed, 1 modified
+```
+
+**See also**: [Diff Guide](DIFF_GUIDE.md) for complete documentation.
+
 ## Configuration Files
 
 ### Lint Configuration

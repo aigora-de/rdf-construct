@@ -2,7 +2,7 @@
 
 > *"The ROM construct itself is a hardwired ROM cassette replicating a dead man's skills..."* — William Gibson, Neuromancer
 
-**Semantic RDF manipulation toolkit** for ordering, serializing, and visualizing RDF ontologies.
+**Semantic RDF manipulation toolkit** for ordering, serializing, comparing, and visualizing RDF ontologies.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -10,6 +10,7 @@
 ## Features
 
 - **Semantic Ordering**: Serialize RDF/Turtle with intelligent ordering instead of alphabetical chaos
+- **Semantic Diff**: Compare ontology versions and identify meaningful changes (not cosmetic noise)
 - **UML Generation**: Create PlantUML class diagrams from RDF ontologies
 - **Flexible Styling**: Configure colors, layouts, and visual themes for diagrams
 - **Profile-Based**: Define multiple ordering strategies in YAML configuration
@@ -37,6 +38,19 @@ cd rdf-construct
 poetry install
 
 # Coming soon: pip install rdf-construct
+```
+
+### Compare Ontology Versions
+
+```bash
+# Basic comparison
+poetry run rdf-construct diff v1.0.ttl v1.1.ttl
+
+# Generate markdown changelog
+poetry run rdf-construct diff v1.0.ttl v1.1.ttl --format markdown -o CHANGELOG.md
+
+# JSON output for CI/scripting
+poetry run rdf-construct diff old.ttl new.ttl --format json
 ```
 
 ### Generate UML Diagrams
@@ -67,6 +81,7 @@ poetry run rdf-construct order ontology.ttl order_config.yml -p alpha -p logical
 
 **For Users**:
 - [Getting Started](docs/user_guides/GETTING_STARTED.md) - 5-minute quick start
+- [Diff Guide](docs/user_guides/DIFF_GUIDE.md) - Semantic ontology comparison
 - [UML Guide](docs/user_guides/UML_GUIDE.md) - Complete UML features
 - [CLI Reference](docs/user_guides/CLI_REFERENCE.md) - All commands and options
 
@@ -108,6 +123,34 @@ ex:Cat rdfs:subClassOf ex:Mammal .
 ex:Eagle rdfs:subClassOf ex:Bird .
 ex:Sparrow rdfs:subClassOf ex:Bird .
 ```
+
+## Semantic Diff
+
+Compare ontology versions and see what actually changed:
+
+```bash
+$ poetry run rdf-construct diff v1.0.ttl v1.1.ttl
+
+Comparing v1.0.ttl → v1.1.ttl
+
+ADDED (2 entities):
+  + Class ex:SmartBuilding (subclass of ex:Building)
+  + DataProperty ex:energyRating
+
+REMOVED (1 entity):
+  - Class ex:DeprecatedStructure
+
+MODIFIED (1 entity):
+  ~ Class ex:Building
+    + rdfs:comment "A constructed physical structure."@en
+
+Summary: 2 added, 1 removed, 1 modified
+```
+
+Unlike text-based `diff`, semantic diff ignores:
+- Statement reordering
+- Prefix rebinding (`ex:` → `example:`)
+- Whitespace and formatting changes
 
 ## UML Diagram Generation
 
@@ -189,8 +232,8 @@ properties:
 
 ## Project Status
 
-**Current**: Alpha - UML generation phase complete  
-**Next**: Semantic diff, validation, multi-format support  
+**Current**: Alpha - Semantic diff complete  
+**Next**: Lint module, validation, multi-format support  
 **License**: MIT
 
 ### Completed
@@ -199,11 +242,11 @@ properties:
 ✅ Custom Turtle serialization (preserves order)  
 ✅ PlantUML diagram generation from RDF  
 ✅ Configurable styling and layouts  
+✅ Semantic diff (compare ontology versions)  
 ✅ Comprehensive documentation
 
 ### (Possible) Roadmap
-- [ ] Semantic diff (compare RDF graphs, generate changesets)
-- [ ] Validation module (check for common ontology issues)
+- [ ] Lint module (check for common ontology issues)
 - [ ] Multi-format support (JSON-LD, RDF/XML input)
 - [ ] Streaming mode for very large graphs
 - [ ] Web UI for diagram configuration
