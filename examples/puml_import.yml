@@ -1,0 +1,96 @@
+# Example PlantUML Import Configuration
+# ======================================
+#
+# This file configures how PlantUML class diagrams are converted to RDF ontologies.
+# Use with: rdf-construct puml2rdf diagram.puml -C puml_import_config.yml
+#
+
+# Default namespace URI for entities without an explicit package
+# This becomes the base URI for classes and properties
+default_namespace: "http://example.org/ontology#"
+
+# Language tag for rdfs:label and rdfs:comment
+# Standard BCP 47 language tags: en, en-GB, de, fr, etc.
+language: "en"
+
+# Automatically generate rdfs:label from entity names
+# When true, every class and property gets a human-readable label
+generate_labels: true
+
+# Convert camelCase/PascalCase names to readable labels
+# When true: 'floorArea' becomes 'floor area', 'Building' becomes 'building'
+# When false: names are used as-is
+camel_to_label: true
+
+# Generate inverse properties for object properties
+# When true: 'hasFloor' also creates 'isFloorOf' as inverse
+generate_inverse_properties: false
+
+# Map PlantUML packages to RDF namespaces
+# Each mapping specifies:
+#   package: The package name as it appears in PlantUML
+#   namespace_uri: The full namespace URI (should end with # or /)
+#   prefix: Optional short prefix for the namespace
+namespace_mappings:
+  - package: "building"
+    namespace_uri: "http://example.org/building#"
+    prefix: "bld"
+  - package: "core"
+    namespace_uri: "http://example.org/core#"
+    prefix: "core"
+  - package: "geo"
+    namespace_uri: "http://example.org/geo#"
+    prefix: "geo"
+
+# Custom datatype mappings
+# Map PlantUML/UML type names to XSD datatypes
+# The built-in mappings handle common types (string, integer, decimal, etc.)
+# Add custom mappings for domain-specific types
+datatype_mappings:
+  # Business types
+  Money: "xsd:decimal"
+  Currency: "xsd:string"
+  Percentage: "xsd:decimal"
+
+  # Identifiers
+  Identifier: "xsd:string"
+  UUID: "xsd:string"
+  Code: "xsd:token"
+
+  # Measurements
+  Area: "xsd:decimal"
+  Length: "xsd:decimal"
+  Temperature: "xsd:decimal"
+
+  # Time-related
+  Year: "xsd:gYear"
+  Month: "xsd:gYearMonth"
+  Timestamp: "xsd:dateTime"
+
+# Preferred prefix ordering in serialised output
+# Prefixes are bound in this order for consistent, readable output
+prefix_order:
+  - ""        # Default namespace (no prefix)
+  - "owl"     # OWL vocabulary
+  - "rdfs"    # RDFS vocabulary
+  - "rdf"     # RDF vocabulary
+  - "xsd"     # XML Schema datatypes
+  - "bld"     # Building namespace
+  - "core"    # Core namespace
+  - "geo"     # Geo namespace
+  - "dcterms" # Dublin Core terms
+
+# URIs to include as owl:imports in the generated ontology
+# These are added to the ontology header
+ontology_imports: []
+  # Uncomment to add imports:
+  # - "http://example.org/core"
+  # - "http://www.w3.org/2004/02/skos/core"
+
+# Annotation properties to recognise from notes
+# When notes contain patterns like "@see http://...", these can be
+# extracted into specific annotation properties
+annotation_properties: []
+  # - "rdfs:seeAlso"
+  # - "dcterms:description"
+  # - "skos:definition"

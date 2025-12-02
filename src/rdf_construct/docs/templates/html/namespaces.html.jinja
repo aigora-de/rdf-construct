@@ -1,0 +1,37 @@
+{% extends "base.html.jinja" %}
+
+{% block title %}Namespaces - {{ ontology.title or "Documentation" }}{% endblock %}
+
+{% block content %}
+<h2>Namespaces</h2>
+
+{% if ontology.namespaces %}
+<table>
+    <thead>
+        <tr>
+            <th>Prefix</th>
+            <th>Namespace URI</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for prefix, namespace in ontology.namespaces.items() | sort %}
+        <tr>
+            <td><code>{{ prefix }}</code></td>
+            <td><code>{{ namespace }}</code></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No namespaces defined.</p>
+{% endif %}
+
+{% if ontology.imports %}
+<h2>Imports</h2>
+<ul class="entity-list">
+    {% for uri in ontology.imports %}
+    <li><a href="{{ uri }}" target="_blank"><code>{{ uri }}</code></a></li>
+    {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

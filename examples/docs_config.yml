@@ -1,0 +1,88 @@
+# rdf-construct Documentation Generator Configuration
+# ===================================================
+#
+# This file configures how documentation is generated from RDF ontologies.
+# Use with: rdf-construct docs ontology.ttl --config docs-config.yml
+
+# Output settings
+# ---------------
+
+# Output directory for generated documentation
+output_dir: docs/
+
+# Output format: html, markdown, or json
+format: html
+
+# Generate all documentation in a single page instead of multiple files
+single_page: false
+
+# Content settings
+# ----------------
+
+# Override the ontology title in generated docs
+# title: "My Custom Ontology Documentation"
+
+# Override the ontology description
+# description: "Comprehensive documentation for our domain ontology."
+
+# Preferred language for labels and definitions (ISO 639-1)
+language: en
+
+# Include/exclude entity types
+include_classes: true
+include_object_properties: true
+include_datatype_properties: true
+include_annotation_properties: true
+include_instances: true
+
+# HTML-specific settings
+# ----------------------
+
+# Generate search index for client-side search
+include_search: true
+
+# Generate class hierarchy visualisation
+include_hierarchy: true
+
+# Include ontology statistics on index page
+include_statistics: true
+
+# Base URL for generated links (useful for deployment)
+# base_url: "https://example.org/docs"
+
+# Path to custom logo image
+# logo_path: assets/logo.png
+
+# Path to custom CSS stylesheet
+# css_path: assets/custom.css
+
+# Filtering
+# ---------
+
+# Namespaces to exclude from documentation (prefix or full URI)
+# exclude_namespaces:
+#   - http://www.w3.org/2002/07/owl#
+#   - http://www.w3.org/2000/01/rdf-schema#
+
+# Treat entities from these namespaces as "internal" (include full documentation)
+# include_imports:
+#   - http://example.org/foundation/
+
+# Custom templates
+# ----------------
+
+# Path to directory containing custom Jinja2 templates
+# template_dir: my-templates/
+#
+# Expected structure:
+#   my-templates/
+#   ├── html/
+#   │   ├── base.html.jinja
+#   │   ├── index.html.jinja
+#   │   ├── class.html.jinja
+#   │   ├── property.html.jinja
+#   │   ├── instance.html.jinja
+#   │   ├── hierarchy.html.jinja
+#   │   └── namespaces.html.jinja
+#   └── assets/
+#       └── style.css

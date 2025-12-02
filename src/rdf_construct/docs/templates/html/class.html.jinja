@@ -1,0 +1,152 @@
+{% extends "base.html.jinja" %}
+
+{% block title %}{{ class_info.label or class_info.qname }} - {{ ontology.title or "Documentation" }}{% endblock %}
+
+{% block content %}
+<article class="entity-card">
+    <h1>{{ class_info.label or class_info.qname }} <span class="entity-type">Class</span></h1>
+    <p class="uri">{{ class_info.uri }}</p>
+
+    {% if class_info.definition %}
+    <p class="definition">{{ class_info.definition }}</p>
+    {% endif %}
+
+    {% if class_info.superclasses %}
+    <section class="section">
+        <h3>Superclasses</h3>
+        <ul class="entity-list">
+            {% for uri in class_info.superclasses %}
+            <li>
+                {% set found = namespace(value=false) %}
+                {% for c in classes %}
+                    {% if c.uri|string == uri|string %}
+                    <a href="{{ c.qname | entity_url('class') }}">{{ c.label or c.qname }}</a>
+                    {% set found.value = true %}
+                    {% endif %}
+                {% endfor %}
+                {% if not found.value %}
+                <code>{{ uri }}</code>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if class_info.subclasses %}
+    <section class="section">
+        <h3>Subclasses</h3>
+        <ul class="entity-list">
+            {% for uri in class_info.subclasses %}
+            <li>
+                {% set found = namespace(value=false) %}
+                {% for c in classes %}
+                    {% if c.uri|string == uri|string %}
+                    <a href="{{ c.qname | entity_url('class') }}">{{ c.label or c.qname }}</a>
+                    {% set found.value = true %}
+                    {% endif %}
+                {% endfor %}
+                {% if not found.value %}
+                <code>{{ uri }}</code>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if class_info.domain_of %}
+    <section class="section">
+        <h3>Properties (Domain)</h3>
+        <ul class="entity-list">
+            {% for prop in class_info.domain_of %}
+            <li>
+                <a href="{{ prop.qname | entity_url(prop.property_type + '_property') }}">
+                    {{ prop.label or prop.qname }}
+                </a>
+                <span class="entity-type {{ prop.property_type }}">{{ prop.property_type }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if inherited_properties %}
+    <section class="section">
+        <h3>Inherited Properties</h3>
+        <ul class="entity-list">
+            {% for prop in inherited_properties %}
+            <li>
+                <a href="{{ prop.qname | entity_url(prop.property_type + '_property') }}">
+                    {{ prop.label or prop.qname }}
+                </a>
+                <span class="entity-type {{ prop.property_type }}">{{ prop.property_type }}</span>
+                <span class="annotation">(inherited)</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if class_info.range_of %}
+    <section class="section">
+        <h3>Used as Range</h3>
+        <ul class="entity-list">
+            {% for prop in class_info.range_of %}
+            <li>
+                <a href="{{ prop.qname | entity_url(prop.property_type + '_property') }}">
+                    {{ prop.label or prop.qname }}
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if class_info.instances and config.include_instances %}
+    <section class="section">
+        <h3>Instances</h3>
+        <ul class="entity-list">
+            {% for uri in class_info.instances %}
+            <li>
+                {% set found = namespace(value=false) %}
+                {% for i in instances %}
+                    {% if i.uri|string == uri|string %}
+                    <a href="{{ i.qname | entity_url('instance') }}">{{ i.label or i.qname }}</a>
+                    {% set found.value = true %}
+                    {% endif %}
+                {% endfor %}
+                {% if not found.value %}
+                <code>{{ uri }}</code>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if class_info.annotations %}
+    <section class="section">
+        <h3>Annotations</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Property</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for name, values in class_info.annotations.items() %}
+                {% for value in values %}
+                <tr>
+                    <td><code>{{ name }}</code></td>
+                    <td>{{ value }}</td>
+                </tr>
+                {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+</article>
+{% endblock %}
