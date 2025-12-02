@@ -123,6 +123,75 @@ rdf-construct uml ontology.ttl -C config.yml --rendering-mode odm
 
 ---
 
+### puml2rdf - Convert PlantUML to RDF
+
+Convert PlantUML class diagrams to RDF/OWL ontologies, enabling diagram-first ontology design.
+
+```bash
+rdf-construct puml2rdf SOURCE [OPTIONS]
+```
+
+**Arguments**:
+- `SOURCE`: PlantUML file (.puml or .plantuml)
+
+**Options**:
+- `-o, --output PATH`: Output file path (default: source name with .ttl extension)
+- `-f, --format FORMAT`: Output format: `turtle`, `ttl`, `xml`, `rdfxml`, `jsonld`, `json-ld`, `nt`, `ntriples` (default: turtle)
+- `-n, --namespace URI`: Default namespace URI for the ontology
+- `-C, --config PATH`: Path to YAML configuration file
+- `-m, --merge PATH`: Existing ontology file to merge with
+- `-v, --validate`: Validate only, don't generate output
+- `--strict`: Treat warnings as errors
+- `-l, --language TAG`: Language tag for labels/comments (default: en)
+- `--no-labels`: Don't auto-generate rdfs:label triples
+
+**Supported PlantUML Syntax**:
+- Classes: `class Building`, `class "Display Name" as pkg.Building`
+- Attributes: `floorArea : decimal`, `name : string`
+- Inheritance: `Building --|> Entity`, `Entity <|-- Building`
+- Associations: `Building --> Floor : hasFloor`
+- Packages: `package "http://example.org/building#" as bld { ... }`
+- Notes: `note right of Building : A physical structure`
+- Direction hints: `-u-|>`, `-d-|>`, `-l-|>`, `-r-|>` (up, down, left, right)
+
+**RDF Mapping**:
+| PlantUML | RDF |
+|----------|-----|
+| `class Building` | `Building rdf:type owl:Class` |
+| `floorArea : decimal` | `floorArea rdf:type owl:DatatypeProperty ; rdfs:range xsd:decimal` |
+| `Building --\|> Entity` | `Building rdfs:subClassOf Entity` |
+| `Building --> Floor : hasFloor` | `hasFloor rdf:type owl:ObjectProperty ; rdfs:domain Building ; rdfs:range Floor` |
+| Note attached to class | `rdfs:comment` |
+
+**Examples**:
+
+```bash
+# Basic conversion
+rdf-construct puml2rdf design.puml
+
+# Custom output and namespace
+rdf-construct puml2rdf design.puml -o ontology.ttl -n http://example.org/ont#
+
+# Validate without generating
+rdf-construct puml2rdf design.puml --validate
+
+# Merge with existing ontology (preserves manual annotations)
+rdf-construct puml2rdf design.puml --merge existing.ttl
+
+# Use configuration file for namespace mappings
+rdf-construct puml2rdf design.puml -C puml-config.yml
+
+# Strict mode for CI
+rdf-construct puml2rdf design.puml --validate --strict
+```
+
+**Exit Codes**:
+- `0`: Success
+- `1`: Validation warnings (with --strict)
+- `2`: Parse or validation errors
+
+---
+
 ### shacl-gen - Generate SHACL Shapes
 
 Generate SHACL validation shapes from OWL ontology definitions.
@@ -394,6 +463,45 @@ Available profiles:
 
 ## Configuration Files
 
+### PlantUML Import Configuration
+
+**File**: `puml-import.yml`
+
+```yaml
+# Default namespace for entities without explicit package
+default_namespace: "http://example.org/ontology#"
+
+# Language tag for labels and comments
+language: "en"
+
+# Automatically generate rdfs:label from entity names
+generate_labels: true
+
+# Convert camelCase names to readable labels
+camel_to_label: true
+
+# Map PlantUML packages to RDF namespaces
+namespace_mappings:
+  - package: "building"
+    namespace_uri: "http://example.org/building#"
+    prefix: "bld"
+
+# Custom datatype mappings
+datatype_mappings:
+  Money: "xsd:decimal"
+  Percentage: "xsd:decimal"
+
+# Preferred prefix ordering in output
+prefix_order:
+  - ""
+  - "owl"
+  - "rdfs"
+  - "xsd"
+
+# URIs to include as owl:imports
+ontology_imports: []
+```
+
 ### SHACL Configuration
 
 **File**: `shacl-config.yml`
@@ -569,6 +677,19 @@ profiles:
 
 ## Common Workflows
 
+### Diagram-First Ontology Design
+
+```bash
+# Design in PlantUML, generate RDF
+rdf-construct puml2rdf design.puml -o ontology.ttl -n http://example.org/ont#
+
+# Add manual annotations, then update from PlantUML
+rdf-construct puml2rdf design.puml --merge ontology.ttl -o ontology.ttl
+
+# Validate changes
+rdf-construct lint ontology.ttl
+```
+
 ### Generate Complete Documentation
 
 ```bash
@@ -639,6 +760,7 @@ rdf-construct profiles order.yml
 rdf-construct --help
 rdf-construct docs --help
 rdf-construct uml --help
+rdf-construct puml2rdf --help
 rdf-construct shacl-gen --help
 rdf-construct diff --help
 rdf-construct lint --help
@@ -655,6 +777,7 @@ rdf-construct lint --help
 - **[Getting Started](GETTING_STARTED.md)**: Quick start guide
 - **[Docs Guide](DOCS_GUIDE.md)**: Documentation generation
 - **[UML Guide](UML_GUIDE.md)**: Complete UML features
+- **[PlantUML Import Guide](PUML_IMPORT_GUIDE.md)**: PlantUML to RDF conversion
 - **[SHACL Guide](SHACL_GUIDE.md)**: SHACL shape generation
 - **[Diff Guide](DIFF_GUIDE.md)**: Ontology comparison
 - **[Lint Guide](LINT_GUIDE.md)**: Ontology quality checking

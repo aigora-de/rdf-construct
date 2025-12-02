@@ -11,6 +11,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Added
 
+- **New `puml2rdf` command** for PlantUML to RDF conversion
+  - Convert PlantUML class diagrams to RDF/OWL ontologies
+  - Diagram-first ontology design workflow
+  - Parse classes, attributes, inheritance, and associations
+  - Support for dotted namespace prefixes (e.g., `building.Building` → `building:Building`)
+  - Handle `"Display Name" as alias` syntax for human-readable labels
+  - Direction hints in relationships (`-u-|>`, `-d-|>`, etc.)
+  - PlantUML styling attributes ignored gracefully (`#back:XXX;line:XXX`)
+  - Multi-line notes attached to classes become `rdfs:comment`
+  - Automatic namespace generation from package prefixes
+  - Custom datatype mappings (PlantUML types to XSD)
+  - Merge with existing ontologies (preserves manual annotations)
+  - Validation mode for CI integration (`--validate --strict`)
+  - YAML configuration file support for complex setups
+  - Output formats: Turtle, RDF/XML, JSON-LD, N-Triples
+- New module: `src/rdf_construct/puml2rdf/`
+  - `model.py` - Intermediate representation dataclasses
+  - `parser.py` - Regex-based PlantUML parser
+  - `converter.py` - Model to RDF/OWL conversion
+  - `config.py` - YAML configuration handling
+  - `merger.py` - Ontology merge logic
+  - `validators.py` - Model and RDF validation
+- New documentation: `docs/user_guides/PUML_IMPORT_GUIDE.md`
+- New example: `examples/puml_import_config.yml`
+- New tests: `tests/test_puml2rdf.py`
+
 - **New SHACL Shape Generator** (`shacl-gen` command)
 
   - Generate SHACL NodeShapes from OWL ontology definitions

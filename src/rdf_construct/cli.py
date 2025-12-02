@@ -43,6 +43,16 @@ LINT_FORMATS = ["text", "json"]
 
 from rdf_construct.diff import compare_files, format_diff, filter_diff, parse_filter_string
 
+from rdf_construct.puml2rdf import (
+    ConversionConfig,
+    PlantUMLParser,
+    PumlToRdfConverter,
+    load_import_config,
+    merge_with_existing,
+    validate_puml,
+    validate_rdf,
+)
+
 # Valid rendering modes
 RENDERING_MODES = ["default", "odm"]
 
@@ -1145,6 +1155,255 @@ def shacl_gen(
     except Exception as e:
         click.secho(f"Error generating shapes: {e}", fg="red", err=True)
         raise SystemExit(1)
+
+
+# Output format choices
+OUTPUT_FORMATS = ["turtle", "ttl", "xml", "rdfxml", "jsonld", "json-ld", "nt", "ntriples"]
+
+
+@cli.command()
+@click.argument("source", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Output file path (default: source name with .ttl extension)",
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS, case_sensitive=False),
+    default="turtle",
+    help="Output RDF format (default: turtle)",
+)
+@click.option(
+    "--namespace",
+    "-n",
+    help="Default namespace URI for the ontology",
+)
+@click.option(
+    "--config",
+    "-C",
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to YAML configuration file",
+)
+@click.option(
+    "--merge",
+    "-m",
+    type=click.Path(exists=True, path_type=Path),
+    help="Existing ontology file to merge with",
+)
+@click.option(
+    "--validate",
+    "-v",
+    is_flag=True,
+    help="Validate only, don't generate output",
+)
+@click.option(
+    "--strict",
+    is_flag=True,
+    help="Treat warnings as errors",
+)
+@click.option(
+    "--language",
+    "-l",
+    default="en",
+    help="Language tag for labels/comments (default: en)",
+)
+@click.option(
+    "--no-labels",
+    is_flag=True,
+    help="Don't auto-generate rdfs:label triples",
+)
+def puml2rdf(
+    source: Path,
+    output: Path | None,
+    output_format: str,
+    namespace: str | None,
+    config: Path | None,
+    merge: Path | None,
+    validate: bool,
+    strict: bool,
+    language: str,
+    no_labels: bool,
+):
+    """Convert PlantUML class diagram to RDF ontology.
+
+    Parses a PlantUML file and generates an RDF/OWL ontology.
+    Supports classes, attributes, inheritance, and associations.
+
+    SOURCE: PlantUML file (.puml or .plantuml)
+
+    \b
+    Examples:
+        # Basic conversion
+        rdf-construct puml2rdf design.puml
+
+        # Custom output and namespace
+        rdf-construct puml2rdf design.puml -o ontology.ttl -n http://example.org/ont#
+
+        # Validate without generating
+        rdf-construct puml2rdf design.puml --validate
+
+        # Merge with existing ontology
+        rdf-construct puml2rdf design.puml --merge existing.ttl
+
+        # Use configuration file
+        rdf-construct puml2rdf design.puml -C import-config.yml
+
+    \b
+    Exit codes:
+        0 - Success
+        1 - Validation warnings (with --strict)
+        2 - Parse or validation errors
+    """
+    # Normalise output format
+    format_map = {
+        "ttl": "turtle",
+        "rdfxml": "xml",
+        "json-ld": "json-ld",
+        "jsonld": "json-ld",
+        "ntriples": "nt",
+    }
+    rdf_format = format_map.get(output_format.lower(), output_format.lower())
+
+    # Determine output path
+    if output is None and not validate:
+        ext_map = {"turtle": ".ttl", "xml": ".rdf", "json-ld": ".jsonld", "nt": ".nt"}
+        ext = ext_map.get(rdf_format, ".ttl")
+        output = source.with_suffix(ext)
+
+    # Load configuration if provided
+    if config:
+        try:
+            import_config = load_import_config(config)
+            conversion_config = import_config.to_conversion_config()
+        except Exception as e:
+            click.secho(f"Error loading config: {e}", fg="red", err=True)
+            sys.exit(2)
+    else:
+        conversion_config = ConversionConfig()
+
+    # Override config with CLI options
+    if namespace:
+        conversion_config.default_namespace = namespace
+    if language:
+        conversion_config.language = language
+    if no_labels:
+        conversion_config.generate_labels = False
+
+    # Parse PlantUML file
+    click.echo(f"Parsing {source.name}...")
+    parser = PlantUMLParser()
+
+    try:
+        parse_result = parser.parse_file(source)
+    except Exception as e:
+        click.secho(f"Error reading file: {e}", fg="red", err=True)
+        sys.exit(2)
+
+    # Report parse errors
+    if parse_result.errors:
+        click.secho("Parse errors:", fg="red", err=True)
+        for error in parse_result.errors:
+            click.echo(f"  Line {error.line_number}: {error.message}", err=True)
+        sys.exit(2)
+
+    # Report parse warnings
+    if parse_result.warnings:
+        click.secho("Parse warnings:", fg="yellow", err=True)
+        for warning in parse_result.warnings:
+            click.echo(f"  {warning}", err=True)
+
+    model = parse_result.model
+    click.echo(
+        f"  Found: {len(model.classes)} classes, "
+        f"{len(model.relationships)} relationships"
+    )
+
+    # Validate model
+    model_validation = validate_puml(model)
+
+    if model_validation.has_errors:
+        click.secho("Model validation errors:", fg="red", err=True)
+        for issue in model_validation.errors():
+            click.echo(f"  {issue}", err=True)
+        sys.exit(2)
+
+    if model_validation.has_warnings:
+        click.secho("Model validation warnings:", fg="yellow", err=True)
+        for issue in model_validation.warnings():
+            click.echo(f"  {issue}", err=True)
+        if strict:
+            click.secho("Aborting due to --strict mode", fg="red", err=True)
+            sys.exit(1)
+
+    # If validate-only mode, stop here
+    if validate:
+        if model_validation.has_warnings:
+            click.secho(
+                f"Validation complete: {model_validation.warning_count} warnings",
+                fg="yellow",
+            )
+        else:
+            click.secho("Validation complete: no issues found", fg="green")
+        sys.exit(0)
+
+    # Convert to RDF
+    click.echo("Converting to RDF...")
+    converter = PumlToRdfConverter(conversion_config)
+    conversion_result = converter.convert(model)
+
+    if conversion_result.warnings:
+        click.secho("Conversion warnings:", fg="yellow", err=True)
+        for warning in conversion_result.warnings:
+            click.echo(f"  {warning}", err=True)
+
+    graph = conversion_result.graph
+    click.echo(f"  Generated: {len(graph)} triples")
+
+    # Validate generated RDF
+    rdf_validation = validate_rdf(graph)
+    if rdf_validation.has_warnings:
+        click.secho("RDF validation warnings:", fg="yellow", err=True)
+        for issue in rdf_validation.warnings():
+            click.echo(f"  {issue}", err=True)
+
+    # Merge with existing if requested
+    if merge:
+        click.echo(f"Merging with {merge.name}...")
+        try:
+            merge_result = merge_with_existing(graph, merge)
+            graph = merge_result.graph
+            click.echo(
+                f"  Added: {merge_result.added_count}, "
+                f"Preserved: {merge_result.preserved_count}"
+            )
+            if merge_result.conflicts:
+                click.secho("Merge conflicts:", fg="yellow", err=True)
+                for conflict in merge_result.conflicts[:5]:  # Limit output
+                    click.echo(f"  {conflict}", err=True)
+                if len(merge_result.conflicts) > 5:
+                    click.echo(
+                        f"  ... and {len(merge_result.conflicts) - 5} more",
+                        err=True,
+                    )
+        except Exception as e:
+            click.secho(f"Error merging: {e}", fg="red", err=True)
+            sys.exit(2)
+
+    # Serialise output
+    try:
+        graph.serialize(str(output), format=rdf_format)
+        click.secho(f"✓ Wrote {output}", fg="green")
+        click.echo(
+            f"  Classes: {len(conversion_result.class_uris)}, "
+            f"Properties: {len(conversion_result.property_uris)}"
+        )
+    except Exception as e:
+        click.secho(f"Error writing output: {e}", fg="red", err=True)
+        sys.exit(2)
 
 
 if __name__ == "__main__":
