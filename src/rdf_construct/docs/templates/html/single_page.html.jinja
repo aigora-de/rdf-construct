@@ -1,0 +1,169 @@
+{% extends "base.html.jinja" %}
+
+{% block title %}{{ ontology.title or "Ontology Documentation" }}{% endblock %}
+
+{% block content %}
+<nav class="toc">
+    <h2>Contents</h2>
+    <ul>
+        <li><a href="#classes">Classes</a></li>
+        <li><a href="#object-properties">Object Properties</a></li>
+        <li><a href="#datatype-properties">Datatype Properties</a></li>
+        {% if annotation_properties %}
+        <li><a href="#annotation-properties">Annotation Properties</a></li>
+        {% endif %}
+        {% if instances and config.include_instances %}
+        <li><a href="#instances">Instances</a></li>
+        {% endif %}
+        <li><a href="#namespaces">Namespaces</a></li>
+    </ul>
+</nav>
+
+<section class="stats">
+    <div class="stat-card">
+        <div class="number">{{ classes | length }}</div>
+        <div class="label">Classes</div>
+    </div>
+    <div class="stat-card">
+        <div class="number">{{ object_properties | length + datatype_properties | length }}</div>
+        <div class="label">Properties</div>
+    </div>
+    {% if instances %}
+    <div class="stat-card">
+        <div class="number">{{ instances | length }}</div>
+        <div class="label">Instances</div>
+    </div>
+    {% endif %}
+</section>
+
+<section id="classes">
+    <h2>Classes</h2>
+    {% for class_info in classes %}
+    <article class="entity-card" id="class-{{ class_info.qname | qname_local }}">
+        <h3>{{ class_info.label or class_info.qname }}</h3>
+        <p class="uri">{{ class_info.uri }}</p>
+        {% if class_info.definition %}
+        <p class="definition">{{ class_info.definition }}</p>
+        {% endif %}
+        {% if class_info.superclasses %}
+        <p><strong>Superclasses:</strong>
+        {% for uri in class_info.superclasses %}
+            <code>{{ uri }}</code>{% if not loop.last %}, {% endif %}
+        {% endfor %}
+        </p>
+        {% endif %}
+    </article>
+    {% endfor %}
+</section>
+
+<section id="object-properties">
+    <h2>Object Properties</h2>
+    {% for prop in object_properties %}
+    <article class="entity-card" id="prop-{{ prop.qname | qname_local }}">
+        <h3>{{ prop.label or prop.qname }} <span class="entity-type object">Object</span></h3>
+        <p class="uri">{{ prop.uri }}</p>
+        {% if prop.definition %}
+        <p class="definition">{{ prop.definition }}</p>
+        {% endif %}
+        {% if prop.domain %}
+        <p><strong>Domain:</strong>
+        {% for uri in prop.domain %}
+            <code>{{ uri }}</code>{% if not loop.last %}, {% endif %}
+        {% endfor %}
+        </p>
+        {% endif %}
+        {% if prop.range %}
+        <p><strong>Range:</strong>
+        {% for uri in prop.range %}
+            <code>{{ uri }}</code>{% if not loop.last %}, {% endif %}
+        {% endfor %}
+        </p>
+        {% endif %}
+    </article>
+    {% endfor %}
+</section>
+
+<section id="datatype-properties">
+    <h2>Datatype Properties</h2>
+    {% for prop in datatype_properties %}
+    <article class="entity-card" id="prop-{{ prop.qname | qname_local }}">
+        <h3>{{ prop.label or prop.qname }} <span class="entity-type datatype">Datatype</span></h3>
+        <p class="uri">{{ prop.uri }}</p>
+        {% if prop.definition %}
+        <p class="definition">{{ prop.definition }}</p>
+        {% endif %}
+        {% if prop.domain %}
+        <p><strong>Domain:</strong>
+        {% for uri in prop.domain %}
+            <code>{{ uri }}</code>{% if not loop.last %}, {% endif %}
+        {% endfor %}
+        </p>
+        {% endif %}
+        {% if prop.range %}
+        <p><strong>Range:</strong>
+        {% for uri in prop.range %}
+            <code>{{ uri }}</code>{% if not loop.last %}, {% endif %}
+        {% endfor %}
+        </p>
+        {% endif %}
+    </article>
+    {% endfor %}
+</section>
+
+{% if annotation_properties %}
+<section id="annotation-properties">
+    <h2>Annotation Properties</h2>
+    {% for prop in annotation_properties %}
+    <article class="entity-card" id="prop-{{ prop.qname | qname_local }}">
+        <h3>{{ prop.label or prop.qname }} <span class="entity-type annotation">Annotation</span></h3>
+        <p class="uri">{{ prop.uri }}</p>
+        {% if prop.definition %}
+        <p class="definition">{{ prop.definition }}</p>
+        {% endif %}
+    </article>
+    {% endfor %}
+</section>
+{% endif %}
+
+{% if instances and config.include_instances %}
+<section id="instances">
+    <h2>Instances</h2>
+    {% for inst in instances %}
+    <article class="entity-card" id="inst-{{ inst.qname | qname_local }}">
+        <h3>{{ inst.label or inst.qname }} <span class="entity-type instance">Instance</span></h3>
+        <p class="uri">{{ inst.uri }}</p>
+        {% if inst.definition %}
+        <p class="definition">{{ inst.definition }}</p>
+        {% endif %}
+        {% if inst.types %}
+        <p><strong>Types:</strong>
+        {% for uri in inst.types %}
+            <code>{{ uri }}</code>{% if not loop.last %}, {% endif %}
+        {% endfor %}
+        </p>
+        {% endif %}
+    </article>
+    {% endfor %}
+</section>
+{% endif %}
+
+<section id="namespaces">
+    <h2>Namespaces</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Prefix</th>
+                <th>Namespace URI</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for prefix, namespace in ontology.namespaces.items() | sort %}
+            <tr>
+                <td><code>{{ prefix }}</code></td>
+                <td><code>{{ namespace }}</code></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

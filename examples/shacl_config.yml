@@ -1,0 +1,60 @@
+# SHACL Generator Configuration
+# ==============================
+#
+# This file configures how SHACL shapes are generated from OWL ontologies.
+# Use with: rdf-construct shacl-gen ontology.ttl --config shacl-config.yml
+
+# Strictness level controls which OWL patterns are converted:
+#   minimal  - Basic type constraints only (sh:class, sh:datatype)
+#   standard - Adds cardinality and functional property constraints (default)
+#   strict   - Maximum constraints including enumerations, closed shapes
+level: standard
+
+# Default severity for constraint violations:
+#   violation - Validation fails (default)
+#   warning   - Logged as warning
+#   info      - Informational only
+default_severity: violation
+
+# Generate closed shapes (sh:closed true)
+# When true, instances cannot have properties not defined in the shape
+closed: false
+
+# Namespace suffix for generated shapes
+# The shape namespace is derived from the ontology namespace + this suffix
+shape_namespace: "shapes#"
+
+# Target specific classes only (leave empty for all classes)
+# Use local names or full URIs
+target_classes: []
+  # - Building
+  # - Floor
+  # - http://example.org/Person
+
+# Exclude specific classes from shape generation
+exclude_classes: []
+  # - owl:Thing
+  # - rdfs:Resource
+
+# Include rdfs:label as sh:name in shapes
+include_labels: true
+
+# Include rdfs:comment as sh:description in shapes
+include_descriptions: true
+
+# Inherit property constraints from superclasses
+# When true, subclass shapes include constraints from parent classes
+inherit_constraints: true
+
+# Generate top-level PropertyShapes (not just inline property constraints)
+# Useful for reusable property validation rules
+generate_property_shapes: false
+
+# Properties to ignore in closed shapes
+# These properties are allowed even when sh:closed is true
+ignored_properties:
+  - rdf:type
+  - rdfs:label
+  - rdfs:comment
+  # - dcterms:created
+  # - dcterms:modified

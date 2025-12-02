@@ -1,0 +1,28 @@
+{% extends "base.html.jinja" %}
+
+{% block title %}Class Hierarchy - {{ ontology.title or "Documentation" }}{% endblock %}
+
+{% block content %}
+<h2>Class Hierarchy</h2>
+
+{% macro render_tree(nodes) %}
+<ul class="hierarchy-tree">
+    {% for node in nodes %}
+    <li>
+        <a href="{{ node.class.qname | entity_url('class') }}">
+            {{ node.class.label or node.class.qname }}
+        </a>
+        {% if node.children %}
+        {{ render_tree(node.children) }}
+        {% endif %}
+    </li>
+    {% endfor %}
+</ul>
+{% endmacro %}
+
+{% if hierarchy %}
+{{ render_tree(hierarchy) }}
+{% else %}
+<p>No class hierarchy found.</p>
+{% endif %}
+{% endblock %}
