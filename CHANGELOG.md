@@ -9,7 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-Added
+- **New `cq-test` command** for competency question testing
+  - Validate ontologies against SPARQL-based competency questions
+  - YAML test file format with prefixes, inline data, and questions
+  - Multiple expectation types:
+    - Boolean (ASK query true/false)
+    - `has_results` / `no_results` for existence checks
+    - `count`, `min_count`, `max_count` for result counting
+    - `results` for exact result set matching
+    - `contains` for subset matching
+  - Tag-based test filtering (`--tag`, `--exclude-tag`)
+  - Three output formats: `text` (console), `json` (scripting), `junit` (CI)
+  - Verbose mode with query text and timing
+  - Fail-fast mode for quick debugging
+  - Skip tests with reasons
+  - Exit codes: 0 (all passed), 1 (failures), 2 (errors)
+- New module: `src/rdf_construct/cq/`
+  - `expectations.py` - Polymorphic expectation classes
+  - `loader.py` - YAML test file parsing
+  - `runner.py` - Test execution engine
+  - `cli.py` - Click command integration
+  - `formatters/` - Text, JSON, JUnit output formatters
+- New documentation: `docs/user_guides/CQ_TESTING_GUIDE.md`
+- New example: `examples/cq_tests_animal.yml`
+- New tests: `tests/test_cq.py`
 
 - **New `puml2rdf` command** for PlantUML to RDF conversion
   - Convert PlantUML class diagrams to RDF/OWL ontologies
@@ -109,8 +132,8 @@ Added
 ### Changed
 
 - Updated `README.md` with semantic diff feature and examples
-- Updated `docs/index.md` to reference docs, diff, and lint functionality
-- Updated `docs/user_guides/CLI_REFERENCE.md` with full docs, diff, and lint command documentation
+- Updated `docs/index.md` to reference docs, diff, lint, and cq-test functionality
+- Updated `docs/user_guides/CLI_REFERENCE.md` with full docs, diff, lint, and cq-test command documentation
 
 ## [0.1.0] - 2025-11-30
 

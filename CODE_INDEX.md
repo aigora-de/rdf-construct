@@ -13,10 +13,22 @@ src/rdf_construct/
 │   ├── __init__.py
 │   ├── config.py
 │   ├── ordering.py
+│   ├── predicate_order.py
 │   ├── profile.py
 │   ├── selector.py
 │   ├── serialiser.py
 │   └── utils.py
+├── cq/
+│   ├── __init__.py
+│   ├── cli.py
+│   ├── expectations.py
+│   ├── loader.py
+│   ├── runner.py
+│   └── formatters/
+│       ├── __init__.py
+│       ├── text.py
+│       ├── json.py
+│       └── junit.py
 ├── diff/
 │   ├── __init__.py
 │   ├── change_types.py
@@ -26,7 +38,38 @@ src/rdf_construct/
 │       ├── __init__.py
 │       ├── text.py
 │       ├── markdown.py
-│       └── json_fmt.py
+│       └── json.py
+├── docs/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── extractors.py
+│   ├── generator.py
+│   ├── search.py
+│   └── renderers/
+│       ├── __init__.py
+│       ├── html.py
+│       ├── json_renderer.py
+│       └── markdown.py
+├── lint/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── engine.py
+│   ├── formatters.py
+│   └── rules.py
+├── puml2rdf/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── converter.py
+│   ├── merger.py
+│   ├── model.py
+│   ├── parser.py
+│   └── validators.py
+├── shacl/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── converters.py
+│   ├── generator.py
+│   └── namespaces.py
 └── uml/
     ├── __init__.py
     ├── context.py
@@ -39,6 +82,7 @@ src/rdf_construct/
 examples/
 ├── animal_ontology.ttl
 ├── building_structure_context.yml
+├── cq_tests_animal.yml
 ├── ies_colour_palette.yml
 ├── sample_profile.yml
 ├── uml_contexts.yml
@@ -46,6 +90,7 @@ examples/
 └── uml_styles.yml
 
 tests/
+├── test_cq.py
 ├── test_diff.py
 ├── test_explicit_mode.py
 ├── test_instance_styling.py
@@ -65,8 +110,11 @@ docs/
 │   └── UML_IMPLEMENTATION.md
 └── user_guides/
     ├── CLI_REFERENCE.md
+    ├── CQ_TEST_GUIDE.md
     ├── DIFF_GUIDE.md
     ├── GETTING_STARTED.md
+    ├── LINT_GUIDE.md
+    ├── SHACL_GUIDE.md
     └── UML_GUIDE.md
 ```
 
@@ -88,6 +136,8 @@ docs/
 - `order` command for ordering ontologies
 - `uml` command for generating diagrams
 - `diff` command for semantic comparison
+- `lint` command for quality checking
+- `cq-test` command for competency question testing
 - `profiles` and `contexts` commands for listing configurations
 
 ### Core Modules (`core/`)
@@ -132,6 +182,50 @@ docs/
 - `rebind_prefixes()` - set prefix order
 - `qname_sort_key()` - generate sortable keys for RDF terms
 
+### Competency Question Module (`cq/`)
+
+SPARQL-based ontology validation through competency question testing.
+
+**`cq/__init__.py`**
+- Public API exports
+- `CQTest`, `CQTestSuite`, `CQTestRunner`, `CQTestResult`, `CQStatus`
+- Expectation classes and formatters
+
+**`cq/expectations.py`**
+- `Expectation` abstract base class
+- `BooleanExpectation` - ASK query true/false matching
+- `HasResultsExpectation` - query returns ≥1 results
+- `NoResultsExpectation` - query returns 0 results
+- `CountExpectation` - exact, min, max count matching
+- `ValuesExpectation` - exact result set matching
+- `ContainsExpectation` - subset matching
+- `parse_expectation()` - parse YAML expect values
+
+**`cq/loader.py`**
+- `CQTest` dataclass - single test definition
+- `CQTestSuite` dataclass - complete test suite
+- `load_test_suite()` - parse YAML test files
+- `filter_by_tags()` - include/exclude tag filtering
+- `build_query_with_prefixes()` - inject PREFIX declarations
+
+**`cq/runner.py`**
+- `CQStatus` enum - PASS, FAIL, ERROR, SKIP
+- `CQTestResult` dataclass - single test result
+- `CQTestResults` dataclass - complete results with stats
+- `CQTestRunner` class - execute tests with fail-fast support
+- `run_tests()` - convenience function for file paths
+
+**`cq/cli.py`**
+- `cq_test` Click command
+- Tag filtering, format selection, output handling
+- Exit codes: 0 (pass), 1 (fail), 2 (error)
+
+**`cq/formatters/`**
+- `text.py` - Human-readable console output with colours
+- `json.py` - Structured JSON for programmatic use
+- `junit.py` - JUnit XML for CI integration
+- `__init__.py` - `format_results()` dispatcher
+
 ### Diff Module (`diff/`)
 
 Semantic comparison of RDF graphs, identifying meaningful changes while ignoring cosmetic differences.
@@ -163,7 +257,7 @@ Semantic comparison of RDF graphs, identifying meaningful changes while ignoring
 **`diff/formatters/`**
 - `text.py` - Plain text output for terminals
 - `markdown.py` - Markdown for release notes/changelogs
-- `json_fmt.py` - JSON for programmatic use
+- `json.py` - JSON for programmatic use
 - `__init__.py` - `format_diff()` dispatcher
 
 ### UML Module (`uml/`)
@@ -276,6 +370,13 @@ Located in `diff/comparator.py`, function `compare_graphs()`:
 - Classifies entities as added/removed/modified
 - Ignores cosmetic changes (order, prefixes, whitespace)
 
+### Competency Question Testing
+Located in `cq/runner.py`, class `CQTestRunner`:
+- Executes SPARQL queries against combined ontology + test data
+- Supports ASK and SELECT queries
+- Multiple expectation types for flexible validation
+- Fail-fast mode for quick debugging
+
 ## Dependencies
 
 ### Runtime
@@ -283,6 +384,7 @@ Located in `diff/comparator.py`, function `compare_graphs()`:
 - `click>=8.1.0` - CLI framework
 - `pyyaml>=6.0` - YAML configuration parsing
 - `rich>=13.0.0` - Terminal formatting
+- `jinja2>=3.1.0` - Template rendering
 
 ### Development
 - `black>=24.0.0` - Code formatting
@@ -311,6 +413,7 @@ poetry run pytest
 # Run specific test modules
 poetry run pytest tests/test_diff.py -v
 poetry run pytest tests/test_ordering.py -v
+poetry run pytest tests/test_cq.py -v
 
 # Format code
 black src/ tests/
@@ -336,10 +439,15 @@ mypy src/
 - Configurable styling and layouts
 - Semantic diff (text, markdown, JSON output)
 - Change filtering by type and entity
+- Ontology linting with configurable rules
+- Documentation generation (HTML, Markdown, JSON)
+- SHACL shape generation
+- PlantUML to RDF conversion
+- Competency question testing
 - CLI and programmatic API
 
 ### ❌ Future Features
-- Lint module (ontology quality checking)
+- Stats module (ontology metrics)
 - JSON-LD support
 - N-Triples support
 - Streaming mode for very large graphs

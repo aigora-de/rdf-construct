@@ -1,0 +1,151 @@
+# Competency Question Tests for Animal Ontology
+#
+# This example test suite demonstrates how to write CQ tests
+# for validating an ontology's ability to answer competency questions.
+
+version: "1.0"
+name: "Animal Ontology CQ Tests"
+description: "Validates the animal ontology can answer basic competency questions"
+
+# Shared prefix definitions - injected into all queries
+prefixes:
+  ex: "http://example.org/animals#"
+  owl: "http://www.w3.org/2002/07/owl#"
+  rdfs: "http://www.w3.org/2000/01/rdf-schema#"
+  rdf: "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+
+# Optional sample data for testing data-level queries
+data:
+  inline: |
+    ex:Fido a ex:Dog ;
+        rdfs:label "Fido" ;
+        ex:hasParent ex:Rex .
+    ex:Rex a ex:Dog ;
+        rdfs:label "Rex" .
+    ex:Mittens a ex:Cat ;
+        rdfs:label "Mittens" .
+    ex:Polly a ex:Parrot ;
+        rdfs:label "Polly" ;
+        ex:canSpeak true .
+
+# Competency questions
+questions:
+  # ============================================
+  # Schema-level tests (test ontology structure)
+  # ============================================
+
+  - id: cq-schema-001
+    name: "Animal class exists"
+    description: "The ontology should define an Animal class"
+    tags: [schema, core]
+    query: "ASK { ex:Animal a owl:Class }"
+    expect: true
+
+  - id: cq-schema-002
+    name: "Animal has subclasses"
+    description: "Animal should have at least one subclass"
+    tags: [schema, hierarchy]
+    query: |
+      SELECT ?subclass WHERE {
+        ?subclass rdfs:subClassOf ex:Animal .
+      }
+    expect:
+      min_results: 1
+
+  - id: cq-schema-003
+    name: "Mammal is subclass of Animal"
+    description: "Mammal should be defined as a subclass of Animal"
+    tags: [schema, hierarchy]
+    query: "ASK { ex:Mammal rdfs:subClassOf ex:Animal }"
+    expect: true
+
+  - id: cq-schema-004
+    name: "Dog is subclass of Mammal"
+    description: "Dog should be a subclass of Mammal"
+    tags: [schema, hierarchy]
+    query: "ASK { ex:Dog rdfs:subClassOf ex:Mammal }"
+    expect: true
+
+  # ============================================
+  # Data-level tests (test with sample instances)
+  # ============================================
+
+  - id: cq-data-001
+    name: "List all dogs"
+    description: "Should be able to query for all Dog instances"
+    tags: [data, dogs]
+    query: |
+      SELECT ?dog WHERE {
+        ?dog a ex:Dog .
+      }
+    expect:
+      min_results: 1
+
+  - id: cq-data-002
+    name: "Find Fido's parent"
+    description: "Should be able to find the parent relationship"
+    tags: [data, relationships]
+    query: |
+      SELECT ?parent WHERE {
+        ex:Fido ex:hasParent ?parent .
+      }
+    expect:
+      contains:
+        - parent: "http://example.org/animals#Rex"
+
+  - id: cq-data-003
+    name: "Count animals by type"
+    description: "Should be able to count instances by class"
+    tags: [data, aggregation]
+    query: |
+      SELECT ?type (COUNT(?animal) as ?count) WHERE {
+        ?animal a ?type .
+        ?type rdfs:subClassOf* ex:Animal .
+        FILTER(?type != owl:NamedIndividual)
+      }
+      GROUP BY ?type
+    expect:
+      min_results: 1
+
+  - id: cq-data-004
+    name: "Animals that can speak"
+    description: "Find animals with speaking ability"
+    tags: [data, abilities]
+    query: |
+      SELECT ?animal WHERE {
+        ?animal ex:canSpeak true .
+      }
+    expect:
+      results:
+        - animal: "http://example.org/animals#Polly"
+
+  # ============================================
+  # Negative tests (things that shouldn't exist)
+  # ============================================
+
+  - id: cq-neg-001
+    name: "No undefined parent relationships"
+    description: "Parents should themselves be animals"
+    tags: [validation, negative]
+    query: |
+      ASK {
+        ?animal ex:hasParent ?parent .
+        FILTER NOT EXISTS { ?parent a ?type . ?type rdfs:subClassOf* ex:Animal }
+      }
+    expect: false
+
+  # ============================================
+  # Skip example
+  # ============================================
+
+  - id: cq-future-001
+    name: "Complex inference test"
+    description: "This test requires reasoner support"
+    tags: [future, inference]
+    skip: true
+    skip_reason: "Requires OWL reasoner (not implemented)"
+    query: |
+      ASK {
+        ex:Fido a ex:Animal .  # Should be inferred from Dog subClassOf Mammal subClassOf Animal
+      }
+    expect: true
