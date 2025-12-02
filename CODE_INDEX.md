@@ -202,6 +202,53 @@ PlantUML diagram generation from RDF ontologies.
 - `LayoutConfig` class - diagram arrangement
 - Direction, spacing, grouping hints
 
+### UML `puml2rdf` Module
+
+Convert PlantUML class diagrams to RDF/OWL ontologies.
+
+**`puml2rdf/__init__.py`**
+- Public API exports
+- `PlantUMLParser`, `PumlToRdfConverter`, `validate_puml`, `validate_rdf`
+
+**`puml2rdf/model.py`**
+- `PumlClass` dataclass - parsed class with name, package, attributes, notes
+- `PumlAttribute` dataclass - class attributes with datatypes
+- `PumlRelationship` dataclass - inheritance and associations
+- `PumlPackage` dataclass - namespace mappings
+- `PumlModel` dataclass - complete parsed diagram
+- `RelationshipType` enum - INHERITANCE, ASSOCIATION, AGGREGATION, COMPOSITION
+
+**`puml2rdf/parser.py`**
+- `PlantUMLParser` class - regex-based multi-pass parser
+- `parse_dotted_name()` - split `building.Building` into package and local name
+- Handles `"Display Name" as alias` syntax
+- Supports direction hints (`-u-|>`, `-d-|>`, etc.)
+- Ignores PlantUML styling attributes (`#back:XXX;line:XXX`)
+
+**`puml2rdf/converter.py`**
+- `PumlToRdfConverter` class - transform parsed model to RDF graph
+- `ConversionConfig` dataclass - conversion options
+- Auto-generate namespaces from package prefixes
+- XSD datatype mapping for attributes
+- Label generation with camelCase conversion
+
+**`puml2rdf/config.py`**
+- `PumlImportConfig` dataclass - YAML configuration
+- `NamespaceMapping` - package to namespace URI mappings
+- `DatatypeMapping` - custom type conversions
+- `load_import_config()` - load from YAML file
+
+**`puml2rdf/merger.py`**
+- `OntologyMerger` class - merge generated RDF with existing ontologies
+- Preserves manual annotations while updating structure
+- Conflict detection and reporting
+
+**`puml2rdf/validators.py`**
+- `PumlModelValidator` - validate parsed PlantUML model
+- `RdfValidator` - validate generated RDF graph
+- Check for duplicate classes, unknown references, inheritance cycles
+- Severity levels: ERROR, WARNING, INFO
+
 ## Key Algorithms
 
 ### Topological Sorting
