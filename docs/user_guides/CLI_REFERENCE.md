@@ -357,6 +357,140 @@ rdf-construct lint ontology.ttl --disable orphan-class
 
 ---
 
+### cq-test - Test Competency Questions
+
+Validate ontologies against competency questions expressed as SPARQL queries with expected results.
+
+```bash
+rdf-construct cq-test ONTOLOGY TEST_FILE [OPTIONS]
+```
+
+**Arguments**:
+- `ONTOLOGY`: Input RDF ontology file (.ttl, .rdf, .owl, etc.)
+- `TEST_FILE`: YAML file containing competency question tests
+
+**Options**:
+- `-d, --data PATH`: Additional data files to load (can specify multiple)
+- `-t, --tag TAG`: Only run tests with this tag (can specify multiple)
+- `-x, --exclude-tag TAG`: Exclude tests with this tag (can specify multiple)
+- `-f, --format FORMAT`: Output format: `text`, `json`, `junit` (default: text)
+- `-o, --output PATH`: Write output to file instead of stdout
+- `-v, --verbose`: Show detailed output including query text and timing
+- `--fail-fast`: Stop on first test failure
+
+**Test File Format**:
+
+```yaml
+version: "1.0"
+name: "Animal Ontology Tests"
+description: "Competency questions for validating the animal ontology"
+
+prefixes:
+  ex: "http://example.org/animals#"
+  owl: "http://www.w3.org/2002/07/owl#"
+  rdfs: "http://www.w3.org/2000/01/rdf-schema#"
+
+# Optional inline test data
+data: |
+  @prefix ex: <http://example.org/animals#> .
+  ex:Fido a ex:Dog .
+  ex:Rex a ex:Dog .
+
+# Or reference external files
+data_files:
+  - test-data/instances.ttl
+
+questions:
+  - id: cq-001
+    name: "Animal class exists"
+    description: "The ontology should define an Animal class"
+    tags: [schema, required]
+    query: "ASK { ex:Animal a owl:Class }"
+    expect: true
+
+  - id: cq-002
+    name: "Dogs are animals"
+    description: "Dog should be a subclass of Animal"
+    tags: [schema, hierarchy]
+    query: |
+      ASK { 
+        ex:Dog rdfs:subClassOf ex:Animal 
+      }
+    expect: true
+
+  - id: cq-003
+    name: "At least one dog instance"
+    tags: [data]
+    query: "SELECT ?dog WHERE { ?dog a ex:Dog }"
+    expect:
+      min_count: 1
+
+  - id: cq-004
+    name: "Exactly two dogs"
+    tags: [data]
+    query: "SELECT ?dog WHERE { ?dog a ex:Dog }"
+    expect:
+      count: 2
+
+  - id: cq-005
+    name: "Fido exists"
+    tags: [data, instances]
+    query: "SELECT ?dog WHERE { ?dog a ex:Dog }"
+    expect:
+      contains:
+        - dog: "http://example.org/animals#Fido"
+```
+
+**Expectation Types**:
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `true` / `false` | ASK query result | `expect: true` |
+| `has_results` | Query returns ≥1 results | `expect: has_results` |
+| `no_results` | Query returns 0 results | `expect: no_results` |
+| `count` | Exact result count | `expect: { count: 5 }` |
+| `min_count` | Minimum results | `expect: { min_count: 1 }` |
+| `max_count` | Maximum results | `expect: { max_count: 10 }` |
+| `results` | Exact result set | `expect: { results: [...] }` |
+| `contains` | Subset matching | `expect: { contains: [...] }` |
+
+**Examples**:
+
+```bash
+# Run all tests
+rdf-construct cq-test ontology.ttl tests.yml
+
+# With additional instance data
+rdf-construct cq-test ontology.ttl tests.yml --data instances.ttl
+
+# Filter by tag
+rdf-construct cq-test ontology.ttl tests.yml --tag schema
+
+# Exclude data tests
+rdf-construct cq-test ontology.ttl tests.yml --exclude-tag data
+
+# JUnit output for CI
+rdf-construct cq-test ontology.ttl tests.yml --format junit -o results.xml
+
+# JSON output for scripting
+rdf-construct cq-test ontology.ttl tests.yml --format json
+
+# Verbose with fail-fast
+rdf-construct cq-test ontology.ttl tests.yml --verbose --fail-fast
+```
+
+**Exit Codes**:
+- `0`: All tests passed
+- `1`: One or more tests failed
+- `2`: Error occurred (parse error, file not found, etc.)
+
+**Output Formats**:
+- `text`: Human-readable console output with colours
+- `json`: Structured JSON for programmatic use
+- `junit`: JUnit XML for CI integration (GitHub Actions, GitLab CI, Jenkins)
+
+---
+
 ### contexts - List UML Contexts
 
 List available UML contexts in a configuration file.
@@ -568,6 +702,46 @@ ignore:
     - "ex:DeprecatedClass"
 ```
 
+### Competency Question Test Configuration
+
+**File**: `cq-tests.yml`
+
+```yaml
+version: "1.0"
+name: "Ontology Competency Tests"
+description: "SPARQL-based validation of ontology requirements"
+
+prefixes:
+  ex: "http://example.org/ontology#"
+  owl: "http://www.w3.org/2002/07/owl#"
+  rdfs: "http://www.w3.org/2000/01/rdf-schema#"
+
+# Inline test data (Turtle format)
+data: |
+  @prefix ex: <http://example.org/ontology#> .
+  ex:Instance1 a ex:Class1 .
+
+# Or external data files
+data_files:
+  - test-data/instances.ttl
+  - test-data/more-data.ttl
+
+questions:
+  - id: cq-001
+    name: "Test name"
+    description: "Optional longer description"
+    tags: [schema, required]
+    query: "ASK { ... }"
+    expect: true
+    
+  - id: cq-002
+    name: "Skipped test"
+    skip: true
+    skip_reason: "Feature not yet implemented"
+    query: "ASK { ... }"
+    expect: true
+```
+
 ### UML Context Configuration
 
 **File**: `uml_contexts.yml`
@@ -670,7 +844,7 @@ profiles:
 | Code | Meaning |
 |------|---------|
 | `0` | Success (or no differences/issues) |
-| `1` | General error (or differences/warnings found) |
+| `1` | General error (or differences/warnings/failures found) |
 | `2` | Command line usage error (or errors found for lint) |
 
 ---
@@ -702,10 +876,11 @@ rdf-construct shacl-gen ontology.ttl -o docs/shapes.ttl
 ### CI Quality Pipeline
 
 ```bash
-# Lint, generate shapes, validate
+# Lint, generate shapes, validate, test competency questions
 rdf-construct lint ontology.ttl --format sarif -o lint.sarif
 rdf-construct shacl-gen ontology.ttl -o shapes.ttl --level strict
 pyshacl -s shapes.ttl -d test-data.ttl
+rdf-construct cq-test ontology.ttl cq-tests.yml --format junit -o cq-results.xml
 ```
 
 ### Compare Ontology Versions
@@ -721,6 +896,19 @@ rdf-construct diff v1.0.ttl v1.1.ttl --format markdown -o CHANGELOG.md
 rdf-construct uml ontology.ttl -C config.yml \
   --style-config styles.yml --style high_contrast \
   --layout-config layouts.yml --layout presentation
+```
+
+### Test-Driven Ontology Development
+
+```bash
+# Write competency questions first
+rdf-construct cq-test ontology.ttl cq-tests.yml --tag required
+
+# Iterate until all pass
+rdf-construct cq-test ontology.ttl cq-tests.yml --verbose
+
+# Run full test suite in CI
+rdf-construct cq-test ontology.ttl cq-tests.yml --format junit -o results.xml
 ```
 
 ---
@@ -752,6 +940,12 @@ rdf-construct profiles order.yml
 2. Verify namespace prefixes
 3. Check selection criteria
 
+### CQ Test Failures
+
+1. Check SPARQL syntax with `--verbose`
+2. Verify prefixes match between test file and ontology
+3. Use `--fail-fast` to debug one test at a time
+
 ---
 
 ## Getting Help
@@ -764,6 +958,7 @@ rdf-construct puml2rdf --help
 rdf-construct shacl-gen --help
 rdf-construct diff --help
 rdf-construct lint --help
+rdf-construct cq-test --help
 ```
 
 **Online**:
@@ -781,3 +976,4 @@ rdf-construct lint --help
 - **[SHACL Guide](SHACL_GUIDE.md)**: SHACL shape generation
 - **[Diff Guide](DIFF_GUIDE.md)**: Ontology comparison
 - **[Lint Guide](LINT_GUIDE.md)**: Ontology quality checking
+- **[CQ Testing Guide](CQ_TEST_GUIDE.md)**: Competency question testing

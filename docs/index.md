@@ -9,6 +9,7 @@
 **Generate SHACL Shapes?** → [SHACL Guide](user_guides/SHACL_GUIDE.md)  
 **Compare Ontologies?** → [Diff Guide](user_guides/DIFF_GUIDE.md)  
 **Check Quality?** → [Lint Guide](user_guides/LINT_GUIDE.md)  
+**Test Competency Questions?** → [CQ Testing Guide](user_guides/CQ_TEST_GUIDE.md)  
 **Need Command Syntax?** → [CLI Reference](user_guides/CLI_REFERENCE.md)  
 **Contributing?** → [Contributing Guide](../CONTRIBUTING.md)  
 **Code Reference?** → [Code Index](../CODE_INDEX.md)
@@ -67,6 +68,12 @@ For users of rdf-construct who want to generate diagrams and work with RDF ontol
   - Configuration
   - CI integration
 
+- **[CQ Testing Guide](user_guides/CQ_TEST_GUIDE.md)** - Competency question testing
+  - SPARQL-based ontology validation
+  - Test file format
+  - Expectation types
+  - CI integration with JUnit output
+
 - **[CLI Reference](user_guides/CLI_REFERENCE.md)** - Command reference
   - All commands with options
   - Configuration file formats
@@ -110,6 +117,7 @@ A Python CLI toolkit for RDF operations:
 - **SHACL Generation**: Generate validation shapes from OWL definitions
 - **Semantic Diff**: Compare ontologies and identify meaningful changes
 - **Ontology Linting**: Check ontology quality with configurable rules
+- **Competency Question Testing**: Validate ontologies against SPARQL-based tests
 - **Flexible Configuration**: YAML-based control without code changes
 
 Named after the ROM construct from William Gibson's *Neuromancer*—preserved, structured knowledge.
@@ -191,6 +199,19 @@ poetry run rdf-construct lint ontology.ttl
 
 # Strict checking
 poetry run rdf-construct lint ontology.ttl --level strict
+```
+
+### Test Competency Questions
+
+```bash
+# Run competency question tests
+poetry run rdf-construct cq-test ontology.ttl tests.yml
+
+# With JUnit output for CI
+poetry run rdf-construct cq-test ontology.ttl tests.yml --format junit -o results.xml
+
+# Filter by tag
+poetry run rdf-construct cq-test ontology.ttl tests.yml --tag schema
 ```
 
 ### Reorder RDF Files

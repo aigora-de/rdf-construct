@@ -53,6 +53,8 @@ from rdf_construct.puml2rdf import (
     validate_rdf,
 )
 
+from rdf_construct.cq import load_test_suite, CQTestRunner, format_results
+
 # Valid rendering modes
 RENDERING_MODES = ["default", "odm"]
 
@@ -1404,6 +1406,175 @@ def puml2rdf(
     except Exception as e:
         click.secho(f"Error writing output: {e}", fg="red", err=True)
         sys.exit(2)
+
+
+@cli.command("cq-test")
+@click.argument("ontology", type=click.Path(exists=True, path_type=Path))
+@click.argument("test_file", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--data",
+    "-d",
+    multiple=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="Additional data file(s) to load alongside the ontology",
+)
+@click.option(
+    "--tag",
+    "-t",
+    multiple=True,
+    help="Only run tests with these tags (can specify multiple)",
+)
+@click.option(
+    "--exclude-tag",
+    "-x",
+    multiple=True,
+    help="Exclude tests with these tags (can specify multiple)",
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["text", "json", "junit"], case_sensitive=False),
+    default="text",
+    help="Output format (default: text)",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Write output to file instead of stdout",
+)
+@click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    help="Show verbose output (query text, timing details)",
+)
+@click.option(
+    "--fail-fast",
+    is_flag=True,
+    help="Stop on first failure",
+)
+def cq_test(
+    ontology: Path,
+    test_file: Path,
+    data: tuple[Path, ...],
+    tag: tuple[str, ...],
+    exclude_tag: tuple[str, ...],
+    output_format: str,
+    output: Path | None,
+    verbose: bool,
+    fail_fast: bool,
+):
+    """Run competency question tests against an ontology.
+
+    Validates whether an ontology can answer competency questions expressed
+    as SPARQL queries with expected results.
+
+    ONTOLOGY: RDF file containing the ontology to test
+    TEST_FILE: YAML file containing competency question tests
+
+    \b
+    Examples:
+        # Run all tests
+        rdf-construct cq-test ontology.ttl cq-tests.yml
+
+        # Run with additional sample data
+        rdf-construct cq-test ontology.ttl cq-tests.yml --data sample-data.ttl
+
+        # Run only tests tagged 'core'
+        rdf-construct cq-test ontology.ttl cq-tests.yml --tag core
+
+        # Generate JUnit XML for CI
+        rdf-construct cq-test ontology.ttl cq-tests.yml --format junit -o results.xml
+
+        # Verbose output with timing
+        rdf-construct cq-test ontology.ttl cq-tests.yml --verbose
+
+    \b
+    Exit codes:
+        0 - All tests passed
+        1 - One or more tests failed
+        2 - Error occurred (invalid file, parse error, etc.)
+    """
+    try:
+        # Load ontology
+        click.echo(f"Loading ontology: {ontology.name}...", err=True)
+        graph = Graph()
+        graph.parse(str(ontology), format=_infer_format(ontology))
+
+        # Load additional data files
+        if data:
+            for data_file in data:
+                click.echo(f"Loading data: {data_file.name}...", err=True)
+                graph.parse(str(data_file), format=_infer_format(data_file))
+
+        # Load test suite
+        click.echo(f"Loading tests: {test_file.name}...", err=True)
+        suite = load_test_suite(test_file)
+
+        # Filter by tags
+        if tag or exclude_tag:
+            include_tags = set(tag) if tag else None
+            exclude_tags = set(exclude_tag) if exclude_tag else None
+            suite = suite.filter_by_tags(include_tags, exclude_tags)
+
+        if not suite.questions:
+            click.secho("No tests to run (check tag filters)", fg="yellow", err=True)
+            sys.exit(0)
+
+        # Run tests
+        click.echo(f"Running {len(suite.questions)} test(s)...", err=True)
+        click.echo("", err=True)
+
+        runner = CQTestRunner(fail_fast=fail_fast, verbose=verbose)
+        results = runner.run(graph, suite, ontology_file=ontology)
+
+        # Format output
+        formatted = format_results(results, format_name=output_format, verbose=verbose)
+
+        # Write output
+        if output:
+            output.write_text(formatted)
+            click.secho(f"✓ Results written to {output}", fg="green", err=True)
+        else:
+            click.echo(formatted)
+
+        # Exit code based on results
+        if results.has_errors:
+            sys.exit(2)
+        elif results.has_failures:
+            sys.exit(1)
+        else:
+            sys.exit(0)
+
+    except FileNotFoundError as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(2)
+    except ValueError as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(2)
+    except Exception as e:
+        click.secho(f"Error: {type(e).__name__}: {e}", fg="red", err=True)
+        sys.exit(2)
+
+
+def _infer_format(path: Path) -> str:
+    """Infer RDF format from file extension."""
+    suffix = path.suffix.lower()
+    format_map = {
+        ".ttl": "turtle",
+        ".turtle": "turtle",
+        ".rdf": "xml",
+        ".xml": "xml",
+        ".owl": "xml",
+        ".nt": "nt",
+        ".ntriples": "nt",
+        ".n3": "n3",
+        ".jsonld": "json-ld",
+        ".json": "json-ld",
+    }
+    return format_map.get(suffix, "turtle")
 
 
 if __name__ == "__main__":
