@@ -290,7 +290,7 @@ Generate HTML, Markdown, or JSON documentation from RDF ontologies.
 **`docs/renderers/`**
 - `html.py` - Jinja2-based HTML rendering
 - `markdown.py` - Markdown file generation
-- `json_renderer.py` - Structured JSON output
+- `json.py` - Structured JSON output
 
 ### Competency Question Module (`cq/`)
 
