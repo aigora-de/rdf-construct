@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 *No unreleased changes.*
 
+## [0.2.1] - 2025-12-03
+
+### Changed
+- Added PyPI badges to README
+- Updated `pyproject.toml`
+
 ## [0.2.0] - 2025-12-03
 
 ### Added
