@@ -5,12 +5,14 @@
 **New User?** → [Getting Started](user_guides/GETTING_STARTED.md)  
 **Generate Documentation?** → [Docs Guide](user_guides/DOCS_GUIDE.md)  
 **Generate Diagrams?** → [UML Guide](user_guides/UML_GUIDE.md)  
-**Import from PlantUML?** → [PlantUML Import Guide](user_guides/PUML_IMPORT_GUIDE.md)  
+**Import from PlantUML?** → [PUML2RDF Guide](user_guides/PUML2RDF_GUIDE.md)  
 **Generate SHACL Shapes?** → [SHACL Guide](user_guides/SHACL_GUIDE.md)  
 **Compare Ontologies?** → [Diff Guide](user_guides/DIFF_GUIDE.md)  
 **Check Quality?** → [Lint Guide](user_guides/LINT_GUIDE.md)  
 **Test Competency Questions?** → [CQ Testing Guide](user_guides/CQ_TEST_GUIDE.md)  
+**Ontology Metrics?** → [Stats Guide](user_guides/STATS_GUIDE.md)  
 **Need Command Syntax?** → [CLI Reference](user_guides/CLI_REFERENCE.md)  
+**Quick Cheat Sheet?** → [Quick Reference](user_guides/QUICK_REFERENCE.md)  
 **Contributing?** → [Contributing Guide](../CONTRIBUTING.md)  
 **Code Reference?** → [Code Index](../CODE_INDEX.md)
 
@@ -42,7 +44,7 @@ For users of rdf-construct who want to generate diagrams and work with RDF ontol
   - Complete examples
   - Tips and techniques
 
-- **[PlantUML Import Guide](user_guides/PUML_IMPORT_GUIDE.md)** - Convert PlantUML to RDF
+- **[PUML2RDF Guide](user_guides/PUML2RDF_GUIDE.md)** - Convert PlantUML to RDF
   - Diagram-first ontology design
   - Supported PlantUML syntax
   - Namespace handling
@@ -64,7 +66,7 @@ For users of rdf-construct who want to generate diagrams and work with RDF ontol
   - CI integration
 
 - **[Lint Guide](user_guides/LINT_GUIDE.md)** - Ontology quality checking
-  - Available rules
+  - Available rules (11 across 3 categories)
   - Configuration
   - CI integration
 
@@ -86,6 +88,16 @@ For users of rdf-construct who want to generate diagrams and work with RDF ontol
   - Configuration file formats
   - Common workflows
   - Troubleshooting
+
+- **[Quick Reference](user_guides/QUICK_REFERENCE.md)** - Cheat sheet
+  - Command summary
+  - Common patterns
+  - Exit codes
+
+- **[Project Setup](user_guides/PROJECT_SETUP.md)** - Setting up a new project
+  - Starter templates
+  - Directory structure
+  - Configuration basics
 
 ### Developer Documentation (docs/dev/)
 
@@ -125,11 +137,14 @@ A Python CLI toolkit for RDF operations:
 - **Semantic Diff**: Compare ontologies and identify meaningful changes
 - **Ontology Linting**: Check ontology quality with configurable rules
 - **Competency Question Testing**: Validate ontologies against SPARQL-based tests
+- **Ontology Statistics**: Comprehensive metrics with comparison mode
 - **Flexible Configuration**: YAML-based control without code changes
 
 Named after the ROM construct from William Gibson's *Neuromancer*—preserved, structured knowledge.
 
 ## Quick Examples
+
+> **Note**: If installed via pip, use `rdf-construct` directly. If using Poetry for development, prefix with `poetry run`.
 
 ### Generate Documentation
 
@@ -168,7 +183,6 @@ poetry run rdf-construct order ontology.ttl order.yml
 # Specific profile
 poetry run rdf-construct order ontology.ttl order.yml -p logical_topo
 ```
-
 
 ### Import from PlantUML
 
