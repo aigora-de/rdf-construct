@@ -1,0 +1,45 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <http://example.org/> .
+
+# Instance data for testing data migration
+
+# Building instances
+ex:building1 a ex:Building ;
+    rdfs:label "Office Tower"@en ;
+    ex:hasName "Central Office Tower" ;
+    ex:floorCount 25 ;
+    ex:hasLocation ex:location1 .
+
+ex:building2 a ex:Building ;
+    rdfs:label "Shopping Centre"@en ;
+    ex:hasName "Westfield Mall" ;
+    ex:floorCount 3 ;
+    ex:hasLocation ex:location2 .
+
+ex:building3 a ex:CommercialBuilding ;
+    rdfs:label "Tech Hub"@en ;
+    ex:hasName "Innovation Centre" ;
+    ex:floorCount 10 ;
+    ex:hasLocation ex:location3 .
+
+# Place instances
+ex:location1 a ex:Place ;
+    rdfs:label "Downtown"@en .
+
+ex:location2 a ex:Place ;
+    rdfs:label "Suburbs"@en .
+
+ex:location3 a ex:Place ;
+    rdfs:label "Business Park"@en .
+
+# Organisation instances (for testing type migration)
+ex:org1 a ex:Organisation ;
+    rdfs:label "Acme Corp"@en ;
+    ex:hasName "Acme Corporation" .
+
+ex:org2 a ex:Organisation ;
+    rdfs:label "TechStart"@en ;
+    ex:hasName "TechStart Ltd" .

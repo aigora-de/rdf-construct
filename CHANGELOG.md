@@ -7,7 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-*No unreleased changes.*
+### Added
+
+- **New `merge` command** for combining multiple RDF ontology files
+  - Intelligent conflict detection (same subject+predicate, different values)
+  - Four resolution strategies: `priority`, `first`, `last`, `mark_all`
+  - Conflict markers (`# === CONFLICT ===`) in output for manual review
+  - Namespace remapping during merge
+  - owl:imports handling (preserve, remove, merge)
+  - Conflict report generation (text and markdown formats)
+  - Data migration support:
+    - Simple URI substitution for renames and namespace changes
+    - Complex CONSTRUCT-style transformation rules
+    - Property splits, type migrations, value transformations
+  - YAML configuration file support for complex merges
+  - Dry-run mode for previewing changes
+  - Exit codes: 0 (success), 1 (unresolved conflicts), 2 (error)
+- New module: `src/rdf_construct/merge/`
+  - `config.py` - Configuration dataclasses (MergeConfig, MigrationRule, etc.)
+  - `conflicts.py` - Conflict detection and marking
+  - `merger.py` - Core OntologyMerger class
+  - `migrator.py` - Data graph migration (shared infrastructure for future split/refactor commands)
+  - `rules.py` - SPARQL-like transformation rule engine
+  - `formatters.py` - Text and Markdown output formatters
+- New documentation: `docs/user_guides/MERGE_GUIDE.md`
+- New example: `examples/merge_config.yml`
+- New tests: `tests/test_merge.py` (28 test cases)
 
 ## [0.2.1] - 2025-12-03
 

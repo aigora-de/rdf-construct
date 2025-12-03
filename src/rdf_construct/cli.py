@@ -62,6 +62,22 @@ from rdf_construct.stats import (
     format_comparison,
 )
 
+# Import here to avoid circular imports
+from rdf_construct.merge import (
+    MergeConfig,
+    SourceConfig,
+    OutputConfig,
+    ConflictConfig,
+    ConflictStrategy,
+    ImportsStrategy,
+    DataMigrationConfig,
+    OntologyMerger,
+    load_merge_config,
+    create_default_config,
+    get_formatter,
+    migrate_data_files,
+)
+
 # Valid rendering modes
 RENDERING_MODES = ["default", "odm"]
 
@@ -1756,6 +1772,292 @@ def stats(
     except Exception as e:
         click.secho(f"Error: {e}", fg="red", err=True)
         sys.exit(1)
+
+
+@cli.command()
+@click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Output file for merged ontology",
+)
+@click.option(
+    "--config",
+    "-c",
+    "config_file",
+    type=click.Path(exists=True, path_type=Path),
+    help="YAML configuration file",
+)
+@click.option(
+    "--priority",
+    "-p",
+    multiple=True,
+    type=int,
+    help="Priority for each source (order matches sources)",
+)
+@click.option(
+    "--strategy",
+    type=click.Choice(["priority", "first", "last", "mark_all"], case_sensitive=False),
+    default="priority",
+    help="Conflict resolution strategy (default: priority)",
+)
+@click.option(
+    "--report",
+    "-r",
+    type=click.Path(path_type=Path),
+    help="Write conflict report to file",
+)
+@click.option(
+    "--report-format",
+    type=click.Choice(["text", "markdown", "md"], case_sensitive=False),
+    default="markdown",
+    help="Format for conflict report (default: markdown)",
+)
+@click.option(
+    "--imports",
+    type=click.Choice(["preserve", "remove", "merge"], case_sensitive=False),
+    default="preserve",
+    help="How to handle owl:imports (default: preserve)",
+)
+@click.option(
+    "--migrate-data",
+    multiple=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="Data file(s) to migrate",
+)
+@click.option(
+    "--migration-rules",
+    type=click.Path(exists=True, path_type=Path),
+    help="YAML file with migration rules",
+)
+@click.option(
+    "--data-output",
+    type=click.Path(path_type=Path),
+    help="Output path for migrated data",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would happen without writing files",
+)
+@click.option(
+    "--no-colour",
+    is_flag=True,
+    help="Disable coloured output",
+)
+@click.option(
+    "--init",
+    "init_config",
+    is_flag=True,
+    help="Generate a default merge configuration file",
+)
+def merge(
+    sources: tuple[Path, ...],
+    output: Path,
+    config_file: Path | None,
+    priority: tuple[int, ...],
+    strategy: str,
+    report: Path | None,
+    report_format: str,
+    imports: str,
+    migrate_data: tuple[Path, ...],
+    migration_rules: Path | None,
+    data_output: Path | None,
+    dry_run: bool,
+    no_colour: bool,
+    init_config: bool,
+):
+    """Merge multiple RDF ontology files.
+
+    Combines SOURCES into a single output ontology, detecting and handling
+    conflicts between definitions.
+
+    \b
+    SOURCES: One or more RDF files to merge (.ttl, .rdf, .owl)
+
+    \b
+    Exit codes:
+      0 - Merge successful, no unresolved conflicts
+      1 - Merge successful, but unresolved conflicts marked in output
+      2 - Error (file not found, parse error, etc.)
+
+    \b
+    Examples:
+      # Basic merge of two files
+      rdf-construct merge core.ttl ext.ttl -o merged.ttl
+
+      # With priorities (higher wins conflicts)
+      rdf-construct merge core.ttl ext.ttl -o merged.ttl -p 1 -p 2
+
+      # Generate conflict report
+      rdf-construct merge core.ttl ext.ttl -o merged.ttl --report conflicts.md
+
+      # Mark all conflicts for manual review
+      rdf-construct merge core.ttl ext.ttl -o merged.ttl --strategy mark_all
+
+      # With data migration
+      rdf-construct merge core.ttl ext.ttl -o merged.ttl \\
+          --migrate-data instances.ttl --data-output migrated.ttl
+
+      # Use configuration file
+      rdf-construct merge --config merge.yml -o merged.ttl
+
+      # Generate default config file
+      rdf-construct merge --init
+    """
+    # Handle --init flag
+    if init_config:
+        config_path = Path("merge.yml")
+        if config_path.exists():
+            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
+            raise click.Abort()
+
+        config_content = create_default_config()
+        config_path.write_text(config_content)
+        click.secho(f"Created {config_path}", fg="green")
+        click.echo("Edit this file to configure your merge, then run:")
+        click.echo(f"  rdf-construct merge --config {config_path} -o merged.ttl")
+        return
+
+    # Validate we have sources
+    if not sources and not config_file:
+        click.secho("Error: No source files specified.", fg="red", err=True)
+        click.echo("Provide source files or use --config with a configuration file.", err=True)
+        raise click.Abort()
+
+    # Build configuration
+    if config_file:
+        try:
+            config = load_merge_config(config_file)
+            click.echo(f"Using config: {config_file}")
+
+            # Override output if provided on CLI
+            if output:
+                config.output = OutputConfig(path=output)
+        except (FileNotFoundError, ValueError) as e:
+            click.secho(f"Error loading config: {e}", fg="red", err=True)
+            raise click.Abort()
+    else:
+        # Build config from CLI arguments
+        priorities_list = list(priority) if priority else list(range(1, len(sources) + 1))
+
+        # Pad priorities if needed
+        while len(priorities_list) < len(sources):
+            priorities_list.append(len(priorities_list) + 1)
+
+        source_configs = [
+            SourceConfig(path=p, priority=pri)
+            for p, pri in zip(sources, priorities_list)
+        ]
+
+        conflict_strategy = ConflictStrategy[strategy.upper()]
+        imports_strategy = ImportsStrategy[imports.upper()]
+
+        # Data migration config
+        data_migration = None
+        if migrate_data:
+            data_migration = DataMigrationConfig(
+                data_sources=list(migrate_data),
+                output_path=data_output,
+            )
+
+        config = MergeConfig(
+            sources=source_configs,
+            output=OutputConfig(path=output),
+            conflicts=ConflictConfig(
+                strategy=conflict_strategy,
+                report_path=report,
+            ),
+            imports=imports_strategy,
+            migrate_data=data_migration,
+            dry_run=dry_run,
+        )
+
+    # Execute merge
+    click.echo("Merging ontologies...")
+
+    merger = OntologyMerger(config)
+    result = merger.merge()
+
+    if not result.success:
+        click.secho(f"✗ Merge failed: {result.error}", fg="red", err=True)
+        raise SystemExit(2)
+
+    # Display results
+    use_colour = not no_colour
+    text_formatter = get_formatter("text", use_colour=use_colour)
+    click.echo(text_formatter.format_merge_result(result, result.merged_graph))
+
+    # Write output (unless dry run)
+    if not dry_run and result.merged_graph and config.output:
+        merger.write_output(result, config.output.path)
+        click.echo()
+        click.secho(f"✓ Wrote {config.output.path}", fg="green")
+
+    # Generate conflict report if requested
+    if report and result.conflicts:
+        report_formatter = get_formatter(report_format)
+        report_content = report_formatter.format_conflict_report(
+            result.conflicts, result.merged_graph
+        )
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(report_content)
+        click.echo(f"  Conflict report: {report}")
+
+    # Handle data migration
+    if config.migrate_data and config.migrate_data.data_sources:
+        click.echo()
+        click.echo("Migrating data...")
+
+        # Build URI map from any namespace remappings
+        from rdf_construct.merge import DataMigrator
+
+        migrator = DataMigrator()
+        uri_map: dict[URIRef, URIRef] = {}
+
+        # Collect namespace remaps from all sources
+        for src in config.sources:
+            if src.namespace_remap:
+                for old_ns, new_ns in src.namespace_remap.items():
+                    # We'd need to scan data files to build complete map
+                    # For now, this is a placeholder
+                    pass
+
+        # Apply migration
+        migration_result = migrate_data_files(
+            data_paths=config.migrate_data.data_sources,
+            uri_map=uri_map if uri_map else None,
+            rules=config.migrate_data.rules if config.migrate_data.rules else None,
+            output_path=config.migrate_data.output_path if not dry_run else None,
+        )
+
+        if migration_result.success:
+            click.echo(text_formatter.format_migration_result(migration_result))
+            if config.migrate_data.output_path and not dry_run:
+                click.secho(
+                    f"✓ Wrote migrated data to {config.migrate_data.output_path}",
+                    fg="green",
+                )
+        else:
+            click.secho(
+                f"✗ Data migration failed: {migration_result.error}",
+                fg="red",
+                err=True,
+            )
+
+    # Exit code based on unresolved conflicts
+    if result.unresolved_conflicts:
+        click.echo()
+        click.secho(
+            f"⚠ {len(result.unresolved_conflicts)} unresolved conflict(s) "
+            "marked in output",
+            fg="yellow",
+        )
+        raise SystemExit(1)
+    else:
+        raise SystemExit(0)
 
 
 if __name__ == "__main__":
