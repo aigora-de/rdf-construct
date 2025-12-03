@@ -1,6 +1,6 @@
-# rdf-construct Source Code Package
+# rdf-construct Source Code Index
 
-This directory contains the complete refactored **rdf-construct** package code.
+This document provides a complete inventory of the rdf-construct package code.
 
 ## Directory Structure
 
@@ -11,13 +11,19 @@ docs/
 │   ├── ARCHITECTURE.md
 │   └── UML_IMPLEMENTATION.md
 └── user_guides/
-│   ├── CLI_REFERENCE.md
-│   ├── CQ_TEST_GUIDE.md
-│   ├── DIFF_GUIDE.md
-│   ├── GETTING_STARTED.md
-│   ├── LINT_GUIDE.md
-│   ├── SHACL_GUIDE.md
-│   └── UML_GUIDE.md
+    ├── CLI_REFERENCE.md
+    ├── CQ_TEST_GUIDE.md
+    ├── DIFF_GUIDE.md
+    ├── DOCS_GUIDE.md
+    ├── GETTING_STARTED.md
+    ├── LINT_GUIDE.md
+    ├── PLANTUML_IMPORT_GUIDE.md
+    ├── PROJECT_SETUP.md
+    ├── QUICK_REFERENCE.md
+    ├── SHACL_GUIDE.md
+    ├── STATS_GUIDE.md
+    └── UML_GUIDE.md
+
 src/rdf_construct/
 ├── __init__.py
 ├── __main__.py
@@ -33,7 +39,6 @@ src/rdf_construct/
 │   └── utils.py
 ├── cq/
 │   ├── __init__.py
-│   ├── cli.py
 │   ├── expectations.py
 │   ├── loader.py
 │   ├── runner.py
@@ -58,11 +63,21 @@ src/rdf_construct/
 │   ├── extractors.py
 │   ├── generator.py
 │   ├── search.py
-│   └── renderers/
-│       ├── __init__.py
-│       ├── html.py
-│       ├── json_renderer.py
-│       └── markdown.py
+│   ├── renderers/
+│   │   ├── __init__.py
+│   │   ├── html.py
+│   │   ├── json.py
+│   │   └── markdown.py
+│   └── templates/
+│       └── html/
+│           ├── base.html.jinja
+│           ├── class.html.jinja
+│           ├── hierarchy.html.jinja
+│           ├── index.html.jinja
+│           ├── instance.html.jinja
+│           ├── namespaces.html.jinja
+│           ├── property.html.jinja
+│           └── single_page.html.jinja
 ├── lint/
 │   ├── __init__.py
 │   ├── config.py
@@ -83,74 +98,99 @@ src/rdf_construct/
 │   ├── converters.py
 │   ├── generator.py
 │   └── namespaces.py
-└── uml/
-│   ├── __init__.py
-│   ├── context.py
-│   ├── mapper.py
-│   ├── renderer.py
-│   ├── odm_renderer.py
-│   ├── uml_style.py
-│   └── uml_layout.py
-└── stats/
+├── stats/
 │   ├── __init__.py
 │   ├── collector.py
 │   ├── comparator.py
 │   ├── metrics/
 │   │   ├── __init__.py
+│   │   ├── base.py
 │   │   ├── basic.py
-│   │   ├── hierarchy.py
-│   │   ├── properties.py
-│   │   ├── documentation.py
 │   │   ├── complexity.py
-│   │   └── connectivity.py
+│   │   ├── connectivity.py
+│   │   ├── documentation.py
+│   │   ├── hierarchy.py
+│   │   └── properties.py
 │   └── formatters/
-│   │   ├── __init__.py
-│   │   ├── text.py
-│   │   ├── json_fmt.py
-│           └── markdown.py
+│       ├── __init__.py
+│       ├── json.py
+│       ├── markdown.py
+│       └── text.py
+└── uml/
+    ├── __init__.py
+    ├── context.py
+    ├── mapper.py
+    ├── odm_renderer.py
+    ├── renderer.py
+    ├── uml_layout.py
+    └── uml_style.py
+
 examples/
 ├── animal_ontology.ttl
+├── basic_ordering.py
 ├── building_structure_context.yml
 ├── cq_tests_animal.yml
+├── docs_config.yml
+├── ies_building_contexts.yml
+├── ies_colour_examples.yml
 ├── ies_colour_palette.yml
+├── ies_colour_palette_with_instances.yml
+├── ordering_starter.yml
+├── organisation_ontology.ttl
+├── puml_import.yml
+├── rdf_lint.yml
 ├── sample_profile.yml
+├── shacl_config.yml
+├── test_profile.yml
 ├── uml_contexts.yml
+├── uml_contexts_explicit.yml
+├── uml_contexts_starter.yml
 ├── uml_layouts.yml
-└── uml_styles.yml
-│
+├── uml_styles.yml
+└── uml_styles_starter.yml
+
 tests/
+├── __init__.py
 ├── test_cq.py
 ├── test_diff.py
+├── test_docs.py
 ├── test_explicit_mode.py
 ├── test_instance_styling.py
+├── test_lint.py
 ├── test_odm_renderer.py
 ├── test_ordering.py
 ├── test_plantuml.py
 ├── test_predicate_order.py
+├── test_puml2rdf.py
+├── test_shacl_gen.py
+├── test_stats.py
 └── fixtures/
-│   └── diff/
-│       ├── v1.0.ttl
-│       └── v1.1.ttl
+    └── diff/
+        ├── v1_0.ttl
+        └── v1_1.ttl
+
 ├── pyproject.toml              # Modern Python packaging config
+├── poetry.lock                 # Locked dependencies
 ├── README.md                   # User documentation
 ├── CONTRIBUTING.md             # Development guide
 ├── CHANGELOG.md                # Version history
+├── CODE_INDEX.md               # This file
+├── CODE_OF_CONDUCT.md          # Community guidelines
 ├── LICENSE                     # MIT license
 ├── .gitignore                  # Git ignore rules
-├── .pre-commit-config.yaml     # Pre-commit hooks
-└── CODE_INDEX.md               # This file
+└── .pre-commit-config.yaml     # Pre-commit hooks
 ```
 
 ## File Descriptions
 
 ### Core Package Files
 
-**`rdf_construct/__init__.py`** (40 lines)
-- Package initialization and exports
-- Version number
+**`rdf_construct/__init__.py`**
+- Package initialisation and exports
+- Version number (`__version__`)
 - Public API definitions
 
-**`rdf_construct/__main__.py`** (5 lines)
+**`rdf_construct/__main__.py`**
 - Entry point for `python -m rdf_construct`
 - Calls CLI
 
@@ -160,21 +200,21 @@ tests/
 - `profiles` command for listing profiles
 - `contexts` command for listing UML contexts
 - `uml` command for generating diagrams
-- `puml2rdf` command to generate RDF from PUML
+- `docs` command for generating documentation
+- `puml2rdf` command to generate RDF from PlantUML
+- `shacl-gen` command for generating SHACL shapes
 - `lint` command for quality checking
-- `shacl` command for generating SHACL shapes
 - `diff` command for semantic comparison
 - `cq-test` command for competency question testing
 - `stats` command for ontology metrics
-- `doc` command for generating documentation from RDF
 
-### Core Modules
+### Core Modules (`core/`)
 
-**`core/__init__.py`** (34 lines)
+**`core/__init__.py`**
 - Core module exports
 - Makes functions available at package level
 
-**`core/config.py`** (193 lines)
+**`core/config.py`**
 - YAML loading functions
 - Dataclasses for configuration
 - `OrderingSpec` for complete config
@@ -183,13 +223,13 @@ tests/
 - CURIE expansion
 - Prefix rebinding
 
-**`core/profile.py`** (111 lines)
+**`core/profile.py`**
 - `OrderingConfig` class - main config manager
 - `OrderingProfile` class - individual profile
 - Profile loading and access methods
 - YAML parsing with error handling
 
-**`core/selector.py`** (65 lines)
+**`core/selector.py`**
 - `select_subjects()` - select RDF subjects by type
 - Handles classes (owl:Class, rdfs:Class)
 - Handles properties (ObjectProperty, DatatypeProperty, AnnotationProperty)
@@ -202,17 +242,55 @@ tests/
 - `sort_with_roots()` - root-based branch ordering
 - `sort_subjects()` - main sorting dispatcher
 
-**`core/serializer.py`** (168 lines)
+**`core/serialiser.py`**
 - `format_term()` - format RDF terms as Turtle strings
-- `serialize_turtle()` - custom Turtle writer that preserves order
+- `serialise_turtle()` - custom Turtle writer that preserves order
 - `build_section_graph()` - filter graph to specific subjects
 - **Critical**: Preserves subject order (rdflib doesn't)
 
-**`core/utils.py`** (90 lines)
+**`core/predicate_ordering.py`**
+- `PredicateOrder` dataclass - ordering specification
+- `get_predicate_order()` - retrieve ordering for a profile
+- Configurable predicate output order within subjects
+
+**`core/utils.py`**
 - `extract_prefix_map()` - get namespaces from graph
 - `expand_curie()` - expand CURIEs to full IRIs
 - `rebind_prefixes()` - set prefix order
 - `qname_sort_key()` - generate sortable keys for RDF terms
+
+### Documentation Module (`docs/`)
+
+Generate HTML, Markdown, or JSON documentation from RDF ontologies.
+
+**`docs/__init__.py`**
+- Public API exports
+- `DocsConfig`, `DocsGenerator`, `load_docs_config`
+
+**`docs/config.py`**
+- `DocsConfig` dataclass - documentation settings
+- `load_docs_config()` - load from YAML file
+- Output format, template, filtering options
+
+**`docs/extractors.py`**
+- `OntologyExtractor` class - extract entities from RDF
+- Class, property, instance extraction
+- Hierarchy building
+- Inherited property detection
+
+**`docs/generator.py`**
+- `DocsGenerator` class - orchestrate documentation generation
+- Format routing (HTML, Markdown, JSON)
+- Output file management
+
+**`docs/search.py`**
+- `SearchIndexBuilder` - build search.json for HTML
+- Entity indexing for client-side search
+
+**`docs/renderers/`**
+- `html.py` - Jinja2-based HTML rendering
+- `markdown.py` - Markdown file generation
+- `json_renderer.py` - Structured JSON output
 
 ### Competency Question Module (`cq/`)
 
@@ -247,11 +325,6 @@ SPARQL-based ontology validation through competency question testing.
 - `CQTestRunner` class - execute tests with fail-fast support
 - `run_tests()` - convenience function for file paths
 
-**`cq/cli.py`**
-- `cq_test` Click command
-- Tag filtering, format selection, output handling
-- Exit codes: 0 (pass), 1 (fail), 2 (error)
-
 **`cq/formatters/`**
 - `text.py` - Human-readable console output with colours
 - `json.py` - Structured JSON for programmatic use
@@ -282,59 +355,59 @@ Semantic comparison of RDF graphs, identifying meaningful changes while ignoring
 - `_get_superclasses()` - find class hierarchy
 
 **`diff/filters.py`**
-- `filter_diff()` - filter by change type and entity type
+- `filter_diff()` - filter diff results by type/entity
 - `parse_filter_string()` - parse comma-separated filter strings
 - Maps CLI filter names to internal types
 
 **`diff/formatters/`**
-- `text.py` - Plain text output for terminals
-- `markdown.py` - Markdown for release notes/changelogs
-- `json.py` - JSON for programmatic use
+- `text.py` - Coloured terminal output
+- `markdown.py` - Release notes format/changelogs
+- `json.py` - Structured JSON for scripting
 - `__init__.py` - `format_diff()` dispatcher
 
-### UML Module (`uml/`)
+### Lint Module (`lint/`)
 
-PlantUML diagram generation from RDF ontologies.
+Ontology quality checking with configurable rules.
 
-**`uml/__init__.py`**
-- UML module exports
+**`lint/__init__.py`**
+- Public API exports
+- `LintEngine`, `LintConfig`, `LintRule`, `LintIssue`
 
-**`uml/context.py`**
-- `UMLContext` - diagram specification
-- `UMLConfig` - manages multiple contexts
+**`lint/config.py`**
+- `LintConfig` dataclass - lint settings
+- `load_lint_config()` - load from YAML
+- `find_config_file()` - auto-discover `.rdf-lint.yml`
+- Rule enable/disable, severity levels
 
-**`uml/mapper.py`**
-- Entity selection for diagrams
-- Class, property, and instance selection strategies
+**`lint/engine.py`**
+- `LintEngine` class - orchestrate rule execution
+- Issue collection and severity filtering
+- Exit code determination
 
-**`uml/renderer.py`**
-- PlantUML text generation
-- Classes, properties, instances rendering
+**`lint/rules.py`**
+- `LintRule` abstract base class
+- 11 built-in rules across 3 categories:
+  - Structural: `orphan-class`, `dangling-reference`, `circular-subclass`, `property-no-type`, `empty-ontology`
+  - Documentation: `missing-label`, `missing-comment`
+  - Best Practice: `redundant-subclass`, `property-no-domain`, `property-no-range`, `inconsistent-naming`
 
-**`uml/odm_renderer.py`**
-- OMG ODM RDF Profile compliant rendering
+**`lint/formatters.py`**
+- `TextFormatter` - coloured terminal output
+- `JsonFormatter` - machine-readable JSON
+- `get_formatter()` - format dispatcher
 
-**`uml/uml_style.py`**
-- Color schemes and visual styling
-- Namespace-based and type-based coloring
-
-**`uml/uml_layout.py`**
-- Layout configuration
-- Direction, spacing, grouping controls
-
-### UML `puml2rdf` Module
+### `puml2rdf` Module
 
 Convert PlantUML class diagrams to RDF/OWL ontologies.
 
 **`puml2rdf/__init__.py`**
 - Public API exports
-- `PlantUMLParser`, `PumlToRdfConverter`, `validate_puml`, `validate_rdf`
+- `PlantUMLParser`, `PumlToRdfConverter`, `ConversionConfig`
 
 **`puml2rdf/model.py`**
-- `PumlClass` dataclass - parsed class with name, package, attributes, notes
-- `PumlAttribute` dataclass - class attributes with datatypes
-- `PumlRelationship` dataclass - inheritance and associations
-- `PumlPackage` dataclass - namespace mappings
+- `PumlClass` dataclass - parsed class definition
+- `PumlAttribute` dataclass - class attribute
+- `PumlRelationship` dataclass - relationship between classes
 - `PumlModel` dataclass - complete parsed diagram
 - `RelationshipType` enum - INHERITANCE, ASSOCIATION, AGGREGATION, COMPOSITION
 
@@ -369,10 +442,41 @@ Convert PlantUML class diagrams to RDF/OWL ontologies.
 - Check for duplicate classes, unknown references, inheritance cycles
 - Severity levels: ERROR, WARNING, INFO
 
-### Stats Module
+### SHACL Module (`shacl/`)
+
+Generate SHACL validation shapes from OWL definitions.
+
+**`shacl/__init__.py`**
+- Public API exports
+- `ShaclGenerator`, `ShaclConfig`
+
+**`shacl/config.py`**
+- `ShaclConfig` dataclass - generation settings
+- Strictness levels: minimal, standard, strict
+- Class filtering, closed shapes, severity options
+
+**`shacl/generator.py`**
+- `ShaclGenerator` class - orchestrate shape generation
+- Per-class NodeShape creation
+- Property constraint generation
+
+**`shacl/converters.py`**
+- `convert_domain_range()` - domain/range to sh:property
+- `convert_cardinality()` - cardinality to sh:minCount/sh:maxCount
+- `convert_functional()` - FunctionalProperty to sh:maxCount 1
+- `convert_restrictions()` - OWL restrictions to SHACL constraints
+
+**`shacl/namespaces.py`**
+- SHACL namespace bindings
+- Prefix management for output
+
+### Stats Module (`stats/`)
+
+Comprehensive ontology metrics and comparison.
 
 **`stats/__init__.py`**
-- Public API exports for stats functionality
+- Public API exports
+- `collect_stats()`, `compare_stats()`, `format_stats()`
 
 **`stats/collector.py`**
 - `OntologyStats` dataclass - aggregates all metrics
@@ -385,106 +489,59 @@ Convert PlantUML class diagrams to RDF/OWL ontologies.
 - `compare_stats()` - compares two OntologyStats objects
 - Improvement/degradation detection
 
-**`stats/metrics/basic.py`**
-- `BasicStats` - counts (triples, classes, properties, individuals)
-- `collect_basic_stats()` - count collection
-- Helper functions for entity discovery
+**`stats/metrics/`**
+- `basic.py` - Counts (triples, classes, properties, individuals)
+- `hierarchy.py` - Depth, branching factor, orphans
+- `properties.py` - Domain/range coverage, functional, symmetric
+- `documentation.py` - Label and comment coverage
+- `complexity.py` - Multiple inheritance, OWL axioms
+- `connectivity.py` - Most connected class, isolated classes
 
-**`stats/metrics/hierarchy.py`**
-- `HierarchyStats` - hierarchy analysis
-- Depth calculation (max, average)
-- Branching factor
-- Orphan class detection
+**`stats/formatters/`**
+- `text.py` - Aligned columns for terminal
+- `json.py` - Machine-readable JSON
+- `markdown.py` - README-ready tables
 
-**`stats/metrics/properties.py`**
-- `PropertyStats` - property coverage
-- Domain/range coverage rates
-- Inverse pairs, functional, symmetric counts
+### UML Module (`uml/`)
 
-**`stats/metrics/documentation.py`**
-- `DocumentationStats` - documentation coverage
-- Label coverage (rdfs:label, skos:prefLabel)
-- Comment coverage (rdfs:comment, skos:definition)
+Generate PlantUML class diagrams from RDF ontologies.
 
-**`stats/metrics/complexity.py`**
-- `ComplexityStats` - structural complexity
-- Multiple inheritance detection
-- OWL restriction and equivalence counts
+**`uml/__init__.py`**
+- Public API exports
+- `load_uml_config()`, `collect_diagram_entities()`, `render_plantuml()`
 
-**`stats/metrics/connectivity.py`**
-- `ConnectivityStats` - class connectivity
-- Most connected class identification
-- Isolated class detection
+**`uml/context.py`**
+- `UmlConfig` class - load and manage contexts
+- `UmlContext` dataclass - single context definition
+- Class selection strategies (root, focus, selector)
+- Property and instance filtering
 
-**`stats/formatters/text.py`**
-- Text output with aligned columns
-- Human-readable format
+**`uml/mapper.py`**
+- `collect_diagram_entities()` - select classes, properties, instances
+- Descendant traversal with depth limiting
+- Property mode handling (domain_based, connected, explicit, all, none)
 
-**`stats/formatters/json_fmt.py`**
-- JSON serialisation
-- Machine-readable format
+**`uml/renderer.py`**
+- `render_plantuml()` - generate PlantUML output
+- Class rendering with attributes
+- Relationship rendering (inheritance, object properties)
+- Instance rendering
 
-**`stats/formatters/markdown.py`**
-- Markdown tables
-- README-ready format
+**`uml/odm_renderer.py`**
+- `render_odm_plantuml()` - OMG ODM RDF Profile compliant output
+- Standard stereotypes and notation
+- Compliance with UML profile standards
 
-### Configuration
+**`uml/uml_style.py`**
+- `StyleConfig` class - load style schemes
+- `StyleScheme` dataclass - visual styling
+- Namespace and type-based colouring
+- Arrow styling, stereotypes
 
-**`pyproject.toml`** (134 lines)
-- Modern Python packaging configuration
-- Dependencies: rdflib, click, pyyaml, rich
-- Dev dependencies: black, ruff, mypy, pytest
-- Tool configurations for black, ruff, mypy, pytest
-- Entry point: `rdf-construct` command
-
-### Documentation
-
-**`README.md`** (154 lines)
-- User-facing documentation
-- Installation instructions
-- Quick start guide
-- Configuration examples
-- Programmatic API usage
-- Roadmap
-
-**`CONTRIBUTING.md`** (development guide)
-- How to set up development environment
-- Code style guidelines
-- How to run tests
-- How to contribute
-
-**`CHANGELOG.md`** (version history)
-- Release notes
-- Version changes
-
-**`LICENSE`** (MIT)
-- Open source license text
-
-### Examples
-
-**`examples/basic_ordering.py`**
-- Complete working example of programmatic usage
-- Shows how to use the API without CLI
-
-**`examples/sample_config.yml`**
-- Complete YAML configuration example
-- Shows all profile types
-- Includes comments explaining options
-
-### Tests
-
-**`tests/test_ordering.py`**
-- Basic unit tests for ordering functions
-- Needs expansion (currently minimal)
-
-**`tests/test_stats.py`**
-- Unit tests for stats module
-- Tests for each metric category
-- Comparison and formatter tests
-
-**`tests/fixtures/`**
-- Directory for test data files
-- Currently empty, needs test ontologies
+**`uml/uml_layout.py`**
+- `LayoutConfig` class - load layouts
+- `LayoutOptions` dataclass - layout settings
+- Direction, spacing, grouping options
 
 ## Key Algorithms
 
@@ -500,11 +557,11 @@ Located in `core/ordering.py`, function `sort_with_roots()`:
 - Respects hierarchy within each branch
 - Multiple roots processed in declaration order
 
-### Custom Serialization
-Located in `core/serializer.py`, function `serialize_turtle()`:
+### Custom Serialisation
+Located in `core/serialiser.py`, function `serialise_turtle()`:
 - **Critical feature**: Preserves exact subject order
 - rdflib always sorts alphabetically (can't be configured)
-- This custom serializer writes subjects in semantic order
+- This custom serialiser writes subjects in semantic order
 - Makes RDF files readable and maintainable
 
 ### Semantic Diff
@@ -543,6 +600,7 @@ Located in `stats/metrics/hierarchy.py`:
 - `pytest>=8.0.0` - Testing framework
 - `pytest-cov>=4.1.0` - Coverage reporting
 - `types-PyYAML>=6.0.0` - Type stubs for PyYAML
+- `pre-commit>=3.6.0` - Pre-commit hooks
 
 ## Python Version
 
@@ -565,6 +623,8 @@ poetry run pytest
 poetry run pytest tests/test_diff.py -v
 poetry run pytest tests/test_ordering.py -v
 poetry run pytest tests/test_cq.py -v
+poetry run pytest tests/test_stats.py -v
+poetry run pytest tests/test_lint.py -v
 
 # Format code
 black src/ tests/
@@ -584,27 +644,27 @@ mypy src/
 - Root-based ordering
 - Header sections (owl:Ontology metadata)
 - Prefix ordering
-- Custom serialization
+- Custom serialisation
 - Multiple profiles
 - UML diagram generation
 - Configurable styling and layouts
+- ODM-compliant rendering
 - Semantic diff (text, markdown, JSON output)
 - Change filtering by type and entity
-- Ontology linting with configurable rules
+- Ontology linting with 11 configurable rules
 - Documentation generation (HTML, Markdown, JSON)
 - SHACL shape generation
 - PlantUML to RDF conversion
 - Competency question testing
+- Ontology statistics with comparison
 - CLI and programmatic API
-- UML diagram generation
-- Semantic diff
-- Ontology statistics
 
 ### Future Features
-- JSON-LD support
-- N-Triples support
-- Validation framework
-- Graph visualization
+- JSON-LD input support
+- N-Triples input support
+- Web UI for configuration
+- Additional lint rules
+- Graph visualisation
 
 ## Getting Help
 
@@ -612,6 +672,7 @@ mypy src/
 2. Read the README.md for user guide
 3. See examples/ for working code
 4. Review ARCHITECTURE.md for system design
+5. Browse user guides in docs/user_guides/
 
 ## License
 
