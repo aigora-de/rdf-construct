@@ -2,17 +2,19 @@
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.poetry]
+[project]
 name = "rdf-construct"
 version = "0.2.0"
 description = "Semantic RDF manipulation toolkit - order, serialize, and diff RDF ontologies"
-authors = ["Dave Dyke <23141680+aigora-de@users.noreply.github.com>"]
-maintainers = ["Dave Dyke <23141680+aigora-de@users.noreply.github.com>"]
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/aigora-de/rdf-construct"
-repository = "https://github.com/aigora-de/rdf-construct.git"
-documentation = "https://github.com/aigora-de/rdf-construct#readme"
+requires-python = ">=3.10"
+authors = [
+    {name = "Dave Dyke", email = "23141680+aigora-de@users.noreply.github.com"}
+]
+maintainers = [
+    {name = "Dave Dyke", email = "23141680+aigora-de@users.noreply.github.com"}
+]
 keywords = [
     "rdf",
     "ontology",
@@ -31,7 +33,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Information Technology",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -43,6 +44,19 @@ classifiers = [
     "Topic :: Text Processing :: Markup",
     "Typing :: Typed",
 ]
+dynamic = ["dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/aigora-de/rdf-construct"
+Repository = "https://github.com/aigora-de/rdf-construct.git"
+Documentation = "https://github.com/aigora-de/rdf-construct#readme"
+"Bug Tracker" = "https://github.com/aigora-de/rdf-construct/issues"
+Changelog = "https://github.com/aigora-de/rdf-construct/blob/main/CHANGELOG.md"
+
+[project.scripts]
+rdf-construct = "rdf_construct.cli:cli"
+
+[tool.poetry]
 packages = [{include = "rdf_construct", from = "src"}]
 
 [tool.poetry.dependencies]
@@ -61,13 +75,6 @@ pytest = "^8.0.0"
 pytest-cov = "^4.1.0"
 types-pyyaml = "^6.0.0"
 pre-commit = "^3.6.0"
-
-[tool.poetry.scripts]
-rdf-construct = "rdf_construct.cli:cli"
-
-[tool.poetry.urls]
-"Bug Tracker" = "https://github.com/aigora-de/rdf-construct/issues"
-"Changelog" = "https://github.com/aigora-de/rdf-construct/blob/main/CHANGELOG.md"
 
 [tool.black]
 line-length = 100
