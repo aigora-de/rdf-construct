@@ -1,0 +1,42 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <http://example.org/> .
+
+# Ontology metadata
+ex:Ontology a owl:Ontology ;
+    rdfs:label "Extension Ontology"@en ;
+    rdfs:comment "An extension ontology adding building subtypes."@en .
+
+# Subclasses of Building
+ex:CommercialBuilding a owl:Class ;
+    rdfs:label "Commercial Building"@en ;
+    rdfs:comment "A building used for commercial purposes."@en ;
+    rdfs:subClassOf ex:Building .
+
+ex:ResidentialBuilding a owl:Class ;
+    rdfs:label "Residential Building"@en ;
+    rdfs:comment "A building used for residential purposes."@en ;
+    rdfs:subClassOf ex:Building .
+
+ex:IndustrialBuilding a owl:Class ;
+    rdfs:label "Industrial Building"@en ;
+    rdfs:comment "A building used for industrial purposes."@en ;
+    rdfs:subClassOf ex:Building .
+
+# Additional properties
+ex:hasOccupancy a owl:DatatypeProperty ;
+    rdfs:label "has occupancy"@en ;
+    rdfs:domain ex:Building ;
+    rdfs:range xsd:integer .
+
+ex:hasOwner a owl:ObjectProperty ;
+    rdfs:label "has owner"@en ;
+    rdfs:domain ex:Building ;
+    rdfs:range ex:Organisation .
+
+# Supporting class
+ex:Organisation a owl:Class ;
+    rdfs:label "Organisation"@en ;
+    rdfs:comment "An organised group of people."@en .

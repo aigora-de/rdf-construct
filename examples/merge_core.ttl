@@ -1,0 +1,36 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <http://example.org/> .
+
+# Ontology metadata
+ex:Ontology a owl:Ontology ;
+    rdfs:label "Core Ontology"@en ;
+    rdfs:comment "A core ontology for testing merge functionality."@en .
+
+# Classes
+ex:Building a owl:Class ;
+    rdfs:label "Building"@en ;
+    rdfs:comment "A constructed structure."@en .
+
+ex:Place a owl:Class ;
+    rdfs:label "Place"@en ;
+    rdfs:comment "A geographic location."@en .
+
+# Object Properties
+ex:hasLocation a owl:ObjectProperty ;
+    rdfs:label "has location"@en ;
+    rdfs:domain ex:Building ;
+    rdfs:range ex:Place .
+
+# Datatype Properties
+ex:hasName a owl:DatatypeProperty ;
+    rdfs:label "has name"@en ;
+    rdfs:domain ex:Building ;
+    rdfs:range xsd:string .
+
+ex:floorCount a owl:DatatypeProperty ;
+    rdfs:label "floor count"@en ;
+    rdfs:domain ex:Building ;
+    rdfs:range xsd:integer .

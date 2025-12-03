@@ -1,0 +1,29 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <http://example.org/> .
+
+# This ontology has definitions that conflict with core.ttl
+# Used for testing conflict detection and resolution
+
+# Conflicting label for Building
+ex:Building a owl:Class ;
+    rdfs:label "Structure"@en ;
+    rdfs:comment "A physical structure."@en .
+
+# Conflicting range for hasLocation (uses Location instead of Place)
+ex:hasLocation a owl:ObjectProperty ;
+    rdfs:label "has location"@en ;
+    rdfs:range ex:Location .
+
+# New class that conflicts with Place semantically
+ex:Location a owl:Class ;
+    rdfs:label "Location"@en ;
+    rdfs:comment "A specific location or address."@en .
+
+# Additional property with different domain
+ex:hasName a owl:DatatypeProperty ;
+    rdfs:label "name"@en ;
+    rdfs:domain owl:Thing ;
+    rdfs:range xsd:string .
