@@ -10,11 +10,11 @@
 # Higher priority sources win in conflict resolution with "priority" strategy
 sources:
   # Core ontology - baseline definitions
-  - path: core.ttl
+  - path: examples/merge_core.ttl
     priority: 1
 
   # Extension ontology - additional concepts
-  - path: extension.ttl
+  - path: examples/merge_extension.ttl
     priority: 2
 
   # Local overrides - highest priority
@@ -69,11 +69,10 @@ imports: preserve
 # migrate_data:
 #   # Data files to migrate
 #   sources:
-#     - instances.ttl
-#     - relationships.ttl
+#     - examples/merge_instances.ttl
 #
 #   # Output path for migrated data
-#   output: migrated.ttl
+#   output: migrated_instances.ttl
 #
 #   # Migration rules for complex transformations
 #   # rules_file: migration-rules.yml
