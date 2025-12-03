@@ -24,7 +24,7 @@
 
 ## Why?
 
-RDFlib's built-in serializers always sort alphabetically, which:
+RDFlib's built-in serialisers always sort alphabetically, which:
 - Obscures semantic structure
 - Makes diffs noisy (unrelated changes mixed together)
 - Loses author's intentional organisation
