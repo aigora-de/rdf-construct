@@ -446,6 +446,123 @@ rdf-construct lint --init
 
 ---
 
+### merge - Combine RDF Ontologies
+
+Merge multiple RDF ontology files with intelligent conflict detection and resolution.
+
+```bash
+rdf-construct merge [SOURCES...] -o OUTPUT [OPTIONS]
+```
+
+**Arguments**:
+- `SOURCES`: One or more RDF files to merge (.ttl, .rdf, .owl)
+
+**Options**:
+- `-o, --output PATH`: Output file for merged ontology (required)
+- `-c, --config PATH`: YAML configuration file
+- `-p, --priority INT`: Priority for each source (can specify multiple, higher wins conflicts)
+- `--strategy STRATEGY`: Conflict resolution: `priority`, `first`, `last`, `mark_all` (default: priority)
+- `-r, --report PATH`: Write conflict report to file
+- `--report-format FORMAT`: Report format: `text`, `markdown`, `md` (default: markdown)
+- `--imports STRATEGY`: owl:imports handling: `preserve`, `remove`, `merge` (default: preserve)
+- `--migrate-data PATH`: Data file(s) to migrate (can specify multiple)
+- `--migration-rules PATH`: YAML file with migration rules
+- `--data-output PATH`: Output path for migrated data
+- `--dry-run`: Show what would happen without writing files
+- `--no-colour`: Disable coloured output
+- `--init`: Generate a default merge configuration file
+
+**Conflict Resolution Strategies**:
+
+| Strategy | Description |
+|----------|-------------|
+| `priority` | Higher priority source wins (default) |
+| `first` | First source encountered wins |
+| `last` | Last source encountered wins |
+| `mark_all` | Mark all conflicts for manual review |
+
+**Examples**:
+
+```bash
+# Basic merge of two ontologies
+rdf-construct merge core.ttl extension.ttl -o merged.ttl
+
+# With priorities (extension wins conflicts)
+rdf-construct merge core.ttl extension.ttl -o merged.ttl -p 1 -p 2
+
+# Mark all conflicts for manual review
+rdf-construct merge core.ttl extension.ttl -o merged.ttl --strategy mark_all
+
+# Generate conflict report
+rdf-construct merge core.ttl extension.ttl -o merged.ttl --report conflicts.md
+
+# Dry run (preview without writing)
+rdf-construct merge core.ttl extension.ttl -o merged.ttl --dry-run
+
+# With data migration
+rdf-construct merge core.ttl extension.ttl -o merged.ttl \
+    --migrate-data instances.ttl --data-output migrated.ttl
+
+# Using configuration file
+rdf-construct merge --config merge.yml -o merged.ttl
+
+# Generate default configuration
+rdf-construct merge --init
+```
+
+**Conflict Markers**:
+
+Unresolved conflicts are marked in the output file:
+
+```turtle
+# === CONFLICT: ex:Building rdfs:label ===
+# Source: core.ttl (priority 1): "Building"@en
+# Source: ext.ttl (priority 2): "Structure"@en
+# Resolution: UNRESOLVED - values differ, manual review required
+ex:Building a owl:Class ;
+    rdfs:label "Building"@en ;
+    rdfs:label "Structure"@en .
+# === END CONFLICT ===
+```
+
+Find conflicts with: `grep -n "=== CONFLICT ===" merged.ttl`
+
+**Configuration File Format**:
+
+```yaml
+sources:
+  - path: core.ttl
+    priority: 1
+  - path: extension.ttl
+    priority: 2
+    namespace_remap:
+      "http://old.org/": "http://new.org/"
+
+output:
+  path: merged.ttl
+  format: turtle
+
+conflicts:
+  strategy: priority
+  report: conflicts.md
+
+imports: preserve
+
+migrate_data:
+  sources:
+    - instances.ttl
+  output: migrated.ttl
+  rules:
+    - type: rename
+      from: "http://old.org/Class"
+      to: "http://new.org/Class"
+```
+
+**Exit Codes**:
+- `0`: Merge successful, no unresolved conflicts
+- `1`: Merge successful, but unresolved conflicts marked in output
+- `2`: Error (file not found, parse error, etc.)
+
 ### cq-test - Run Competency Question Tests
 
 Validate ontologies against SPARQL-based competency questions.

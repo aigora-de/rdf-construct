@@ -1,0 +1,107 @@
+# rdf-construct merge configuration example
+#
+# This file demonstrates how to configure ontology merging with
+# conflict detection, namespace management, and data migration.
+#
+# Usage:
+#   rdf-construct merge --config merge_config.yml -o merged.ttl
+
+# Source files to merge (in order of priority, lowest to highest)
+# Higher priority sources win in conflict resolution with "priority" strategy
+sources:
+  # Core ontology - baseline definitions
+  - path: core.ttl
+    priority: 1
+
+  # Extension ontology - additional concepts
+  - path: extension.ttl
+    priority: 2
+
+  # Local overrides - highest priority
+  # - path: local.ttl
+  #   priority: 3
+  #   namespace_remap:
+  #     "http://old.example.org/": "http://example.org/"
+
+# Output configuration
+output:
+  path: merged.ttl
+  format: turtle
+  # preserve_prefixes: true  # Keep prefix bindings from sources
+
+# Namespace handling
+namespaces:
+  # base: "http://example.org/merged#"
+
+  # Remap namespaces during merge (all sources)
+  # remappings:
+  #   "http://legacy.org/": "http://example.org/"
+
+  # Ensure consistent prefix bindings in output
+  preferred_prefixes:
+    rdfs: "http://www.w3.org/2000/01/rdf-schema#"
+    owl: "http://www.w3.org/2002/07/owl#"
+    # ex: "http://example.org/"
+
+# Conflict resolution
+conflicts:
+  # Strategy options:
+  #   priority  - Higher priority source wins (default)
+  #   first     - First source encountered wins
+  #   last      - Last source encountered wins
+  #   mark_all  - Mark all conflicts for manual review
+  strategy: priority
+
+  # Generate a detailed conflict report
+  # report: conflicts.md
+
+  # Predicates to ignore in conflict detection
+  # (useful for metadata that varies legitimately)
+  # ignore_predicates:
+  #   - "http://www.w3.org/2000/01/rdf-schema#isDefinedBy"
+  #   - "http://purl.org/dc/terms/modified"
+
+# How to handle owl:imports statements
+# Options: preserve, remove, merge
+imports: preserve
+
+# Optional: Migrate instance data when ontology changes
+# migrate_data:
+#   # Data files to migrate
+#   sources:
+#     - instances.ttl
+#     - relationships.ttl
+#
+#   # Output path for migrated data
+#   output: migrated.ttl
+#
+#   # Migration rules for complex transformations
+#   # rules_file: migration-rules.yml
+#
+#   # Or inline rules:
+#   rules:
+#     # Simple URI rename
+#     - type: rename
+#       description: "Rename legacy class"
+#       from: "http://old.example.org/ont#LegacyClass"
+#       to: "http://example.org/ont#ModernClass"
+#
+#     # Property split transformation
+#     # - type: transform
+#     #   description: "Split fullName into givenName and familyName"
+#     #   match: "?s ex:fullName ?name"
+#     #   construct:
+#     #     - pattern: "?s ex:givenName ?given"
+#     #       bind: "STRBEFORE(?name, ' ') AS ?given"
+#     #     - pattern: "?s ex:familyName ?family"
+#     #       bind: "STRAFTER(?name, ' ') AS ?family"
+#     #   delete_matched: true
+#
+#     # Type migration
+#     # - type: transform
+#     #   description: "Migrate Company to Organisation"
+#     #   match: "?s a ex:Company"
+#     #   construct:
+#     #     - pattern: "?s a ex:Organisation"
+#     #     - pattern: "?s ex:organisationType ex:Commercial"
+#     #   delete_matched: true

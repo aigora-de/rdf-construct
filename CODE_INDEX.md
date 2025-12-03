@@ -116,6 +116,14 @@ src/rdf_construct/
 │       ├── json.py
 │       ├── markdown.py
 │       └── text.py
+├── merge/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── conflicts.py
+│   ├── formatters.py
+│   ├── merger.py
+│   ├── migrator.py
+│   └── rules.py
 └── uml/
     ├── __init__.py
     ├── context.py
@@ -135,6 +143,7 @@ examples/
 ├── ies_colour_examples.yml
 ├── ies_colour_palette.yml
 ├── ies_colour_palette_with_instances.yml
+├── merge_config.yml
 ├── ordering_starter.yml
 ├── organisation_ontology.ttl
 ├── puml_import.yml
@@ -157,6 +166,7 @@ tests/
 ├── test_explicit_mode.py
 ├── test_instance_styling.py
 ├── test_lint.py
+├── test_merge.py
 ├── test_odm_renderer.py
 ├── test_ordering.py
 ├── test_plantuml.py
@@ -395,6 +405,69 @@ Ontology quality checking with configurable rules.
 - `TextFormatter` - coloured terminal output
 - `JsonFormatter` - machine-readable JSON
 - `get_formatter()` - format dispatcher
+
+---
+
+### Merge Module (`merge/`)
+
+Combine multiple RDF ontologies with conflict detection, namespace management, and data migration.
+
+**`merge/__init__.py`**
+- Public API exports
+- `OntologyMerger`, `MergeConfig`, `MergeResult`
+- `merge_files()`, `migrate_data_files()`
+- Conflict and migration classes
+
+**`merge/config.py`**
+- `MergeConfig` dataclass - complete merge configuration
+- `SourceConfig` dataclass - source file with priority
+- `ConflictConfig` dataclass - conflict resolution settings
+- `DataMigrationConfig` dataclass - data migration settings
+- `MigrationRule` dataclass - transform rule specification
+- `ConflictStrategy` enum - priority, first, last, mark_all
+- `ImportsStrategy` enum - preserve, remove, merge
+- `load_merge_config()` - load from YAML
+- `create_default_config()` - generate starter config
+
+**`merge/conflicts.py`**
+- `Conflict` dataclass - conflict with values from sources
+- `ConflictValue` dataclass - single value in a conflict
+- `ConflictType` enum - VALUE_DIFFERENCE, TYPE_DIFFERENCE, etc.
+- `ConflictDetector` class - find conflicts across sources
+- `SourceGraph` dataclass - loaded graph with metadata
+- `generate_conflict_marker()` - create Turtle comment markers
+
+**`merge/merger.py`**
+- `OntologyMerger` class - core merge orchestration
+- `MergeResult` dataclass - merge outcome with stats
+- `merge_files()` - convenience function for CLI
+- Namespace remapping, owl:imports handling
+- Conflict resolution by strategy
+
+**`merge/migrator.py`**
+- `DataMigrator` class - migrate instance data
+- `MigrationResult` dataclass - migration outcome
+- `MigrationStats` dataclass - change statistics
+- `migrate_data_files()` - convenience function
+- Simple URI substitution
+- Build URI map from namespace remappings
+- Shared infrastructure for split/refactor commands
+
+**`merge/rules.py`**
+- `RuleEngine` class - execute transformation rules
+- `PatternParser` class - parse SPARQL-like patterns
+- `Match` dataclass - pattern match with bindings
+- CONSTRUCT-style triple generation
+- STRBEFORE, STRAFTER, arithmetic bind expressions
+- Support for property splits and type migrations
+
+**`merge/formatters.py`**
+- `TextFormatter` - coloured terminal output
+- `MarkdownFormatter` - conflict reports for review
+- `get_formatter()` - format dispatcher
+- Merge result and migration result formatting
+
+---
 
 ### `puml2rdf` Module
 

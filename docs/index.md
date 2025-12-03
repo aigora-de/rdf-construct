@@ -11,6 +11,7 @@
 **Check Quality?** → [Lint Guide](user_guides/LINT_GUIDE.md)  
 **Test Competency Questions?** → [CQ Testing Guide](user_guides/CQ_TEST_GUIDE.md)  
 **Ontology Metrics?** → [Stats Guide](user_guides/STATS_GUIDE.md)  
+**Merge Ontologies?** → [Merge Guide](user_guides/MERGE_GUIDE.md)
 **Need Command Syntax?** → [CLI Reference](user_guides/CLI_REFERENCE.md)  
 **Quick Cheat Sheet?** → [Quick Reference](user_guides/QUICK_REFERENCE.md)  
 **Contributing?** → [Contributing Guide](../CONTRIBUTING.md)  
@@ -83,6 +84,12 @@ For users of rdf-construct who want to generate diagrams and work with RDF ontol
   - Comparison mode
   - Output formats (text, JSON, markdown)
 
+- **[Merge Guide](user_guides/MERGE_GUIDE.md)** - Combining ontologies
+  - Conflict detection and resolution
+  - Namespace remapping
+  - Data migration
+  - Configuration options
+
 - **[CLI Reference](user_guides/CLI_REFERENCE.md)** - Command reference
   - All commands with options
   - Configuration file formats
@@ -135,6 +142,7 @@ A Python CLI toolkit for RDF operations:
 - **PlantUML Import**: Convert PlantUML diagrams to RDF ontologies
 - **SHACL Generation**: Generate validation shapes from OWL definitions
 - **Semantic Diff**: Compare ontologies and identify meaningful changes
+- **Ontology Merging**: Combine multiple ontologies with conflict detection and data migration
 - **Ontology Linting**: Check ontology quality with configurable rules
 - **Competency Question Testing**: Validate ontologies against SPARQL-based tests
 - **Ontology Statistics**: Comprehensive metrics with comparison mode
@@ -257,6 +265,19 @@ poetry run rdf-construct stats v1.ttl v2.ttl --compare
 
 # JSON output for CI pipelines
 poetry run rdf-construct stats ontology.ttl --format json
+```
+
+### Merge Ontologies
+
+```bash
+# Basic merge
+poetry run rdf-construct merge core.ttl extension.ttl -o merged.ttl
+
+# With priorities (higher wins conflicts)
+poetry run rdf-construct merge core.ttl extension.ttl -o merged.ttl -p 1 -p 2
+
+# Generate conflict report
+poetry run rdf-construct merge core.ttl extension.ttl -o merged.ttl --report conflicts.md
 ```
 
 ## Repository
