@@ -6,7 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-- Nothing yet.
+
+*No unreleased changes.*
 
 ## [0.2.0] - 2025-12-03
 
@@ -46,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `runner.py` - Test execution engine
   - `cli.py` - Click command integration
   - `formatters/` - Text, JSON, JUnit output formatters
-- New documentation: `docs/user_guides/CQ_TESTING_GUIDE.md`
+- New documentation: `docs/user_guides/CQ_TEST_GUIDE.md`
 - New example: `examples/cq_tests_animal.yml`
 - New tests: `tests/test_cq.py`
 
@@ -72,12 +73,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `config.py` - YAML configuration handling
   - `merger.py` - Ontology merge logic
   - `validators.py` - Model and RDF validation
-- New documentation: `docs/user_guides/PUML_IMPORT_GUIDE.md`
-- New example: `examples/puml_import_config.yml`
+- New documentation: `docs/user_guides/PUML2RDF_GUIDE.md`
+- New example: `examples/puml2rdf_config.yml`
 - New tests: `tests/test_puml2rdf.py`
 
 - **New SHACL Shape Generator** (`shacl-gen` command)
-
   - Generate SHACL NodeShapes from OWL ontology definitions
   - Convert domain/range to sh:property with sh:class/sh:datatype
   - Convert cardinality restrictions to sh:minCount/sh:maxCount
@@ -91,10 +91,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - YAML configuration file support
   - Include rdfs:label as sh:name and rdfs:comment as sh:description
   - Output formats: Turtle, JSON-LD
-- Documentation
-  - Added SHACL Guide (docs/user_guides/SHACL_GUIDE.md)
-  - Updated CLI Reference with shacl-gen command
-  - Updated documentation index with SHACL module
+- New module: `src/rdf_construct/shacl/`
+- New documentation: `docs/user_guides/SHACL_GUIDE.md`
+- New tests: `tests/test_shacl_gen.py`
 
 - **New `docs` command** for generating documentation from RDF ontologies
   - Three output formats: `html` (navigable website), `markdown` (GitHub/GitLab compatible), `json` (structured data)
@@ -112,8 +111,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Responsive CSS styling with property-type colour coding
   - YAML frontmatter for Markdown output (Jekyll/Hugo compatible)
 - New dependency: `jinja2 >= 3.1.0`
+- New module: `src/rdf_construct/docs/`
 - New documentation: `docs/user_guides/DOCS_GUIDE.md`
-- Example configuration: `examples/docs-config.yml`
+- Example configuration: `examples/docs_config.yml`
+- New tests: `tests/test_docs.py`
 
 - **New `diff` command** for semantic ontology comparison
   - Compares two RDF graphs and reports meaningful changes
@@ -126,8 +127,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Entity classification: classes, object/datatype/annotation properties, individuals
   - Superclass detection for added classes
   - Blank node warning (detected but not deeply analysed)
+- New module: `src/rdf_construct/diff/`
 - New documentation: `docs/user_guides/DIFF_GUIDE.md`
-- Test fixtures: `tests/fixtures/diff/v1.0.ttl`, `v1.1.ttl`
+- Test fixtures: `tests/fixtures/diff/v1_0.ttl`, `v1_1.ttl`
+- New tests: `tests/test_diff.py`
 
 - **New `lint` command** for ontology quality checking with 11 rules across three categories:
   - Structural (error): `orphan-class`, `dangling-reference`, `circular-subclass`, `property-no-type`, `empty-ontology`
@@ -143,15 +146,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Line number detection in lint output (best-effort source file search)
 - Namespace-aware entity formatting in output (e.g., `ies:Building` not just `Building`)
 - Inheritance-aware checking for `property-no-domain` and `property-no-range` (respects `rdfs:subPropertyOf`)
+- New module: `src/rdf_construct/lint/`
 - New documentation: `docs/user_guides/LINT_GUIDE.md`
+- New tests: `tests/test_lint.py`
+
+- Starter templates for new projects:
+  - `uml_contexts_starter.yml` - Basic UML context configuration
+  - `uml_styles_starter.yml` - Basic styling configuration
+  - `ordering_starter.yml` - Basic ordering profile
+- New documentation: `docs/user_guides/PROJECT_SETUP.md`
+- New documentation: `docs/user_guides/QUICK_REFERENCE.md`
 
 ### Changed
 
-- Updated `docs/index.md` to include Stats Guide in navigation
-- Updated `CODE_INDEX.md` with docs, diff, lint, cq-test, and stats modules
-- Updated `README.md` with docs, diff, lint, cq-test, and stats links
-- Updated `docs/index.md` to reference docs, diff, lint, cq-test, and stats functionality
-- Updated `docs/user_guides/CLI_REFERENCE.md` with full docs, diff, lint, cq-test, and stats command documentation
+- Updated `docs/index.md` to include all new command guides
+- Updated `CODE_INDEX.md` with all new modules
+- Updated `README.md` with all new features and commands
+- Updated `docs/user_guides/CLI_REFERENCE.md` with full command documentation
 
 ## [0.1.0] - 2025-11-30
 
@@ -225,10 +236,10 @@ Initial public release.
 
 ## Version History Summary
 
-| Version | Date           | Highlights |
-|---------|----------------|------------|
-| [0.2.0] | 2025-11-30     | Add starter templates, PROJECT_SETUP.md and QUICKE_REFERENCE.md |
-| [0.1.0] | 2025-11-30     | Initial release: ordering, UML generation, styling |
+| Version | Date       | Highlights                                                      |
+|---------|------------|-----------------------------------------------------------------|
+| [0.2.0] | 2025-12-03 | Stats, CQ testing, SHACL gen, docs gen, diff, lint, puml2rdf    |
+| [0.1.0] | 2025-11-30 | Initial release: ordering, UML generation, styling              |
 
 [Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.2.0
