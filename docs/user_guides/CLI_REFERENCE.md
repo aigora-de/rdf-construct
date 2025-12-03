@@ -496,7 +496,7 @@ rdf-construct cq-test ontology.ttl tests.yml --verbose --fail-fast
 List available UML contexts in a configuration file.
 
 ```bash
-rdf-construct contexts CONFIG
+poetry run rdf-construct contexts CONFIG
 ```
 
 **Arguments**:
@@ -505,7 +505,8 @@ rdf-construct contexts CONFIG
 **Examples**:
 
 ```bash
-rdf-construct contexts examples/uml_contexts.yml
+# List contexts
+poetry run rdf-construct contexts examples/uml_contexts.yml
 ```
 
 **Output**:
@@ -532,7 +533,7 @@ Available UML contexts:
 Reorder RDF/Turtle files according to semantic profiles.
 
 ```bash
-rdf-construct order SOURCE CONFIG [OPTIONS]
+poetry run rdf-construct order SOURCE CONFIG [OPTIONS]
 ```
 
 **Arguments**:
@@ -547,13 +548,16 @@ rdf-construct order SOURCE CONFIG [OPTIONS]
 
 ```bash
 # Generate all profiles
-rdf-construct order ontology.ttl order.yml
+poetry run rdf-construct order ontology.ttl order.yml
 
 # Specific profiles
-rdf-construct order ontology.ttl order.yml -p alpha -p logical_topo
+poetry run rdf-construct order ontology.ttl order.yml -p alpha -p logical_topo
+
+# Multiple profiles
+poetry run rdf-construct order ontology.ttl order.yml -p profile1 -p profile2
 
 # Custom output directory
-rdf-construct order ontology.ttl order.yml -o output/
+poetry run rdf-construct order ontology.ttl order.yml -o output/
 ```
 
 **Output**:
@@ -568,7 +572,7 @@ rdf-construct order ontology.ttl order.yml -o output/
 List available ordering profiles in a configuration file.
 
 ```bash
-rdf-construct profiles CONFIG
+poetry run rdf-construct profiles CONFIG
 ```
 
 **Arguments**:
@@ -577,7 +581,8 @@ rdf-construct profiles CONFIG
 **Examples**:
 
 ```bash
-rdf-construct profiles order.yml
+# List profiles
+poetry run rdf-construct profiles order.yml
 ```
 
 **Output**:
@@ -594,6 +599,21 @@ Available profiles:
 ```
 
 ---
+
+Comparing: v1.ttl → v2.ttl
+==========================
+
+                        v1        v2    Change
+Classes                 10        12    +2 (+20.0%) ✓
+Max Depth                3         4    +1
+Documentation Coverage  60%       67%   +7pp ✓
+
+Summary: Ontology grew with improved documentation coverage.
+```
+
+**Exit Codes**:
+- `0`: Success
+- `1`: Error occurred
 
 ## Configuration Files
 
@@ -779,24 +799,44 @@ schemes:
   scheme_name:
     description: "Visual theme description"
     
+    # Class styling
     classes:
       by_namespace:
         prefix:
           border: "#0066CC"
           fill: "#E8F4F8"
+          line_style: bold
+      
+      by_type:
+        type_key:
+          border: "#CC0000"
+          fill: "#FFE6E6"
+      
       default:
         border: "#000000"
         fill: "#FFFFFF"
     
+    # Instance styling
     instances:
       border: "#000000"
       fill: "#000000"
       text: "#FFFFFF"
+      inherit_class_border: true
     
+    # Arrow styling
     arrows:
       subclass:
         color: "#0066CC"
         style: bold
+      rdf_type:
+        color: "#D32F2F"
+        style: bold
+    
+    # Stereotypes
+    show_stereotypes: true
+    stereotype_map:
+      owl:Class: "«class»"
+      prefix:MetaClass: "«meta»"
 ```
 
 ### Layout Configuration
@@ -806,11 +846,14 @@ schemes:
 ```yaml
 layouts:
   layout_name:
-    description: "Layout arrangement"
-    direction: top_to_bottom
-    arrow_direction: up
+    description: "Layout arrangement description"
+    direction: top_to_bottom  # or left_to_right, etc.
+    arrow_direction: up  # or down, left, right
     hide_empty_members: false
     group_by_namespace: false
+    spacing:
+      classMarginTop: 10
+      classMarginBottom: 10
 ```
 
 ### Ordering Profile Configuration
@@ -818,26 +861,32 @@ layouts:
 **File**: `order.yml`
 
 ```yaml
+# Optional: control prefix ordering
 prefix_order:
   - rdf
   - rdfs
   - owl
 
+# Define subject selectors
 selectors:
   classes: "rdf:type owl:Class"
   obj_props: "rdf:type owl:ObjectProperty"
+  data_props: "rdf:type owl:DatatypeProperty"
 
+# Define ordering profiles
 profiles:
   profile_name:
-    description: "Profile description"
+    description: "Human-readable description"
     sections:
       - header: {}
       - classes:
           select: classes
+          sort: alpha  # or topological
+          roots: [prefix:RootClass, ...]
+      - object_properties:
+          select: obj_props
           sort: topological
 ```
-
----
 
 ## Exit Codes
 
@@ -847,9 +896,36 @@ profiles:
 | `1` | General error (or differences/warnings/failures found) |
 | `2` | Command line usage error (or errors found for lint) |
 
----
+## Files and Directories
+
+**Input Files**:
+- `.ttl` - RDF/Turtle ontology files
+- `.yml` - YAML configuration files
+
+**Output Files**:
+- `.puml` - PlantUML diagram files (from `uml` command)
+- `.ttl` - Ordered RDF/Turtle files (from `order` command)
+- `.json` - Statistics output (from `stats --format json`)
+- `.md` - Markdown output (from `stats --format markdown`)
+
+**Default Output Directories**:
+- `diagrams/` - UML diagram output
+- `src/ontology/` - Ordered RDF output
 
 ## Common Workflows
+
+### Generate Documentation Diagrams
+
+```bash
+# Create multiple views of an ontology
+poetry run rdf-construct uml ontology.ttl config.yml \
+  -c overview \
+  -c detailed \
+  -c examples \
+  -o docs/diagrams/ \
+  --style-config styles.yml --style default \
+  --layout-config layouts.yml --layout hierarchy
+```
 
 ### Diagram-First Ontology Design
 
@@ -860,21 +936,7 @@ rdf-construct puml2rdf design.puml -o ontology.ttl -n http://example.org/ont#
 # Add manual annotations, then update from PlantUML
 rdf-construct puml2rdf design.puml --merge ontology.ttl -o ontology.ttl
 
-# Validate changes
-rdf-construct lint ontology.ttl
-```
-
-### Generate Complete Documentation
-
-```bash
-# HTML docs, UML diagrams, and SHACL shapes
-rdf-construct docs ontology.ttl -o docs/api/
-rdf-construct uml ontology.ttl -C contexts.yml -o docs/diagrams/
-rdf-construct shacl-gen ontology.ttl -o docs/shapes.ttl
-```
-
-### CI Quality Pipeline
-
+# Validate ontology quality
 ```bash
 # Lint, generate shapes, validate, test competency questions
 rdf-construct lint ontology.ttl --format sarif -o lint.sarif
@@ -886,14 +948,38 @@ rdf-construct cq-test ontology.ttl cq-tests.yml --format junit -o cq-results.xml
 ### Compare Ontology Versions
 
 ```bash
-# Semantic diff with changelog
-rdf-construct diff v1.0.ttl v1.1.ttl --format markdown -o CHANGELOG.md
+# Generate ordered versions
+poetry run rdf-construct order v1.ttl order.yml -p canonical -o output/v1/
+poetry run rdf-construct order v2.ttl order.yml -p canonical -o output/v2/
+
+### Generate Complete Documentation
+
+```bash
+# HTML docs, UML diagrams, and SHACL shapes
+rdf-construct docs ontology.ttl -o docs/api/
+rdf-construct uml ontology.ttl -C contexts.yml -o docs/diagrams/
+rdf-construct shacl-gen ontology.ttl -o docs/shapes.ttl
+```
+
+# Diff them
+diff output/v1/v1-canonical.ttl output/v2/v2-canonical.ttl
+```
+
+### Track Ontology Metrics
+
+```bash
+# Generate stats for CI pipeline
+poetry run rdf-construct stats ontology.ttl --format json -o metrics.json
+
+# Compare versions before release
+poetry run rdf-construct stats v1.ttl v2.ttl --compare --format markdown >> CHANGELOG.md
 ```
 
 ### Generate Presentation Diagrams
 
 ```bash
-rdf-construct uml ontology.ttl -C config.yml \
+# High contrast, large spacing
+poetry run rdf-construct uml ontology.ttl config.yml \
   --style-config styles.yml --style high_contrast \
   --layout-config layouts.yml --layout presentation
 ```
@@ -911,42 +997,96 @@ rdf-construct cq-test ontology.ttl cq-tests.yml --verbose
 rdf-construct cq-test ontology.ttl cq-tests.yml --format junit -o results.xml
 ```
 
----
+## Tips
+
+### Check Configuration
+
+Before generating, list available contexts/profiles:
+
+```bash
+poetry run rdf-construct contexts config.yml
+poetry run rdf-construct profiles order.yml
+```
+
+### Start Simple
+
+Generate without styling first:
+
+```bash
+poetry run rdf-construct uml ontology.ttl config.yml -c simple_context
+```
+
+Then add styling once you're happy with the structure.
+
+### Use Descriptive Names
+
+In YAML configs:
+- **Good**: `animal_taxonomy`, `management_structure`, `key_relationships`
+- **Bad**: `context1`, `test`, `temp`
+
+### Organize Output
+
+Use subdirectories for different versions or audiences:
+
+```bash
+poetry run rdf-construct uml ontology.ttl config.yml -o docs/diagrams/public/
+poetry run rdf-construct uml ontology.ttl config.yml -o docs/diagrams/internal/
+```
 
 ## Troubleshooting
 
 ### "Command not found"
 
+**Problem**: `rdf-construct: command not found`
+
+**Solution**:
 ```bash
 # With poetry
 poetry run rdf-construct --version
 
-# Or activate shell
+# Or activate poetry shell
 poetry shell
 rdf-construct --version
 ```
 
 ### "Context/Profile not found"
 
+**Problem**: `Error: Context 'xyz' not found`
+
+**Solution**: List available contexts/profiles:
 ```bash
-# List available options
-rdf-construct contexts config.yml
-rdf-construct profiles order.yml
+poetry run rdf-construct contexts config.yml
+poetry run rdf-construct profiles order.yml
+```
+
+### "File not found"
+
+**Problem**: `Error: Path 'file.ttl' does not exist`
+
+**Solution**: Check file path is correct:
+```bash
+ls -la file.ttl
+# Use absolute path if needed
+poetry run rdf-construct uml /full/path/to/file.ttl config.yml
 ```
 
 ### Empty Output
 
-1. Check CURIE format in config matches ontology prefixes
-2. Verify namespace prefixes
-3. Check selection criteria
+**Problem**: Generated file has no classes/properties.
 
-### CQ Test Failures
+**Solutions**:
+1. Check CURIE format in config
+2. Verify namespace prefixes match ontology
+3. Check class/property selection criteria
 
-1. Check SPARQL syntax with `--verbose`
-2. Verify prefixes match between test file and ontology
-3. Use `--fail-fast` to debug one test at a time
-
----
+**Debug**:
+```python
+from rdflib import Graph, RDF, OWL
+g = Graph().parse("ontology.ttl", format="turtle")
+print(f"Classes: {len(list(g.subjects(RDF.type, OWL.Class)))}")
+for pfx, ns in g.namespace_manager.namespaces():
+    if pfx: print(f"{pfx}: {ns}")
+```
 
 ## Getting Help
 
@@ -961,11 +1101,10 @@ rdf-construct lint --help
 rdf-construct cq-test --help
 ```
 
-**Online**:
-- Issues: https://github.com/aigora-de/rdf-construct/issues
-- Discussions: https://github.com/aigora-de/rdf-construct/discussions
-
----
+# Online resources
+# - Issues: https://github.com/aigora-de/rdf-construct/issues
+# - Discussions: https://github.com/aigora-de/rdf-construct/discussions
+```
 
 ## See Also
 
@@ -977,3 +1116,4 @@ rdf-construct cq-test --help
 - **[Diff Guide](DIFF_GUIDE.md)**: Ontology comparison
 - **[Lint Guide](LINT_GUIDE.md)**: Ontology quality checking
 - **[CQ Testing Guide](CQ_TEST_GUIDE.md)**: Competency question testing
+- **[Stats Guide](STATS_GUIDE.md)**: Ontology metrics and statistics

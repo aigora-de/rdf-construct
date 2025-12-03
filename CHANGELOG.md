@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Stats command** - New `rdf-construct stats` command for computing ontology metrics
+  - Basic counts: triples, classes, properties (object, datatype, annotation), individuals
+  - Hierarchy analysis: root/leaf classes, max/average depth, branching factor, orphan detection
+  - Property metrics: domain/range coverage, inverse pairs, functional/symmetric properties
+  - Documentation coverage: label and comment coverage for classes and properties
+  - Complexity metrics: multiple inheritance, OWL restrictions, equivalent classes
+  - Connectivity analysis: most connected class, isolated classes
+  - Comparison mode (`--compare`) for tracking changes between ontology versions
+  - Three output formats: text (default), JSON, markdown
+  - Category filtering with `--include` and `--exclude` options
+- New documentation: `docs/user_guides/STATS_GUIDE.md`
+- Unit tests for all stats metrics and formatters
+
 - **New `cq-test` command** for competency question testing
   - Validate ontologies against SPARQL-based competency questions
   - YAML test file format with prefixes, inline data, and questions
@@ -131,9 +144,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Updated `README.md` with semantic diff feature and examples
-- Updated `docs/index.md` to reference docs, diff, lint, and cq-test functionality
-- Updated `docs/user_guides/CLI_REFERENCE.md` with full docs, diff, lint, and cq-test command documentation
+- Updated `docs/index.md` to include Stats Guide in navigation
+- Updated `CODE_INDEX.md` with docs, diff, lint, cq-test, and stats modules
+- Updated `README.md` with docs, diff, lint, cq-test, and stats links
+- Updated `docs/index.md` to reference docs, diff, lint, cq-test, and stats functionality
+- Updated `docs/user_guides/CLI_REFERENCE.md` with full docs, diff, lint, cq-test, and stats command documentation
 
 ## [0.1.0] - 2025-11-30
 
