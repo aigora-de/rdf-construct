@@ -74,6 +74,13 @@ For users of rdf-construct who want to generate diagrams and work with RDF ontol
   - Expectation types
   - CI integration with JUnit output
 
+- **[Stats Guide](user_guides/STATS_GUIDE.md)** - Ontology metrics and statistics
+  - Basic counts (classes, properties, triples)
+  - Hierarchy analysis (depth, branching, orphans)
+  - Documentation coverage
+  - Comparison mode
+  - Output formats (text, JSON, markdown)
+
 - **[CLI Reference](user_guides/CLI_REFERENCE.md)** - Command reference
   - All commands with options
   - Configuration file formats
@@ -152,6 +159,17 @@ poetry run rdf-construct uml ontology.ttl -C config.yml \
   --layout-config layouts.yml --layout hierarchy
 ```
 
+### Reorder RDF Files
+
+```bash
+# Semantic ordering
+poetry run rdf-construct order ontology.ttl order.yml
+
+# Specific profile
+poetry run rdf-construct order ontology.ttl order.yml -p logical_topo
+```
+
+
 ### Import from PlantUML
 
 ```bash
@@ -214,14 +232,17 @@ poetry run rdf-construct cq-test ontology.ttl tests.yml --format junit -o result
 poetry run rdf-construct cq-test ontology.ttl tests.yml --tag schema
 ```
 
-### Reorder RDF Files
+### Ontology Statistics
 
 ```bash
-# Semantic ordering
-poetry run rdf-construct order ontology.ttl order.yml
+# Display statistics
+poetry run rdf-construct stats ontology.ttl
 
-# Specific profile
-poetry run rdf-construct order ontology.ttl order.yml -p logical_topo
+# Compare two versions
+poetry run rdf-construct stats v1.ttl v2.ttl --compare
+
+# JSON output for CI pipelines
+poetry run rdf-construct stats ontology.ttl --format json
 ```
 
 ## Repository

@@ -55,6 +55,13 @@ from rdf_construct.puml2rdf import (
 
 from rdf_construct.cq import load_test_suite, CQTestRunner, format_results
 
+from rdf_construct.stats import (
+    collect_stats,
+    compare_stats,
+    format_stats,
+    format_comparison,
+)
+
 # Valid rendering modes
 RENDERING_MODES = ["default", "odm"]
 
@@ -1575,6 +1582,180 @@ def _infer_format(path: Path) -> str:
         ".json": "json-ld",
     }
     return format_map.get(suffix, "turtle")
+
+
+@cli.command()
+@click.argument("files", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Write output to file instead of stdout",
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["text", "json", "markdown", "md"], case_sensitive=False),
+    default="text",
+    help="Output format (default: text)",
+)
+@click.option(
+    "--compare",
+    is_flag=True,
+    help="Compare two ontology files (requires exactly 2 files)",
+)
+@click.option(
+    "--include",
+    type=str,
+    help="Include only these metric categories (comma-separated: basic,hierarchy,properties,documentation,complexity,connectivity)",
+)
+@click.option(
+    "--exclude",
+    type=str,
+    help="Exclude these metric categories (comma-separated)",
+)
+def stats(
+    files: tuple[Path, ...],
+    output: Path | None,
+    output_format: str,
+    compare: bool,
+    include: str | None,
+    exclude: str | None,
+):
+    """Compute and display ontology statistics.
+
+    Analyses one or more RDF ontology files and displays comprehensive metrics
+    about structure, complexity, and documentation coverage.
+
+    \b
+    Examples:
+        # Basic statistics
+        rdf-construct stats ontology.ttl
+
+        # JSON output for programmatic use
+        rdf-construct stats ontology.ttl --format json -o stats.json
+
+        # Markdown for documentation
+        rdf-construct stats ontology.ttl --format markdown >> README.md
+
+        # Compare two versions
+        rdf-construct stats v1.ttl v2.ttl --compare
+
+        # Only show specific categories
+        rdf-construct stats ontology.ttl --include basic,documentation
+
+        # Exclude some categories
+        rdf-construct stats ontology.ttl --exclude connectivity,complexity
+
+    \b
+    Metric Categories:
+        basic         - Counts (triples, classes, properties, individuals)
+        hierarchy     - Structure (depth, branching, orphans)
+        properties    - Coverage (domain, range, functional, symmetric)
+        documentation - Labels and comments
+        complexity    - Multiple inheritance, OWL axioms
+        connectivity  - Most connected class, isolated classes
+
+    \b
+    Exit codes:
+        0 - Success
+        1 - Error occurred
+    """
+    try:
+        # Validate file count for compare mode
+        if compare:
+            if len(files) != 2:
+                click.secho(
+                    "Error: --compare requires exactly 2 files",
+                    fg="red",
+                    err=True,
+                )
+                sys.exit(1)
+
+        # Parse include/exclude categories
+        include_set: set[str] | None = None
+        exclude_set: set[str] | None = None
+
+        if include:
+            include_set = {cat.strip().lower() for cat in include.split(",")}
+        if exclude:
+            exclude_set = {cat.strip().lower() for cat in exclude.split(",")}
+
+        # Load graphs
+        graphs: list[tuple[Graph, Path]] = []
+        for filepath in files:
+            click.echo(f"Loading {filepath}...", err=True)
+            graph = Graph()
+            graph.parse(str(filepath), format="turtle")
+            graphs.append((graph, filepath))
+            click.echo(f"  Loaded {len(graph)} triples", err=True)
+
+        if compare:
+            # Comparison mode
+            old_graph, old_path = graphs[0]
+            new_graph, new_path = graphs[1]
+
+            click.echo("Collecting statistics...", err=True)
+            old_stats = collect_stats(
+                old_graph,
+                source=str(old_path),
+                include=include_set,
+                exclude=exclude_set,
+            )
+            new_stats = collect_stats(
+                new_graph,
+                source=str(new_path),
+                include=include_set,
+                exclude=exclude_set,
+            )
+
+            click.echo("Comparing versions...", err=True)
+            comparison = compare_stats(old_stats, new_stats)
+
+            # Format output
+            formatted = format_comparison(
+                comparison,
+                format_name=output_format,
+                graph=new_graph,
+            )
+        else:
+            # Single file or multiple files (show stats for first)
+            graph, filepath = graphs[0]
+
+            click.echo("Collecting statistics...", err=True)
+            ontology_stats = collect_stats(
+                graph,
+                source=str(filepath),
+                include=include_set,
+                exclude=exclude_set,
+            )
+
+            # Format output
+            formatted = format_stats(
+                ontology_stats,
+                format_name=output_format,
+                graph=graph,
+            )
+
+        # Write output
+        if output:
+            output.write_text(formatted)
+            click.secho(f"✓ Wrote stats to {output}", fg="green", err=True)
+        else:
+            click.echo(formatted)
+
+        sys.exit(0)
+
+    except ValueError as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(1)
+    except FileNotFoundError as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
