@@ -84,6 +84,22 @@ from rdf_construct.merge import (
     create_default_split_config,
 )
 
+from rdf_construct.refactor import (
+    RenameConfig,
+    DeprecationSpec,
+    RefactorConfig,
+    OntologyRenamer,
+    OntologyDeprecator,
+    TextFormatter as RefactorTextFormatter,
+    load_refactor_config,
+    create_default_rename_config,
+    create_default_deprecation_config,
+    rename_file,
+    rename_files,
+    deprecate_file,
+)
+from rdf_construct.merge import DataMigrator
+
 # Valid rendering modes
 RENDERING_MODES = ["default", "odm"]
 
@@ -2344,6 +2360,560 @@ def _display_split_result(
             click.secho(f"✓ Wrote modules to {output_dir}/", fg="green")
         else:
             click.echo(f"✓ Wrote modules to {output_dir}/")
+
+
+# Refactor command group
+@cli.group()
+def refactor():
+    """Refactor ontologies: rename URIs and deprecate entities.
+
+    \b
+    Subcommands:
+      rename     Rename URIs (single entity or bulk namespace)
+      deprecate  Mark entities as deprecated
+
+    \b
+    Examples:
+      # Fix a typo
+      rdf-construct refactor rename ont.ttl --from ex:Buiding --to ex:Building -o fixed.ttl
+
+      # Bulk namespace change
+      rdf-construct refactor rename ont.ttl \\
+          --from-namespace http://old/ --to-namespace http://new/ -o migrated.ttl
+
+      # Deprecate entity with replacement
+      rdf-construct refactor deprecate ont.ttl \\
+          --entity ex:OldClass --replaced-by ex:NewClass \\
+          --message "Use NewClass instead." -o updated.ttl
+    """
+    pass
+
+
+@refactor.command("rename")
+@click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "-o", "--output",
+    type=click.Path(path_type=Path),
+    help="Output file (for single source) or directory (for multiple sources).",
+)
+@click.option(
+    "--from", "from_uri",
+    help="Single URI to rename (use with --to).",
+)
+@click.option(
+    "--to", "to_uri",
+    help="New URI for single rename (use with --from).",
+)
+@click.option(
+    "--from-namespace",
+    help="Old namespace prefix for bulk rename.",
+)
+@click.option(
+    "--to-namespace",
+    help="New namespace prefix for bulk rename.",
+)
+@click.option(
+    "-c", "--config",
+    "config_file",
+    type=click.Path(exists=True, path_type=Path),
+    help="YAML configuration file with rename mappings.",
+)
+@click.option(
+    "--migrate-data",
+    multiple=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="Data files to migrate (can be repeated).",
+)
+@click.option(
+    "--data-output",
+    type=click.Path(path_type=Path),
+    help="Output path for migrated data.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview changes without writing files.",
+)
+@click.option(
+    "--no-colour", "--no-color",
+    is_flag=True,
+    help="Disable coloured output.",
+)
+@click.option(
+    "--init",
+    "init_config",
+    is_flag=True,
+    help="Generate a template rename configuration file.",
+)
+def refactor_rename(
+    sources: tuple[Path, ...],
+    output: Path | None,
+    from_uri: str | None,
+    to_uri: str | None,
+    from_namespace: str | None,
+    to_namespace: str | None,
+    config_file: Path | None,
+    migrate_data: tuple[Path, ...],
+    data_output: Path | None,
+    dry_run: bool,
+    no_colour: bool,
+    init_config: bool,
+):
+    """Rename URIs in ontology files.
+
+    Supports single entity renames (fixing typos) and bulk namespace changes
+    (project migrations). The renamer updates subject, predicate, and object
+    positions but intentionally leaves literal values unchanged.
+
+    \b
+    SOURCES: One or more RDF files to process (.ttl, .rdf, .owl)
+
+    \b
+    Exit codes:
+      0 - Success
+      1 - Success with warnings (some URIs not found)
+      2 - Error (file not found, parse error, etc.)
+
+    \b
+    Examples:
+      # Fix a single typo
+      rdf-construct refactor rename ontology.ttl \\
+          --from "http://example.org/ont#Buiding" \\
+          --to "http://example.org/ont#Building" \\
+          -o fixed.ttl
+
+      # Bulk namespace change
+      rdf-construct refactor rename ontology.ttl \\
+          --from-namespace "http://old.example.org/" \\
+          --to-namespace "http://new.example.org/" \\
+          -o migrated.ttl
+
+      # With data migration
+      rdf-construct refactor rename ontology.ttl \\
+          --from "ex:OldClass" --to "ex:NewClass" \\
+          --migrate-data instances.ttl \\
+          --data-output updated-instances.ttl
+
+      # From configuration file
+      rdf-construct refactor rename --config renames.yml
+
+      # Preview changes (dry run)
+      rdf-construct refactor rename ontology.ttl \\
+          --from "ex:Old" --to "ex:New" --dry-run
+
+      # Process multiple files
+      rdf-construct refactor rename modules/*.ttl \\
+          --from-namespace "http://old/" --to-namespace "http://new/" \\
+          -o migrated/
+
+      # Generate template config
+      rdf-construct refactor rename --init
+    """
+    # Handle --init flag
+    if init_config:
+        config_path = Path("refactor_rename.yml")
+        if config_path.exists():
+            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
+            raise click.Abort()
+
+        config_content = create_default_rename_config()
+        config_path.write_text(config_content)
+        click.secho(f"Created {config_path}", fg="green")
+        click.echo("Edit this file to configure your renames, then run:")
+        click.echo(f"  rdf-construct refactor rename --config {config_path}")
+        return
+
+    # Validate input options
+    if not sources and not config_file:
+        click.secho("Error: No source files specified.", fg="red", err=True)
+        click.echo("Provide source files or use --config with a configuration file.", err=True)
+        raise click.Abort()
+
+    # Validate rename options
+    if from_uri and not to_uri:
+        click.secho("Error: --from requires --to", fg="red", err=True)
+        raise click.Abort()
+    if to_uri and not from_uri:
+        click.secho("Error: --to requires --from", fg="red", err=True)
+        raise click.Abort()
+    if from_namespace and not to_namespace:
+        click.secho("Error: --from-namespace requires --to-namespace", fg="red", err=True)
+        raise click.Abort()
+    if to_namespace and not from_namespace:
+        click.secho("Error: --to-namespace requires --from-namespace", fg="red", err=True)
+        raise click.Abort()
+
+    # Build configuration
+    if config_file:
+        try:
+            config = load_refactor_config(config_file)
+            click.echo(f"Using config: {config_file}")
+
+            # Override output if provided on CLI
+            if output:
+                if len(sources) > 1 or (config.source_files and len(config.source_files) > 1):
+                    config.output_dir = output
+                else:
+                    config.output = output
+
+            # Override sources if provided on CLI
+            if sources:
+                config.source_files = list(sources)
+        except (FileNotFoundError, ValueError) as e:
+            click.secho(f"Error loading config: {e}", fg="red", err=True)
+            raise click.Abort()
+    else:
+        # Build config from CLI arguments
+        rename_config = RenameConfig()
+
+        if from_namespace and to_namespace:
+            rename_config.namespaces[from_namespace] = to_namespace
+
+        if from_uri and to_uri:
+            # Expand CURIEs if needed
+            rename_config.entities[from_uri] = to_uri
+
+        config = RefactorConfig(
+            rename=rename_config,
+            source_files=list(sources),
+            output=output if len(sources) == 1 else None,
+            output_dir=output if len(sources) > 1 else None,
+            dry_run=dry_run,
+        )
+
+    # Validate we have something to rename
+    if config.rename is None or (not config.rename.namespaces and not config.rename.entities):
+        click.secho(
+            "Error: No renames specified. Use --from/--to, --from-namespace/--to-namespace, "
+            "or provide a config file.",
+            fg="red",
+            err=True,
+        )
+        raise click.Abort()
+
+    # Execute rename
+    formatter = RefactorTextFormatter(use_colour=not no_colour)
+    renamer = OntologyRenamer()
+
+    for source_path in config.source_files:
+        click.echo(f"\nProcessing: {source_path}")
+
+        # Load source graph
+        graph = Graph()
+        try:
+            graph.parse(source_path.as_posix())
+        except Exception as e:
+            click.secho(f"✗ Failed to parse: {e}", fg="red", err=True)
+            raise SystemExit(2)
+
+        # Build mappings for preview
+        mappings = config.rename.build_mappings(graph)
+
+        if dry_run:
+            # Show preview
+            click.echo()
+            click.echo(
+                formatter.format_rename_preview(
+                    mappings=mappings,
+                    source_file=source_path.name,
+                    source_triples=len(graph),
+                )
+            )
+        else:
+            # Perform rename
+            result = renamer.rename(graph, config.rename)
+
+            if not result.success:
+                click.secho(f"✗ Rename failed: {result.error}", fg="red", err=True)
+                raise SystemExit(2)
+
+            # Show result
+            click.echo(formatter.format_rename_result(result))
+
+            # Write output
+            if result.renamed_graph:
+                out_path = config.output or (config.output_dir / source_path.name if config.output_dir else None)
+                if out_path:
+                    out_path.parent.mkdir(parents=True, exist_ok=True)
+                    result.renamed_graph.serialize(destination=out_path.as_posix(), format="turtle")
+                    click.secho(f"✓ Wrote {out_path}", fg="green")
+
+    # Handle data migration
+    if migrate_data and not dry_run:
+        click.echo("\nMigrating data...")
+
+        # Build URI map from rename config
+        combined_graph = Graph()
+        for source_path in config.source_files:
+            combined_graph.parse(source_path.as_posix())
+
+        uri_map = {}
+        for mapping in config.rename.build_mappings(combined_graph):
+            uri_map[mapping.from_uri] = mapping.to_uri
+
+        if uri_map:
+            migrator = DataMigrator()
+            for data_path in migrate_data:
+                data_graph = Graph()
+                try:
+                    data_graph.parse(data_path.as_posix())
+                except Exception as e:
+                    click.secho(f"✗ Failed to parse data file {data_path}: {e}", fg="red", err=True)
+                    continue
+
+                migration_result = migrator.migrate(data_graph, uri_map=uri_map)
+
+                if migration_result.success and migration_result.migrated_graph:
+                    # Determine output path
+                    if data_output and len(migrate_data) == 1:
+                        out_path = data_output
+                    elif data_output:
+                        out_path = data_output / data_path.name
+                    else:
+                        out_path = data_path.parent / f"migrated_{data_path.name}"
+
+                    out_path.parent.mkdir(parents=True, exist_ok=True)
+                    migration_result.migrated_graph.serialize(
+                        destination=out_path.as_posix(), format="turtle"
+                    )
+                    click.echo(f"  Migrated {data_path.name}: {migration_result.stats.total_changes} changes")
+                    click.secho(f"  ✓ Wrote {out_path}", fg="green")
+
+    raise SystemExit(0)
+
+
+@refactor.command("deprecate")
+@click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "-o", "--output",
+    type=click.Path(path_type=Path),
+    help="Output file.",
+)
+@click.option(
+    "--entity",
+    help="URI of entity to deprecate.",
+)
+@click.option(
+    "--replaced-by",
+    help="URI of replacement entity (adds dcterms:isReplacedBy).",
+)
+@click.option(
+    "--message", "-m",
+    help="Deprecation message (added to rdfs:comment).",
+)
+@click.option(
+    "--version",
+    help="Version when deprecated (included in message).",
+)
+@click.option(
+    "-c", "--config",
+    "config_file",
+    type=click.Path(exists=True, path_type=Path),
+    help="YAML configuration file with deprecation specs.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview changes without writing files.",
+)
+@click.option(
+    "--no-colour", "--no-color",
+    is_flag=True,
+    help="Disable coloured output.",
+)
+@click.option(
+    "--init",
+    "init_config",
+    is_flag=True,
+    help="Generate a template deprecation configuration file.",
+)
+def refactor_deprecate(
+    sources: tuple[Path, ...],
+    output: Path | None,
+    entity: str | None,
+    replaced_by: str | None,
+    message: str | None,
+    version: str | None,
+    config_file: Path | None,
+    dry_run: bool,
+    no_colour: bool,
+    init_config: bool,
+):
+    """Mark ontology entities as deprecated.
+
+    Adds standard deprecation annotations:
+    - owl:deprecated true
+    - dcterms:isReplacedBy (if replacement specified)
+    - rdfs:comment with "DEPRECATED: ..." message
+
+    Deprecation marks entities but does NOT rename or migrate references.
+    Use 'refactor rename' to actually migrate references after deprecation.
+
+    \b
+    SOURCES: One or more RDF files to process (.ttl, .rdf, .owl)
+
+    \b
+    Exit codes:
+      0 - Success
+      1 - Success with warnings (some entities not found)
+      2 - Error (file not found, parse error, etc.)
+
+    \b
+    Examples:
+      # Deprecate with replacement
+      rdf-construct refactor deprecate ontology.ttl \\
+          --entity "http://example.org/ont#LegacyTerm" \\
+          --replaced-by "http://example.org/ont#NewTerm" \\
+          --message "Use NewTerm instead. Will be removed in v3.0." \\
+          -o updated.ttl
+
+      # Deprecate without replacement
+      rdf-construct refactor deprecate ontology.ttl \\
+          --entity "ex:ObsoleteThing" \\
+          --message "No longer needed. Will be removed in v3.0." \\
+          -o updated.ttl
+
+      # Bulk deprecation from config
+      rdf-construct refactor deprecate ontology.ttl \\
+          -c deprecations.yml \\
+          -o updated.ttl
+
+      # Preview changes (dry run)
+      rdf-construct refactor deprecate ontology.ttl \\
+          --entity "ex:Legacy" --replaced-by "ex:Modern" --dry-run
+
+      # Generate template config
+      rdf-construct refactor deprecate --init
+    """
+    # Handle --init flag
+    if init_config:
+        config_path = Path("refactor_deprecate.yml")
+        if config_path.exists():
+            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
+            raise click.Abort()
+
+        config_content = create_default_deprecation_config()
+        config_path.write_text(config_content)
+        click.secho(f"Created {config_path}", fg="green")
+        click.echo("Edit this file to configure your deprecations, then run:")
+        click.echo(f"  rdf-construct refactor deprecate --config {config_path}")
+        return
+
+    # Validate input options
+    if not sources and not config_file:
+        click.secho("Error: No source files specified.", fg="red", err=True)
+        click.echo("Provide source files or use --config with a configuration file.", err=True)
+        raise click.Abort()
+
+    # Build configuration
+    if config_file:
+        try:
+            config = load_refactor_config(config_file)
+            click.echo(f"Using config: {config_file}")
+
+            # Override output if provided on CLI
+            if output:
+                config.output = output
+
+            # Override sources if provided on CLI
+            if sources:
+                config.source_files = list(sources)
+        except (FileNotFoundError, ValueError) as e:
+            click.secho(f"Error loading config: {e}", fg="red", err=True)
+            raise click.Abort()
+    else:
+        # Build config from CLI arguments
+        if not entity:
+            click.secho(
+                "Error: --entity is required when not using a config file.",
+                fg="red",
+                err=True,
+            )
+            raise click.Abort()
+
+        spec = DeprecationSpec(
+            entity=entity,
+            replaced_by=replaced_by,
+            message=message,
+            version=version,
+        )
+
+        config = RefactorConfig(
+            deprecations=[spec],
+            source_files=list(sources),
+            output=output,
+            dry_run=dry_run,
+        )
+
+    # Validate we have something to deprecate
+    if not config.deprecations:
+        click.secho(
+            "Error: No deprecations specified. Use --entity or provide a config file.",
+            fg="red",
+            err=True,
+        )
+        raise click.Abort()
+
+    # Execute deprecation
+    formatter = RefactorTextFormatter(use_colour=not no_colour)
+    deprecator = OntologyDeprecator()
+
+    for source_path in config.source_files:
+        click.echo(f"\nProcessing: {source_path}")
+
+        # Load source graph
+        graph = Graph()
+        try:
+            graph.parse(source_path.as_posix())
+        except Exception as e:
+            click.secho(f"✗ Failed to parse: {e}", fg="red", err=True)
+            raise SystemExit(2)
+
+        if dry_run:
+            # Perform dry run to get entity info
+            temp_graph = Graph()
+            for triple in graph:
+                temp_graph.add(triple)
+
+            result = deprecator.deprecate_bulk(temp_graph, config.deprecations)
+
+            # Show preview
+            click.echo()
+            click.echo(
+                formatter.format_deprecation_preview(
+                    specs=config.deprecations,
+                    entity_info=result.entity_info,
+                    source_file=source_path.name,
+                    source_triples=len(graph),
+                )
+            )
+        else:
+            # Perform deprecation
+            result = deprecator.deprecate_bulk(graph, config.deprecations)
+
+            if not result.success:
+                click.secho(f"✗ Deprecation failed: {result.error}", fg="red", err=True)
+                raise SystemExit(2)
+
+            # Show result
+            click.echo(formatter.format_deprecation_result(result))
+
+            # Write output
+            if result.deprecated_graph:
+                out_path = config.output or source_path.with_stem(f"{source_path.stem}_deprecated")
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                result.deprecated_graph.serialize(destination=out_path.as_posix(), format="turtle")
+                click.secho(f"✓ Wrote {out_path}", fg="green")
+
+            # Warn about entities not found
+            if result.stats.entities_not_found > 0:
+                click.secho(
+                    f"\n⚠ {result.stats.entities_not_found} entity/entities not found in graph",
+                    fg="yellow",
+                )
+                raise SystemExit(1)
+
+    raise SystemExit(0)
 
 
 if __name__ == "__main__":

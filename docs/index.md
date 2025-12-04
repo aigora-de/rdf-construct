@@ -13,6 +13,7 @@
 **Ontology Metrics?** → [Stats Guide](user_guides/STATS_GUIDE.md)  
 **Merge Ontologies?** → [Merge Guide](user_guides/MERGE_GUIDE.md)
 **Split Ontologies?** → [Merge Guide](user_guides/MERGE_GUIDE.md#split-command)
+**Refactor URIs?** → [Refactor Guide](user_guides/REFACTOR_GUIDE.md)
 **Need Command Syntax?** → [CLI Reference](user_guides/CLI_REFERENCE.md)  
 **Quick Cheat Sheet?** → [Quick Reference](user_guides/QUICK_REFERENCE.md)  
 **Contributing?** → [Contributing Guide](../CONTRIBUTING.md)  
@@ -92,6 +93,12 @@ For users of rdf-construct who want to generate diagrams and work with RDF ontol
   - **Splitting monolithic ontologies into modules**
   - Configuration options
 
+- **[Refactor Guide](user_guides/REFACTOR_GUIDE.md)** - Renaming and deprecation
+  - Single entity and bulk namespace renames
+  - Deprecation with owl:deprecated and dcterms:isReplacedBy
+  - Data migration for instance graphs
+  - Dry-run preview mode
+
 - **[CLI Reference](user_guides/CLI_REFERENCE.md)** - Command reference
   - All commands with options
   - Configuration file formats
@@ -146,6 +153,7 @@ A Python CLI toolkit for RDF operations:
 - **Semantic Diff**: Compare ontologies and identify meaningful changes
 - **Ontology Merging**: Combine multiple ontologies with conflict detection and data migration
 - **Ontology Splitting**: Split monolithic ontologies into modules with dependency tracking
+- **Ontology Refactoring**: Rename URIs and deprecate entities with proper OWL annotations
 - **Ontology Linting**: Check ontology quality with configurable rules
 - **Competency Question Testing**: Validate ontologies against SPARQL-based tests
 - **Ontology Statistics**: Comprehensive metrics with comparison mode
@@ -293,6 +301,22 @@ poetry run rdf-construct split large.ttl -o modules/ -c split.yml
 
 # Dry run preview
 poetry run rdf-construct split large.ttl -o modules/ --by-namespace --dry-run
+```
+
+### Refactor Ontologies
+```bash
+# Fix a typo
+poetry run rdf-construct refactor rename ontology.ttl \
+  --from "ex:Buiding" --to "ex:Building" -o fixed.ttl
+
+# Bulk namespace change
+poetry run rdf-construct refactor rename ontology.ttl \
+  --from-namespace "http://old/" --to-namespace "http://new/" -o migrated.ttl
+
+# Deprecate an entity
+poetry run rdf-construct refactor deprecate ontology.ttl \
+  --entity "ex:LegacyClass" --replaced-by "ex:NewClass" \
+  --message "Use NewClass instead." -o updated.ttl
 ```
 
 ## Repository

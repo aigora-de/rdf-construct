@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **New `refactor` command group** for URI renaming and deprecation
+  - `refactor rename` subcommand for URI renaming:
+    - Single entity renames (fixing typos): `--from ex:Buiding --to ex:Building`
+    - Bulk namespace changes: `--from-namespace http://old/ --to-namespace http://new/`
+    - Combined namespace + explicit entity renames
+    - Data migration support using shared `merge/migrator.py` infrastructure
+    - Literals intentionally NOT modified (preserves comments mentioning old URIs)
+    - YAML configuration file support for complex renames
+    - Dry-run preview mode
+  - `refactor deprecate` subcommand for marking entities deprecated:
+    - Adds `owl:deprecated true`
+    - Adds `dcterms:isReplacedBy` when replacement specified
+    - Prepends "DEPRECATED:" to `rdfs:comment` with custom message
+    - Bulk deprecation from YAML configuration
+    - Preserves all existing entity properties
+    - Dry-run preview mode
+  - Exit codes: 0 (success), 1 (warnings), 2 (error)
+- New module: `src/rdf_construct/refactor/`
+  - `config.py` - Configuration dataclasses (RenameConfig, DeprecationSpec, etc.)
+  - `renamer.py` - OntologyRenamer class for URI substitution
+  - `deprecator.py` - OntologyDeprecator class for deprecation workflow
+  - `formatters/text.py` - Dry-run preview formatting
+- New documentation: `docs/user_guides/REFACTOR_GUIDE.md`
+- New examples: `examples/refactor_renames.yml`, `examples/refactor_deprecations.yml`, `examples/refactor_*.ttl`
+- New tests: `tests/test_refactor.py` (25+ test cases)
+
 - **New `split` command** for modularising monolithic ontologies
   - Namespace-based auto-detection mode (`--by-namespace`)
   - Configuration file support for explicit module definitions
