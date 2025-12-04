@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Nothing yet.
+
+## [0.3.0] - 2025-12-04
+
 ### Added
 
 - **New `localise` command** for multi-language translation management
@@ -329,11 +333,14 @@ Initial public release.
 
 ## Version History Summary
 
-| Version | Date       | Highlights                                                      |
-|---------|------------|-----------------------------------------------------------------|
-| [0.2.0] | 2025-12-03 | Stats, CQ testing, SHACL gen, docs gen, diff, lint, puml2rdf    |
-| [0.1.0] | 2025-11-30 | Initial release: ordering, UML generation, styling              |
+| Version | Date       | Highlights                                                                                          |
+|---------|------------|-----------------------------------------------------------------------------------------------------|
+| [0.3.0] | 2025-12-04 | Add merge/split, refactor, and localise |
+| [0.2.0] | 2025-12-03 | Stats, CQ testing, SHACL gen, docs gen, diff, lint, puml2rdf                                        |
+| [0.1.0] | 2025-11-30 | Initial release: ordering, UML generation, styling                                                  |
 
-[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.3.0
+[0.2.1]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.2.1
 [0.2.0]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.2.0
 [0.1.0]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.1.0
