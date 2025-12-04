@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "rdf-construct"
-version = "0.2.1"
+version = "0.3.0"
 description = "Semantic RDF manipulation toolkit - order, serialize, and diff RDF ontologies"
 license = "MIT"
 readme = "README.md"
@@ -29,7 +29,7 @@ keywords = [
     "sparql",
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Information Technology",
