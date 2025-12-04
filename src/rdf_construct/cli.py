@@ -62,7 +62,6 @@ from rdf_construct.stats import (
     format_comparison,
 )
 
-# Import here to avoid circular imports
 from rdf_construct.merge import (
     MergeConfig,
     SourceConfig,
@@ -76,6 +75,13 @@ from rdf_construct.merge import (
     create_default_config,
     get_formatter,
     migrate_data_files,
+    # Split imports
+    OntologySplitter,
+    SplitConfig,
+    SplitResult,
+    ModuleDefinition,
+    split_by_namespace,
+    create_default_split_config,
 )
 
 # Valid rendering modes
@@ -1899,7 +1905,7 @@ def merge(
 
       # With data migration
       rdf-construct merge core.ttl ext.ttl -o merged.ttl \\
-          --migrate-data instances.ttl --data-output migrated.ttl
+          --migrate-data split_instances.ttl --data-output migrated.ttl
 
       # Use configuration file
       rdf-construct merge --config merge.yml -o merged.ttl
@@ -2058,6 +2064,286 @@ def merge(
         raise SystemExit(1)
     else:
         raise SystemExit(0)
+
+
+@cli.command()
+@click.argument("source", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    "output_dir",
+    type=click.Path(path_type=Path),
+    default=Path("modules"),
+    help="Output directory for split modules (default: modules/)",
+)
+@click.option(
+    "--config",
+    "-c",
+    "config_file",
+    type=click.Path(exists=True, path_type=Path),
+    help="YAML configuration file for split",
+)
+@click.option(
+    "--by-namespace",
+    is_flag=True,
+    help="Automatically split by namespace (auto-detect modules)",
+)
+@click.option(
+    "--migrate-data",
+    multiple=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="Data file(s) to split by instance type",
+)
+@click.option(
+    "--data-output",
+    type=click.Path(path_type=Path),
+    help="Output directory for split data files",
+)
+@click.option(
+    "--unmatched",
+    type=click.Choice(["common", "error"], case_sensitive=False),
+    default="common",
+    help="Strategy for unmatched entities (default: common)",
+)
+@click.option(
+    "--common-name",
+    default="common",
+    help="Name for common module (default: common)",
+)
+@click.option(
+    "--no-manifest",
+    is_flag=True,
+    help="Don't generate manifest.yml",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would happen without writing files",
+)
+@click.option(
+    "--no-colour",
+    is_flag=True,
+    help="Disable coloured output",
+)
+@click.option(
+    "--init",
+    "init_config",
+    is_flag=True,
+    help="Generate a default split configuration file",
+)
+def split(
+    source: Path,
+    output_dir: Path,
+    config_file: Path | None,
+    by_namespace: bool,
+    migrate_data: tuple[Path, ...],
+    data_output: Path | None,
+    unmatched: str,
+    common_name: str,
+    no_manifest: bool,
+    dry_run: bool,
+    no_colour: bool,
+    init_config: bool,
+):
+    """Split a monolithic ontology into multiple modules.
+
+    SOURCE: RDF ontology file to split (.ttl, .rdf, .owl)
+
+    \b
+    Exit codes:
+      0 - Split successful
+      1 - Split successful with unmatched entities in common module
+      2 - Error (file not found, config invalid, etc.)
+
+    \b
+    Examples:
+      # Split by namespace (auto-detect modules)
+      rdf-construct split large.ttl -o modules/ --by-namespace
+
+      # Split using configuration file
+      rdf-construct split large.ttl -o modules/ -c split.yml
+
+      # With data migration
+      rdf-construct split large.ttl -o modules/ -c split.yml \\
+          --migrate-data split_instances.ttl --data-output data/
+
+      # Dry run - show what would be created
+      rdf-construct split large.ttl -o modules/ --by-namespace --dry-run
+
+      # Generate default config file
+      rdf-construct split --init
+    """
+    # Handle --init flag
+    if init_config:
+        config_path = Path("split.yml")
+        if config_path.exists():
+            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
+            raise click.Abort()
+
+        config_content = create_default_split_config()
+        config_path.write_text(config_content)
+        click.secho(f"Created {config_path}", fg="green")
+        click.echo("Edit this file to configure your split, then run:")
+        click.echo(f"  rdf-construct split your-ontology.ttl -c {config_path}")
+        return
+
+    # Validate we have a source
+    if not source:
+        click.secho("Error: SOURCE is required.", fg="red", err=True)
+        raise click.Abort()
+
+    # Handle --by-namespace mode
+    if by_namespace:
+        click.echo(f"Splitting {source.name} by namespace...")
+
+        result = split_by_namespace(source, output_dir, dry_run=dry_run)
+
+        if not result.success:
+            click.secho(f"✗ Split failed: {result.error}", fg="red", err=True)
+            raise SystemExit(2)
+
+        _display_split_result(result, output_dir, dry_run, not no_colour)
+        raise SystemExit(0 if not result.unmatched_entities else 1)
+
+    # Build configuration from file or CLI
+    if config_file:
+        try:
+            config = SplitConfig.from_yaml(config_file)
+            # Override source and output_dir if provided
+            config.source = source
+            config.output_dir = output_dir
+            config.dry_run = dry_run
+            config.generate_manifest = not no_manifest
+            click.echo(f"Using config: {config_file}")
+        except (FileNotFoundError, ValueError) as e:
+            click.secho(f"Error loading config: {e}", fg="red", err=True)
+            raise click.Abort()
+    else:
+        # Need either --by-namespace or --config
+        if not by_namespace:
+            click.secho(
+                "Error: Specify either --by-namespace or --config.",
+                fg="red",
+                err=True,
+            )
+            click.echo("Use --by-namespace for auto-detection or -c for a config file.")
+            click.echo("Run 'rdf-construct split --init' to generate a config template.")
+            raise click.Abort()
+
+        # Build minimal config
+        config = SplitConfig(
+            source=source,
+            output_dir=output_dir,
+            modules=[],
+            unmatched=UnmatchedStrategy(
+                strategy=unmatched,
+                common_module=common_name,
+                common_output=f"{common_name}.ttl",
+            ),
+            generate_manifest=not no_manifest,
+            dry_run=dry_run,
+        )
+
+    # Add data migration config if specified
+    if migrate_data:
+        config.split_data = SplitDataConfig(
+            sources=list(migrate_data),
+            output_dir=data_output if data_output else output_dir,
+            prefix="data_",
+        )
+
+    # Override unmatched strategy if specified on CLI
+    if unmatched:
+        config.unmatched = UnmatchedStrategy(
+            strategy=unmatched,
+            common_module=common_name,
+            common_output=f"{common_name}.ttl",
+        )
+
+    # Execute split
+    click.echo(f"Splitting {source.name}...")
+
+    splitter = OntologySplitter(config)
+    result = splitter.split()
+
+    if not result.success:
+        click.secho(f"✗ Split failed: {result.error}", fg="red", err=True)
+        raise SystemExit(2)
+
+    # Write output (unless dry run)
+    if not dry_run:
+        splitter.write_modules(result)
+        if config.generate_manifest:
+            splitter.write_manifest(result)
+
+    _display_split_result(result, output_dir, dry_run, not no_colour)
+
+    # Exit code based on unmatched entities
+    if result.unmatched_entities and config.unmatched.strategy == "common":
+        click.echo()
+        click.secho(
+            f"⚠ {len(result.unmatched_entities)} unmatched entities placed in "
+            f"{config.unmatched.common_module} module",
+            fg="yellow",
+        )
+        raise SystemExit(1)
+    else:
+        raise SystemExit(0)
+
+
+def _display_split_result(
+    result: "SplitResult",
+    output_dir: Path,
+    dry_run: bool,
+    use_colour: bool,
+) -> None:
+    """Display split results to console.
+
+    Args:
+        result: SplitResult from split operation.
+        output_dir: Output directory.
+        dry_run: Whether this was a dry run.
+        use_colour: Whether to use coloured output.
+    """
+    # Header
+    if dry_run:
+        click.echo("\n[DRY RUN] Would create:")
+    else:
+        click.echo("\nSplit complete:")
+
+    # Module summary
+    click.echo(f"\n  Modules: {result.total_modules}")
+    click.echo(f"  Total triples: {result.total_triples}")
+
+    # Module details
+    if result.module_stats:
+        click.echo("\n  Module breakdown:")
+        for stats in result.module_stats:
+            deps_str = ""
+            if stats.dependencies:
+                deps_str = f" (deps: {', '.join(stats.dependencies)})"
+            click.echo(
+                f"    {stats.file}: {stats.classes} classes, "
+                f"{stats.properties} properties, {stats.triples} triples{deps_str}"
+            )
+
+    # Unmatched entities
+    if result.unmatched_entities:
+        click.echo(f"\n  Unmatched entities: {len(result.unmatched_entities)}")
+        # Show first few
+        sample = list(result.unmatched_entities)[:5]
+        for uri in sample:
+            click.echo(f"    - {uri}")
+        if len(result.unmatched_entities) > 5:
+            click.echo(f"    ... and {len(result.unmatched_entities) - 5} more")
+
+    # Output location
+    if not dry_run:
+        click.echo()
+        if use_colour:
+            click.secho(f"✓ Wrote modules to {output_dir}/", fg="green")
+        else:
+            click.echo(f"✓ Wrote modules to {output_dir}/")
 
 
 if __name__ == "__main__":

@@ -1,13 +1,13 @@
 """Ontology merge and modularisation tools.
 
-This module provides tools for combining multiple RDF ontology files
+This module provides tools for combining and splitting RDF ontology files
 with intelligent conflict detection, namespace management, and optional
 data migration support.
 
 Usage:
+    # Merge multiple ontologies
     from rdf_construct.merge import merge_files, OntologyMerger
 
-    # Simple merge
     result = merge_files(
         sources=[Path("core.ttl"), Path("ext.ttl")],
         output=Path("merged.ttl"),
@@ -20,6 +20,19 @@ Usage:
     merger = OntologyMerger(config)
     result = merger.merge()
 
+    # Split a monolithic ontology
+    from rdf_construct.merge import OntologySplitter, SplitConfig
+
+    config = SplitConfig.from_yaml(Path("split.yml"))
+    splitter = OntologySplitter(config)
+    result = splitter.split()
+    splitter.write_modules(result)
+
+    # Split by namespace (auto-detect)
+    from rdf_construct.merge import split_by_namespace
+
+    result = split_by_namespace(Path("large.ttl"), Path("modules/"))
+
 CLI:
     # Basic merge
     rdf-construct merge core.ttl ext.ttl -o merged.ttl
@@ -27,9 +40,11 @@ CLI:
     # With conflict report
     rdf-construct merge core.ttl ext.ttl -o merged.ttl --report conflicts.md
 
-    # With data migration
-    rdf-construct merge core.ttl ext.ttl -o merged.ttl \\
-        --migrate-data instances.ttl --data-output migrated.ttl
+    # Split by namespace
+    rdf-construct split large.ttl -o modules/ --by-namespace
+
+    # Split with config
+    rdf-construct split large.ttl -o modules/ -c split.yml
 """
 
 from rdf_construct.merge.config import (
@@ -84,6 +99,18 @@ from rdf_construct.merge.formatters import (
     FORMATTERS,
 )
 
+from rdf_construct.merge.splitter import (
+    OntologySplitter,
+    SplitConfig,
+    SplitResult,
+    ModuleDefinition,
+    UnmatchedStrategy,
+    SplitDataConfig,
+    ModuleStats,
+    split_by_namespace,
+    create_default_split_config,
+)
+
 __all__ = [
     # Configuration
     "MergeConfig",
@@ -125,4 +152,14 @@ __all__ = [
     "MarkdownFormatter",
     "get_formatter",
     "FORMATTERS",
+    # Splitter
+    "OntologySplitter",
+    "SplitConfig",
+    "SplitResult",
+    "ModuleDefinition",
+    "UnmatchedStrategy",
+    "SplitDataConfig",
+    "ModuleStats",
+    "split_by_namespace",
+    "create_default_split_config",
 ]

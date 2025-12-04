@@ -118,7 +118,7 @@ def conflicting_ontology(temp_dir):
 def data_file(temp_dir):
     """Create a data file with instances.
 
-    For the equivalent file-based fixture, see fixtures/merge/instances.ttl
+    For the equivalent file-based fixture, see fixtures/merge/split_instances.ttl
     """
     content = dedent('''
         @prefix ex: <http://example.org/> .
@@ -173,7 +173,7 @@ def conflicting_ontology_file(fixtures_dir):
 @pytest.fixture
 def instances_file(fixtures_dir):
     """Load instance data from fixture file."""
-    path = fixtures_dir / "instances.ttl"
+    path = fixtures_dir / "split_instances.ttl"
     if not path.exists():
         pytest.skip(f"Fixture file not found: {path}")
     return path

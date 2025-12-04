@@ -214,7 +214,7 @@ rdf-construct cq-test ontology.ttl tests.yml --tag core
 rdf-construct cq-test ontology.ttl tests.yml --exclude-tag slow
 
 # Run with additional instance data
-rdf-construct cq-test ontology.ttl tests.yml --data instances.ttl
+rdf-construct cq-test ontology.ttl tests.yml --data split_instances.ttl
 
 # Verbose mode (shows query text and timing)
 rdf-construct cq-test ontology.ttl tests.yml --verbose

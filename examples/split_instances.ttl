@@ -1,0 +1,78 @@
+@prefix ex: <http://example.org/ontology#> .
+@prefix org: <http://example.org/ontology/org#> .
+@prefix building: <http://example.org/ontology/building#> .
+@prefix data: <http://example.org/data#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# ==============================================================================
+# Organisation Instances
+# ==============================================================================
+
+data:acme a org:Company ;
+    ex:identifier "ACME001" ;
+    ex:name "ACME Corporation" ;
+    org:registrationNumber "12345678" ;
+    org:hasEmployee data:alice, data:bob .
+
+data:bigco a org:Company ;
+    ex:identifier "BIGCO001" ;
+    ex:name "BigCo Industries" ;
+    org:registrationNumber "87654321" .
+
+data:govdept a org:GovernmentBody ;
+    ex:identifier "GOV001" ;
+    ex:name "Department of Examples" .
+
+data:alice a org:Employee ;
+    ex:identifier "EMP001" ;
+    ex:name "Alice Smith" ;
+    org:employedBy data:acme .
+
+data:bob a org:Employee ;
+    ex:identifier "EMP002" ;
+    ex:name "Bob Jones" ;
+    org:employedBy data:acme .
+
+# ==============================================================================
+# Building Instances
+# ==============================================================================
+
+data:headquarters a building:CommercialBuilding ;
+    ex:identifier "BLD001" ;
+    ex:name "ACME Headquarters" ;
+    building:occupiedBy data:acme ;
+    building:hasFloor data:hq_floor1, data:hq_floor2 .
+
+data:hq_floor1 a building:Floor ;
+    building:floorNumber 1 ;
+    building:hasRoom data:reception, data:meeting1 .
+
+data:hq_floor2 a building:Floor ;
+    building:floorNumber 2 ;
+    building:hasRoom data:office1, data:office2 .
+
+data:reception a building:Room ;
+    ex:name "Reception" .
+
+data:meeting1 a building:Room ;
+    ex:name "Meeting Room 1" .
+
+data:office1 a building:Room ;
+    ex:name "Office 201" .
+
+data:office2 a building:Room ;
+    ex:name "Office 202" .
+
+data:warehouse a building:CommercialBuilding ;
+    ex:identifier "BLD002" ;
+    ex:name "ACME Warehouse" ;
+    building:occupiedBy data:acme .
+
+data:apartment a building:ResidentialBuilding ;
+    ex:identifier "BLD003" ;
+    ex:name "123 Example Street" ;
+    building:hasFloor data:apt_floor1 .
+
+data:apt_floor1 a building:Floor ;
+    building:floorNumber 0 .

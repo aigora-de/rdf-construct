@@ -18,7 +18,8 @@
 - **SHACL Generation**: Generate SHACL validation shapes from OWL definitions
 - **Semantic Diff**: Compare ontology versions and identify meaningful changes
 - **Ontology Merging**: Combine multiple ontologies with conflict detection and data migration
-- **Ontology Linting**: Check quality with 11 configurable rules
+- **Ontology Splitting**: Split monolithic ontologies into modules with dependency tracking
+  - **Ontology Linting**: Check quality with 11 configurable rules
 - **Competency Question Testing**: Validate ontologies against SPARQL-based tests
 - **Ontology Statistics**: Comprehensive metrics with comparison mode
 - **Flexible Styling**: Configure colours, layouts, and visual themes for diagrams
@@ -151,6 +152,18 @@ rdf-construct merge core.ttl extension.ttl -o merged.ttl -p 1 -p 2
 
 # Generate conflict report
 rdf-construct merge core.ttl extension.ttl -o merged.ttl --report conflicts.md
+```
+
+### Split Ontologies
+```bash
+# Split by namespace (auto-detect modules)
+rdf-construct split large.ttl -o modules/ --by-namespace
+
+# Split with configuration file
+rdf-construct split large.ttl -o modules/ -c split.yml
+
+# Preview what would be created
+rdf-construct split large.ttl -o modules/ --by-namespace --dry-run
 ```
 
 ## Documentation

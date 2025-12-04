@@ -1,0 +1,142 @@
+@prefix ex: <http://example.org/ontology#> .
+@prefix org: <http://example.org/ontology/org#> .
+@prefix building: <http://example.org/ontology/building#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# ==============================================================================
+# Core Ontology Concepts
+# ==============================================================================
+
+ex:Entity a owl:Class ;
+    rdfs:label "Entity"@en ;
+    rdfs:comment "Base class for all domain entities"@en .
+
+ex:Event a owl:Class ;
+    rdfs:label "Event"@en ;
+    rdfs:comment "Something that happens at a point in time"@en ;
+    rdfs:subClassOf ex:Entity .
+
+ex:State a owl:Class ;
+    rdfs:label "State"@en ;
+    rdfs:comment "A condition or mode of being"@en ;
+    rdfs:subClassOf ex:Entity .
+
+ex:identifier a owl:DatatypeProperty ;
+    rdfs:label "identifier"@en ;
+    rdfs:comment "Unique identifier for an entity"@en ;
+    rdfs:domain ex:Entity ;
+    rdfs:range xsd:string .
+
+ex:name a owl:DatatypeProperty ;
+    rdfs:label "name"@en ;
+    rdfs:comment "Human-readable name"@en ;
+    rdfs:domain ex:Entity ;
+    rdfs:range xsd:string .
+
+ex:hasState a owl:ObjectProperty ;
+    rdfs:label "has state"@en ;
+    rdfs:domain ex:Entity ;
+    rdfs:range ex:State .
+
+# ==============================================================================
+# Organisation Domain
+# ==============================================================================
+
+org:Organisation a owl:Class ;
+    rdfs:label "Organisation"@en ;
+    rdfs:comment "A structured group of people with a purpose"@en ;
+    rdfs:subClassOf ex:Entity .
+
+org:Company a owl:Class ;
+    rdfs:label "Company"@en ;
+    rdfs:comment "A commercial business organisation"@en ;
+    rdfs:subClassOf org:Organisation .
+
+org:GovernmentBody a owl:Class ;
+    rdfs:label "Government Body"@en ;
+    rdfs:comment "An organisation that is part of government"@en ;
+    rdfs:subClassOf org:Organisation .
+
+org:Person a owl:Class ;
+    rdfs:label "Person"@en ;
+    rdfs:comment "A human individual"@en ;
+    rdfs:subClassOf ex:Entity .
+
+org:Employee a owl:Class ;
+    rdfs:label "Employee"@en ;
+    rdfs:comment "A person employed by an organisation"@en ;
+    rdfs:subClassOf org:Person .
+
+org:hasEmployee a owl:ObjectProperty ;
+    rdfs:label "has employee"@en ;
+    rdfs:comment "Relates an organisation to its employees"@en ;
+    rdfs:domain org:Organisation ;
+    rdfs:range org:Person .
+
+org:employedBy a owl:ObjectProperty ;
+    rdfs:label "employed by"@en ;
+    rdfs:comment "Relates a person to their employer"@en ;
+    rdfs:domain org:Person ;
+    rdfs:range org:Organisation ;
+    owl:inverseOf org:hasEmployee .
+
+org:registrationNumber a owl:DatatypeProperty ;
+    rdfs:label "registration number"@en ;
+    rdfs:domain org:Company ;
+    rdfs:range xsd:string .
+
+# ==============================================================================
+# Building Domain
+# ==============================================================================
+
+building:Building a owl:Class ;
+    rdfs:label "Building"@en ;
+    rdfs:comment "A permanent structure with roof and walls"@en ;
+    rdfs:subClassOf ex:Entity .
+
+building:ResidentialBuilding a owl:Class ;
+    rdfs:label "Residential Building"@en ;
+    rdfs:comment "A building used primarily for housing"@en ;
+    rdfs:subClassOf building:Building .
+
+building:CommercialBuilding a owl:Class ;
+    rdfs:label "Commercial Building"@en ;
+    rdfs:comment "A building used for commercial purposes"@en ;
+    rdfs:subClassOf building:Building .
+
+building:Floor a owl:Class ;
+    rdfs:label "Floor"@en ;
+    rdfs:comment "A level within a building"@en ;
+    rdfs:subClassOf ex:Entity .
+
+building:Room a owl:Class ;
+    rdfs:label "Room"@en ;
+    rdfs:comment "An enclosed space within a building"@en ;
+    rdfs:subClassOf ex:Entity .
+
+building:hasFloor a owl:ObjectProperty ;
+    rdfs:label "has floor"@en ;
+    rdfs:comment "Relates a building to its floors"@en ;
+    rdfs:domain building:Building ;
+    rdfs:range building:Floor .
+
+building:hasRoom a owl:ObjectProperty ;
+    rdfs:label "has room"@en ;
+    rdfs:comment "Relates a floor to its rooms"@en ;
+    rdfs:domain building:Floor ;
+    rdfs:range building:Room .
+
+building:floorNumber a owl:DatatypeProperty ;
+    rdfs:label "floor number"@en ;
+    rdfs:comment "The numeric designation of a floor"@en ;
+    rdfs:domain building:Floor ;
+    rdfs:range xsd:integer .
+
+building:occupiedBy a owl:ObjectProperty ;
+    rdfs:label "occupied by"@en ;
+    rdfs:comment "Relates a building to its occupant organisation"@en ;
+    rdfs:domain building:Building ;
+    rdfs:range org:Organisation .

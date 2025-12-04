@@ -345,7 +345,7 @@ imports: preserve  # preserve, remove, update, or merge
 # Optional data migration
 # migrate_data:
 #   sources:
-#     - instances.ttl
+#     - split_instances.ttl
 #   output: migrated.ttl
 #   rules:
 #     - type: rename
