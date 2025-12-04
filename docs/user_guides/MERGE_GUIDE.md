@@ -192,7 +192,7 @@ When namespaces are remapped, instance data can be automatically migrated:
 
 ```bash
 rdf-construct merge core.ttl ext.ttl -o merged.ttl \
-    --migrate-data instances.ttl \
+    --migrate-data split_instances.ttl \
     --data-output migrated.ttl
 ```
 
@@ -292,7 +292,7 @@ imports: merge
 # Data migration
 migrate_data:
   sources:
-    - data/instances.ttl
+    - data/split_instances.ttl
     - data/relationships.ttl
   output: data/migrated.ttl
   rules_file: migration-rules.yml
@@ -377,3 +377,340 @@ Consider:
 - `rdf-construct lint` - Check merged output for quality issues
 - `rdf-construct diff` - Compare merged result with original
 - `rdf-construct docs` - Generate documentation for merged ontology
+
+---
+
+## Split Command
+
+The `split` command is the inverse of `merge` — it takes a monolithic ontology and splits it into multiple modules.
+
+### Quick Start
+
+```bash
+# Split by namespace (auto-detect modules)
+rdf-construct split large.ttl -o modules/ --by-namespace
+
+# Split using configuration file
+rdf-construct split large.ttl -o modules/ -c split.yml
+
+# Generate a starter configuration file
+rdf-construct split --init
+```
+
+### Use Cases
+
+- **Modularising large ontologies** for better maintainability
+- **Creating domain-specific modules** from a unified ontology
+- **Enabling selective imports** (load only what you need)
+- **Supporting parallel development** by different teams
+- **Migrating instance data** to match new module structure
+
+### CLI Reference
+
+```bash
+rdf-construct split SOURCE [OPTIONS]
+```
+
+#### Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `SOURCE` | RDF ontology file to split (.ttl, .rdf, .owl) |
+
+#### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `-o, --output PATH` | Output directory for modules | `modules/` |
+| `-c, --config PATH` | YAML configuration file | - |
+| `--by-namespace` | Auto-detect modules from namespaces | `False` |
+| `--migrate-data PATH` | Data file(s) to split (repeatable) | - |
+| `--data-output PATH` | Output directory for split data | - |
+| `--unmatched` | Strategy: `common` or `error` | `common` |
+| `--common-name` | Name for common module | `common` |
+| `--no-manifest` | Don't generate manifest.yml | `False` |
+| `--dry-run` | Show what would happen without writing | `False` |
+| `--no-colour` | Disable coloured output | `False` |
+| `--init` | Generate default configuration file | - |
+
+#### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Split successful |
+| 1 | Split successful, unmatched entities in common module |
+| 2 | Error (file not found, config invalid, etc.) |
+
+### Splitting Strategies
+
+#### Namespace-Based (Auto-Detect)
+
+The simplest approach — entities are assigned to modules based on their namespace:
+
+```bash
+rdf-construct split ontology.ttl -o modules/ --by-namespace
+```
+
+If your ontology uses distinct namespaces for different domains (e.g., `org:`, `building:`), this will automatically create separate modules.
+
+#### Configuration-Based (Explicit)
+
+For fine-grained control, define modules in a YAML configuration:
+
+```yaml
+split:
+  source: ontology/split_monolith.ttl
+  output_dir: modules/
+
+  modules:
+    # By explicit class/property list
+    - name: core
+      description: "Core upper ontology concepts"
+      output: core.ttl
+      include:
+        classes:
+          - ex:Entity
+          - ex:Event
+          - ex:State
+        properties:
+          - ex:identifier
+          - ex:name
+      include_descendants: true
+
+    # By namespace
+    - name: organisation
+      description: "Organisation domain module"
+      output: organisation.ttl
+      namespaces:
+        - "http://example.org/ontology/org#"
+
+    # With explicit imports
+    - name: building
+      output: building.ttl
+      namespaces:
+        - "http://example.org/ontology/building#"
+      imports:
+        - core.ttl
+      auto_imports: true
+
+  # Handle entities that don't match any module
+  unmatched:
+    strategy: common  # or "error"
+    module: common
+    output: common.ttl
+
+  generate_manifest: true
+```
+
+### Include Descendants
+
+When `include_descendants: true`, the splitter includes all subclasses and subproperties:
+
+```yaml
+modules:
+  - name: entities
+    include:
+      classes:
+        - ex:Entity  # Will include all subclasses
+    include_descendants: true
+```
+
+### Dependency Tracking
+
+The splitter automatically detects cross-module dependencies (when one module references entities from another) and can generate `owl:imports` declarations:
+
+```turtle
+# In organisation.ttl
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+<http://example.org/ontology/org> a owl:Ontology ;
+    owl:imports <core.ttl> .
+
+org:Organisation a owl:Class ;
+    rdfs:subClassOf ex:Entity .  # Reference to core module
+```
+
+Control imports with:
+
+- `auto_imports: true` — Generate imports from detected dependencies (default)
+- `auto_imports: false` — No automatic imports
+- `imports: [core.ttl]` — Explicit import list
+
+### Unmatched Entities
+
+Entities that don't match any module definition are handled according to strategy:
+
+**Common module (default):**
+```yaml
+unmatched:
+  strategy: common
+  module: common
+  output: common.ttl
+```
+
+**Error (fail if unmatched):**
+```yaml
+unmatched:
+  strategy: error
+```
+
+### Manifest Generation
+
+The split command generates a `manifest.yml` documenting the split:
+
+```yaml
+source: ontology/split_monolith.ttl
+output_dir: modules/
+modules:
+  - name: core
+    file: core.ttl
+    classes: 5
+    properties: 3
+    triples: 42
+    imports: []
+    dependencies: []
+
+  - name: organisation
+    file: organisation.ttl
+    classes: 8
+    properties: 5
+    triples: 67
+    imports: [core.ttl]
+    dependencies: [core]
+
+summary:
+  total_modules: 3
+  total_triples: 156
+  unmatched_entities: 2
+
+dependency_graph: |
+  core.ttl
+  ├── organisation.ttl
+  └── building.ttl
+```
+
+Disable with `--no-manifest` or `generate_manifest: false`.
+
+### Data Migration
+
+Split instance data alongside the ontology:
+
+```bash
+rdf-construct split large.ttl -o modules/ -c split.yml \
+    --migrate-data split_instances.ttl \
+    --data-output data/
+```
+
+Instances are assigned to modules based on their `rdf:type`:
+
+- Instance of `org:Company` → `data_organisation.ttl`
+- Instance of `building:Floor` → `data_building.ttl`
+
+Configuration:
+
+```yaml
+split_data:
+  sources:
+    - data/split_instances.ttl
+    - data/relationships.ttl
+  output_dir: data/
+  prefix: data_  # Output: data_core.ttl, data_org.ttl, etc.
+```
+
+### Round-Trip Validation
+
+A well-configured split should satisfy:
+
+```
+merge(split(ontology)) ≈ ontology
+```
+
+Test with:
+
+```bash
+# Split
+rdf-construct split large.ttl -o modules/ -c split.yml
+
+# Merge back
+rdf-construct merge modules/*.ttl -o reconstructed.ttl
+
+# Compare
+rdf-construct diff large.ttl reconstructed.ttl
+```
+
+Minor differences may occur due to:
+- Added `owl:imports` declarations
+- Namespace binding order
+- Blank node identifiers
+
+### Examples
+
+#### Basic Namespace Split
+
+```bash
+rdf-construct split ies.ttl -o ies-modules/ --by-namespace
+```
+
+Output:
+```
+ies-modules/
+├── ies.ttl
+├── common.ttl
+└── manifest.yml
+```
+
+#### Split with Data Migration
+
+```bash
+rdf-construct split ontology.ttl -o modules/ -c split.yml \
+    --migrate-data instances/*.ttl \
+    --data-output data/
+```
+
+Output:
+```
+modules/
+├── core.ttl
+├── organisation.ttl
+├── building.ttl
+├── manifest.yml
+data/
+├── data_core.ttl
+├── data_organisation.ttl
+└── data_building.ttl
+```
+
+#### Dry Run Preview
+
+```bash
+rdf-construct split large.ttl -o modules/ --by-namespace --dry-run
+```
+
+Shows what would be created without writing files.
+
+### Best Practices
+
+1. **Start with dry run** to preview the split structure
+2. **Use explicit configuration** for production splits
+3. **Enable `include_descendants`** to capture class hierarchies
+4. **Review the manifest** to understand module dependencies
+5. **Run `lint`** on each module to catch issues
+6. **Test round-trip** to validate the split preserves semantics
+
+### Troubleshooting
+
+#### "Unmatched entities in common module"
+
+Some entities don't match any module definition. Either:
+- Add them to a module's class/property list
+- Include their namespace in a module
+- Accept them in the common module
+- Use `--unmatched error` to identify what's missing
+
+#### "Too many cross-module dependencies"
+
+Consider reorganising modules or accepting some coupling. Use the manifest's dependency graph to visualise.
+
+#### "Missing triples after split"
+
+Ensure all entity types (classes, properties, individuals) are covered. The split only includes triples where the subject is an assigned entity.

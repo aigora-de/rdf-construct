@@ -501,7 +501,7 @@ rdf-construct merge core.ttl extension.ttl -o merged.ttl --dry-run
 
 # With data migration
 rdf-construct merge core.ttl extension.ttl -o merged.ttl \
-    --migrate-data instances.ttl --data-output migrated.ttl
+    --migrate-data split_instances.ttl --data-output migrated.ttl
 
 # Using configuration file
 rdf-construct merge --config merge.yml -o merged.ttl
@@ -550,7 +550,7 @@ imports: preserve
 
 migrate_data:
   sources:
-    - instances.ttl
+    - split_instances.ttl
   output: migrated.ttl
   rules:
     - type: rename
@@ -562,6 +562,118 @@ migrate_data:
 - `0`: Merge successful, no unresolved conflicts
 - `1`: Merge successful, but unresolved conflicts marked in output
 - `2`: Error (file not found, parse error, etc.)
+
+---
+
+---
+
+### split - Modularise Ontologies
+
+Split a monolithic ontology into multiple modules.
+```bash
+rdf-construct split SOURCE [OPTIONS]
+```
+
+**Arguments**:
+- `SOURCE`: RDF ontology file to split (.ttl, .rdf, .owl)
+
+**Options**:
+- `-o, --output PATH`: Output directory for modules (default: `modules/`)
+- `-c, --config PATH`: YAML configuration file
+- `--by-namespace`: Auto-detect modules from namespaces
+- `--migrate-data PATH`: Data file(s) to split by instance type (can specify multiple)
+- `--data-output PATH`: Output directory for split data files
+- `--unmatched STRATEGY`: Strategy for unmatched entities: `common` or `error` (default: common)
+- `--common-name NAME`: Name for common module (default: `common`)
+- `--no-manifest`: Don't generate manifest.yml
+- `--dry-run`: Show what would happen without writing files
+- `--no-colour`: Disable coloured output
+- `--init`: Generate a default split configuration file
+
+**Examples**:
+```bash
+# Split by namespace (auto-detect modules)
+rdf-construct split large.ttl -o modules/ --by-namespace
+
+# Split using configuration file
+rdf-construct split large.ttl -o modules/ -c split.yml
+
+# With data migration
+rdf-construct split large.ttl -o modules/ -c split.yml \
+    --migrate-data instances.ttl --data-output data/
+
+# Dry run (preview without writing)
+rdf-construct split large.ttl -o modules/ --by-namespace --dry-run
+
+# Generate default configuration
+rdf-construct split --init
+```
+
+**Configuration File Format**:
+```yaml
+split:
+  source: ontology/monolith.ttl
+  output_dir: modules/
+
+  modules:
+    # By explicit class/property list
+    - name: core
+      description: "Core concepts"
+      output: core.ttl
+      include:
+        classes:
+          - ex:Entity
+          - ex:Event
+        properties:
+          - ex:identifier
+      include_descendants: true
+
+    # By namespace
+    - name: organisation
+      output: organisation.ttl
+      namespaces:
+        - "http://example.org/ontology/org#"
+      auto_imports: true
+
+  unmatched:
+    strategy: common
+    module: common
+    output: common.ttl
+
+  generate_manifest: true
+```
+
+**Manifest Output** (`manifest.yml`):
+```yaml
+source: ontology/monolith.ttl
+output_dir: modules/
+modules:
+  - name: core
+    file: core.ttl
+    classes: 5
+    properties: 3
+    triples: 42
+    imports: []
+    dependencies: []
+  - name: organisation
+    file: organisation.ttl
+    classes: 8
+    properties: 5
+    triples: 67
+    imports: [core.ttl]
+    dependencies: [core]
+summary:
+  total_modules: 2
+  total_triples: 109
+  unmatched_entities: 0
+```
+
+**Exit Codes**:
+- `0`: Split successful
+- `1`: Split successful, unmatched entities placed in common module
+- `2`: Error (file not found, config invalid, etc.)
+
+---
 
 ### cq-test - Run Competency Question Tests
 

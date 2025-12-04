@@ -123,7 +123,8 @@ src/rdf_construct/
 │   ├── formatters.py
 │   ├── merger.py
 │   ├── migrator.py
-│   └── rules.py
+│   ├── rules.py
+│   └── splitter.py
 └── uml/
     ├── __init__.py
     ├── context.py
@@ -150,6 +151,9 @@ examples/
 ├── rdf_lint.yml
 ├── sample_profile.yml
 ├── shacl_config.yml
+├── split_config.yml
+├── split_instances.ttl
+├── split_monolith.ttl
 ├── test_profile.yml
 ├── uml_contexts.yml
 ├── uml_contexts_explicit.yml
@@ -173,11 +177,20 @@ tests/
 ├── test_predicate_order.py
 ├── test_puml2rdf.py
 ├── test_shacl_gen.py
+├── test_split.py
 ├── test_stats.py
 └── fixtures/
-    └── diff/
-        ├── v1_0.ttl
-        └── v1_1.ttl
+    ├── diff/
+    │   ├── v1_0.ttl
+    │   └── v1_1.ttl
+    ├── merge/
+    │   ├── conflicting.ttl
+    │   ├── core.ttl
+    │   ├── extension.ttl
+    │   └── instances.ttl
+    ├── split/
+    │   ├── instances.ttl
+    │   └── monolith.ttl
 
 ├── pyproject.toml              # Modern Python packaging config
 ├── poetry.lock                 # Locked dependencies
@@ -467,6 +480,22 @@ Combine multiple RDF ontologies with conflict detection, namespace management, a
 - `get_formatter()` - format dispatcher
 - Merge result and migration result formatting
 
+**`merge/splitter.py`**
+- `OntologySplitter` class - core split orchestration
+- `SplitConfig` dataclass - split configuration
+- `SplitResult` dataclass - split outcome with stats
+- `ModuleDefinition` dataclass - module specification
+- `UnmatchedStrategy` dataclass - handling unassigned entities
+- `SplitDataConfig` dataclass - data splitting settings
+- `ModuleStats` dataclass - per-module statistics
+- `split_by_namespace()` - auto-detect modules from namespaces
+- `create_default_split_config()` - generate starter config
+- Entity assignment by class list, property list, or namespace
+- Include descendants traversal (subClassOf, subPropertyOf)
+- Dependency detection and owl:imports generation
+- Manifest generation with dependency graph
+- Data splitting by instance rdf:type
+
 ---
 
 ### `puml2rdf` Module
@@ -698,6 +727,8 @@ poetry run pytest tests/test_ordering.py -v
 poetry run pytest tests/test_cq.py -v
 poetry run pytest tests/test_stats.py -v
 poetry run pytest tests/test_lint.py -v
+poetry run pytest tests/test_merge.py -v
+poetry run pytest tests/test_split.py -v
 
 # Format code
 black src/ tests/

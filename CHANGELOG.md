@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **New `split` command** for modularising monolithic ontologies
+  - Namespace-based auto-detection mode (`--by-namespace`)
+  - Configuration file support for explicit module definitions
+  - Entity assignment by class list, property list, or namespace
+  - `include_descendants` option for capturing class hierarchies
+  - Automatic `owl:imports` generation from detected dependencies
+  - Manifest file (`manifest.yml`) with module statistics and dependency graph
+  - Instance data splitting by `rdf:type`
+  - Dry-run preview mode
+  - Round-trip validation: `merge(split(x)) ≈ x`
+  - Exit codes: 0 (success), 1 (unmatched in common), 2 (error)
+- Extended merge module: `src/rdf_construct/merge/splitter.py`
+- New examples: `examples/split_monolith.ttl`, `examples/split_instances.ttl`, `examples/split_config.yml`
+- New tests: `tests/test_split.py` (18 test cases)
 - **New `merge` command** for combining multiple RDF ontology files
   - Intelligent conflict detection (same subject+predicate, different values)
   - Four resolution strategies: `priority`, `first`, `last`, `mark_all`
