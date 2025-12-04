@@ -17,7 +17,9 @@
 - **PUML2RDF**: Convert PlantUML diagrams to RDF/OWL ontologies (diagram-first design)
 - **SHACL Generation**: Generate SHACL validation shapes from OWL definitions
 - **Semantic Diff**: Compare ontology versions and identify meaningful changes
-- **Ontology Linting**: Check quality with 11 configurable rules
+- **Ontology Merging**: Combine multiple ontologies with conflict detection and data migration
+- **Ontology Splitting**: Split monolithic ontologies into modules with dependency tracking
+  - **Ontology Linting**: Check quality with 11 configurable rules
 - **Competency Question Testing**: Validate ontologies against SPARQL-based tests
 - **Ontology Statistics**: Comprehensive metrics with comparison mode
 - **Flexible Styling**: Configure colours, layouts, and visual themes for diagrams
@@ -139,6 +141,31 @@ rdf-construct stats ontology.ttl
 rdf-construct stats v1.ttl v2.ttl --compare --format markdown
 ```
 
+### Merge Ontologies
+
+```bash
+# Basic merge
+rdf-construct merge core.ttl extension.ttl -o merged.ttl
+
+# With priorities (higher wins conflicts)
+rdf-construct merge core.ttl extension.ttl -o merged.ttl -p 1 -p 2
+
+# Generate conflict report
+rdf-construct merge core.ttl extension.ttl -o merged.ttl --report conflicts.md
+```
+
+### Split Ontologies
+```bash
+# Split by namespace (auto-detect modules)
+rdf-construct split large.ttl -o modules/ --by-namespace
+
+# Split with configuration file
+rdf-construct split large.ttl -o modules/ -c split.yml
+
+# Preview what would be created
+rdf-construct split large.ttl -o modules/ --by-namespace --dry-run
+```
+
 ## Documentation
 
 📚 **[Complete Documentation](docs/index.md)** - Start here
@@ -153,6 +180,7 @@ rdf-construct stats v1.ttl v2.ttl --compare --format markdown
 - [Lint Guide](docs/user_guides/LINT_GUIDE.md) - Ontology quality checking
 - [CQ Testing Guide](docs/user_guides/CQ_TEST_GUIDE.md) - Competency question testing
 - [Stats Guide](docs/user_guides/STATS_GUIDE.md) - Ontology metrics
+- [Merge Guide](docs/user_guides/MERGE_GUIDE.md) - Combining ontologies
 - [CLI Reference](docs/user_guides/CLI_REFERENCE.md) - All commands and options
 
 **For Developers**:

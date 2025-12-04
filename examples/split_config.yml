@@ -1,0 +1,61 @@
+# rdf-construct split configuration example
+# See MERGE_GUIDE.md for full documentation
+
+split:
+  # Source ontology to split
+  source: tests/fixtures/split/split_monolith.ttl
+
+  # Output directory for modules
+  output_dir: tests/fixtures/split/modules/
+
+  # Module definitions
+  modules:
+    # Core module: explicit class list with descendants
+    - name: core
+      description: "Core upper ontology concepts"
+      output: core.ttl
+      include:
+        classes:
+          - http://example.org/ontology#Entity
+          - http://example.org/ontology#Event
+          - http://example.org/ontology#State
+        properties:
+          - http://example.org/ontology#identifier
+          - http://example.org/ontology#name
+          - http://example.org/ontology#hasState
+      include_descendants: false
+      auto_imports: false
+
+    # Organisation module: by namespace
+    - name: organisation
+      description: "Organisation domain module"
+      output: organisation.ttl
+      namespaces:
+        - "http://example.org/ontology/org#"
+      auto_imports: true
+
+    # Building module: by namespace with explicit import
+    - name: building
+      description: "Building domain module"
+      output: building.ttl
+      namespaces:
+        - "http://example.org/ontology/building#"
+      imports:
+        - core.ttl
+      auto_imports: true
+
+  # Handling for entities that don't match any module
+  unmatched:
+    strategy: common
+    module: common
+    output: common.ttl
+
+  # Generate manifest file
+  generate_manifest: true
+
+  # Optional: Split data files by instance type
+  split_data:
+    sources:
+      - tests/fixtures/split/split_instances.ttl
+    output_dir: tests/fixtures/split/data/
+    prefix: data_
