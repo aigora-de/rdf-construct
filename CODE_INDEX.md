@@ -9,25 +9,35 @@ docs/
 ├── index.md
 ├── dev/
 │   ├── ARCHITECTURE.md
-│   └── UML_IMPLEMENTATION.md
+│   ├── UML_IMPLEMENTATION.md
+│   └── UML_ODM_RDF_INTEGRATION.md
 └── user_guides/
     ├── CLI_REFERENCE.md
     ├── CQ_TEST_GUIDE.md
     ├── DIFF_GUIDE.md
     ├── DOCS_GUIDE.md
+    ├── EXPLICIT_MODE.md
     ├── GETTING_STARTED.md
+    ├── IES_COLOUR_PALETTE_GUIDE.md
+    ├── IES_COLOUR_REFERENCE.md
+    ├── IES_COLOUR_SCHEME_COMPARISON.md
     ├── LINT_GUIDE.md
-    ├── PLANTUML_IMPORT_GUIDE.md
+    ├── MERGE_GUIDE.md
     ├── PROJECT_SETUP.md
+    ├── PUML2RDF_GUIDE.md
     ├── QUICK_REFERENCE.md
+    ├── REFACTOR_GUIDE.md
     ├── SHACL_GUIDE.md
     ├── STATS_GUIDE.md
-    └── UML_GUIDE.md
+    ├── UML_GUIDE.md
+    ├── UML_MODE_DECISION_TREE.md
+    └── UML_ODM_RDF_GUIDE.md
 
 src/rdf_construct/
 ├── __init__.py
 ├── __main__.py
 ├── cli.py
+├── main.py
 ├── core/
 │   ├── __init__.py
 │   ├── config.py
@@ -104,7 +114,6 @@ src/rdf_construct/
 │   ├── comparator.py
 │   ├── metrics/
 │   │   ├── __init__.py
-│   │   ├── base.py
 │   │   ├── basic.py
 │   │   ├── complexity.py
 │   │   ├── connectivity.py
@@ -125,6 +134,14 @@ src/rdf_construct/
 │   ├── migrator.py
 │   ├── rules.py
 │   └── splitter.py
+├── refactor/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── deprecator.py
+│   ├── renamer.py
+│   └── formatters/
+│       ├── __init__.py
+│       └── text.py
 └── uml/
     ├── __init__.py
     ├── context.py
@@ -136,34 +153,59 @@ src/rdf_construct/
 
 examples/
 ├── animal_ontology.ttl
-├── basic_ordering.py
-├── building_structure_context.yml
-├── cq_tests_animal.yml
-├── docs_config.yml
-├── ies_building_contexts.yml
-├── ies_colour_examples.yml
-├── ies_colour_palette.yml
-├── ies_colour_palette_with_instances.yml
-├── merge_config.yml
-├── ordering_starter.yml
 ├── organisation_ontology.ttl
-├── puml_import.yml
-├── rdf_lint.yml
-├── sample_profile.yml
-├── shacl_config.yml
-├── split_config.yml
-├── split_instances.ttl
-├── split_monolith.ttl
-├── test_profile.yml
-├── uml_contexts.yml
-├── uml_contexts_explicit.yml
+├── simple_ontology.ttl
+├── cq-test/
+│   └── cq_tests_animal.yml
+├── docs/
+│   └── docs_config.yml
+├── lint/
+│   ├── example_lint_problematic.ttl
+│   └── rdf_lint.yml
+├── merge/
+│   ├── merge_config.yml
+│   ├── merge_conflicting.ttl
+│   ├── merge_core.ttl
+│   ├── merge_extension.ttl
+│   └── merge_instances.ttl
+├── order/
+│   ├── basic_ordering.py
+│   ├── ies_profile.yml
+│   ├── sample_profile.yml
+│   └── test_profile.yml
+├── puml2rdf/
+│   └── puml2rdf_config.yml
+├── refactor/
+│   ├── deprecations.yml
+│   ├── instances.ttl
+│   ├── legacy.ttl
+│   ├── old_namespace.ttl
+│   ├── renames.yml
+│   └── typos.ttl
+├── shacl/
+│   └── shacl_config.yml
+├── split/
+│   ├── split_config.yml
+│   ├── split_instances.ttl
+│   └── split_monolith.ttl
+└── uml/
+    ├── example_styled_uml.py
+    ├── ies_colour_examples.yml
+    ├── ies_colour_palette.yml
+    ├── ies_colour_palette_with_instances.yml
+    ├── uml_contexts.yml
+    ├── uml_contexts_explicit.yml
+    ├── uml_layouts.yml
+    └── uml_styles.yml
+
+templates/
+├── ordering_starter.yml
 ├── uml_contexts_starter.yml
-├── uml_layouts.yml
-├── uml_styles.yml
 └── uml_styles_starter.yml
 
 tests/
 ├── __init__.py
+├── conftest.py
 ├── test_cq.py
 ├── test_diff.py
 ├── test_docs.py
@@ -176,21 +218,29 @@ tests/
 ├── test_plantuml.py
 ├── test_predicate_order.py
 ├── test_puml2rdf.py
+├── test_refactor.py
 ├── test_shacl_gen.py
 ├── test_split.py
 ├── test_stats.py
 └── fixtures/
     ├── diff/
-    │   ├── v1_0.ttl
-    │   └── v1_1.ttl
+    │   ├── v1.0.ttl
+    │   └── v1.1.ttl
     ├── merge/
     │   ├── conflicting.ttl
     │   ├── core.ttl
     │   ├── extension.ttl
     │   └── instances.ttl
-    ├── split/
+    ├── refactor/
+    │   ├── deprecations.yml
     │   ├── instances.ttl
-    │   └── monolith.ttl
+    │   ├── legacy.ttl
+    │   ├── old_namespace.ttl
+    │   ├── renames.yml
+    │   └── typos.ttl
+    └── split/
+        ├── instances.ttl
+        └── monolith.ttl
 
 ├── pyproject.toml              # Modern Python packaging config
 ├── poetry.lock                 # Locked dependencies
@@ -495,6 +545,60 @@ Combine multiple RDF ontologies with conflict detection, namespace management, a
 - Dependency detection and owl:imports generation
 - Manifest generation with dependency graph
 - Data splitting by instance rdf:type
+
+---
+
+### Refactor Module (`refactor/`)
+
+Rename URIs and deprecate entities in RDF ontologies.
+
+**`refactor/__init__.py`**
+- Public API exports
+- `OntologyRenamer`, `OntologyDeprecator`
+- `RenameConfig`, `DeprecationSpec`, `RefactorConfig`
+- `RenameResult`, `DeprecationResult`
+- `rename_file()`, `deprecate_file()`
+
+**`refactor/config.py`**
+- `RenameConfig` dataclass - namespace and entity rename mappings
+- `RenameMapping` dataclass - single from/to URI mapping
+- `DeprecationSpec` dataclass - entity deprecation specification
+- `DeprecationConfig` dataclass - bulk deprecation configuration
+- `RefactorConfig` dataclass - complete refactor configuration
+- `DataMigrationSpec` dataclass - data migration settings
+- `load_refactor_config()` - load from YAML
+- `create_default_rename_config()` - generate rename starter config
+- `create_default_deprecation_config()` - generate deprecation starter config
+
+**`refactor/renamer.py`**
+- `OntologyRenamer` class - core URI renaming
+- `RenameResult` dataclass - rename outcome with stats
+- `RenameStats` dataclass - rename statistics
+- `rename_file()` - convenience function for single file
+- `rename_files()` - batch processing
+- Namespace bulk rename (all URIs in namespace)
+- Explicit entity rename (individual URIs)
+- Predicate position handling
+- Literals intentionally NOT modified
+
+**`refactor/deprecator.py`**
+- `OntologyDeprecator` class - deprecation workflow
+- `DeprecationResult` dataclass - deprecation outcome
+- `DeprecationStats` dataclass - deprecation statistics
+- `EntityDeprecationInfo` dataclass - per-entity details
+- `deprecate_file()` - convenience function
+- Adds `owl:deprecated true`
+- Adds `dcterms:isReplacedBy` when replacement specified
+- Prepends "DEPRECATED:" to `rdfs:comment`
+- Preserves all existing entity properties
+
+**`refactor/formatters/text.py`**
+- `TextFormatter` - dry-run preview formatting
+- `format_rename_preview()` - rename preview output
+- `format_rename_result()` - rename result summary
+- `format_deprecation_preview()` - deprecation preview output
+- `format_deprecation_result()` - deprecation result summary
+- Coloured terminal output support
 
 ---
 

@@ -675,6 +675,195 @@ summary:
 
 ---
 
+### refactor - Rename and Deprecate Entities
+
+Refactor ontologies by renaming URIs or marking entities as deprecated.
+
+```bash
+rdf-construct refactor <subcommand> [OPTIONS]
+```
+
+**Subcommands**:
+- `rename` - Rename URIs (single entity or bulk namespace)
+- `deprecate` - Mark entities as deprecated with OWL annotations
+
+---
+
+#### refactor rename
+
+Rename URIs in ontology files.
+
+```bash
+rdf-construct refactor rename SOURCES [OPTIONS]
+```
+
+**Arguments**:
+- `SOURCES`: One or more RDF files to process (.ttl, .rdf, .owl)
+
+**Options**:
+- `--from URI`: Single URI to rename
+- `--to URI`: New URI for single rename
+- `--from-namespace NS`: Old namespace prefix for bulk rename
+- `--to-namespace NS`: New namespace prefix for bulk rename
+- `-c, --config PATH`: YAML configuration file with rename mappings
+- `-o, --output PATH`: Output file (single source) or directory (multiple sources)
+- `--migrate-data PATH`: Data file(s) to migrate (can specify multiple)
+- `--data-output PATH`: Output path for migrated data
+- `--dry-run`: Preview changes without writing files
+- `--no-colour`: Disable coloured output
+- `--init`: Generate a template rename configuration file
+
+**Examples**:
+```bash
+# Fix a single typo
+rdf-construct refactor rename ontology.ttl \
+    --from "http://example.org/ont#Buiding" \
+    --to "http://example.org/ont#Building" \
+    -o fixed.ttl
+
+# Bulk namespace change
+rdf-construct refactor rename ontology.ttl \
+    --from-namespace "http://old.example.org/" \
+    --to-namespace "http://new.example.org/" \
+    -o migrated.ttl
+
+# With data migration
+rdf-construct refactor rename ontology.ttl \
+    --from "ex:OldClass" --to "ex:NewClass" \
+    --migrate-data instances.ttl \
+    --data-output updated-instances.ttl
+
+# From configuration file
+rdf-construct refactor rename --config renames.yml
+
+# Preview changes (dry run)
+rdf-construct refactor rename ontology.ttl \
+    --from "ex:Old" --to "ex:New" --dry-run
+
+# Process multiple files
+rdf-construct refactor rename modules/*.ttl \
+    --from-namespace "http://old/" --to-namespace "http://new/" \
+    -o migrated/
+
+# Generate template config
+rdf-construct refactor rename --init
+```
+
+**Configuration File Format**:
+```yaml
+source_files:
+  - ontology.ttl
+
+output: renamed.ttl
+
+rename:
+  # Namespace mappings (applied first)
+  namespaces:
+    "http://old.example.org/v1#": "http://example.org/v2#"
+
+  # Individual entity renames (applied after namespace)
+  entities:
+    "http://example.org/v2#Buiding": "http://example.org/v2#Building"
+    "http://example.org/v2#hasAddres": "http://example.org/v2#hasAddress"
+
+# Optional data migration
+migrate_data:
+  sources:
+    - data/*.ttl
+  output_dir: data/migrated/
+```
+
+---
+
+#### refactor deprecate
+
+Mark ontology entities as deprecated with OWL annotations.
+
+```bash
+rdf-construct refactor deprecate SOURCES [OPTIONS]
+```
+
+**Arguments**:
+- `SOURCES`: One or more RDF files to process (.ttl, .rdf, .owl)
+
+**Options**:
+- `--entity URI`: URI of entity to deprecate
+- `--replaced-by URI`: URI of replacement entity (adds dcterms:isReplacedBy)
+- `-m, --message TEXT`: Deprecation message (added to rdfs:comment)
+- `--version VERSION`: Version when deprecated (included in message)
+- `-c, --config PATH`: YAML configuration file with deprecation specs
+- `-o, --output PATH`: Output file
+- `--dry-run`: Preview changes without writing files
+- `--no-colour`: Disable coloured output
+- `--init`: Generate a template deprecation configuration file
+
+**Examples**:
+```bash
+# Deprecate with replacement
+rdf-construct refactor deprecate ontology.ttl \
+    --entity "http://example.org/ont#LegacyTerm" \
+    --replaced-by "http://example.org/ont#NewTerm" \
+    --message "Use NewTerm instead. Will be removed in v3.0." \
+    -o updated.ttl
+
+# Deprecate without replacement
+rdf-construct refactor deprecate ontology.ttl \
+    --entity "ex:ObsoleteThing" \
+    --message "No longer needed." \
+    -o updated.ttl
+
+# Bulk deprecation from config
+rdf-construct refactor deprecate ontology.ttl \
+    -c deprecations.yml \
+    -o updated.ttl
+
+# Preview changes (dry run)
+rdf-construct refactor deprecate ontology.ttl \
+    --entity "ex:Legacy" --replaced-by "ex:Modern" --dry-run
+
+# Generate template config
+rdf-construct refactor deprecate --init
+```
+
+**Configuration File Format**:
+```yaml
+source_files:
+  - ontology.ttl
+
+output: deprecated.ttl
+
+deprecations:
+  - entity: "http://example.org/ont#LegacyPerson"
+    replaced_by: "http://example.org/ont#Agent"
+    message: "Deprecated in v2.0. Use Agent for both people and organisations."
+    version: "2.0.0"
+
+  - entity: "http://example.org/ont#hasAddress"
+    replaced_by: "http://example.org/ont#locatedAt"
+    message: "Renamed for consistency with location vocabulary."
+
+  - entity: "http://example.org/ont#TemporaryClass"
+    # No replacement - just deprecated
+    message: "Experimental class removed. No replacement available."
+```
+
+**Deprecation Output**:
+
+When you deprecate an entity, the following triples are added:
+```turtle
+ex:LegacyTerm
+    owl:deprecated true ;
+    dcterms:isReplacedBy ex:NewTerm ;
+    rdfs:comment "DEPRECATED (v2.0): Use NewTerm instead..."@en .
+```
+
+**Exit Codes**:
+- `0`: Success
+- `1`: Success with warnings (some entities not found)
+- `2`: Error (file not found, parse error, etc.)
+
+---
+
 ### cq-test - Run Competency Question Tests
 
 Validate ontologies against SPARQL-based competency questions.

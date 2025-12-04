@@ -1,0 +1,38 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix old: <http://old.example.org/v1#> .
+
+# Ontology using old namespace that needs migration
+
+old:Building a owl:Class ;
+    rdfs:label "Building"@en ;
+    rdfs:comment "A structure."@en ;
+    rdfs:subClassOf old:Structure .
+
+old:Structure a owl:Class ;
+    rdfs:label "Structure"@en .
+
+old:House a owl:Class ;
+    rdfs:label "House"@en ;
+    rdfs:subClassOf old:Building .
+
+old:Office a owl:Class ;
+    rdfs:label "Office"@en ;
+    rdfs:subClassOf old:Building .
+
+old:hasLocation a owl:ObjectProperty ;
+    rdfs:label "has location"@en ;
+    rdfs:domain old:Building ;
+    rdfs:range old:Location .
+
+old:Location a owl:Class ;
+    rdfs:label "Location"@en .
+
+old:Person a owl:Class ;
+    rdfs:label "Person"@en .
+
+old:worksIn a owl:ObjectProperty ;
+    rdfs:label "works in"@en ;
+    rdfs:domain old:Person ;
+    rdfs:range old:Building .

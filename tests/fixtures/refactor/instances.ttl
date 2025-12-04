@@ -1,0 +1,29 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/ont#> .
+@prefix data: <http://example.org/data#> .
+
+# Instance data that references the typo ontology
+
+data:building1 a ex:Buiding ;
+    rdfs:label "Main Office"@en ;
+    ex:hasAddres data:address1 .
+
+data:building2 a ex:Buiding ;
+    rdfs:label "Warehouse"@en ;
+    ex:hasAddres data:address2 .
+
+data:house1 a ex:House ;
+    rdfs:label "Sample House"@en .
+
+data:address1 a ex:Addres ;
+    rdfs:label "123 Main St"@en .
+
+data:address2 a ex:Addres ;
+    rdfs:label "456 Industrial Ave"@en .
+
+data:org1 a ex:Organistion ;
+    rdfs:label "Acme Corp"@en ;
+    ex:hasMember data:person1 .
+
+data:person1 rdfs:label "John Smith"@en .

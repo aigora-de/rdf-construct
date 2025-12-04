@@ -1,0 +1,21 @@
+# Deprecation configuration for legacy entities
+
+source_files:
+  - legacy.ttl
+
+output: updated.ttl
+
+deprecations:
+  - entity: "http://example.org/ont#LegacyPerson"
+    replaced_by: "http://example.org/ont#Agent"
+    message: "Deprecated in v2.0. Use Agent for both people and organisations."
+    version: "2.0.0"
+
+  - entity: "http://example.org/ont#hasAddress"
+    replaced_by: "http://example.org/ont#locatedAt"
+    message: "Renamed for consistency with location vocabulary."
+
+  - entity: "http://example.org/ont#TemporaryClass"
+    # No replacement - just deprecated
+    message: "Experimental class removed in v2.0. No replacement available."
+    version: "2.0.0"
