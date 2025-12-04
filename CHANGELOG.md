@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **New `localise` command** for multi-language translation management
+  - `localise extract` - Extract translatable strings (rdfs:label, rdfs:comment, skos:prefLabel, etc.) to YAML files
+  - `localise merge` - Merge completed translations back into ontologies as language-tagged literals
+  - `localise report` - Generate translation coverage reports across languages
+  - `localise init` - Create empty translation file for a new language
+  - `localise config --init` - Generate default configuration file
+  - Four-level status tracking: pending → needs_review → translated → approved
+  - Property-aware extraction (configurable properties to extract)
+  - Missing-only mode for incremental translation updates
+  - Preserve/overwrite strategies for existing translations
+  - Text and Markdown output formatters
+  - Exit codes: 0 (success), 1 (warnings), 2 (error)
+- New module: `src/rdf_construct/localise/`
+  - `config.py` - Configuration dataclasses (TranslationEntry, TranslationFile, etc.)
+  - `extractor.py` - String extraction from ontologies
+  - `merger.py` - Merge translations back into graphs
+  - `reporter.py` - Coverage analysis
+  - `formatters/` - Text and Markdown output formatters
+- New documentation: `docs/user_guides/LOCALISE_GUIDE.md`
+- New example: `examples/localise_config.yml`
+- New tests: `tests/test_localise.py` (27 test cases)
+
 - **New `refactor` command group** for URI renaming and deprecation
   - `refactor rename` subcommand for URI renaming:
     - Single entity renames (fixing typos): `--from ex:Buiding --to ex:Building`

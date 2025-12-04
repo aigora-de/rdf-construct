@@ -100,6 +100,20 @@ from rdf_construct.refactor import (
 )
 from rdf_construct.merge import DataMigrator
 
+from rdf_construct.localise import (
+    StringExtractor,
+    TranslationMerger,
+    CoverageReporter,
+    ExtractConfig,
+    MergeConfig as LocaliseMergeConfig,
+    TranslationFile,
+    TranslationStatus,
+    ExistingStrategy,
+    create_default_config as create_default_localise_config,
+    load_localise_config,
+    get_formatter as get_localise_formatter,
+)
+
 # Valid rendering modes
 RENDERING_MODES = ["default", "odm"]
 
@@ -2914,6 +2928,501 @@ def refactor_deprecate(
                 raise SystemExit(1)
 
     raise SystemExit(0)
+
+
+@cli.group()
+def localise():
+    """Multi-language translation management.
+
+    Extract translatable strings, merge translations, and track coverage.
+
+    \b
+    Commands:
+      extract   Extract strings for translation
+      merge     Merge translations back into ontology
+      report    Generate translation coverage report
+      init      Create empty translation file for new language
+
+    \b
+    Examples:
+      # Extract strings for German translation
+      rdf-construct localise extract ontology.ttl --language de -o translations/de.yml
+
+      # Merge completed translations
+      rdf-construct localise merge ontology.ttl translations/de.yml -o localised.ttl
+
+      # Check translation coverage
+      rdf-construct localise report ontology.ttl --languages en,de,fr
+    """
+    pass
+
+
+@localise.command("extract")
+@click.argument("source", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--language",
+    "-l",
+    "target_language",
+    required=True,
+    help="Target language code (e.g., de, fr, es)",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Output YAML file (default: {language}.yml)",
+)
+@click.option(
+    "--source-language",
+    default="en",
+    help="Source language code (default: en)",
+)
+@click.option(
+    "--properties",
+    "-p",
+    help="Comma-separated properties to extract (e.g., rdfs:label,rdfs:comment)",
+)
+@click.option(
+    "--include-deprecated",
+    is_flag=True,
+    help="Include deprecated entities",
+)
+@click.option(
+    "--missing-only",
+    is_flag=True,
+    help="Only extract strings missing in target language",
+)
+@click.option(
+    "--config",
+    "-c",
+    "config_file",
+    type=click.Path(exists=True, path_type=Path),
+    help="YAML configuration file",
+)
+def localise_extract(
+    source: Path,
+    target_language: str,
+    output: Path | None,
+    source_language: str,
+    properties: str | None,
+    include_deprecated: bool,
+    missing_only: bool,
+    config_file: Path | None,
+):
+    """Extract translatable strings from an ontology.
+
+    Generates a YAML file with source text and empty translation fields,
+    ready to be filled in by translators.
+
+    \b
+    Examples:
+      # Basic extraction
+      rdf-construct localise extract ontology.ttl --language de -o de.yml
+
+      # Extract only labels
+      rdf-construct localise extract ontology.ttl -l de -p rdfs:label
+
+      # Extract missing strings only (for updates)
+      rdf-construct localise extract ontology.ttl -l de --missing-only -o de_update.yml
+    """
+    from rdflib import Graph
+    from rdf_construct.localise import (
+        StringExtractor,
+        ExtractConfig,
+        get_formatter as get_localise_formatter,
+    )
+
+    # Load config if provided
+    if config_file:
+        from rdf_construct.localise import load_localise_config
+        config = load_localise_config(config_file)
+        extract_config = config.extract
+        extract_config.target_language = target_language
+    else:
+        # Build config from CLI args
+        prop_list = None
+        if properties:
+            prop_list = [_expand_localise_property(p.strip()) for p in properties.split(",")]
+
+        extract_config = ExtractConfig(
+            source_language=source_language,
+            target_language=target_language,
+            properties=prop_list or ExtractConfig().properties,
+            include_deprecated=include_deprecated,
+            missing_only=missing_only,
+        )
+
+    # Load graph
+    click.echo(f"Loading {source}...")
+    graph = Graph()
+    graph.parse(source)
+
+    # Extract
+    click.echo(f"Extracting strings for {target_language}...")
+    extractor = StringExtractor(extract_config)
+    result = extractor.extract(graph, source, target_language)
+
+    # Display result
+    formatter = get_localise_formatter("text")
+    click.echo(formatter.format_extraction_result(result))
+
+    if not result.success:
+        raise SystemExit(2)
+
+    # Save output
+    output_path = output or Path(f"{target_language}.yml")
+    if result.translation_file:
+        result.translation_file.save(output_path)
+        click.echo()
+        click.secho(f"✓ Wrote {output_path}", fg="green")
+
+    raise SystemExit(0)
+
+
+@localise.command("merge")
+@click.argument("source", type=click.Path(exists=True, path_type=Path))
+@click.argument("translations", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Output file for merged ontology",
+)
+@click.option(
+    "--status",
+    type=click.Choice(["pending", "needs_review", "translated", "approved"], case_sensitive=False),
+    default="translated",
+    help="Minimum status to include (default: translated)",
+)
+@click.option(
+    "--existing",
+    type=click.Choice(["preserve", "overwrite"], case_sensitive=False),
+    default="preserve",
+    help="How to handle existing translations (default: preserve)",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would happen without writing files",
+)
+@click.option(
+    "--no-colour",
+    is_flag=True,
+    help="Disable coloured output",
+)
+def localise_merge(
+    source: Path,
+    translations: tuple[Path, ...],
+    output: Path,
+    status: str,
+    existing: str,
+    dry_run: bool,
+    no_colour: bool,
+):
+    """Merge translation files back into an ontology.
+
+    Takes completed YAML translation files and adds the translations
+    as new language-tagged literals to the ontology.
+
+    \b
+    Examples:
+      # Merge single translation file
+      rdf-construct localise merge ontology.ttl de.yml -o localised.ttl
+
+      # Merge multiple languages
+      rdf-construct localise merge ontology.ttl translations/*.yml -o multilingual.ttl
+
+      # Merge only approved translations
+      rdf-construct localise merge ontology.ttl de.yml --status approved -o localised.ttl
+    """
+    from rdflib import Graph
+    from rdf_construct.localise import (
+        TranslationMerger,
+        TranslationFile,
+        MergeConfig as LocaliseMergeConfig,
+        TranslationStatus,
+        ExistingStrategy,
+        get_formatter as get_localise_formatter,
+    )
+
+    # Load graph
+    click.echo(f"Loading {source}...")
+    graph = Graph()
+    graph.parse(source)
+
+    # Load translation files
+    click.echo(f"Loading {len(translations)} translation file(s)...")
+    trans_files = [TranslationFile.from_yaml(p) for p in translations]
+
+    # Build config
+    config = LocaliseMergeConfig(
+        min_status=TranslationStatus(status),
+        existing=ExistingStrategy(existing),
+    )
+
+    # Merge
+    click.echo("Merging translations...")
+    merger = TranslationMerger(config)
+    result = merger.merge_multiple(graph, trans_files)
+
+    # Display result
+    formatter = get_localise_formatter("text", use_colour=not no_colour)
+    click.echo(formatter.format_merge_result(result))
+
+    if not result.success:
+        raise SystemExit(2)
+
+    # Save output (unless dry run)
+    if not dry_run and result.merged_graph:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        result.merged_graph.serialize(destination=output, format="turtle")
+        click.echo()
+        click.secho(f"✓ Wrote {output}", fg="green")
+
+    # Exit code based on warnings
+    if result.stats.errors > 0:
+        raise SystemExit(1)
+    else:
+        raise SystemExit(0)
+
+
+@localise.command("report")
+@click.argument("source", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--languages",
+    "-l",
+    required=True,
+    help="Comma-separated language codes to check (e.g., en,de,fr)",
+)
+@click.option(
+    "--source-language",
+    default="en",
+    help="Base language for translations (default: en)",
+)
+@click.option(
+    "--properties",
+    "-p",
+    help="Comma-separated properties to check",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Output file for report",
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["text", "markdown", "md"], case_sensitive=False),
+    default="text",
+    help="Output format (default: text)",
+)
+@click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    help="Show detailed missing translation list",
+)
+@click.option(
+    "--no-colour",
+    is_flag=True,
+    help="Disable coloured output",
+)
+def localise_report(
+    source: Path,
+    languages: str,
+    source_language: str,
+    properties: str | None,
+    output: Path | None,
+    output_format: str,
+    verbose: bool,
+    no_colour: bool,
+):
+    """Generate translation coverage report.
+
+    Analyses an ontology and reports what percentage of translatable
+    content has been translated into each target language.
+
+    \b
+    Examples:
+      # Basic coverage report
+      rdf-construct localise report ontology.ttl --languages en,de,fr
+
+      # Detailed report with missing entities
+      rdf-construct localise report ontology.ttl -l en,de,fr --verbose
+
+      # Markdown report to file
+      rdf-construct localise report ontology.ttl -l en,de,fr -f markdown -o coverage.md
+    """
+    from rdflib import Graph
+    from rdf_construct.localise import (
+        CoverageReporter,
+        get_formatter as get_localise_formatter,
+    )
+
+    # Parse languages
+    lang_list = [lang.strip() for lang in languages.split(",")]
+
+    # Parse properties
+    prop_list = None
+    if properties:
+        prop_list = [_expand_localise_property(p.strip()) for p in properties.split(",")]
+
+    # Load graph
+    click.echo(f"Loading {source}...")
+    graph = Graph()
+    graph.parse(source)
+
+    # Generate report
+    click.echo("Analysing translation coverage...")
+    reporter = CoverageReporter(
+        source_language=source_language,
+        properties=prop_list,
+    )
+    report = reporter.report(graph, lang_list, source)
+
+    # Format output
+    formatter = get_localise_formatter(output_format, use_colour=not no_colour)
+    report_text = formatter.format_coverage_report(report, verbose=verbose)
+
+    # Output
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(report_text)
+        click.secho(f"✓ Wrote {output}", fg="green")
+    else:
+        click.echo()
+        click.echo(report_text)
+
+    raise SystemExit(0)
+
+
+@localise.command("init")
+@click.argument("source", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--language",
+    "-l",
+    "target_language",
+    required=True,
+    help="Target language code (e.g., de, fr, es)",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Output YAML file (default: {language}.yml)",
+)
+@click.option(
+    "--source-language",
+    default="en",
+    help="Source language code (default: en)",
+)
+def localise_init(
+    source: Path,
+    target_language: str,
+    output: Path | None,
+    source_language: str,
+):
+    """Create empty translation file for a new language.
+
+    Equivalent to 'extract' but explicitly for starting a new language.
+
+    \b
+    Examples:
+      rdf-construct localise init ontology.ttl --language ja -o translations/ja.yml
+    """
+    from rdflib import Graph
+    from rdf_construct.localise import (
+        StringExtractor,
+        ExtractConfig,
+        get_formatter as get_localise_formatter,
+    )
+
+    # Build config
+    extract_config = ExtractConfig(
+        source_language=source_language,
+        target_language=target_language,
+    )
+
+    # Load graph
+    click.echo(f"Loading {source}...")
+    graph = Graph()
+    graph.parse(source)
+
+    # Extract
+    click.echo(f"Initialising translation file for {target_language}...")
+    extractor = StringExtractor(extract_config)
+    result = extractor.extract(graph, source, target_language)
+
+    # Display result
+    formatter = get_localise_formatter("text")
+    click.echo(formatter.format_extraction_result(result))
+
+    if not result.success:
+        raise SystemExit(2)
+
+    # Save output
+    output_path = output or Path(f"{target_language}.yml")
+    if result.translation_file:
+        result.translation_file.save(output_path)
+        click.echo()
+        click.secho(f"✓ Created {output_path}", fg="green")
+        click.echo(f"  Fill in translations and run:")
+        click.echo(f"    rdf-construct localise merge {source} {output_path} -o localised.ttl")
+
+    raise SystemExit(0)
+
+
+@localise.command("config")
+@click.option(
+    "--init",
+    "init_config",
+    is_flag=True,
+    help="Generate a default localise configuration file",
+)
+def localise_config(init_config: bool):
+    """Generate or validate localise configuration.
+
+    \b
+    Examples:
+      rdf-construct localise config --init
+    """
+    from rdf_construct.localise import create_default_config as create_default_localise_config
+
+    if init_config:
+        config_path = Path("localise.yml")
+        if config_path.exists():
+            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
+            raise click.Abort()
+
+        config_content = create_default_localise_config()
+        config_path.write_text(config_content)
+        click.secho(f"Created {config_path}", fg="green")
+        click.echo("Edit this file to configure your localisation workflow.")
+    else:
+        click.echo("Use --init to create a default configuration file.")
+
+    raise SystemExit(0)
+
+
+def _expand_localise_property(prop: str) -> str:
+    """Expand a CURIE to full URI for localise commands."""
+    prefixes = {
+        "rdfs:": "http://www.w3.org/2000/01/rdf-schema#",
+        "skos:": "http://www.w3.org/2004/02/skos/core#",
+        "owl:": "http://www.w3.org/2002/07/owl#",
+        "rdf:": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+        "dc:": "http://purl.org/dc/elements/1.1/",
+        "dcterms:": "http://purl.org/dc/terms/",
+    }
+
+    for prefix, namespace in prefixes.items():
+        if prop.startswith(prefix):
+            return namespace + prop[len(prefix):]
+
+    return prop
 
 
 if __name__ == "__main__":

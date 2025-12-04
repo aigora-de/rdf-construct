@@ -19,7 +19,8 @@
 - **Semantic Diff**: Compare ontology versions and identify meaningful changes
 - **Ontology Merging**: Combine multiple ontologies with conflict detection and data migration
 - **Ontology Splitting**: Split monolithic ontologies into modules with dependency tracking
-- **Ontology Refactoring**: Rename URIs (typos, namespace changes) and deprecate entities
+- **Ontology Refactoring**: Rename URIs and deprecate entities with OWL annotations
+- **Multi-Language Support**: Extract, translate, and merge translations for internationalised ontologies
 - **Ontology Linting**: Check quality with 11 configurable rules
 - **Competency Question Testing**: Validate ontologies against SPARQL-based tests
 - **Ontology Statistics**: Comprehensive metrics with comparison mode
@@ -186,6 +187,18 @@ rdf-construct refactor deprecate ontology.ttl \
 rdf-construct refactor rename ontology.ttl --from "ex:Old" --to "ex:New" --dry-run
 ```
 
+### Multi-Language Translations
+```bash
+# Extract strings for German translation
+rdf-construct localise extract ontology.ttl --language de -o translations/de.yml
+
+# Merge completed translations
+rdf-construct localise merge ontology.ttl translations/de.yml -o localised.ttl
+
+# Check translation coverage
+rdf-construct localise report ontology.ttl --languages en,de,fr
+```
+
 ## Documentation
 
 📚 **[Complete Documentation](docs/index.md)** - Start here
@@ -202,6 +215,7 @@ rdf-construct refactor rename ontology.ttl --from "ex:Old" --to "ex:New" --dry-r
 - [Stats Guide](docs/user_guides/STATS_GUIDE.md) - Ontology metrics
 - [Merge Guide](docs/user_guides/MERGE_GUIDE.md) - Combining ontologies
 - [Refactor Guide](docs/user_guides/REFACTOR_GUIDE.md) - Renaming and deprecation
+- [Localise Guide](docs/user_guides/LOCALISE_GUIDE.md) - Multi-language translations
 - [CLI Reference](docs/user_guides/CLI_REFERENCE.md) - All commands and options
 
 **For Developers**:
