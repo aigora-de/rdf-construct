@@ -1,0 +1,44 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex: <http://example.org/ont#> .
+
+# Ontology with legacy entities that should be deprecated
+
+ex:LegacyPerson a owl:Class ;
+    rdfs:label "Legacy Person"@en ;
+    rdfs:comment "Represents a person. Originally for people only."@en ;
+    rdfs:subClassOf ex:Thing .
+
+ex:Thing a owl:Class ;
+    rdfs:label "Thing"@en .
+
+ex:Agent a owl:Class ;
+    rdfs:label "Agent"@en ;
+    rdfs:comment "An agent - either a person or organisation."@en ;
+    rdfs:subClassOf ex:Thing .
+
+ex:hasAddress a owl:ObjectProperty ;
+    rdfs:label "has address"@en ;
+    rdfs:domain ex:LegacyPerson ;
+    rdfs:range ex:Address .
+
+ex:locatedAt a owl:ObjectProperty ;
+    rdfs:label "located at"@en ;
+    rdfs:comment "The new location property."@en ;
+    rdfs:domain ex:Thing ;
+    rdfs:range ex:Location .
+
+ex:Address a owl:Class ;
+    rdfs:label "Address"@en .
+
+ex:Location a owl:Class ;
+    rdfs:label "Location"@en .
+
+ex:TemporaryClass a owl:Class ;
+    rdfs:label "Temporary Class"@en ;
+    rdfs:comment "An experimental class."@en .
+
+ex:Employee a owl:Class ;
+    rdfs:label "Employee"@en ;
+    rdfs:subClassOf ex:LegacyPerson .

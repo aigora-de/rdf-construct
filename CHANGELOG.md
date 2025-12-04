@@ -7,7 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-*No unreleased changes.*
+### Added
+
+- **New `refactor` command group** for URI renaming and deprecation
+  - `refactor rename` subcommand for URI renaming:
+    - Single entity renames (fixing typos): `--from ex:Buiding --to ex:Building`
+    - Bulk namespace changes: `--from-namespace http://old/ --to-namespace http://new/`
+    - Combined namespace + explicit entity renames
+    - Data migration support using shared `merge/migrator.py` infrastructure
+    - Literals intentionally NOT modified (preserves comments mentioning old URIs)
+    - YAML configuration file support for complex renames
+    - Dry-run preview mode
+  - `refactor deprecate` subcommand for marking entities deprecated:
+    - Adds `owl:deprecated true`
+    - Adds `dcterms:isReplacedBy` when replacement specified
+    - Prepends "DEPRECATED:" to `rdfs:comment` with custom message
+    - Bulk deprecation from YAML configuration
+    - Preserves all existing entity properties
+    - Dry-run preview mode
+  - Exit codes: 0 (success), 1 (warnings), 2 (error)
+- New module: `src/rdf_construct/refactor/`
+  - `config.py` - Configuration dataclasses (RenameConfig, DeprecationSpec, etc.)
+  - `renamer.py` - OntologyRenamer class for URI substitution
+  - `deprecator.py` - OntologyDeprecator class for deprecation workflow
+  - `formatters/text.py` - Dry-run preview formatting
+- New documentation: `docs/user_guides/REFACTOR_GUIDE.md`
+- New examples: `examples/refactor_renames.yml`, `examples/refactor_deprecations.yml`, `examples/refactor_*.ttl`
+- New tests: `tests/test_refactor.py` (25+ test cases)
+
+- **New `split` command** for modularising monolithic ontologies
+  - Namespace-based auto-detection mode (`--by-namespace`)
+  - Configuration file support for explicit module definitions
+  - Entity assignment by class list, property list, or namespace
+  - `include_descendants` option for capturing class hierarchies
+  - Automatic `owl:imports` generation from detected dependencies
+  - Manifest file (`manifest.yml`) with module statistics and dependency graph
+  - Instance data splitting by `rdf:type`
+  - Dry-run preview mode
+  - Round-trip validation: `merge(split(x)) ≈ x`
+  - Exit codes: 0 (success), 1 (unmatched in common), 2 (error)
+- Extended merge module: `src/rdf_construct/merge/splitter.py`
+- New examples: `examples/split_monolith.ttl`, `examples/split_instances.ttl`, `examples/split_config.yml`
+- New tests: `tests/test_split.py` (18 test cases)
+- **New `merge` command** for combining multiple RDF ontology files
+  - Intelligent conflict detection (same subject+predicate, different values)
+  - Four resolution strategies: `priority`, `first`, `last`, `mark_all`
+  - Conflict markers (`# === CONFLICT ===`) in output for manual review
+  - Namespace remapping during merge
+  - owl:imports handling (preserve, remove, merge)
+  - Conflict report generation (text and markdown formats)
+  - Data migration support:
+    - Simple URI substitution for renames and namespace changes
+    - Complex CONSTRUCT-style transformation rules
+    - Property splits, type migrations, value transformations
+  - YAML configuration file support for complex merges
+  - Dry-run mode for previewing changes
+  - Exit codes: 0 (success), 1 (unresolved conflicts), 2 (error)
+- New module: `src/rdf_construct/merge/`
+  - `config.py` - Configuration dataclasses (MergeConfig, MigrationRule, etc.)
+  - `conflicts.py` - Conflict detection and marking
+  - `merger.py` - Core OntologyMerger class
+  - `migrator.py` - Data graph migration (shared infrastructure for future split/refactor commands)
+  - `rules.py` - SPARQL-like transformation rule engine
+  - `formatters.py` - Text and Markdown output formatters
+- New documentation: `docs/user_guides/MERGE_GUIDE.md`
+- New example: `examples/merge_config.yml`
+- New tests: `tests/test_merge.py` (28 test cases)
 
 ## [0.2.1] - 2025-12-03
 

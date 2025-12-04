@@ -1,0 +1,35 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex: <http://example.org/ont#> .
+
+# Ontology with typos that need fixing
+
+ex:Buiding a owl:Class ;
+    rdfs:label "Building"@en ;
+    rdfs:comment "A structure for human use. Note: Buiding is a typo!"@en ;
+    rdfs:subClassOf ex:Structure .
+
+ex:Structure a owl:Class ;
+    rdfs:label "Structure"@en ;
+    rdfs:comment "A physical structure."@en .
+
+ex:House rdfs:subClassOf ex:Buiding ;
+    rdfs:label "House"@en .
+
+ex:hasAddres a owl:ObjectProperty ;
+    rdfs:label "has address"@en ;
+    rdfs:domain ex:Buiding ;
+    rdfs:range ex:Addres .
+
+ex:Addres a owl:Class ;
+    rdfs:label "Address"@en ;
+    rdfs:comment "A postal address."@en .
+
+ex:Organistion a owl:Class ;
+    rdfs:label "Organisation"@en ;
+    rdfs:comment "An organization or company."@en .
+
+ex:hasMember a owl:ObjectProperty ;
+    rdfs:label "has member"@en ;
+    rdfs:domain ex:Organistion .

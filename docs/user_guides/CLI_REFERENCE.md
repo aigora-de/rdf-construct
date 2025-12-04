@@ -446,6 +446,424 @@ rdf-construct lint --init
 
 ---
 
+### merge - Combine RDF Ontologies
+
+Merge multiple RDF ontology files with intelligent conflict detection and resolution.
+
+```bash
+rdf-construct merge [SOURCES...] -o OUTPUT [OPTIONS]
+```
+
+**Arguments**:
+- `SOURCES`: One or more RDF files to merge (.ttl, .rdf, .owl)
+
+**Options**:
+- `-o, --output PATH`: Output file for merged ontology (required)
+- `-c, --config PATH`: YAML configuration file
+- `-p, --priority INT`: Priority for each source (can specify multiple, higher wins conflicts)
+- `--strategy STRATEGY`: Conflict resolution: `priority`, `first`, `last`, `mark_all` (default: priority)
+- `-r, --report PATH`: Write conflict report to file
+- `--report-format FORMAT`: Report format: `text`, `markdown`, `md` (default: markdown)
+- `--imports STRATEGY`: owl:imports handling: `preserve`, `remove`, `merge` (default: preserve)
+- `--migrate-data PATH`: Data file(s) to migrate (can specify multiple)
+- `--migration-rules PATH`: YAML file with migration rules
+- `--data-output PATH`: Output path for migrated data
+- `--dry-run`: Show what would happen without writing files
+- `--no-colour`: Disable coloured output
+- `--init`: Generate a default merge configuration file
+
+**Conflict Resolution Strategies**:
+
+| Strategy | Description |
+|----------|-------------|
+| `priority` | Higher priority source wins (default) |
+| `first` | First source encountered wins |
+| `last` | Last source encountered wins |
+| `mark_all` | Mark all conflicts for manual review |
+
+**Examples**:
+
+```bash
+# Basic merge of two ontologies
+rdf-construct merge core.ttl extension.ttl -o merged.ttl
+
+# With priorities (extension wins conflicts)
+rdf-construct merge core.ttl extension.ttl -o merged.ttl -p 1 -p 2
+
+# Mark all conflicts for manual review
+rdf-construct merge core.ttl extension.ttl -o merged.ttl --strategy mark_all
+
+# Generate conflict report
+rdf-construct merge core.ttl extension.ttl -o merged.ttl --report conflicts.md
+
+# Dry run (preview without writing)
+rdf-construct merge core.ttl extension.ttl -o merged.ttl --dry-run
+
+# With data migration
+rdf-construct merge core.ttl extension.ttl -o merged.ttl \
+    --migrate-data split_instances.ttl --data-output migrated.ttl
+
+# Using configuration file
+rdf-construct merge --config merge.yml -o merged.ttl
+
+# Generate default configuration
+rdf-construct merge --init
+```
+
+**Conflict Markers**:
+
+Unresolved conflicts are marked in the output file:
+
+```turtle
+# === CONFLICT: ex:Building rdfs:label ===
+# Source: core.ttl (priority 1): "Building"@en
+# Source: ext.ttl (priority 2): "Structure"@en
+# Resolution: UNRESOLVED - values differ, manual review required
+ex:Building a owl:Class ;
+    rdfs:label "Building"@en ;
+    rdfs:label "Structure"@en .
+# === END CONFLICT ===
+```
+
+Find conflicts with: `grep -n "=== CONFLICT ===" merged.ttl`
+
+**Configuration File Format**:
+
+```yaml
+sources:
+  - path: core.ttl
+    priority: 1
+  - path: extension.ttl
+    priority: 2
+    namespace_remap:
+      "http://old.org/": "http://new.org/"
+
+output:
+  path: merged.ttl
+  format: turtle
+
+conflicts:
+  strategy: priority
+  report: conflicts.md
+
+imports: preserve
+
+migrate_data:
+  sources:
+    - split_instances.ttl
+  output: migrated.ttl
+  rules:
+    - type: rename
+      from: "http://old.org/Class"
+      to: "http://new.org/Class"
+```
+
+**Exit Codes**:
+- `0`: Merge successful, no unresolved conflicts
+- `1`: Merge successful, but unresolved conflicts marked in output
+- `2`: Error (file not found, parse error, etc.)
+
+---
+
+---
+
+### split - Modularise Ontologies
+
+Split a monolithic ontology into multiple modules.
+```bash
+rdf-construct split SOURCE [OPTIONS]
+```
+
+**Arguments**:
+- `SOURCE`: RDF ontology file to split (.ttl, .rdf, .owl)
+
+**Options**:
+- `-o, --output PATH`: Output directory for modules (default: `modules/`)
+- `-c, --config PATH`: YAML configuration file
+- `--by-namespace`: Auto-detect modules from namespaces
+- `--migrate-data PATH`: Data file(s) to split by instance type (can specify multiple)
+- `--data-output PATH`: Output directory for split data files
+- `--unmatched STRATEGY`: Strategy for unmatched entities: `common` or `error` (default: common)
+- `--common-name NAME`: Name for common module (default: `common`)
+- `--no-manifest`: Don't generate manifest.yml
+- `--dry-run`: Show what would happen without writing files
+- `--no-colour`: Disable coloured output
+- `--init`: Generate a default split configuration file
+
+**Examples**:
+```bash
+# Split by namespace (auto-detect modules)
+rdf-construct split large.ttl -o modules/ --by-namespace
+
+# Split using configuration file
+rdf-construct split large.ttl -o modules/ -c split.yml
+
+# With data migration
+rdf-construct split large.ttl -o modules/ -c split.yml \
+    --migrate-data instances.ttl --data-output data/
+
+# Dry run (preview without writing)
+rdf-construct split large.ttl -o modules/ --by-namespace --dry-run
+
+# Generate default configuration
+rdf-construct split --init
+```
+
+**Configuration File Format**:
+```yaml
+split:
+  source: ontology/monolith.ttl
+  output_dir: modules/
+
+  modules:
+    # By explicit class/property list
+    - name: core
+      description: "Core concepts"
+      output: core.ttl
+      include:
+        classes:
+          - ex:Entity
+          - ex:Event
+        properties:
+          - ex:identifier
+      include_descendants: true
+
+    # By namespace
+    - name: organisation
+      output: organisation.ttl
+      namespaces:
+        - "http://example.org/ontology/org#"
+      auto_imports: true
+
+  unmatched:
+    strategy: common
+    module: common
+    output: common.ttl
+
+  generate_manifest: true
+```
+
+**Manifest Output** (`manifest.yml`):
+```yaml
+source: ontology/monolith.ttl
+output_dir: modules/
+modules:
+  - name: core
+    file: core.ttl
+    classes: 5
+    properties: 3
+    triples: 42
+    imports: []
+    dependencies: []
+  - name: organisation
+    file: organisation.ttl
+    classes: 8
+    properties: 5
+    triples: 67
+    imports: [core.ttl]
+    dependencies: [core]
+summary:
+  total_modules: 2
+  total_triples: 109
+  unmatched_entities: 0
+```
+
+**Exit Codes**:
+- `0`: Split successful
+- `1`: Split successful, unmatched entities placed in common module
+- `2`: Error (file not found, config invalid, etc.)
+
+---
+
+### refactor - Rename and Deprecate Entities
+
+Refactor ontologies by renaming URIs or marking entities as deprecated.
+
+```bash
+rdf-construct refactor <subcommand> [OPTIONS]
+```
+
+**Subcommands**:
+- `rename` - Rename URIs (single entity or bulk namespace)
+- `deprecate` - Mark entities as deprecated with OWL annotations
+
+---
+
+#### refactor rename
+
+Rename URIs in ontology files.
+
+```bash
+rdf-construct refactor rename SOURCES [OPTIONS]
+```
+
+**Arguments**:
+- `SOURCES`: One or more RDF files to process (.ttl, .rdf, .owl)
+
+**Options**:
+- `--from URI`: Single URI to rename
+- `--to URI`: New URI for single rename
+- `--from-namespace NS`: Old namespace prefix for bulk rename
+- `--to-namespace NS`: New namespace prefix for bulk rename
+- `-c, --config PATH`: YAML configuration file with rename mappings
+- `-o, --output PATH`: Output file (single source) or directory (multiple sources)
+- `--migrate-data PATH`: Data file(s) to migrate (can specify multiple)
+- `--data-output PATH`: Output path for migrated data
+- `--dry-run`: Preview changes without writing files
+- `--no-colour`: Disable coloured output
+- `--init`: Generate a template rename configuration file
+
+**Examples**:
+```bash
+# Fix a single typo
+rdf-construct refactor rename ontology.ttl \
+    --from "http://example.org/ont#Buiding" \
+    --to "http://example.org/ont#Building" \
+    -o fixed.ttl
+
+# Bulk namespace change
+rdf-construct refactor rename ontology.ttl \
+    --from-namespace "http://old.example.org/" \
+    --to-namespace "http://new.example.org/" \
+    -o migrated.ttl
+
+# With data migration
+rdf-construct refactor rename ontology.ttl \
+    --from "ex:OldClass" --to "ex:NewClass" \
+    --migrate-data instances.ttl \
+    --data-output updated-instances.ttl
+
+# From configuration file
+rdf-construct refactor rename --config renames.yml
+
+# Preview changes (dry run)
+rdf-construct refactor rename ontology.ttl \
+    --from "ex:Old" --to "ex:New" --dry-run
+
+# Process multiple files
+rdf-construct refactor rename modules/*.ttl \
+    --from-namespace "http://old/" --to-namespace "http://new/" \
+    -o migrated/
+
+# Generate template config
+rdf-construct refactor rename --init
+```
+
+**Configuration File Format**:
+```yaml
+source_files:
+  - ontology.ttl
+
+output: renamed.ttl
+
+rename:
+  # Namespace mappings (applied first)
+  namespaces:
+    "http://old.example.org/v1#": "http://example.org/v2#"
+
+  # Individual entity renames (applied after namespace)
+  entities:
+    "http://example.org/v2#Buiding": "http://example.org/v2#Building"
+    "http://example.org/v2#hasAddres": "http://example.org/v2#hasAddress"
+
+# Optional data migration
+migrate_data:
+  sources:
+    - data/*.ttl
+  output_dir: data/migrated/
+```
+
+---
+
+#### refactor deprecate
+
+Mark ontology entities as deprecated with OWL annotations.
+
+```bash
+rdf-construct refactor deprecate SOURCES [OPTIONS]
+```
+
+**Arguments**:
+- `SOURCES`: One or more RDF files to process (.ttl, .rdf, .owl)
+
+**Options**:
+- `--entity URI`: URI of entity to deprecate
+- `--replaced-by URI`: URI of replacement entity (adds dcterms:isReplacedBy)
+- `-m, --message TEXT`: Deprecation message (added to rdfs:comment)
+- `--version VERSION`: Version when deprecated (included in message)
+- `-c, --config PATH`: YAML configuration file with deprecation specs
+- `-o, --output PATH`: Output file
+- `--dry-run`: Preview changes without writing files
+- `--no-colour`: Disable coloured output
+- `--init`: Generate a template deprecation configuration file
+
+**Examples**:
+```bash
+# Deprecate with replacement
+rdf-construct refactor deprecate ontology.ttl \
+    --entity "http://example.org/ont#LegacyTerm" \
+    --replaced-by "http://example.org/ont#NewTerm" \
+    --message "Use NewTerm instead. Will be removed in v3.0." \
+    -o updated.ttl
+
+# Deprecate without replacement
+rdf-construct refactor deprecate ontology.ttl \
+    --entity "ex:ObsoleteThing" \
+    --message "No longer needed." \
+    -o updated.ttl
+
+# Bulk deprecation from config
+rdf-construct refactor deprecate ontology.ttl \
+    -c deprecations.yml \
+    -o updated.ttl
+
+# Preview changes (dry run)
+rdf-construct refactor deprecate ontology.ttl \
+    --entity "ex:Legacy" --replaced-by "ex:Modern" --dry-run
+
+# Generate template config
+rdf-construct refactor deprecate --init
+```
+
+**Configuration File Format**:
+```yaml
+source_files:
+  - ontology.ttl
+
+output: deprecated.ttl
+
+deprecations:
+  - entity: "http://example.org/ont#LegacyPerson"
+    replaced_by: "http://example.org/ont#Agent"
+    message: "Deprecated in v2.0. Use Agent for both people and organisations."
+    version: "2.0.0"
+
+  - entity: "http://example.org/ont#hasAddress"
+    replaced_by: "http://example.org/ont#locatedAt"
+    message: "Renamed for consistency with location vocabulary."
+
+  - entity: "http://example.org/ont#TemporaryClass"
+    # No replacement - just deprecated
+    message: "Experimental class removed. No replacement available."
+```
+
+**Deprecation Output**:
+
+When you deprecate an entity, the following triples are added:
+```turtle
+ex:LegacyTerm
+    owl:deprecated true ;
+    dcterms:isReplacedBy ex:NewTerm ;
+    rdfs:comment "DEPRECATED (v2.0): Use NewTerm instead..."@en .
+```
+
+**Exit Codes**:
+- `0`: Success
+- `1`: Success with warnings (some entities not found)
+- `2`: Error (file not found, parse error, etc.)
+
+---
+
 ### cq-test - Run Competency Question Tests
 
 Validate ontologies against SPARQL-based competency questions.

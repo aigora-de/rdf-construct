@@ -1,0 +1,23 @@
+# Rename configuration for fixing typos
+
+source_files:
+  - typos.ttl
+
+output: fixed.ttl
+
+rename:
+  # Namespace mapping (none needed for this case)
+  namespaces: {}
+
+  # Individual entity renames - fixing typos
+  entities:
+    "http://example.org/ont#Buiding": "http://example.org/ont#Building"
+    "http://example.org/ont#hasAddres": "http://example.org/ont#hasAddress"
+    "http://example.org/ont#Addres": "http://example.org/ont#Address"
+    "http://example.org/ont#Organistion": "http://example.org/ont#Organisation"
+
+# Also migrate instance data
+migrate_data:
+  sources:
+    - instances.ttl
+  output: migrated_instances.ttl
