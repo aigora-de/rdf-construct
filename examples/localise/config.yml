@@ -1,0 +1,60 @@
+# rdf-construct localise configuration
+# Example configuration for multi-language translation management
+#
+# Usage:
+#   rdf-construct localise extract ontology.ttl -l de -c localise_config.yml
+#   rdf-construct localise merge ontology.ttl translations/de.yml -o localised.ttl
+
+localise:
+  # Properties to extract/check (in display order)
+  # These are the properties that will be extracted for translation
+  # and checked in coverage reports
+  properties:
+    - rdfs:label
+    - skos:prefLabel
+    - rdfs:comment
+    - skos:definition
+    - skos:altLabel
+    - skos:example
+
+  # Language configuration
+  languages:
+    # Base language - source text will be extracted from this language
+    source: en
+    # Target languages - translation files will be generated for these
+    targets:
+      - de    # German
+      - fr    # French
+      - es    # Spanish
+
+  # Output settings for generated translation files
+  output:
+    # Directory to store translation files
+    directory: translations/
+    # Naming pattern for output files
+    # {language} will be replaced with the language code
+    naming: "{language}.yml"
+
+  # Extraction options
+  extract:
+    # Include entities without source language labels?
+    # If true, extracts all entities even if they don't have English labels
+    include_unlabelled: false
+
+    # Include deprecated entities?
+    # If true, extracts labels from deprecated classes/properties
+    include_deprecated: false
+
+  # Merge options
+  merge:
+    # How to handle existing translations in the ontology
+    # - preserve: Keep existing translations (don't overwrite)
+    # - overwrite: Replace existing translations with new values
+    existing: preserve
+
+    # Minimum status required to include a translation in merge
+    # - pending: Include all entries (even empty)
+    # - needs_review: Include translated entries that need review
+    # - translated: Include only completed translations (default)
+    # - approved: Include only reviewed and approved translations
+    min_status: translated

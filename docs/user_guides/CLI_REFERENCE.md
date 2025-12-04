@@ -864,6 +864,223 @@ ex:LegacyTerm
 
 ---
 
+### localise - Multi-Language Translation Management
+
+Manage translations for multi-language ontology support.
+
+```bash
+rdf-construct localise <subcommand> [OPTIONS]
+```
+
+**Subcommands**:
+- `extract` - Extract translatable strings to YAML
+- `merge` - Merge translations back into ontology
+- `report` - Generate translation coverage report
+- `init` - Create empty translation file for new language
+- `config` - Generate default configuration
+
+---
+
+#### localise extract
+
+Extract translatable strings from an ontology to a YAML file.
+
+```bash
+rdf-construct localise extract SOURCE [OPTIONS]
+```
+
+**Arguments**:
+- `SOURCE`: RDF ontology file (.ttl, .rdf, .owl)
+
+**Options**:
+- `-l, --language CODE`: Target language code (required, e.g., de, fr, es)
+- `-o, --output PATH`: Output YAML file (default: {language}.yml)
+- `--source-language CODE`: Source language code (default: en)
+- `-p, --properties PROPS`: Comma-separated properties to extract (e.g., rdfs:label,rdfs:comment)
+- `--include-deprecated`: Include deprecated entities
+- `--missing-only`: Only extract strings missing in target language
+- `-c, --config PATH`: YAML configuration file
+
+**Examples**:
+```bash
+# Basic extraction for German
+rdf-construct localise extract ontology.ttl --language de -o translations/de.yml
+
+# Extract only labels
+rdf-construct localise extract ontology.ttl -l de -p rdfs:label,skos:prefLabel
+
+# Extract missing strings only (for updates)
+rdf-construct localise extract ontology.ttl -l de --missing-only -o de_update.yml
+
+# Include deprecated entities
+rdf-construct localise extract ontology.ttl -l fr --include-deprecated
+```
+
+---
+
+#### localise merge
+
+Merge translation files back into an ontology.
+
+```bash
+rdf-construct localise merge SOURCE TRANSLATIONS... [OPTIONS]
+```
+
+**Arguments**:
+- `SOURCE`: RDF ontology file
+- `TRANSLATIONS`: One or more translation YAML files
+
+**Options**:
+- `-o, --output PATH`: Output file for merged ontology (required)
+- `--status STATUS`: Minimum status to include (pending|needs_review|translated|approved, default: translated)
+- `--existing STRATEGY`: How to handle existing translations (preserve|overwrite, default: preserve)
+- `--dry-run`: Preview changes without writing files
+- `--no-colour`: Disable coloured output
+
+**Examples**:
+```bash
+# Merge single translation file
+rdf-construct localise merge ontology.ttl de.yml -o localised.ttl
+
+# Merge multiple languages
+rdf-construct localise merge ontology.ttl translations/*.yml -o multilingual.ttl
+
+# Merge only approved translations
+rdf-construct localise merge ontology.ttl de.yml --status approved -o localised.ttl
+
+# Overwrite existing translations
+rdf-construct localise merge ontology.ttl de.yml --existing overwrite -o updated.ttl
+
+# Preview changes
+rdf-construct localise merge ontology.ttl de.yml -o output.ttl --dry-run
+```
+
+---
+
+#### localise report
+
+Generate translation coverage report.
+
+```bash
+rdf-construct localise report SOURCE [OPTIONS]
+```
+
+**Arguments**:
+- `SOURCE`: RDF ontology file
+
+**Options**:
+- `-l, --languages CODES`: Comma-separated language codes to check (required, e.g., en,de,fr)
+- `--source-language CODE`: Base language for translations (default: en)
+- `-p, --properties PROPS`: Comma-separated properties to check
+- `-o, --output PATH`: Output file for report
+- `-f, --format FORMAT`: Output format (text|markdown, default: text)
+- `-v, --verbose`: Show detailed missing translation list
+- `--no-colour`: Disable coloured output
+
+**Examples**:
+```bash
+# Basic coverage report
+rdf-construct localise report ontology.ttl --languages en,de,fr
+
+# Detailed report with missing entities
+rdf-construct localise report ontology.ttl -l en,de,fr --verbose
+
+# Markdown report to file
+rdf-construct localise report ontology.ttl -l en,de,fr -f markdown -o coverage.md
+
+# Check specific properties only
+rdf-construct localise report ontology.ttl -l en,de -p rdfs:label,skos:prefLabel
+```
+
+---
+
+#### localise init
+
+Create empty translation file for a new language (equivalent to extract).
+
+```bash
+rdf-construct localise init SOURCE [OPTIONS]
+```
+
+**Arguments**:
+- `SOURCE`: RDF ontology file
+
+**Options**:
+- `-l, --language CODE`: Target language code (required)
+- `-o, --output PATH`: Output YAML file (default: {language}.yml)
+- `--source-language CODE`: Source language code (default: en)
+
+**Examples**:
+```bash
+# Initialise Japanese translation
+rdf-construct localise init ontology.ttl --language ja -o translations/ja.yml
+```
+
+---
+
+#### localise config
+
+Generate or manage localise configuration.
+
+```bash
+rdf-construct localise config [OPTIONS]
+```
+
+**Options**:
+- `--init`: Generate a default localise configuration file
+
+**Examples**:
+```bash
+# Generate default config
+rdf-construct localise config --init
+```
+
+**Translation File Format**:
+```yaml
+metadata:
+  source_file: ontology.ttl
+  source_language: en
+  target_language: de
+  generated: 2025-01-15T10:30:00
+  properties:
+    - rdfs:label
+    - rdfs:comment
+
+entities:
+  - uri: http://example.org/ont#Building
+    type: owl:Class
+    labels:
+      - property: rdfs:label
+        source: Building
+        translation: Gebäude
+        status: translated
+      - property: rdfs:comment
+        source: A permanent structure
+        translation: ""
+        status: pending
+
+summary:
+  total_entities: 42
+  total_strings: 84
+  by_status:
+    pending: 40
+    translated: 44
+  coverage: "52.4%"
+```
+
+**Status Values**:
+- `pending`: Not yet translated (empty translation field)
+- `needs_review`: Translation uncertain, needs review
+- `translated`: Translation complete
+- `approved`: Translation reviewed and approved
+
+**Exit Codes**:
+- `0`: Success
+- `1`: Success with warnings
+- `2`: Error
+
+---
+
 ### cq-test - Run Competency Question Tests
 
 Validate ontologies against SPARQL-based competency questions.

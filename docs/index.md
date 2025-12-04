@@ -14,6 +14,7 @@
 **Merge Ontologies?** → [Merge Guide](user_guides/MERGE_GUIDE.md)
 **Split Ontologies?** → [Merge Guide](user_guides/MERGE_GUIDE.md#split-command)
 **Refactor URIs?** → [Refactor Guide](user_guides/REFACTOR_GUIDE.md)
+**Multi-Language Support?** → [Localise Guide](user_guides/LOCALISE_GUIDE.md)
 **Need Command Syntax?** → [CLI Reference](user_guides/CLI_REFERENCE.md)  
 **Quick Cheat Sheet?** → [Quick Reference](user_guides/QUICK_REFERENCE.md)  
 **Contributing?** → [Contributing Guide](../CONTRIBUTING.md)  
@@ -99,6 +100,12 @@ For users of rdf-construct who want to generate diagrams and work with RDF ontol
   - Data migration for instance graphs
   - Dry-run preview mode
 
+- **[Localise Guide](user_guides/LOCALISE_GUIDE.md)** - Multi-language translation
+  - Extract translatable strings to YAML
+  - Merge completed translations back
+  - Translation coverage reports
+  - Status tracking workflow
+
 - **[CLI Reference](user_guides/CLI_REFERENCE.md)** - Command reference
   - All commands with options
   - Configuration file formats
@@ -154,6 +161,7 @@ A Python CLI toolkit for RDF operations:
 - **Ontology Merging**: Combine multiple ontologies with conflict detection and data migration
 - **Ontology Splitting**: Split monolithic ontologies into modules with dependency tracking
 - **Ontology Refactoring**: Rename URIs and deprecate entities with proper OWL annotations
+- **Multi-Language Support**: Extract, translate, and merge translations for internationalised ontologies
 - **Ontology Linting**: Check ontology quality with configurable rules
 - **Competency Question Testing**: Validate ontologies against SPARQL-based tests
 - **Ontology Statistics**: Comprehensive metrics with comparison mode
@@ -317,6 +325,18 @@ poetry run rdf-construct refactor rename ontology.ttl \
 poetry run rdf-construct refactor deprecate ontology.ttl \
   --entity "ex:LegacyClass" --replaced-by "ex:NewClass" \
   --message "Use NewClass instead." -o updated.ttl
+```
+
+### Multi-Language Translations
+```bash
+# Extract strings for German translation
+poetry run rdf-construct localise extract ontology.ttl --language de -o translations/de.yml
+
+# Merge completed translations
+poetry run rdf-construct localise merge ontology.ttl translations/de.yml -o localised.ttl
+
+# Check translation coverage
+poetry run rdf-construct localise report ontology.ttl --languages en,de,fr
 ```
 
 ## Repository
