@@ -511,7 +511,7 @@ class TestDescribeAPI:
 
     def test_describe_ontology(self, simple_owl_graph: Graph):
         """describe_ontology returns OntologyDescription."""
-        description = describe_ontology(simple_owl_graph)
+        description = describe_ontology(simple_owl_graph, source="test.ttl")
         assert isinstance(description, OntologyDescription)
         assert description.metrics is not None
 
@@ -553,7 +553,7 @@ class TestFormatters:
     @pytest.fixture
     def sample_description(self, simple_owl_graph: Graph) -> OntologyDescription:
         """Create a sample description for formatter tests."""
-        return describe_ontology(simple_owl_graph)
+        return describe_ontology(simple_owl_graph, source="test.ttl")
 
     def test_text_format_output(self, sample_description: OntologyDescription):
         """Text formatter produces readable output."""
