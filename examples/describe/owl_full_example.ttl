@@ -1,8 +1,8 @@
-@prefix : &lt;http://example.org/metaclass#&gt; .
-@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
-@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
-@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
-@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+@prefix : <http://example.org/metaclass#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 # =============================================================================
 # OWL FULL ONTOLOGY EXAMPLE
@@ -15,7 +15,7 @@
 # 2. Property used as subject of annotation with non-standard property
 # =============================================================================
 
-&lt;http://example.org/metaclass#&gt; a owl:Ontology ;
+<http://example.org/metaclass#> a owl:Ontology ;
     rdfs:label "Metaclass Example"@en ;
     rdfs:comment "An ontology demonstrating OWL Full patterns. WARNING: This ontology is undecidable and may cause reasoning problems."@en ;
     owl:versionInfo "1.0.0" .
