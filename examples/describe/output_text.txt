@@ -1,0 +1,65 @@
+╭─────────────────────────────────────────────────────────────────────────────╮
+│  ONTOLOGY DESCRIPTION                                                       │
+│  examples/describe/well_documented.ttl                                      │
+╰─────────────────────────────────────────────────────────────────────────────╯
+
+Verdict: OWL 2 DL (simple) | 89 triples, 11 classes, 11 properties
+
+METADATA
+────────────────────────────────────────────────────────────────────────────────
+  Ontology IRI:  http://example.org/library#
+  Title:         Library Ontology
+  Version:       1.0.0
+  Description:   An ontology for modelling libraries, books, authors, and
+                 borrowing activities. Designed as a well-documented example
+                 for the rdf-construct describe command.
+  License:       https://creativecommons.org/licenses/by/4.0/
+  Creator:       Example Author
+
+METRICS
+────────────────────────────────────────────────────────────────────────────────
+  Total Triples:           89
+  Classes:                 11
+  Object Properties:        6
+  Datatype Properties:      5
+  Annotation Properties:    0
+  Individuals:              0
+
+PROFILE
+────────────────────────────────────────────────────────────────────────────────
+  Detected Profile:  OWL 2 DL (simple)
+  Reasoning:         Standard DL reasoning; efficient
+
+  Detected Features:
+    • owl:Class
+    • rdfs:subClassOf
+    • owl:ObjectProperty
+    • owl:DatatypeProperty
+    • rdfs:domain
+    • rdfs:range
+    • owl:FunctionalProperty
+
+NAMESPACES
+────────────────────────────────────────────────────────────────────────────────
+  Local:     http://example.org/library#
+  Standard:  owl, rdfs, rdf, xsd
+  External:  skos, dcterms (not imported)
+
+IMPORTS
+────────────────────────────────────────────────────────────────────────────────
+  No imports declared.
+
+HIERARCHY
+────────────────────────────────────────────────────────────────────────────────
+  Root Classes:     3 (Agent, LibraryItem, Loan)
+  Max Depth:        2
+  Orphan Classes:   0
+  Cycles:           None detected
+
+DOCUMENTATION
+────────────────────────────────────────────────────────────────────────────────
+  Classes:     11/11 labelled (100.0%), 11/11 documented (100.0%)
+  Properties:  11/11 labelled (100.0%), 11/11 documented (100.0%)
+
+================================================================================
+Analysis complete.
