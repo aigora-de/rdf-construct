@@ -1,0 +1,161 @@
+@prefix : &lt;http://example.org/library#&gt; .
+@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+@prefix dcterms: &lt;http://purl.org/dc/terms/&gt; .
+@prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+
+# =============================================================================
+# ONTOLOGY DECLARATION
+# =============================================================================
+
+&lt;http://example.org/library#&gt; a owl:Ontology ;
+    rdfs:label "Library Ontology"@en ;
+    rdfs:comment "An ontology for modelling libraries, books, authors, and borrowing activities. Designed as a well-documented example for the rdf-construct describe command."@en ;
+    owl:versionInfo "1.0.0" ;
+    dcterms:created "2024-01-15"^^xsd:date ;
+    dcterms:creator "Example Author" ;
+    dcterms:license &lt;https://creativecommons.org/licenses/by/4.0/&gt; .
+
+# =============================================================================
+# CLASSES
+# =============================================================================
+
+:Agent a owl:Class ;
+    rdfs:label "Agent"@en ;
+    rdfs:comment "An entity capable of performing actions, such as a person or organisation."@en ;
+    skos:definition "A broad category encompassing any actor that can take actions within the library domain."@en .
+
+:Person a owl:Class ;
+    rdfs:subClassOf :Agent ;
+    rdfs:label "Person"@en ;
+    rdfs:comment "A human being."@en ;
+    skos:definition "An individual human, who may be an author, borrower, or librarian."@en .
+
+:Organisation a owl:Class ;
+    rdfs:subClassOf :Agent ;
+    rdfs:label "Organisation"@en ;
+    rdfs:comment "A structured group of people with a common purpose."@en ;
+    skos:definition "An institutional entity such as a publisher, library system, or university."@en .
+
+:Author a owl:Class ;
+    rdfs:subClassOf :Person ;
+    rdfs:label "Author"@en ;
+    rdfs:comment "A person who writes books or other literary works."@en ;
+    skos:definition "An individual who has created one or more written works held in a library."@en .
+
+:Borrower a owl:Class ;
+    rdfs:subClassOf :Person ;
+    rdfs:label "Borrower"@en ;
+    rdfs:comment "A person who borrows items from a library."@en ;
+    skos:definition "A registered library patron who is permitted to borrow materials."@en .
+
+:LibraryItem a owl:Class ;
+    rdfs:label "Library Item"@en ;
+    rdfs:comment "Any item that can be held in a library collection."@en ;
+    skos:definition "The base class for all materials in a library's holdings."@en .
+
+:Book a owl:Class ;
+    rdfs:subClassOf :LibraryItem ;
+    rdfs:label "Book"@en ;
+    rdfs:comment "A written or printed work consisting of pages bound together."@en ;
+    skos:definition "A bound publication, typically with an ISBN, held in the library collection."@en .
+
+:Journal a owl:Class ;
+    rdfs:subClassOf :LibraryItem ;
+    rdfs:label "Journal"@en ;
+    rdfs:comment "A periodical publication containing academic articles."@en ;
+    skos:definition "A scholarly periodical, typically peer-reviewed, published at regular intervals."@en .
+
+:Loan a owl:Class ;
+    rdfs:label "Loan"@en ;
+    rdfs:comment "A record of an item being borrowed."@en ;
+    skos:definition "A transaction recording the temporary transfer of a library item to a borrower."@en .
+
+:Library a owl:Class ;
+    rdfs:subClassOf :Organisation ;
+    rdfs:label "Library"@en ;
+    rdfs:comment "An institution that holds collections of books and other materials."@en ;
+    skos:definition "A physical or digital institution that manages and provides access to information resources."@en .
+
+:Publisher a owl:Class ;
+    rdfs:subClassOf :Organisation ;
+    rdfs:label "Publisher"@en ;
+    rdfs:comment "An organisation that produces and distributes books."@en ;
+    skos:definition "A commercial or academic entity responsible for producing and distributing publications."@en .
+
+# =============================================================================
+# OBJECT PROPERTIES
+# =============================================================================
+
+:writtenBy a owl:ObjectProperty ;
+    rdfs:label "written by"@en ;
+    rdfs:comment "Relates a book to its author."@en ;
+    rdfs:domain :Book ;
+    rdfs:range :Author .
+
+:publishedBy a owl:ObjectProperty ;
+    rdfs:label "published by"@en ;
+    rdfs:comment "Relates a publication to its publisher."@en ;
+    rdfs:domain :LibraryItem ;
+    rdfs:range :Publisher .
+
+:borrowedBy a owl:ObjectProperty ;
+    rdfs:label "borrowed by"@en ;
+    rdfs:comment "Relates a loan to the borrower."@en ;
+    rdfs:domain :Loan ;
+    rdfs:range :Borrower .
+
+:itemBorrowed a owl:ObjectProperty ;
+    rdfs:label "item borrowed"@en ;
+    rdfs:comment "Relates a loan to the item being borrowed."@en ;
+    rdfs:domain :Loan ;
+    rdfs:range :LibraryItem .
+
+:heldBy a owl:ObjectProperty ;
+    rdfs:label "held by"@en ;
+    rdfs:comment "Relates an item to the library that holds it."@en ;
+    rdfs:domain :LibraryItem ;
+    rdfs:range :Library .
+
+:memberOf a owl:ObjectProperty ;
+    rdfs:label "member of"@en ;
+    rdfs:comment "Relates a borrower to the library they are registered with."@en ;
+    rdfs:domain :Borrower ;
+    rdfs:range :Library .
+
+# =============================================================================
+# DATATYPE PROPERTIES
+# =============================================================================
+
+:isbn a owl:DatatypeProperty ;
+    rdfs:label "ISBN"@en ;
+    rdfs:comment "The International Standard Book Number."@en ;
+    rdfs:domain :Book ;
+    rdfs:range xsd:string ;
+    a owl:FunctionalProperty .
+
+:title a owl:DatatypeProperty ;
+    rdfs:label "title"@en ;
+    rdfs:comment "The title of a library item."@en ;
+    rdfs:domain :LibraryItem ;
+    rdfs:range xsd:string .
+
+:publicationYear a owl:DatatypeProperty ;
+    rdfs:label "publication year"@en ;
+    rdfs:comment "The year the item was published."@en ;
+    rdfs:domain :LibraryItem ;
+    rdfs:range xsd:gYear .
+
+:dueDate a owl:DatatypeProperty ;
+    rdfs:label "due date"@en ;
+    rdfs:comment "The date by which a borrowed item must be returned."@en ;
+    rdfs:domain :Loan ;
+    rdfs:range xsd:date .
+
+:borrowDate a owl:DatatypeProperty ;
+    rdfs:label "borrow date"@en ;
+    rdfs:comment "The date on which an item was borrowed."@en ;
+    rdfs:domain :Loan ;
+    rdfs:range xsd:date .
