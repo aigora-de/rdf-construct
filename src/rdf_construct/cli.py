@@ -1282,4 +1282,2275 @@ def puml2rdf(
     output: Path | None,
     output_format: str,
     namespace: str | None,
-    config: Path |
+    config: Path | None,
+    merge: Path | None,
+    validate: bool,
+    strict: bool,
+    language: str,
+    no_labels: bool,
+):
+    """Convert PlantUML class diagram to RDF ontology.
+
+    Parses a PlantUML file and generates an RDF/OWL ontology.
+    Supports classes, attributes, inheritance, and associations.
+
+    SOURCE: PlantUML file (.puml or .plantuml)
+
+    \b
+    Examples:
+        # Basic conversion
+        rdf-construct puml2rdf design.puml
+
+        # Custom output and namespace
+        rdf-construct puml2rdf design.puml -o ontology.ttl -n http://example.org/ont#
+
+        # Validate without generating
+        rdf-construct puml2rdf design.puml --validate
+
+        # Merge with existing ontology
+        rdf-construct puml2rdf design.puml --merge existing.ttl
+
+        # Use configuration file
+        rdf-construct puml2rdf design.puml -C import-config.yml
+
+    \b
+    Exit codes:
+        0 - Success
+        1 - Validation warnings (with --strict)
+        2 - Parse or validation errors
+    """
+    # Normalise output format
+    format_map = {
+        "ttl": "turtle",
+        "rdfxml": "xml",
+        "json-ld": "json-ld",
+        "jsonld": "json-ld",
+        "ntriples": "nt",
+    }
+    rdf_format = format_map.get(output_format.lower(), output_format.lower())
+
+    # Determine output path
+    if output is None and not validate:
+        ext_map = {"turtle": ".ttl", "xml": ".rdf", "json-ld": ".jsonld", "nt": ".nt"}
+        ext = ext_map.get(rdf_format, ".ttl")
+        output = source.with_suffix(ext)
+
+    # Load configuration if provided
+    if config:
+        try:
+            import_config = load_import_config(config)
+            conversion_config = import_config.to_conversion_config()
+        except Exception as e:
+            click.secho(f"Error loading config: {e}", fg="red", err=True)
+            sys.exit(2)
+    else:
+        conversion_config = ConversionConfig()
+
+    # Override config with CLI options
+    if namespace:
+        conversion_config.default_namespace = namespace
+    if language:
+        conversion_config.language = language
+    if no_labels:
+        conversion_config.generate_labels = False
+
+    # Parse PlantUML file
+    click.echo(f"Parsing {source.name}...")
+    parser = PlantUMLParser()
+
+    try:
+        parse_result = parser.parse_file(source)
+    except Exception as e:
+        click.secho(f"Error reading file: {e}", fg="red", err=True)
+        sys.exit(2)
+
+    # Report parse errors
+    if parse_result.errors:
+        click.secho("Parse errors:", fg="red", err=True)
+        for error in parse_result.errors:
+            click.echo(f"  Line {error.line_number}: {error.message}", err=True)
+        sys.exit(2)
+
+    # Report parse warnings
+    if parse_result.warnings:
+        click.secho("Parse warnings:", fg="yellow", err=True)
+        for warning in parse_result.warnings:
+            click.echo(f"  {warning}", err=True)
+
+    model = parse_result.model
+    click.echo(
+        f"  Found: {len(model.classes)} classes, "
+        f"{len(model.relationships)} relationships"
+    )
+
+    # Validate model
+    model_validation = validate_puml(model)
+
+    if model_validation.has_errors:
+        click.secho("Model validation errors:", fg="red", err=True)
+        for issue in model_validation.errors():
+            click.echo(f"  {issue}", err=True)
+        sys.exit(2)
+
+    if model_validation.has_warnings:
+        click.secho("Model validation warnings:", fg="yellow", err=True)
+        for issue in model_validation.warnings():
+            click.echo(f"  {issue}", err=True)
+        if strict:
+            click.secho("Aborting due to --strict mode", fg="red", err=True)
+            sys.exit(1)
+
+    # If validate-only mode, stop here
+    if validate:
+        if model_validation.has_warnings:
+            click.secho(
+                f"Validation complete: {model_validation.warning_count} warnings",
+                fg="yellow",
+            )
+        else:
+            click.secho("Validation complete: no issues found", fg="green")
+        sys.exit(0)
+
+    # Convert to RDF
+    click.echo("Converting to RDF...")
+    converter = PumlToRdfConverter(conversion_config)
+    conversion_result = converter.convert(model)
+
+    if conversion_result.warnings:
+        click.secho("Conversion warnings:", fg="yellow", err=True)
+        for warning in conversion_result.warnings:
+            click.echo(f"  {warning}", err=True)
+
+    graph = conversion_result.graph
+    click.echo(f"  Generated: {len(graph)} triples")
+
+    # Validate generated RDF
+    rdf_validation = validate_rdf(graph)
+    if rdf_validation.has_warnings:
+        click.secho("RDF validation warnings:", fg="yellow", err=True)
+        for issue in rdf_validation.warnings():
+            click.echo(f"  {issue}", err=True)
+
+    # Merge with existing if requested
+    if merge:
+        click.echo(f"Merging with {merge.name}...")
+        try:
+            merge_result = merge_with_existing(graph, merge)
+            graph = merge_result.graph
+            click.echo(
+                f"  Added: {merge_result.added_count}, "
+                f"Preserved: {merge_result.preserved_count}"
+            )
+            if merge_result.conflicts:
+                click.secho("Merge conflicts:", fg="yellow", err=True)
+                for conflict in merge_result.conflicts[:5]:  # Limit output
+                    click.echo(f"  {conflict}", err=True)
+                if len(merge_result.conflicts) > 5:
+                    click.echo(
+                        f"  ... and {len(merge_result.conflicts) - 5} more",
+                        err=True,
+                    )
+        except Exception as e:
+            click.secho(f"Error merging: {e}", fg="red", err=True)
+            sys.exit(2)
+
+    # Serialise output
+    try:
+        graph.serialize(str(output), format=rdf_format)
+        click.secho(f"✓ Wrote {output}", fg="green")
+        click.echo(
+            f"  Classes: {len(conversion_result.class_uris)}, "
+            f"Properties: {len(conversion_result.property_uris)}"
+        )
+    except Exception as e:
+        click.secho(f"Error writing output: {e}", fg="red", err=True)
+        sys.exit(2)
+
+
+@cli.command("cq-test")
+@click.argument("ontology", type=click.Path(exists=True, path_type=Path))
+@click.argument("test_file", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--data",
+    "-d",
+    multiple=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="Additional data file(s) to load alongside the ontology",
+)
+@click.option(
+    "--tag",
+    "-t",
+    multiple=True,
+    help="Only run tests with these tags (can specify multiple)",
+)
+@click.option(
+    "--exclude-tag",
+    "-x",
+    multiple=True,
+    help="Exclude tests with these tags (can specify multiple)",
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["text", "json", "junit"], case_sensitive=False),
+    default="text",
+    help="Output format (default: text)",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Write output to file instead of stdout",
+)
+@click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    help="Show verbose output (query text, timing details)",
+)
+@click.option(
+    "--fail-fast",
+    is_flag=True,
+    help="Stop on first failure",
+)
+def cq_test(
+    ontology: Path,
+    test_file: Path,
+    data: tuple[Path, ...],
+    tag: tuple[str, ...],
+    exclude_tag: tuple[str, ...],
+    output_format: str,
+    output: Path | None,
+    verbose: bool,
+    fail_fast: bool,
+):
+    """Run competency question tests against an ontology.
+
+    Validates whether an ontology can answer competency questions expressed
+    as SPARQL queries with expected results.
+
+    ONTOLOGY: RDF file containing the ontology to test
+    TEST_FILE: YAML file containing competency question tests
+
+    \b
+    Examples:
+        # Run all tests
+        rdf-construct cq-test ontology.ttl cq-tests.yml
+
+        # Run with additional sample data
+        rdf-construct cq-test ontology.ttl cq-tests.yml --data sample-data.ttl
+
+        # Run only tests tagged 'core'
+        rdf-construct cq-test ontology.ttl cq-tests.yml --tag core
+
+        # Generate JUnit XML for CI
+        rdf-construct cq-test ontology.ttl cq-tests.yml --format junit -o results.xml
+
+        # Verbose output with timing
+        rdf-construct cq-test ontology.ttl cq-tests.yml --verbose
+
+    \b
+    Exit codes:
+        0 - All tests passed
+        1 - One or more tests failed
+        2 - Error occurred (invalid file, parse error, etc.)
+    """
+    try:
+        # Load ontology
+        click.echo(f"Loading ontology: {ontology.name}...", err=True)
+        graph = Graph()
+        graph.parse(str(ontology), format=_infer_format(ontology))
+
+        # Load additional data files
+        if data:
+            for data_file in data:
+                click.echo(f"Loading data: {data_file.name}...", err=True)
+                graph.parse(str(data_file), format=_infer_format(data_file))
+
+        # Load test suite
+        click.echo(f"Loading tests: {test_file.name}...", err=True)
+        suite = load_test_suite(test_file)
+
+        # Filter by tags
+        if tag or exclude_tag:
+            include_tags = set(tag) if tag else None
+            exclude_tags = set(exclude_tag) if exclude_tag else None
+            suite = suite.filter_by_tags(include_tags, exclude_tags)
+
+        if not suite.questions:
+            click.secho("No tests to run (check tag filters)", fg="yellow", err=True)
+            sys.exit(0)
+
+        # Run tests
+        click.echo(f"Running {len(suite.questions)} test(s)...", err=True)
+        click.echo("", err=True)
+
+        runner = CQTestRunner(fail_fast=fail_fast, verbose=verbose)
+        results = runner.run(graph, suite, ontology_file=ontology)
+
+        # Format output
+        formatted = format_results(results, format_name=output_format, verbose=verbose)
+
+        # Write output
+        if output:
+            output.write_text(formatted)
+            click.secho(f"✓ Results written to {output}", fg="green", err=True)
+        else:
+            click.echo(formatted)
+
+        # Exit code based on results
+        if results.has_errors:
+            sys.exit(2)
+        elif results.has_failures:
+            sys.exit(1)
+        else:
+            sys.exit(0)
+
+    except FileNotFoundError as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(2)
+    except ValueError as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(2)
+    except Exception as e:
+        click.secho(f"Error: {type(e).__name__}: {e}", fg="red", err=True)
+        sys.exit(2)
+
+
+def _infer_format(path: Path) -> str:
+    """Infer RDF format from file extension."""
+    suffix = path.suffix.lower()
+    format_map = {
+        ".ttl": "turtle",
+        ".turtle": "turtle",
+        ".rdf": "xml",
+        ".xml": "xml",
+        ".owl": "xml",
+        ".nt": "nt",
+        ".ntriples": "nt",
+        ".n3": "n3",
+        ".jsonld": "json-ld",
+        ".json": "json-ld",
+    }
+    return format_map.get(suffix, "turtle")
+
+
+@cli.command()
+@click.argument("files", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Write output to file instead of stdout",
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["text", "json", "markdown", "md"], case_sensitive=False),
+    default="text",
+    help="Output format (default: text)",
+)
+@click.option(
+    "--compare",
+    is_flag=True,
+    help="Compare two ontology files (requires exactly 2 files)",
+)
+@click.option(
+    "--include",
+    type=str,
+    help="Include only these metric categories (comma-separated: basic,hierarchy,properties,documentation,complexity,connectivity)",
+)
+@click.option(
+    "--exclude",
+    type=str,
+    help="Exclude these metric categories (comma-separated)",
+)
+def stats(
+    files: tuple[Path, ...],
+    output: Path | None,
+    output_format: str,
+    compare: bool,
+    include: str | None,
+    exclude: str | None,
+):
+    """Compute and display ontology statistics.
+
+    Analyses one or more RDF ontology files and displays comprehensive metrics
+    about structure, complexity, and documentation coverage.
+
+    \b
+    Examples:
+        # Basic statistics
+        rdf-construct stats ontology.ttl
+
+        # JSON output for programmatic use
+        rdf-construct stats ontology.ttl --format json -o stats.json
+
+        # Markdown for documentation
+        rdf-construct stats ontology.ttl --format markdown >> README.md
+
+        # Compare two versions
+        rdf-construct stats v1.ttl v2.ttl --compare
+
+        # Only show specific categories
+        rdf-construct stats ontology.ttl --include basic,documentation
+
+        # Exclude some categories
+        rdf-construct stats ontology.ttl --exclude connectivity,complexity
+
+    \b
+    Metric Categories:
+        basic         - Counts (triples, classes, properties, individuals)
+        hierarchy     - Structure (depth, branching, orphans)
+        properties    - Coverage (domain, range, functional, symmetric)
+        documentation - Labels and comments
+        complexity    - Multiple inheritance, OWL axioms
+        connectivity  - Most connected class, isolated classes
+
+    \b
+    Exit codes:
+        0 - Success
+        1 - Error occurred
+    """
+    try:
+        # Validate file count for compare mode
+        if compare:
+            if len(files) != 2:
+                click.secho(
+                    "Error: --compare requires exactly 2 files",
+                    fg="red",
+                    err=True,
+                )
+                sys.exit(1)
+
+        # Parse include/exclude categories
+        include_set: set[str] | None = None
+        exclude_set: set[str] | None = None
+
+        if include:
+            include_set = {cat.strip().lower() for cat in include.split(",")}
+        if exclude:
+            exclude_set = {cat.strip().lower() for cat in exclude.split(",")}
+
+        # Load graphs
+        graphs: list[tuple[Graph, Path]] = []
+        for filepath in files:
+            click.echo(f"Loading {filepath}...", err=True)
+            graph = Graph()
+            graph.parse(str(filepath), format="turtle")
+            graphs.append((graph, filepath))
+            click.echo(f"  Loaded {len(graph)} triples", err=True)
+
+        if compare:
+            # Comparison mode
+            old_graph, old_path = graphs[0]
+            new_graph, new_path = graphs[1]
+
+            click.echo("Collecting statistics...", err=True)
+            old_stats = collect_stats(
+                old_graph,
+                source=str(old_path),
+                include=include_set,
+                exclude=exclude_set,
+            )
+            new_stats = collect_stats(
+                new_graph,
+                source=str(new_path),
+                include=include_set,
+                exclude=exclude_set,
+            )
+
+            click.echo("Comparing versions...", err=True)
+            comparison = compare_stats(old_stats, new_stats)
+
+            # Format output
+            formatted = format_comparison(
+                comparison,
+                format_name=output_format,
+                graph=new_graph,
+            )
+        else:
+            # Single file or multiple files (show stats for first)
+            graph, filepath = graphs[0]
+
+            click.echo("Collecting statistics...", err=True)
+            ontology_stats = collect_stats(
+                graph,
+                source=str(filepath),
+                include=include_set,
+                exclude=exclude_set,
+            )
+
+            # Format output
+            formatted = format_stats(
+                ontology_stats,
+                format_name=output_format,
+                graph=graph,
+            )
+
+        # Write output
+        if output:
+            output.write_text(formatted)
+            click.secho(f"✓ Wrote stats to {output}", fg="green", err=True)
+        else:
+            click.echo(formatted)
+
+        sys.exit(0)
+
+    except ValueError as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(1)
+    except FileNotFoundError as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(1)
+    except Exception as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.argument("file", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Write output to file instead of stdout",
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["text", "json", "markdown", "md"], case_sensitive=False),
+    default="text",
+    help="Output format (default: text)",
+)
+@click.option(
+    "--brief",
+    is_flag=True,
+    help="Show brief summary only (metadata, metrics, profile)",
+)
+@click.option(
+    "--no-resolve",
+    is_flag=True,
+    help="Skip import resolution checks",
+)
+@click.option(
+    "--reasoning",
+    is_flag=True,
+    help="Include reasoning analysis",
+)
+@click.option(
+    "--no-colour",
+    "--no-color",
+    is_flag=True,
+    help="Disable coloured output (text format only)",
+)
+def describe(
+    file: Path,
+    output: Path | None,
+    output_format: str,
+    brief: bool,
+    no_resolve: bool,
+    reasoning: bool,
+    no_colour: bool,
+):
+    """Describe an ontology: profile, metrics, imports, and structure.
+
+    Provides a comprehensive analysis of an RDF ontology file, including:
+    - Profile detection (RDF, RDFS, OWL DL, OWL Full)
+    - Basic metrics (classes, properties, individuals)
+    - Import analysis with optional resolvability checking
+    - Namespace categorisation
+    - Class hierarchy analysis
+    - Documentation coverage
+
+    FILE: RDF ontology file to describe (.ttl, .rdf, .owl, etc.)
+
+    \b
+    Examples:
+        # Basic description
+        rdf-construct describe ontology.ttl
+
+        # Brief summary only
+        rdf-construct describe ontology.ttl --brief
+
+        # JSON output for programmatic use
+        rdf-construct describe ontology.ttl --format json -o description.json
+
+        # Markdown for documentation
+        rdf-construct describe ontology.ttl --format markdown -o DESCRIPTION.md
+
+        # Skip slow import resolution
+        rdf-construct describe ontology.ttl --no-resolve
+
+    \b
+    Exit codes:
+        0 - Success
+        1 - Success with warnings (unresolvable imports, etc.)
+        2 - Error (file not found, parse error)
+    """
+    from rdf_construct.describe import describe_file, format_description
+
+    try:
+        click.echo(f"Analysing {file}...", err=True)
+
+        # Perform analysis
+        description = describe_file(
+            file,
+            brief=brief,
+            resolve_imports=not no_resolve,
+            include_reasoning=reasoning,
+        )
+
+        # Format output
+        use_colour = not no_colour and output_format == "text" and output is None
+        formatted = format_description(
+            description,
+            format_name=output_format,
+            use_colour=use_colour,
+        )
+
+        # Write output
+        if output:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(formatted)
+            click.secho(f"✓ Wrote description to {output}", fg="green", err=True)
+        else:
+            click.echo(formatted)
+
+        # Exit code based on warnings
+        if description.imports and description.imports.unresolvable_count > 0:
+            sys.exit(1)
+        else:
+            sys.exit(0)
+
+    except FileNotFoundError as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(2)
+    except ValueError as e:
+        click.secho(f"Error parsing RDF: {e}", fg="red", err=True)
+        sys.exit(2)
+    except Exception as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(2)
+
+
+@cli.command()
+@click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Output file for merged ontology",
+)
+@click.option(
+    "--config",
+    "-c",
+    "config_file",
+    type=click.Path(exists=True, path_type=Path),
+    help="YAML configuration file",
+)
+@click.option(
+    "--priority",
+    "-p",
+    multiple=True,
+    type=int,
+    help="Priority for each source (order matches sources)",
+)
+@click.option(
+    "--strategy",
+    type=click.Choice(["priority", "first", "last", "mark_all"], case_sensitive=False),
+    default="priority",
+    help="Conflict resolution strategy (default: priority)",
+)
+@click.option(
+    "--report",
+    "-r",
+    type=click.Path(path_type=Path),
+    help="Write conflict report to file",
+)
+@click.option(
+    "--report-format",
+    type=click.Choice(["text", "markdown", "md"], case_sensitive=False),
+    default="markdown",
+    help="Format for conflict report (default: markdown)",
+)
+@click.option(
+    "--imports",
+    type=click.Choice(["preserve", "remove", "merge"], case_sensitive=False),
+    default="preserve",
+    help="How to handle owl:imports (default: preserve)",
+)
+@click.option(
+    "--migrate-data",
+    multiple=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="Data file(s) to migrate",
+)
+@click.option(
+    "--migration-rules",
+    type=click.Path(exists=True, path_type=Path),
+    help="YAML file with migration rules",
+)
+@click.option(
+    "--data-output",
+    type=click.Path(path_type=Path),
+    help="Output path for migrated data",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would happen without writing files",
+)
+@click.option(
+    "--no-colour",
+    is_flag=True,
+    help="Disable coloured output",
+)
+@click.option(
+    "--init",
+    "init_config",
+    is_flag=True,
+    help="Generate a default merge configuration file",
+)
+def merge(
+    sources: tuple[Path, ...],
+    output: Path,
+    config_file: Path | None,
+    priority: tuple[int, ...],
+    strategy: str,
+    report: Path | None,
+    report_format: str,
+    imports: str,
+    migrate_data: tuple[Path, ...],
+    migration_rules: Path | None,
+    data_output: Path | None,
+    dry_run: bool,
+    no_colour: bool,
+    init_config: bool,
+):
+    """Merge multiple RDF ontology files.
+
+    Combines SOURCES into a single output ontology, detecting and handling
+    conflicts between definitions.
+
+    \b
+    SOURCES: One or more RDF files to merge (.ttl, .rdf, .owl)
+
+    \b
+    Exit codes:
+      0 - Merge successful, no unresolved conflicts
+      1 - Merge successful, but unresolved conflicts marked in output
+      2 - Error (file not found, parse error, etc.)
+
+    \b
+    Examples:
+      # Basic merge of two files
+      rdf-construct merge core.ttl ext.ttl -o merged.ttl
+
+      # With priorities (higher wins conflicts)
+      rdf-construct merge core.ttl ext.ttl -o merged.ttl -p 1 -p 2
+
+      # Generate conflict report
+      rdf-construct merge core.ttl ext.ttl -o merged.ttl --report conflicts.md
+
+      # Mark all conflicts for manual review
+      rdf-construct merge core.ttl ext.ttl -o merged.ttl --strategy mark_all
+
+      # With data migration
+      rdf-construct merge core.ttl ext.ttl -o merged.ttl \\
+          --migrate-data split_instances.ttl --data-output migrated.ttl
+
+      # Use configuration file
+      rdf-construct merge --config merge.yml -o merged.ttl
+
+      # Generate default config file
+      rdf-construct merge --init
+    """
+    # Handle --init flag
+    if init_config:
+        config_path = Path("merge.yml")
+        if config_path.exists():
+            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
+            raise click.Abort()
+
+        config_content = create_default_config()
+        config_path.write_text(config_content)
+        click.secho(f"Created {config_path}", fg="green")
+        click.echo("Edit this file to configure your merge, then run:")
+        click.echo(f"  rdf-construct merge --config {config_path} -o merged.ttl")
+        return
+
+    # Validate we have sources
+    if not sources and not config_file:
+        click.secho("Error: No source files specified.", fg="red", err=True)
+        click.echo("Provide source files or use --config with a configuration file.", err=True)
+        raise click.Abort()
+
+    # Build configuration
+    if config_file:
+        try:
+            config = load_merge_config(config_file)
+            click.echo(f"Using config: {config_file}")
+
+            # Override output if provided on CLI
+            if output:
+                config.output = OutputConfig(path=output)
+        except (FileNotFoundError, ValueError) as e:
+            click.secho(f"Error loading config: {e}", fg="red", err=True)
+            raise click.Abort()
+    else:
+        # Build config from CLI arguments
+        priorities_list = list(priority) if priority else list(range(1, len(sources) + 1))
+
+        # Pad priorities if needed
+        while len(priorities_list) < len(sources):
+            priorities_list.append(len(priorities_list) + 1)
+
+        source_configs = [
+            SourceConfig(path=p, priority=pri)
+            for p, pri in zip(sources, priorities_list)
+        ]
+
+        conflict_strategy = ConflictStrategy[strategy.upper()]
+        imports_strategy = ImportsStrategy[imports.upper()]
+
+        # Data migration config
+        data_migration = None
+        if migrate_data:
+            data_migration = DataMigrationConfig(
+                data_sources=list(migrate_data),
+                output_path=data_output,
+            )
+
+        config = MergeConfig(
+            sources=source_configs,
+            output=OutputConfig(path=output),
+            conflicts=ConflictConfig(
+                strategy=conflict_strategy,
+                report_path=report,
+            ),
+            imports=imports_strategy,
+            migrate_data=data_migration,
+            dry_run=dry_run,
+        )
+
+    # Execute merge
+    click.echo("Merging ontologies...")
+
+    merger = OntologyMerger(config)
+    result = merger.merge()
+
+    if not result.success:
+        click.secho(f"✗ Merge failed: {result.error}", fg="red", err=True)
+        raise SystemExit(2)
+
+    # Display results
+    use_colour = not no_colour
+    text_formatter = get_formatter("text", use_colour=use_colour)
+    click.echo(text_formatter.format_merge_result(result, result.merged_graph))
+
+    # Write output (unless dry run)
+    if not dry_run and result.merged_graph and config.output:
+        merger.write_output(result, config.output.path)
+        click.echo()
+        click.secho(f"✓ Wrote {config.output.path}", fg="green")
+
+    # Generate conflict report if requested
+    if report and result.conflicts:
+        report_formatter = get_formatter(report_format)
+        report_content = report_formatter.format_conflict_report(
+            result.conflicts, result.merged_graph
+        )
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(report_content)
+        click.echo(f"  Conflict report: {report}")
+
+    # Handle data migration
+    if config.migrate_data and config.migrate_data.data_sources:
+        click.echo()
+        click.echo("Migrating data...")
+
+        # Build URI map from any namespace remappings
+        from rdf_construct.merge import DataMigrator
+
+        migrator = DataMigrator()
+        uri_map: dict[URIRef, URIRef] = {}
+
+        # Collect namespace remaps from all sources
+        for src in config.sources:
+            if src.namespace_remap:
+                for old_ns, new_ns in src.namespace_remap.items():
+                    # We'd need to scan data files to build complete map
+                    # For now, this is a placeholder
+                    pass
+
+        # Apply migration
+        migration_result = migrate_data_files(
+            data_paths=config.migrate_data.data_sources,
+            uri_map=uri_map if uri_map else None,
+            rules=config.migrate_data.rules if config.migrate_data.rules else None,
+            output_path=config.migrate_data.output_path if not dry_run else None,
+        )
+
+        if migration_result.success:
+            click.echo(text_formatter.format_migration_result(migration_result))
+            if config.migrate_data.output_path and not dry_run:
+                click.secho(
+                    f"✓ Wrote migrated data to {config.migrate_data.output_path}",
+                    fg="green",
+                )
+        else:
+            click.secho(
+                f"✗ Data migration failed: {migration_result.error}",
+                fg="red",
+                err=True,
+            )
+
+    # Exit code based on unresolved conflicts
+    if result.unresolved_conflicts:
+        click.echo()
+        click.secho(
+            f"⚠ {len(result.unresolved_conflicts)} unresolved conflict(s) "
+            "marked in output",
+            fg="yellow",
+        )
+        raise SystemExit(1)
+    else:
+        raise SystemExit(0)
+
+
+@cli.command()
+@click.argument("source", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    "output_dir",
+    type=click.Path(path_type=Path),
+    default=Path("modules"),
+    help="Output directory for split modules (default: modules/)",
+)
+@click.option(
+    "--config",
+    "-c",
+    "config_file",
+    type=click.Path(exists=True, path_type=Path),
+    help="YAML configuration file for split",
+)
+@click.option(
+    "--by-namespace",
+    is_flag=True,
+    help="Automatically split by namespace (auto-detect modules)",
+)
+@click.option(
+    "--migrate-data",
+    multiple=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="Data file(s) to split by instance type",
+)
+@click.option(
+    "--data-output",
+    type=click.Path(path_type=Path),
+    help="Output directory for split data files",
+)
+@click.option(
+    "--unmatched",
+    type=click.Choice(["common", "error"], case_sensitive=False),
+    default="common",
+    help="Strategy for unmatched entities (default: common)",
+)
+@click.option(
+    "--common-name",
+    default="common",
+    help="Name for common module (default: common)",
+)
+@click.option(
+    "--no-manifest",
+    is_flag=True,
+    help="Don't generate manifest.yml",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would happen without writing files",
+)
+@click.option(
+    "--no-colour",
+    is_flag=True,
+    help="Disable coloured output",
+)
+@click.option(
+    "--init",
+    "init_config",
+    is_flag=True,
+    help="Generate a default split configuration file",
+)
+def split(
+    source: Path,
+    output_dir: Path,
+    config_file: Path | None,
+    by_namespace: bool,
+    migrate_data: tuple[Path, ...],
+    data_output: Path | None,
+    unmatched: str,
+    common_name: str,
+    no_manifest: bool,
+    dry_run: bool,
+    no_colour: bool,
+    init_config: bool,
+):
+    """Split a monolithic ontology into multiple modules.
+
+    SOURCE: RDF ontology file to split (.ttl, .rdf, .owl)
+
+    \b
+    Exit codes:
+      0 - Split successful
+      1 - Split successful with unmatched entities in common module
+      2 - Error (file not found, config invalid, etc.)
+
+    \b
+    Examples:
+      # Split by namespace (auto-detect modules)
+      rdf-construct split large.ttl -o modules/ --by-namespace
+
+      # Split using configuration file
+      rdf-construct split large.ttl -o modules/ -c split.yml
+
+      # With data migration
+      rdf-construct split large.ttl -o modules/ -c split.yml \\
+          --migrate-data split_instances.ttl --data-output data/
+
+      # Dry run - show what would be created
+      rdf-construct split large.ttl -o modules/ --by-namespace --dry-run
+
+      # Generate default config file
+      rdf-construct split --init
+    """
+    # Handle --init flag
+    if init_config:
+        config_path = Path("split.yml")
+        if config_path.exists():
+            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
+            raise click.Abort()
+
+        config_content = create_default_split_config()
+        config_path.write_text(config_content)
+        click.secho(f"Created {config_path}", fg="green")
+        click.echo("Edit this file to configure your split, then run:")
+        click.echo(f"  rdf-construct split your-ontology.ttl -c {config_path}")
+        return
+
+    # Validate we have a source
+    if not source:
+        click.secho("Error: SOURCE is required.", fg="red", err=True)
+        raise click.Abort()
+
+    # Handle --by-namespace mode
+    if by_namespace:
+        click.echo(f"Splitting {source.name} by namespace...")
+
+        result = split_by_namespace(source, output_dir, dry_run=dry_run)
+
+        if not result.success:
+            click.secho(f"✗ Split failed: {result.error}", fg="red", err=True)
+            raise SystemExit(2)
+
+        _display_split_result(result, output_dir, dry_run, not no_colour)
+        raise SystemExit(0 if not result.unmatched_entities else 1)
+
+    # Build configuration from file or CLI
+    if config_file:
+        try:
+            config = SplitConfig.from_yaml(config_file)
+            # Override source and output_dir if provided
+            config.source = source
+            config.output_dir = output_dir
+            config.dry_run = dry_run
+            config.generate_manifest = not no_manifest
+            click.echo(f"Using config: {config_file}")
+        except (FileNotFoundError, ValueError) as e:
+            click.secho(f"Error loading config: {e}", fg="red", err=True)
+            raise click.Abort()
+    else:
+        # Need either --by-namespace or --config
+        if not by_namespace:
+            click.secho(
+                "Error: Specify either --by-namespace or --config.",
+                fg="red",
+                err=True,
+            )
+            click.echo("Use --by-namespace for auto-detection or -c for a config file.")
+            click.echo("Run 'rdf-construct split --init' to generate a config template.")
+            raise click.Abort()
+
+        # Build minimal config
+        config = SplitConfig(
+            source=source,
+            output_dir=output_dir,
+            modules=[],
+            unmatched=UnmatchedStrategy(
+                strategy=unmatched,
+                common_module=common_name,
+                common_output=f"{common_name}.ttl",
+            ),
+            generate_manifest=not no_manifest,
+            dry_run=dry_run,
+        )
+
+    # Add data migration config if specified
+    if migrate_data:
+        config.split_data = SplitDataConfig(
+            sources=list(migrate_data),
+            output_dir=data_output if data_output else output_dir,
+            prefix="data_",
+        )
+
+    # Override unmatched strategy if specified on CLI
+    if unmatched:
+        config.unmatched = UnmatchedStrategy(
+            strategy=unmatched,
+            common_module=common_name,
+            common_output=f"{common_name}.ttl",
+        )
+
+    # Execute split
+    click.echo(f"Splitting {source.name}...")
+
+    splitter = OntologySplitter(config)
+    result = splitter.split()
+
+    if not result.success:
+        click.secho(f"✗ Split failed: {result.error}", fg="red", err=True)
+        raise SystemExit(2)
+
+    # Write output (unless dry run)
+    if not dry_run:
+        splitter.write_modules(result)
+        if config.generate_manifest:
+            splitter.write_manifest(result)
+
+    _display_split_result(result, output_dir, dry_run, not no_colour)
+
+    # Exit code based on unmatched entities
+    if result.unmatched_entities and config.unmatched.strategy == "common":
+        click.echo()
+        click.secho(
+            f"⚠ {len(result.unmatched_entities)} unmatched entities placed in "
+            f"{config.unmatched.common_module} module",
+            fg="yellow",
+        )
+        raise SystemExit(1)
+    else:
+        raise SystemExit(0)
+
+
+def _display_split_result(
+    result: "SplitResult",
+    output_dir: Path,
+    dry_run: bool,
+    use_colour: bool,
+) -> None:
+    """Display split results to console.
+
+    Args:
+        result: SplitResult from split operation.
+        output_dir: Output directory.
+        dry_run: Whether this was a dry run.
+        use_colour: Whether to use coloured output.
+    """
+    # Header
+    if dry_run:
+        click.echo("\n[DRY RUN] Would create:")
+    else:
+        click.echo("\nSplit complete:")
+
+    # Module summary
+    click.echo(f"\n  Modules: {result.total_modules}")
+    click.echo(f"  Total triples: {result.total_triples}")
+
+    # Module details
+    if result.module_stats:
+        click.echo("\n  Module breakdown:")
+        for stats in result.module_stats:
+            deps_str = ""
+            if stats.dependencies:
+                deps_str = f" (deps: {', '.join(stats.dependencies)})"
+            click.echo(
+                f"    {stats.file}: {stats.classes} classes, "
+                f"{stats.properties} properties, {stats.triples} triples{deps_str}"
+            )
+
+    # Unmatched entities
+    if result.unmatched_entities:
+        click.echo(f"\n  Unmatched entities: {len(result.unmatched_entities)}")
+        # Show first few
+        sample = list(result.unmatched_entities)[:5]
+        for uri in sample:
+            click.echo(f"    - {uri}")
+        if len(result.unmatched_entities) > 5:
+            click.echo(f"    ... and {len(result.unmatched_entities) - 5} more")
+
+    # Output location
+    if not dry_run:
+        click.echo()
+        if use_colour:
+            click.secho(f"✓ Wrote modules to {output_dir}/", fg="green")
+        else:
+            click.echo(f"✓ Wrote modules to {output_dir}/")
+
+
+# Refactor command group
+@cli.group()
+def refactor():
+    """Refactor ontologies: rename URIs and deprecate entities.
+
+    \b
+    Subcommands:
+      rename     Rename URIs (single entity or bulk namespace)
+      deprecate  Mark entities as deprecated
+
+    \b
+    Examples:
+      # Fix a typo
+      rdf-construct refactor rename ont.ttl --from ex:Buiding --to ex:Building -o fixed.ttl
+
+      # Bulk namespace change
+      rdf-construct refactor rename ont.ttl \\
+          --from-namespace http://old/ --to-namespace http://new/ -o migrated.ttl
+
+      # Deprecate entity with replacement
+      rdf-construct refactor deprecate ont.ttl \\
+          --entity ex:OldClass --replaced-by ex:NewClass \\
+          --message "Use NewClass instead." -o updated.ttl
+    """
+    pass
+
+
+@refactor.command("rename")
+@click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "-o", "--output",
+    type=click.Path(path_type=Path),
+    help="Output file (for single source) or directory (for multiple sources).",
+)
+@click.option(
+    "--from", "from_uri",
+    help="Single URI to rename (use with --to).",
+)
+@click.option(
+    "--to", "to_uri",
+    help="New URI for single rename (use with --from).",
+)
+@click.option(
+    "--from-namespace",
+    help="Old namespace prefix for bulk rename.",
+)
+@click.option(
+    "--to-namespace",
+    help="New namespace prefix for bulk rename.",
+)
+@click.option(
+    "-c", "--config",
+    "config_file",
+    type=click.Path(exists=True, path_type=Path),
+    help="YAML configuration file with rename mappings.",
+)
+@click.option(
+    "--migrate-data",
+    multiple=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="Data files to migrate (can be repeated).",
+)
+@click.option(
+    "--data-output",
+    type=click.Path(path_type=Path),
+    help="Output path for migrated data.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview changes without writing files.",
+)
+@click.option(
+    "--no-colour", "--no-color",
+    is_flag=True,
+    help="Disable coloured output.",
+)
+@click.option(
+    "--init",
+    "init_config",
+    is_flag=True,
+    help="Generate a template rename configuration file.",
+)
+def refactor_rename(
+    sources: tuple[Path, ...],
+    output: Path | None,
+    from_uri: str | None,
+    to_uri: str | None,
+    from_namespace: str | None,
+    to_namespace: str | None,
+    config_file: Path | None,
+    migrate_data: tuple[Path, ...],
+    data_output: Path | None,
+    dry_run: bool,
+    no_colour: bool,
+    init_config: bool,
+):
+    """Rename URIs in ontology files.
+
+    Supports single entity renames (fixing typos) and bulk namespace changes
+    (project migrations). The renamer updates subject, predicate, and object
+    positions but intentionally leaves literal values unchanged.
+
+    \b
+    SOURCES: One or more RDF files to process (.ttl, .rdf, .owl)
+
+    \b
+    Exit codes:
+      0 - Success
+      1 - Success with warnings (some URIs not found)
+      2 - Error (file not found, parse error, etc.)
+
+    \b
+    Examples:
+      # Fix a single typo
+      rdf-construct refactor rename ontology.ttl \\
+          --from "http://example.org/ont#Buiding" \\
+          --to "http://example.org/ont#Building" \\
+          -o fixed.ttl
+
+      # Bulk namespace change
+      rdf-construct refactor rename ontology.ttl \\
+          --from-namespace "http://old.example.org/" \\
+          --to-namespace "http://new.example.org/" \\
+          -o migrated.ttl
+
+      # With data migration
+      rdf-construct refactor rename ontology.ttl \\
+          --from "ex:OldClass" --to "ex:NewClass" \\
+          --migrate-data instances.ttl \\
+          --data-output updated-instances.ttl
+
+      # From configuration file
+      rdf-construct refactor rename --config renames.yml
+
+      # Preview changes (dry run)
+      rdf-construct refactor rename ontology.ttl \\
+          --from "ex:Old" --to "ex:New" --dry-run
+
+      # Process multiple files
+      rdf-construct refactor rename modules/*.ttl \\
+          --from-namespace "http://old/" --to-namespace "http://new/" \\
+          -o migrated/
+
+      # Generate template config
+      rdf-construct refactor rename --init
+    """
+    # Handle --init flag
+    if init_config:
+        config_path = Path("refactor_rename.yml")
+        if config_path.exists():
+            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
+            raise click.Abort()
+
+        config_content = create_default_rename_config()
+        config_path.write_text(config_content)
+        click.secho(f"Created {config_path}", fg="green")
+        click.echo("Edit this file to configure your renames, then run:")
+        click.echo(f"  rdf-construct refactor rename --config {config_path}")
+        return
+
+    # Validate input options
+    if not sources and not config_file:
+        click.secho("Error: No source files specified.", fg="red", err=True)
+        click.echo("Provide source files or use --config with a configuration file.", err=True)
+        raise click.Abort()
+
+    # Validate rename options
+    if from_uri and not to_uri:
+        click.secho("Error: --from requires --to", fg="red", err=True)
+        raise click.Abort()
+    if to_uri and not from_uri:
+        click.secho("Error: --to requires --from", fg="red", err=True)
+        raise click.Abort()
+    if from_namespace and not to_namespace:
+        click.secho("Error: --from-namespace requires --to-namespace", fg="red", err=True)
+        raise click.Abort()
+    if to_namespace and not from_namespace:
+        click.secho("Error: --to-namespace requires --from-namespace", fg="red", err=True)
+        raise click.Abort()
+
+    # Build configuration
+    if config_file:
+        try:
+            config = load_refactor_config(config_file)
+            click.echo(f"Using config: {config_file}")
+
+            # Override output if provided on CLI
+            if output:
+                if len(sources) > 1 or (config.source_files and len(config.source_files) > 1):
+                    config.output_dir = output
+                else:
+                    config.output = output
+
+            # Override sources if provided on CLI
+            if sources:
+                config.source_files = list(sources)
+        except (FileNotFoundError, ValueError) as e:
+            click.secho(f"Error loading config: {e}", fg="red", err=True)
+            raise click.Abort()
+    else:
+        # Build config from CLI arguments
+        rename_config = RenameConfig()
+
+        if from_namespace and to_namespace:
+            rename_config.namespaces[from_namespace] = to_namespace
+
+        if from_uri and to_uri:
+            # Expand CURIEs if needed
+            rename_config.entities[from_uri] = to_uri
+
+        config = RefactorConfig(
+            rename=rename_config,
+            source_files=list(sources),
+            output=output if len(sources) == 1 else None,
+            output_dir=output if len(sources) > 1 else None,
+            dry_run=dry_run,
+        )
+
+    # Validate we have something to rename
+    if config.rename is None or (not config.rename.namespaces and not config.rename.entities):
+        click.secho(
+            "Error: No renames specified. Use --from/--to, --from-namespace/--to-namespace, "
+            "or provide a config file.",
+            fg="red",
+            err=True,
+        )
+        raise click.Abort()
+
+    # Execute rename
+    formatter = RefactorTextFormatter(use_colour=not no_colour)
+    renamer = OntologyRenamer()
+
+    for source_path in config.source_files:
+        click.echo(f"\nProcessing: {source_path}")
+
+        # Load source graph
+        graph = Graph()
+        try:
+            graph.parse(source_path.as_posix())
+        except Exception as e:
+            click.secho(f"✗ Failed to parse: {e}", fg="red", err=True)
+            raise SystemExit(2)
+
+        # Build mappings for preview
+        mappings = config.rename.build_mappings(graph)
+
+        if dry_run:
+            # Show preview
+            click.echo()
+            click.echo(
+                formatter.format_rename_preview(
+                    mappings=mappings,
+                    source_file=source_path.name,
+                    source_triples=len(graph),
+                )
+            )
+        else:
+            # Perform rename
+            result = renamer.rename(graph, config.rename)
+
+            if not result.success:
+                click.secho(f"✗ Rename failed: {result.error}", fg="red", err=True)
+                raise SystemExit(2)
+
+            # Show result
+            click.echo(formatter.format_rename_result(result))
+
+            # Write output
+            if result.renamed_graph:
+                out_path = config.output or (config.output_dir / source_path.name if config.output_dir else None)
+                if out_path:
+                    out_path.parent.mkdir(parents=True, exist_ok=True)
+                    result.renamed_graph.serialize(destination=out_path.as_posix(), format="turtle")
+                    click.secho(f"✓ Wrote {out_path}", fg="green")
+
+    # Handle data migration
+    if migrate_data and not dry_run:
+        click.echo("\nMigrating data...")
+
+        # Build URI map from rename config
+        combined_graph = Graph()
+        for source_path in config.source_files:
+            combined_graph.parse(source_path.as_posix())
+
+        uri_map = {}
+        for mapping in config.rename.build_mappings(combined_graph):
+            uri_map[mapping.from_uri] = mapping.to_uri
+
+        if uri_map:
+            migrator = DataMigrator()
+            for data_path in migrate_data:
+                data_graph = Graph()
+                try:
+                    data_graph.parse(data_path.as_posix())
+                except Exception as e:
+                    click.secho(f"✗ Failed to parse data file {data_path}: {e}", fg="red", err=True)
+                    continue
+
+                migration_result = migrator.migrate(data_graph, uri_map=uri_map)
+
+                if migration_result.success and migration_result.migrated_graph:
+                    # Determine output path
+                    if data_output and len(migrate_data) == 1:
+                        out_path = data_output
+                    elif data_output:
+                        out_path = data_output / data_path.name
+                    else:
+                        out_path = data_path.parent / f"migrated_{data_path.name}"
+
+                    out_path.parent.mkdir(parents=True, exist_ok=True)
+                    migration_result.migrated_graph.serialize(
+                        destination=out_path.as_posix(), format="turtle"
+                    )
+                    click.echo(f"  Migrated {data_path.name}: {migration_result.stats.total_changes} changes")
+                    click.secho(f"  ✓ Wrote {out_path}", fg="green")
+
+    raise SystemExit(0)
+
+
+@refactor.command("deprecate")
+@click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "-o", "--output",
+    type=click.Path(path_type=Path),
+    help="Output file.",
+)
+@click.option(
+    "--entity",
+    help="URI of entity to deprecate.",
+)
+@click.option(
+    "--replaced-by",
+    help="URI of replacement entity (adds dcterms:isReplacedBy).",
+)
+@click.option(
+    "--message", "-m",
+    help="Deprecation message (added to rdfs:comment).",
+)
+@click.option(
+    "--version",
+    help="Version when deprecated (included in message).",
+)
+@click.option(
+    "-c", "--config",
+    "config_file",
+    type=click.Path(exists=True, path_type=Path),
+    help="YAML configuration file with deprecation specs.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview changes without writing files.",
+)
+@click.option(
+    "--no-colour", "--no-color",
+    is_flag=True,
+    help="Disable coloured output.",
+)
+@click.option(
+    "--init",
+    "init_config",
+    is_flag=True,
+    help="Generate a template deprecation configuration file.",
+)
+def refactor_deprecate(
+    sources: tuple[Path, ...],
+    output: Path | None,
+    entity: str | None,
+    replaced_by: str | None,
+    message: str | None,
+    version: str | None,
+    config_file: Path | None,
+    dry_run: bool,
+    no_colour: bool,
+    init_config: bool,
+):
+    """Mark ontology entities as deprecated.
+
+    Adds standard deprecation annotations:
+    - owl:deprecated true
+    - dcterms:isReplacedBy (if replacement specified)
+    - rdfs:comment with "DEPRECATED: ..." message
+
+    Deprecation marks entities but does NOT rename or migrate references.
+    Use 'refactor rename' to actually migrate references after deprecation.
+
+    \b
+    SOURCES: One or more RDF files to process (.ttl, .rdf, .owl)
+
+    \b
+    Exit codes:
+      0 - Success
+      1 - Success with warnings (some entities not found)
+      2 - Error (file not found, parse error, etc.)
+
+    \b
+    Examples:
+      # Deprecate with replacement
+      rdf-construct refactor deprecate ontology.ttl \\
+          --entity "http://example.org/ont#LegacyTerm" \\
+          --replaced-by "http://example.org/ont#NewTerm" \\
+          --message "Use NewTerm instead. Will be removed in v3.0." \\
+          -o updated.ttl
+
+      # Deprecate without replacement
+      rdf-construct refactor deprecate ontology.ttl \\
+          --entity "ex:ObsoleteThing" \\
+          --message "No longer needed. Will be removed in v3.0." \\
+          -o updated.ttl
+
+      # Bulk deprecation from config
+      rdf-construct refactor deprecate ontology.ttl \\
+          -c deprecations.yml \\
+          -o updated.ttl
+
+      # Preview changes (dry run)
+      rdf-construct refactor deprecate ontology.ttl \\
+          --entity "ex:Legacy" --replaced-by "ex:Modern" --dry-run
+
+      # Generate template config
+      rdf-construct refactor deprecate --init
+    """
+    # Handle --init flag
+    if init_config:
+        config_path = Path("refactor_deprecate.yml")
+        if config_path.exists():
+            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
+            raise click.Abort()
+
+        config_content = create_default_deprecation_config()
+        config_path.write_text(config_content)
+        click.secho(f"Created {config_path}", fg="green")
+        click.echo("Edit this file to configure your deprecations, then run:")
+        click.echo(f"  rdf-construct refactor deprecate --config {config_path}")
+        return
+
+    # Validate input options
+    if not sources and not config_file:
+        click.secho("Error: No source files specified.", fg="red", err=True)
+        click.echo("Provide source files or use --config with a configuration file.", err=True)
+        raise click.Abort()
+
+    # Build configuration
+    if config_file:
+        try:
+            config = load_refactor_config(config_file)
+            click.echo(f"Using config: {config_file}")
+
+            # Override output if provided on CLI
+            if output:
+                config.output = output
+
+            # Override sources if provided on CLI
+            if sources:
+                config.source_files = list(sources)
+        except (FileNotFoundError, ValueError) as e:
+            click.secho(f"Error loading config: {e}", fg="red", err=True)
+            raise click.Abort()
+    else:
+        # Build config from CLI arguments
+        if not entity:
+            click.secho(
+                "Error: --entity is required when not using a config file.",
+                fg="red",
+                err=True,
+            )
+            raise click.Abort()
+
+        spec = DeprecationSpec(
+            entity=entity,
+            replaced_by=replaced_by,
+            message=message,
+            version=version,
+        )
+
+        config = RefactorConfig(
+            deprecations=[spec],
+            source_files=list(sources),
+            output=output,
+            dry_run=dry_run,
+        )
+
+    # Validate we have something to deprecate
+    if not config.deprecations:
+        click.secho(
+            "Error: No deprecations specified. Use --entity or provide a config file.",
+            fg="red",
+            err=True,
+        )
+        raise click.Abort()
+
+    # Execute deprecation
+    formatter = RefactorTextFormatter(use_colour=not no_colour)
+    deprecator = OntologyDeprecator()
+
+    for source_path in config.source_files:
+        click.echo(f"\nProcessing: {source_path}")
+
+        # Load source graph
+        graph = Graph()
+        try:
+            graph.parse(source_path.as_posix())
+        except Exception as e:
+            click.secho(f"✗ Failed to parse: {e}", fg="red", err=True)
+            raise SystemExit(2)
+
+        if dry_run:
+            # Perform dry run to get entity info
+            temp_graph = Graph()
+            for triple in graph:
+                temp_graph.add(triple)
+
+            result = deprecator.deprecate_bulk(temp_graph, config.deprecations)
+
+            # Show preview
+            click.echo()
+            click.echo(
+                formatter.format_deprecation_preview(
+                    specs=config.deprecations,
+                    entity_info=result.entity_info,
+                    source_file=source_path.name,
+                    source_triples=len(graph),
+                )
+            )
+        else:
+            # Perform deprecation
+            result = deprecator.deprecate_bulk(graph, config.deprecations)
+
+            if not result.success:
+                click.secho(f"✗ Deprecation failed: {result.error}", fg="red", err=True)
+                raise SystemExit(2)
+
+            # Show result
+            click.echo(formatter.format_deprecation_result(result))
+
+            # Write output
+            if result.deprecated_graph:
+                out_path = config.output or source_path.with_stem(f"{source_path.stem}_deprecated")
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                result.deprecated_graph.serialize(destination=out_path.as_posix(), format="turtle")
+                click.secho(f"✓ Wrote {out_path}", fg="green")
+
+            # Warn about entities not found
+            if result.stats.entities_not_found > 0:
+                click.secho(
+                    f"\n⚠ {result.stats.entities_not_found} entity/entities not found in graph",
+                    fg="yellow",
+                )
+                raise SystemExit(1)
+
+    raise SystemExit(0)
+
+
+@cli.group()
+def localise():
+    """Multi-language translation management.
+
+    Extract translatable strings, merge translations, and track coverage.
+
+    \b
+    Commands:
+      extract   Extract strings for translation
+      merge     Merge translations back into ontology
+      report    Generate translation coverage report
+      init      Create empty translation file for new language
+
+    \b
+    Examples:
+      # Extract strings for German translation
+      rdf-construct localise extract ontology.ttl --language de -o translations/de.yml
+
+      # Merge completed translations
+      rdf-construct localise merge ontology.ttl translations/de.yml -o localised.ttl
+
+      # Check translation coverage
+      rdf-construct localise report ontology.ttl --languages en,de,fr
+    """
+    pass
+
+
+@localise.command("extract")
+@click.argument("source", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--language",
+    "-l",
+    "target_language",
+    required=True,
+    help="Target language code (e.g., de, fr, es)",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Output YAML file (default: {language}.yml)",
+)
+@click.option(
+    "--source-language",
+    default="en",
+    help="Source language code (default: en)",
+)
+@click.option(
+    "--properties",
+    "-p",
+    help="Comma-separated properties to extract (e.g., rdfs:label,rdfs:comment)",
+)
+@click.option(
+    "--include-deprecated",
+    is_flag=True,
+    help="Include deprecated entities",
+)
+@click.option(
+    "--missing-only",
+    is_flag=True,
+    help="Only extract strings missing in target language",
+)
+@click.option(
+    "--config",
+    "-c",
+    "config_file",
+    type=click.Path(exists=True, path_type=Path),
+    help="YAML configuration file",
+)
+def localise_extract(
+    source: Path,
+    target_language: str,
+    output: Path | None,
+    source_language: str,
+    properties: str | None,
+    include_deprecated: bool,
+    missing_only: bool,
+    config_file: Path | None,
+):
+    """Extract translatable strings from an ontology.
+
+    Generates a YAML file with source text and empty translation fields,
+    ready to be filled in by translators.
+
+    \b
+    Examples:
+      # Basic extraction
+      rdf-construct localise extract ontology.ttl --language de -o de.yml
+
+      # Extract only labels
+      rdf-construct localise extract ontology.ttl -l de -p rdfs:label
+
+      # Extract missing strings only (for updates)
+      rdf-construct localise extract ontology.ttl -l de --missing-only -o de_update.yml
+    """
+    from rdflib import Graph
+    from rdf_construct.localise import (
+        StringExtractor,
+        ExtractConfig,
+        get_formatter as get_localise_formatter,
+    )
+
+    # Load config if provided
+    if config_file:
+        from rdf_construct.localise import load_localise_config
+        config = load_localise_config(config_file)
+        extract_config = config.extract
+        extract_config.target_language = target_language
+    else:
+        # Build config from CLI args
+        prop_list = None
+        if properties:
+            prop_list = [_expand_localise_property(p.strip()) for p in properties.split(",")]
+
+        extract_config = ExtractConfig(
+            source_language=source_language,
+            target_language=target_language,
+            properties=prop_list or ExtractConfig().properties,
+            include_deprecated=include_deprecated,
+            missing_only=missing_only,
+        )
+
+    # Load graph
+    click.echo(f"Loading {source}...")
+    graph = Graph()
+    graph.parse(source)
+
+    # Extract
+    click.echo(f"Extracting strings for {target_language}...")
+    extractor = StringExtractor(extract_config)
+    result = extractor.extract(graph, source, target_language)
+
+    # Display result
+    formatter = get_localise_formatter("text")
+    click.echo(formatter.format_extraction_result(result))
+
+    if not result.success:
+        raise SystemExit(2)
+
+    # Save output
+    output_path = output or Path(f"{target_language}.yml")
+    if result.translation_file:
+        result.translation_file.save(output_path)
+        click.echo()
+        click.secho(f"✓ Wrote {output_path}", fg="green")
+
+    raise SystemExit(0)
+
+
+@localise.command("merge")
+@click.argument("source", type=click.Path(exists=True, path_type=Path))
+@click.argument("translations", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Output file for merged ontology",
+)
+@click.option(
+    "--status",
+    type=click.Choice(["pending", "needs_review", "translated", "approved"], case_sensitive=False),
+    default="translated",
+    help="Minimum status to include (default: translated)",
+)
+@click.option(
+    "--existing",
+    type=click.Choice(["preserve", "overwrite"], case_sensitive=False),
+    default="preserve",
+    help="How to handle existing translations (default: preserve)",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would happen without writing files",
+)
+@click.option(
+    "--no-colour",
+    is_flag=True,
+    help="Disable coloured output",
+)
+def localise_merge(
+    source: Path,
+    translations: tuple[Path, ...],
+    output: Path,
+    status: str,
+    existing: str,
+    dry_run: bool,
+    no_colour: bool,
+):
+    """Merge translation files back into an ontology.
+
+    Takes completed YAML translation files and adds the translations
+    as new language-tagged literals to the ontology.
+
+    \b
+    Examples:
+      # Merge single translation file
+      rdf-construct localise merge ontology.ttl de.yml -o localised.ttl
+
+      # Merge multiple languages
+      rdf-construct localise merge ontology.ttl translations/*.yml -o multilingual.ttl
+
+      # Merge only approved translations
+      rdf-construct localise merge ontology.ttl de.yml --status approved -o localised.ttl
+    """
+    from rdflib import Graph
+    from rdf_construct.localise import (
+        TranslationMerger,
+        TranslationFile,
+        MergeConfig as LocaliseMergeConfig,
+        TranslationStatus,
+        ExistingStrategy,
+        get_formatter as get_localise_formatter,
+    )
+
+    # Load graph
+    click.echo(f"Loading {source}...")
+    graph = Graph()
+    graph.parse(source)
+
+    # Load translation files
+    click.echo(f"Loading {len(translations)} translation file(s)...")
+    trans_files = [TranslationFile.from_yaml(p) for p in translations]
+
+    # Build config
+    config = LocaliseMergeConfig(
+        min_status=TranslationStatus(status),
+        existing=ExistingStrategy(existing),
+    )
+
+    # Merge
+    click.echo("Merging translations...")
+    merger = TranslationMerger(config)
+    result = merger.merge_multiple(graph, trans_files)
+
+    # Display result
+    formatter = get_localise_formatter("text", use_colour=not no_colour)
+    click.echo(formatter.format_merge_result(result))
+
+    if not result.success:
+        raise SystemExit(2)
+
+    # Save output (unless dry run)
+    if not dry_run and result.merged_graph:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        result.merged_graph.serialize(destination=output, format="turtle")
+        click.echo()
+        click.secho(f"✓ Wrote {output}", fg="green")
+
+    # Exit code based on warnings
+    if result.stats.errors > 0:
+        raise SystemExit(1)
+    else:
+        raise SystemExit(0)
+
+
+@localise.command("report")
+@click.argument("source", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--languages",
+    "-l",
+    required=True,
+    help="Comma-separated language codes to check (e.g., en,de,fr)",
+)
+@click.option(
+    "--source-language",
+    default="en",
+    help="Base language for translations (default: en)",
+)
+@click.option(
+    "--properties",
+    "-p",
+    help="Comma-separated properties to check",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Output file for report",
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["text", "markdown", "md"], case_sensitive=False),
+    default="text",
+    help="Output format (default: text)",
+)
+@click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    help="Show detailed missing translation list",
+)
+@click.option(
+    "--no-colour",
+    is_flag=True,
+    help="Disable coloured output",
+)
+def localise_report(
+    source: Path,
+    languages: str,
+    source_language: str,
+    properties: str | None,
+    output: Path | None,
+    output_format: str,
+    verbose: bool,
+    no_colour: bool,
+):
+    """Generate translation coverage report.
+
+    Analyses an ontology and reports what percentage of translatable
+    content has been translated into each target language.
+
+    \b
+    Examples:
+      # Basic coverage report
+      rdf-construct localise report ontology.ttl --languages en,de,fr
+
+      # Detailed report with missing entities
+      rdf-construct localise report ontology.ttl -l en,de,fr --verbose
+
+      # Markdown report to file
+      rdf-construct localise report ontology.ttl -l en,de,fr -f markdown -o coverage.md
+    """
+    from rdflib import Graph
+    from rdf_construct.localise import (
+        CoverageReporter,
+        get_formatter as get_localise_formatter,
+    )
+
+    # Parse languages
+    lang_list = [lang.strip() for lang in languages.split(",")]
+
+    # Parse properties
+    prop_list = None
+    if properties:
+        prop_list = [_expand_localise_property(p.strip()) for p in properties.split(",")]
+
+    # Load graph
+    click.echo(f"Loading {source}...")
+    graph = Graph()
+    graph.parse(source)
+
+    # Generate report
+    click.echo("Analysing translation coverage...")
+    reporter = CoverageReporter(
+        source_language=source_language,
+        properties=prop_list,
+    )
+    report = reporter.report(graph, lang_list, source)
+
+    # Format output
+    formatter = get_localise_formatter(output_format, use_colour=not no_colour)
+    report_text = formatter.format_coverage_report(report, verbose=verbose)
+
+    # Output
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(report_text)
+        click.secho(f"✓ Wrote {output}", fg="green")
+    else:
+        click.echo()
+        click.echo(report_text)
+
+    raise SystemExit(0)
+
+
+@localise.command("init")
+@click.argument("source", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--language",
+    "-l",
+    "target_language",
+    required=True,
+    help="Target language code (e.g., de, fr, es)",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Output YAML file (default: {language}.yml)",
+)
+@click.option(
+    "--source-language",
+    default="en",
+    help="Source language code (default: en)",
+)
+def localise_init(
+    source: Path,
+    target_language: str,
+    output: Path | None,
+    source_language: str,
+):
+    """Create empty translation file for a new language.
+
+    Equivalent to 'extract' but explicitly for starting a new language.
+
+    \b
+    Examples:
+      rdf-construct localise init ontology.ttl --language ja -o translations/ja.yml
+    """
+    from rdflib import Graph
+    from rdf_construct.localise import (
+        StringExtractor,
+        ExtractConfig,
+        get_formatter as get_localise_formatter,
+    )
+
+    # Build config
+    extract_config = ExtractConfig(
+        source_language=source_language,
+        target_language=target_language,
+    )
+
+    # Load graph
+    click.echo(f"Loading {source}...")
+    graph = Graph()
+    graph.parse(source)
+
+    # Extract
+    click.echo(f"Initialising translation file for {target_language}...")
+    extractor = StringExtractor(extract_config)
+    result = extractor.extract(graph, source, target_language)
+
+    # Display result
+    formatter = get_localise_formatter("text")
+    click.echo(formatter.format_extraction_result(result))
+
+    if not result.success:
+        raise SystemExit(2)
+
+    # Save output
+    output_path = output or Path(f"{target_language}.yml")
+    if result.translation_file:
+        result.translation_file.save(output_path)
+        click.echo()
+        click.secho(f"✓ Created {output_path}", fg="green")
+        click.echo(f"  Fill in translations and run:")
+        click.echo(f"    rdf-construct localise merge {source} {output_path} -o localised.ttl")
+
+    raise SystemExit(0)
+
+
+@localise.command("config")
+@click.option(
+    "--init",
+    "init_config",
+    is_flag=True,
+    help="Generate a default localise configuration file",
+)
+def localise_config(init_config: bool):
+    """Generate or validate localise configuration.
+
+    \b
+    Examples:
+      rdf-construct localise config --init
+    """
+    from rdf_construct.localise import create_default_config as create_default_localise_config
+
+    if init_config:
+        config_path = Path("localise.yml")
+        if config_path.exists():
+            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
+            raise click.Abort()
+
+        config_content = create_default_localise_config()
+        config_path.write_text(config_content)
+        click.secho(f"Created {config_path}", fg="green")
+        click.echo("Edit this file to configure your localisation workflow.")
+    else:
+        click.echo("Use --init to create a default configuration file.")
+
+    raise SystemExit(0)
+
+
+def _expand_localise_property(prop: str) -> str:
+    """Expand a CURIE to full URI for localise commands."""
+    prefixes = {
+        "rdfs:": "http://www.w3.org/2000/01/rdf-schema#",
+        "skos:": "http://www.w3.org/2004/02/skos/core#",
+        "owl:": "http://www.w3.org/2002/07/owl#",
+        "rdf:": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+        "dc:": "http://purl.org/dc/elements/1.1/",
+        "dcterms:": "http://purl.org/dc/terms/",
+    }
+
+    for prefix, namespace in prefixes.items():
+        if prop.startswith(prefix):
+            return namespace + prop[len(prefix):]
+
+    return prop
+
+
+if __name__ == "__main__":
+    cli()
