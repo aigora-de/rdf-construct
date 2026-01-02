@@ -1,5 +1,5 @@
-@prefix : &lt;http://example.org/shapes#&gt; .
-@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix : <http://example.org/shapes#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 
 # =============================================================================
 # A MINIMAL RDFS ONTOLOGY
