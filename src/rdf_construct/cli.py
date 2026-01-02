@@ -1811,6 +1811,133 @@ def stats(
 
 
 @cli.command()
+@click.argument("file", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Write output to file instead of stdout",
+)
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["text", "json", "markdown", "md"], case_sensitive=False),
+    default="text",
+    help="Output format (default: text)",
+)
+@click.option(
+    "--brief",
+    is_flag=True,
+    help="Show brief summary only (metadata, metrics, profile)",
+)
+@click.option(
+    "--no-resolve",
+    is_flag=True,
+    help="Skip import resolution checks",
+)
+@click.option(
+    "--reasoning",
+    is_flag=True,
+    help="Include reasoning analysis",
+)
+@click.option(
+    "--no-colour",
+    "--no-color",
+    is_flag=True,
+    help="Disable coloured output (text format only)",
+)
+def describe(
+    file: Path,
+    output: Path | None,
+    output_format: str,
+    brief: bool,
+    no_resolve: bool,
+    reasoning: bool,
+    no_colour: bool,
+):
+    """Describe an ontology: profile, metrics, imports, and structure.
+
+    Provides a comprehensive analysis of an RDF ontology file, including:
+    - Profile detection (RDF, RDFS, OWL DL, OWL Full)
+    - Basic metrics (classes, properties, individuals)
+    - Import analysis with optional resolvability checking
+    - Namespace categorisation
+    - Class hierarchy analysis
+    - Documentation coverage
+
+    FILE: RDF ontology file to describe (.ttl, .rdf, .owl, etc.)
+
+    \b
+    Examples:
+        # Basic description
+        rdf-construct describe ontology.ttl
+
+        # Brief summary only
+        rdf-construct describe ontology.ttl --brief
+
+        # JSON output for programmatic use
+        rdf-construct describe ontology.ttl --format json -o description.json
+
+        # Markdown for documentation
+        rdf-construct describe ontology.ttl --format markdown -o DESCRIPTION.md
+
+        # Skip slow import resolution
+        rdf-construct describe ontology.ttl --no-resolve
+
+    \b
+    Exit codes:
+        0 - Success
+        1 - Success with warnings (unresolvable imports, etc.)
+        2 - Error (file not found, parse error)
+    """
+    from rdf_construct.describe import describe_file, format_description
+
+    try:
+        click.echo(f"Analysing {file}...", err=True)
+
+        # Perform analysis
+        description = describe_file(
+            file,
+            brief=brief,
+            resolve_imports=not no_resolve,
+            include_reasoning=reasoning,
+        )
+
+        # Format output
+        use_colour = not no_colour and output_format == "text" and output is None
+        formatted = format_description(
+            description,
+            format_name=output_format,
+            use_colour=use_colour,
+        )
+
+        # Write output
+        if output:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(formatted)
+            click.secho(f"✓ Wrote description to {output}", fg="green", err=True)
+        else:
+            click.echo(formatted)
+
+        # Exit code based on warnings
+        if description.imports and description.imports.unresolvable_count > 0:
+            sys.exit(1)
+        else:
+            sys.exit(0)
+
+    except FileNotFoundError as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(2)
+    except ValueError as e:
+        click.secho(f"Error parsing RDF: {e}", fg="red", err=True)
+        sys.exit(2)
+    except Exception as e:
+        click.secho(f"Error: {e}", fg="red", err=True)
+        sys.exit(2)
+
+
+@cli.command()
 @click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
 @click.option(
     "--output",

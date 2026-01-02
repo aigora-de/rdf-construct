@@ -1,0 +1,87 @@
+@prefix : <http://example.org/metaclass#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# =============================================================================
+# OWL FULL ONTOLOGY EXAMPLE
+# =============================================================================
+# This ontology demonstrates patterns that push it into OWL Full,
+# making it undecidable for standard reasoners.
+#
+# OWL Full violations in this file:
+# 1. Metaclass pattern: A class is also used as an instance
+# 2. Property used as subject of annotation with non-standard property
+# =============================================================================
+
+<http://example.org/metaclass#> a owl:Ontology ;
+    rdfs:label "Metaclass Example"@en ;
+    rdfs:comment "An ontology demonstrating OWL Full patterns. WARNING: This ontology is undecidable and may cause reasoning problems."@en ;
+    owl:versionInfo "1.0.0" .
+
+# -----------------------------------------------------------------------------
+# METACLASS PATTERN
+# -----------------------------------------------------------------------------
+# In OWL DL, a resource can be either a class OR an instance, not both.
+# Here, Species is a class, and Dog is both a class AND an instance of Species.
+
+:Species a owl:Class ;
+    rdfs:label "Species"@en ;
+    rdfs:comment "A metaclass representing biological species."@en .
+
+:Animal a owl:Class ;
+    rdfs:label "Animal"@en ;
+    rdfs:comment "A living creature."@en .
+
+# Dog is a class (things can be instances of Dog)
+:Dog a owl:Class ;
+    rdfs:subClassOf :Animal ;
+    rdfs:label "Dog"@en ;
+    rdfs:comment "The domestic dog species."@en .
+
+# But Dog is ALSO an instance of Species - this is OWL Full!
+:Dog a :Species ;
+    :latinName "Canis familiaris" .
+
+:Cat a owl:Class ;
+    rdfs:subClassOf :Animal ;
+    rdfs:label "Cat"@en .
+
+:Cat a :Species ;
+    :latinName "Felis catus" .
+
+# -----------------------------------------------------------------------------
+# PROPERTY USED AS SUBJECT
+# -----------------------------------------------------------------------------
+# In OWL DL, properties cannot be the subject of arbitrary triples.
+# Here we annotate a property with a custom (non-annotation) property.
+
+:eats a owl:ObjectProperty ;
+    rdfs:label "eats"@en ;
+    rdfs:domain :Animal ;
+    rdfs:range :Food .
+
+# Custom property (not declared as AnnotationProperty)
+:isTransitive a owl:DatatypeProperty ;
+    rdfs:label "is transitive"@en ;
+    rdfs:range xsd:boolean .
+
+# Using a property as the subject of another property - OWL Full!
+:eats :isTransitive true .
+
+# -----------------------------------------------------------------------------
+# SUPPORTING CLASSES AND PROPERTIES
+# -----------------------------------------------------------------------------
+
+:Food a owl:Class ;
+    rdfs:label "Food"@en .
+
+:latinName a owl:DatatypeProperty ;
+    rdfs:label "Latin name"@en ;
+    rdfs:domain :Species ;
+    rdfs:range xsd:string .
+
+# A regular individual (this is fine)
+:fido a :Dog ;
+    rdfs:label "Fido" .

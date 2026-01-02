@@ -1,0 +1,125 @@
+{
+  "source": "examples/describe/well_documented.ttl",
+  "timestamp": "2024-11-15T10:30:00Z",
+  "verdict": "OWL 2 DL (simple) | 89 triples, 11 classes, 11 properties",
+  "metadata": {
+    "ontology_iri": "http://example.org/library#",
+    "version_iri": null,
+    "title": "Library Ontology",
+    "description": "An ontology for modelling libraries, books, authors, and borrowing activities. Designed as a well-documented example for the rdf-construct describe command.",
+    "license_uri": "https://creativecommons.org/licenses/by/4.0/",
+    "license_label": null,
+    "creators": ["Example Author"],
+    "version_info": "1.0.0"
+  },
+  "metrics": {
+    "total_triples": 89,
+    "classes": 11,
+    "object_properties": 6,
+    "datatype_properties": 5,
+    "annotation_properties": 0,
+    "rdf_properties": 0,
+    "individuals": 0,
+    "total_properties": 11
+  },
+  "profile": {
+    "profile": "owl_dl_simple",
+    "display_name": "OWL 2 DL (simple)",
+    "reasoning_guidance": "Standard DL reasoning; efficient",
+    "detected_features": [
+      "owl:Class",
+      "rdfs:subClassOf",
+      "owl:ObjectProperty",
+      "owl:DatatypeProperty",
+      "rdfs:domain",
+      "rdfs:range",
+      "owl:FunctionalProperty"
+    ],
+    "owl_constructs_found": [
+      "owl:FunctionalProperty"
+    ],
+    "violating_constructs": []
+  },
+  "namespaces": {
+    "local_namespace": "http://example.org/library#",
+    "namespaces": [
+      {
+        "uri": "http://example.org/library#",
+        "prefix": "",
+        "category": "local",
+        "usage_count": 42
+      },
+      {
+        "uri": "http://www.w3.org/2002/07/owl#",
+        "prefix": "owl",
+        "category": "external",
+        "usage_count": 18
+      },
+      {
+        "uri": "http://www.w3.org/2000/01/rdf-schema#",
+        "prefix": "rdfs",
+        "category": "external",
+        "usage_count": 35
+      },
+      {
+        "uri": "http://www.w3.org/2004/02/skos/core#",
+        "prefix": "skos",
+        "category": "external",
+        "usage_count": 11
+      },
+      {
+        "uri": "http://purl.org/dc/terms/",
+        "prefix": "dcterms",
+        "category": "external",
+        "usage_count": 4
+      }
+    ],
+    "unimported_external": [
+      "http://www.w3.org/2004/02/skos/core#",
+      "http://purl.org/dc/terms/"
+    ],
+    "counts": {
+      "local": 1,
+      "imported": 0,
+      "external": 4
+    }
+  },
+  "imports": {
+    "imports": [],
+    "resolve_attempted": true,
+    "counts": {
+      "total": 0,
+      "resolvable": 0,
+      "unresolvable": 0
+    }
+  },
+  "hierarchy": {
+    "root_classes": [
+      "http://example.org/library#Agent",
+      "http://example.org/library#LibraryItem",
+      "http://example.org/library#Loan"
+    ],
+    "root_count": 3,
+    "max_depth": 2,
+    "orphan_classes": [],
+    "orphan_count": 0,
+    "has_cycles": false,
+    "cycle_members": []
+  },
+  "documentation": {
+    "classes": {
+      "with_label": 11,
+      "with_definition": 11,
+      "total": 11,
+      "label_pct": 100.0,
+      "definition_pct": 100.0
+    },
+    "properties": {
+      "with_label": 11,
+      "with_definition": 11,
+      "total": 11,
+      "label_pct": 100.0,
+      "definition_pct": 100.0
+    }
+  }
+}

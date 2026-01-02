@@ -1,0 +1,44 @@
+@prefix : <http://example.org/shapes#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# =============================================================================
+# A MINIMAL RDFS ONTOLOGY
+# =============================================================================
+# This ontology uses only RDFS vocabulary, demonstrating the simplest
+# form of schema that rdf-construct can describe.
+# No owl:Ontology declaration, no OWL constructs.
+
+:Shape a rdfs:Class ;
+    rdfs:label "Shape" .
+
+:Polygon a rdfs:Class ;
+    rdfs:subClassOf :Shape ;
+    rdfs:label "Polygon" .
+
+:Triangle a rdfs:Class ;
+    rdfs:subClassOf :Polygon ;
+    rdfs:label "Triangle" .
+
+:Quadrilateral a rdfs:Class ;
+    rdfs:subClassOf :Polygon ;
+    rdfs:label "Quadrilateral" .
+
+:Rectangle a rdfs:Class ;
+    rdfs:subClassOf :Quadrilateral ;
+    rdfs:label "Rectangle" .
+
+:Square a rdfs:Class ;
+    rdfs:subClassOf :Rectangle ;
+    rdfs:label "Square" .
+
+:Circle a rdfs:Class ;
+    rdfs:subClassOf :Shape ;
+    rdfs:label "Circle" .
+
+:hasSides a rdfs:Property ;
+    rdfs:label "has sides" ;
+    rdfs:domain :Polygon .
+
+:hasRadius a rdfs:Property ;
+    rdfs:label "has radius" ;
+    rdfs:domain :Circle .
