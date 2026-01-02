@@ -1,22 +1,22 @@
-@prefix : &lt;http://example.org/library#&gt; .
-@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
-@prefix rdf: &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#&gt; .
-@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
-@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
-@prefix dcterms: &lt;http://purl.org/dc/terms/&gt; .
-@prefix skos: &lt;http://www.w3.org/2004/02/skos/core#&gt; .
+@prefix : <http://example.org/library#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 
 # =============================================================================
 # ONTOLOGY DECLARATION
 # =============================================================================
 
-&lt;http://example.org/library#&gt; a owl:Ontology ;
+<http://example.org/library#> a owl:Ontology ;
     rdfs:label "Library Ontology"@en ;
     rdfs:comment "An ontology for modelling libraries, books, authors, and borrowing activities. Designed as a well-documented example for the rdf-construct describe command."@en ;
     owl:versionInfo "1.0.0" ;
     dcterms:created "2024-01-15"^^xsd:date ;
     dcterms:creator "Example Author" ;
-    dcterms:license &lt;https://creativecommons.org/licenses/by/4.0/&gt; .
+    dcterms:license <https://creativecommons.org/licenses/by/4.0/> .
 
 # =============================================================================
 # CLASSES
@@ -129,12 +129,11 @@
 # DATATYPE PROPERTIES
 # =============================================================================
 
-:isbn a owl:DatatypeProperty ;
+:isbn a owl:DatatypeProperty, owl:FunctionalProperty ;
     rdfs:label "ISBN"@en ;
     rdfs:comment "The International Standard Book Number."@en ;
     rdfs:domain :Book ;
-    rdfs:range xsd:string ;
-    a owl:FunctionalProperty .
+    rdfs:range xsd:string .
 
 :title a owl:DatatypeProperty ;
     rdfs:label "title"@en ;
