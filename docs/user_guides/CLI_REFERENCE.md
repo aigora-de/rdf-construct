@@ -30,6 +30,76 @@ rdf-construct --help       # Show help
 
 ## Commands
 
+### describe - Ontology Orientation
+
+Provide a quick orientation to an unfamiliar ontology file, showing metadata, metrics, profile, imports, and documentation coverage.
+
+```bash
+rdf-construct describe SOURCE [OPTIONS]
+```
+
+**Arguments**:
+- `SOURCE`: RDF ontology file to describe (.ttl, .rdf, .owl, etc.)
+
+**Options**:
+- `-o, --output PATH`: Write output to file instead of stdout
+- `-f, --format FORMAT`: Output format: `text` (default), `json`, `markdown`, `md`
+- `-b, --brief`: Quick overview (metadata + metrics + profile only)
+- `--no-resolve`: Skip import resolution (no network requests)
+- `--no-colour`: Disable ANSI colour codes
+
+**Output Sections**:
+
+| Section | Description |
+|---------|-------------|
+| Verdict | One-line summary: profile, scale, import status |
+| Metadata | Title, version, description, license, creators |
+| Metrics | Triples, classes, properties, individuals |
+| Profile | OWL expressiveness level (RDF, RDFS, OWL DL, OWL Full) |
+| Imports | owl:imports declarations and resolution status |
+| Namespaces | Local, standard, and external namespace usage |
+| Hierarchy | Root/leaf classes, depth, orphans, cycles |
+| Documentation | Label and comment coverage percentages |
+
+**Profile Detection**:
+
+| Profile | Description |
+|---------|-------------|
+| RDF | No schema vocabulary |
+| RDFS | Uses rdfs:Class, rdfs:subClassOf |
+| OWL 2 DL (simple) | Basic OWL constructs |
+| OWL 2 DL (expressive) | Complex restrictions, cardinality |
+| OWL 2 Full | Metaclasses, property punning |
+
+**Examples**:
+
+```bash
+# Describe an ontology file
+rdf-construct describe ontology.ttl
+
+# Quick overview (faster for large files)
+rdf-construct describe ontology.ttl --brief
+
+# Output as JSON for scripting
+rdf-construct describe ontology.ttl --format json -o description.json
+
+# Output as Markdown for documentation
+rdf-construct describe ontology.ttl --format markdown >> README.md
+
+# Skip import resolution (no network access)
+rdf-construct describe ontology.ttl --no-resolve
+
+# Disable coloured output
+rdf-construct describe ontology.ttl --no-colour
+```
+
+**Exit Codes**:
+- `0`: Success
+- `1`: Success with warnings (e.g., unresolvable imports)
+- `2`: Error (file not found, parse error)
+
+---
+
 ### order - Reorder RDF Files
 
 Reorder RDF Turtle files according to semantic profiles.
@@ -565,11 +635,10 @@ migrate_data:
 
 ---
 
----
-
 ### split - Modularise Ontologies
 
 Split a monolithic ontology into multiple modules.
+
 ```bash
 rdf-construct split SOURCE [OPTIONS]
 ```
@@ -591,6 +660,7 @@ rdf-construct split SOURCE [OPTIONS]
 - `--init`: Generate a default split configuration file
 
 **Examples**:
+
 ```bash
 # Split by namespace (auto-detect modules)
 rdf-construct split large.ttl -o modules/ --by-namespace
@@ -610,6 +680,7 @@ rdf-construct split --init
 ```
 
 **Configuration File Format**:
+
 ```yaml
 split:
   source: ontology/monolith.ttl
@@ -644,6 +715,7 @@ split:
 ```
 
 **Manifest Output** (`manifest.yml`):
+
 ```yaml
 source: ontology/monolith.ttl
 output_dir: modules/
@@ -714,6 +786,7 @@ rdf-construct refactor rename SOURCES [OPTIONS]
 - `--init`: Generate a template rename configuration file
 
 **Examples**:
+
 ```bash
 # Fix a single typo
 rdf-construct refactor rename ontology.ttl \
@@ -750,6 +823,7 @@ rdf-construct refactor rename --init
 ```
 
 **Configuration File Format**:
+
 ```yaml
 source_files:
   - ontology.ttl
@@ -798,6 +872,7 @@ rdf-construct refactor deprecate SOURCES [OPTIONS]
 - `--init`: Generate a template deprecation configuration file
 
 **Examples**:
+
 ```bash
 # Deprecate with replacement
 rdf-construct refactor deprecate ontology.ttl \
@@ -826,6 +901,7 @@ rdf-construct refactor deprecate --init
 ```
 
 **Configuration File Format**:
+
 ```yaml
 source_files:
   - ontology.ttl
@@ -850,6 +926,7 @@ deprecations:
 **Deprecation Output**:
 
 When you deprecate an entity, the following triples are added:
+
 ```turtle
 ex:LegacyTerm
     owl:deprecated true ;
@@ -902,6 +979,7 @@ rdf-construct localise extract SOURCE [OPTIONS]
 - `-c, --config PATH`: YAML configuration file
 
 **Examples**:
+
 ```bash
 # Basic extraction for German
 rdf-construct localise extract ontology.ttl --language de -o translations/de.yml
@@ -938,6 +1016,7 @@ rdf-construct localise merge SOURCE TRANSLATIONS... [OPTIONS]
 - `--no-colour`: Disable coloured output
 
 **Examples**:
+
 ```bash
 # Merge single translation file
 rdf-construct localise merge ontology.ttl de.yml -o localised.ttl
@@ -978,6 +1057,7 @@ rdf-construct localise report SOURCE [OPTIONS]
 - `--no-colour`: Disable coloured output
 
 **Examples**:
+
 ```bash
 # Basic coverage report
 rdf-construct localise report ontology.ttl --languages en,de,fr
@@ -1011,6 +1091,7 @@ rdf-construct localise init SOURCE [OPTIONS]
 - `--source-language CODE`: Source language code (default: en)
 
 **Examples**:
+
 ```bash
 # Initialise Japanese translation
 rdf-construct localise init ontology.ttl --language ja -o translations/ja.yml
@@ -1030,12 +1111,14 @@ rdf-construct localise config [OPTIONS]
 - `--init`: Generate a default localise configuration file
 
 **Examples**:
+
 ```bash
 # Generate default config
 rdf-construct localise config --init
 ```
 
 **Translation File Format**:
+
 ```yaml
 metadata:
   source_file: ontology.ttl
@@ -1364,6 +1447,19 @@ profiles:
 
 ## Common Workflows
 
+### Exploring a New Ontology
+
+```bash
+# Quick orientation
+rdf-construct describe ontology.ttl
+
+# Brief overview for large files
+rdf-construct describe ontology.ttl --brief
+
+# Check profile compatibility
+rdf-construct describe ontology.ttl --format json | jq '.profile.profile'
+```
+
 ### Diagram-First Ontology Design
 
 ```bash
@@ -1380,7 +1476,8 @@ rdf-construct lint ontology.ttl --level strict
 ### Complete Quality Pipeline
 
 ```bash
-# Lint, generate shapes, validate, test competency questions
+# Describe, lint, generate shapes, validate, test competency questions
+rdf-construct describe ontology.ttl --format json -o description.json
 rdf-construct lint ontology.ttl --format json -o lint.json
 rdf-construct shacl-gen ontology.ttl -o shapes.ttl --level strict
 pyshacl -s shapes.ttl -d test-data.ttl
@@ -1480,6 +1577,7 @@ rdf-construct uml ontology.ttl -C config.yml -o docs/diagrams/internal/
 **Problem**: `rdf-construct: command not found`
 
 **Solution**:
+
 ```bash
 # If installed with Poetry
 poetry run rdf-construct --version
@@ -1497,6 +1595,7 @@ pip show rdf-construct
 **Problem**: `Error: Context 'xyz' not found`
 
 **Solution**: List available contexts/profiles:
+
 ```bash
 rdf-construct contexts config.yml
 rdf-construct profiles order.yml
@@ -1507,6 +1606,7 @@ rdf-construct profiles order.yml
 **Problem**: `Error: Path 'file.ttl' does not exist`
 
 **Solution**: Check file path is correct:
+
 ```bash
 ls -la file.ttl
 # Use absolute path if needed
@@ -1523,6 +1623,7 @@ rdf-construct uml /full/path/to/file.ttl -C config.yml
 3. Check class/property selection criteria
 
 **Debug**:
+
 ```python
 from rdflib import Graph, RDF, OWL
 g = Graph().parse("ontology.ttl", format="turtle")
@@ -1537,6 +1638,7 @@ for pfx, ns in g.namespace_manager.namespaces():
 
 ```bash
 rdf-construct --help
+rdf-construct describe --help
 rdf-construct order --help
 rdf-construct uml --help
 rdf-construct docs --help
@@ -1557,11 +1659,13 @@ rdf-construct stats --help
 ## See Also
 
 - **[Getting Started](GETTING_STARTED.md)**: Quick start guide
+- **[Describe Guide](DESCRIBE_GUIDE.md)**: Ontology orientation
 - **[Docs Guide](DOCS_GUIDE.md)**: Documentation generation
 - **[UML Guide](UML_GUIDE.md)**: Complete UML features
-- **[PlantUML Import Guide](PLANTUML_IMPORT_GUIDE.md)**: PlantUML to RDF conversion
+- **[PlantUML Import Guide](PUML2RDF_GUIDE.md)**: PlantUML to RDF conversion
 - **[SHACL Guide](SHACL_GUIDE.md)**: SHACL shape generation
 - **[Diff Guide](DIFF_GUIDE.md)**: Ontology comparison
 - **[Lint Guide](LINT_GUIDE.md)**: Ontology quality checking
+- **[Merge and Split Guide](MERGE_SPLIT_GUIDE.md)**: Combining and modularising ontologies
 - **[CQ Testing Guide](CQ_TEST_GUIDE.md)**: Competency question testing
 - **[Stats Guide](STATS_GUIDE.md)**: Ontology metrics and statistics
