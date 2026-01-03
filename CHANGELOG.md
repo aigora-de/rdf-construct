@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Nothing yet.
 
-## [0.4.0] - 2025-01-03
+## [0.4.0] - 2026-01-03
 
 ### Added
 
@@ -373,7 +373,7 @@ Initial public release.
 
 | Version | Date       | Highlights                                                                                          |
 |---------|------------|-----------------------------------------------------------------------------------------------------|
-| [0.4.0] | 2025-01-03 | Add describe command, documentation improvements |
+| [0.4.0] | 2026-01-03 | Add describe command, documentation improvements |
 | [0.3.0] | 2025-12-04 | Add merge/split, refactor, and localise |
 | [0.2.0] | 2025-12-03 | Stats, CQ testing, SHACL gen, docs gen, diff, lint, puml2rdf                                        |
 | [0.1.0] | 2025-11-30 | Initial release: ordering, UML generation, styling                                                  |
