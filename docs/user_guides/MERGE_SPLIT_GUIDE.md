@@ -1,8 +1,14 @@
-# Merge Guide
+# Merge & Split Guide
+
+This guide covers two complementary commands for managing ontology modules:
+- **merge**: Combine multiple ontologies into one
+- **split**: Divide a monolithic ontology into modules
+
+## Merge Command
 
 The `merge` command combines multiple RDF ontology files into a single output, with intelligent conflict detection, namespace management, and optional data migration.
 
-## Quick Start
+### Quick Start
 
 ```bash
 # Basic merge of two ontologies
@@ -15,7 +21,7 @@ rdf-construct merge core.ttl extension.ttl -o merged.ttl --dry-run
 rdf-construct merge --init
 ```
 
-## Use Cases
+### Use Cases
 
 - **Combining modular ontologies** for deployment
 - **Merging contributions** from multiple authors
@@ -23,19 +29,19 @@ rdf-construct merge --init
 - **Consolidating legacy ontologies** with different namespaces
 - **Migrating instance data** when ontology structure changes
 
-## CLI Reference
+### CLI Reference
 
 ```bash
 rdf-construct merge [OPTIONS] [SOURCES]...
 ```
 
-### Arguments
+#### Arguments
 
 | Argument | Description |
 |----------|-------------|
 | `SOURCES` | One or more RDF files to merge (.ttl, .rdf, .owl) |
 
-### Options
+#### Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
@@ -53,7 +59,7 @@ rdf-construct merge [OPTIONS] [SOURCES]...
 | `--no-colour` | Disable coloured output | `False` |
 | `--init` | Generate default configuration file | - |
 
-### Exit Codes
+#### Exit Codes
 
 | Code | Meaning |
 |------|---------|
@@ -61,14 +67,14 @@ rdf-construct merge [OPTIONS] [SOURCES]...
 | 1 | Merge successful, but unresolved conflicts marked in output |
 | 2 | Error (file not found, parse error, etc.) |
 
-## Conflict Detection
+### Conflict Detection
 
 The merge command detects conflicts when:
 
 1. **Same subject + predicate** has different values across sources
 2. **Semantic contradictions** exist (e.g., disjoint + subclass)
 
-### Conflict Types
+#### Conflict Types
 
 | Type | Description | Example |
 |------|-------------|---------|
@@ -77,35 +83,29 @@ The merge command detects conflicts when:
 | Hierarchy Difference | Different subClassOf | `ex:A` subClassOf `ex:B` vs `ex:C` |
 | Semantic Contradiction | Logically incompatible | disjointWith + subClassOf |
 
-### Resolution Strategies
+#### Resolution Strategies
 
-#### Priority (default)
-
-Higher priority source wins. Set priorities with `-p`:
+**Priority (default)**: Higher priority source wins. Set priorities with `-p`:
 
 ```bash
 # extension.ttl (priority 2) wins over core.ttl (priority 1)
 rdf-construct merge core.ttl extension.ttl -o merged.ttl -p 1 -p 2
 ```
 
-#### First / Last
-
-First or last source encountered wins:
+**First / Last**: First or last source encountered wins:
 
 ```bash
 rdf-construct merge a.ttl b.ttl c.ttl -o merged.ttl --strategy first
 rdf-construct merge a.ttl b.ttl c.ttl -o merged.ttl --strategy last
 ```
 
-#### Mark All
-
-Leave all conflicts unresolved for manual review:
+**Mark All**: Leave all conflicts unresolved for manual review:
 
 ```bash
 rdf-construct merge core.ttl ext.ttl -o merged.ttl --strategy mark_all
 ```
 
-### Conflict Markers
+#### Conflict Markers
 
 Unresolved conflicts are marked in the output file:
 
@@ -128,7 +128,7 @@ Find conflicts with `grep`:
 grep -n "=== CONFLICT ===" merged.ttl
 ```
 
-### Conflict Reports
+#### Conflict Reports
 
 Generate a detailed report:
 
@@ -142,9 +142,9 @@ The Markdown report includes:
 - Auto-resolved conflicts
 - Recommendations
 
-## Namespace Management
+### Namespace Management
 
-### Namespace Remapping
+#### Namespace Remapping
 
 Remap namespaces during merge (via config file):
 
@@ -156,7 +156,7 @@ sources:
       "http://old.example.org/": "http://example.org/"
 ```
 
-### Preferred Prefixes
+#### Preferred Prefixes
 
 Standardise prefix bindings in output:
 
@@ -167,7 +167,7 @@ namespaces:
     rdfs: "http://www.w3.org/2000/01/rdf-schema#"
 ```
 
-## owl:imports Handling
+### owl:imports Handling
 
 Control how `owl:imports` statements are handled:
 
@@ -182,11 +182,11 @@ rdf-construct merge ... --imports remove
 rdf-construct merge ... --imports merge
 ```
 
-## Data Migration
+### Data Migration
 
 When ontology structure changes, instance data may need updates.
 
-### Simple Migration (URI Substitution)
+#### Simple Migration (URI Substitution)
 
 When namespaces are remapped, instance data can be automatically migrated:
 
@@ -196,7 +196,7 @@ rdf-construct merge core.ttl ext.ttl -o merged.ttl \
     --data-output migrated.ttl
 ```
 
-### Complex Migration (Transformation Rules)
+#### Complex Migration (Transformation Rules)
 
 For structural changes, define migration rules in YAML:
 
@@ -239,15 +239,7 @@ rdf-construct merge core.ttl ext.ttl -o merged.ttl \
     --data-output migrated/
 ```
 
-### Supported Transformations
-
-| Function | Description | Example |
-|----------|-------------|---------|
-| `STRBEFORE` | Substring before delimiter | `STRBEFORE(?name, ' ')` |
-| `STRAFTER` | Substring after delimiter | `STRAFTER(?name, ', ')` |
-| Arithmetic | Basic math operations | `((?f - 32) * 5/9)` |
-
-## Configuration File
+### Configuration File
 
 For complex merges, use a YAML configuration file:
 
@@ -304,9 +296,9 @@ Use with:
 rdf-construct merge --config merge.yml
 ```
 
-## Examples
+### Merge Examples
 
-### Merge with Priorities
+#### Merge with Priorities
 
 ```bash
 # Core ontology has priority 1, extensions have priority 2
@@ -318,7 +310,7 @@ rdf-construct merge \
     -p 1 -p 2 -p 2
 ```
 
-### Generate Conflict Report
+#### Generate Conflict Report
 
 ```bash
 rdf-construct merge core.ttl ext.ttl -o merged.ttl \
@@ -329,14 +321,14 @@ rdf-construct merge core.ttl ext.ttl -o merged.ttl \
 grep -n "CONFLICT" merged.ttl
 ```
 
-### Migrate Data with Namespace Change
+#### Migrate Data with Namespace Change
 
 ```bash
 # Using config with namespace remapping
 rdf-construct merge --config migrate-config.yml
 ```
 
-### Dry Run for CI/CD
+#### Dry Run for CI/CD
 
 ```bash
 # Check for conflicts without writing
@@ -346,7 +338,7 @@ rdf-construct merge core.ttl ext.ttl -o merged.ttl --dry-run
 echo "Exit code: $?"
 ```
 
-## Best Practices
+### Merge Best Practices
 
 1. **Start with dry run** to preview conflicts before committing
 2. **Use consistent priorities** - higher numbers for more authoritative sources
@@ -354,29 +346,6 @@ echo "Exit code: $?"
 4. **Version control** your merge configuration
 5. **Run `lint`** on merged output to catch issues
 6. **Test data migration** on a sample before full migration
-
-## Troubleshooting
-
-### "No conflicts but labels differ"
-
-Some predicates like `rdfs:comment` may have multiple values legitimately. Use `--ignore-predicates` (in config) to skip these.
-
-### "Parse error on source file"
-
-Ensure source files are valid RDF. Run `rdf-construct lint` first.
-
-### "Too many unresolved conflicts"
-
-Consider:
-- Using `--strategy priority` with clear priority ordering
-- Breaking large merges into smaller steps
-- Using configuration file for fine-grained control
-
-## Related Commands
-
-- `rdf-construct lint` - Check merged output for quality issues
-- `rdf-construct diff` - Compare merged result with original
-- `rdf-construct docs` - Generate documentation for merged ontology
 
 ---
 
@@ -643,7 +612,7 @@ Minor differences may occur due to:
 - Namespace binding order
 - Blank node identifiers
 
-### Examples
+### Split Examples
 
 #### Basic Namespace Split
 
@@ -688,7 +657,7 @@ rdf-construct split large.ttl -o modules/ --by-namespace --dry-run
 
 Shows what would be created without writing files.
 
-### Best Practices
+### Split Best Practices
 
 1. **Start with dry run** to preview the split structure
 2. **Use explicit configuration** for production splits
@@ -697,9 +666,33 @@ Shows what would be created without writing files.
 5. **Run `lint`** on each module to catch issues
 6. **Test round-trip** to validate the split preserves semantics
 
-### Troubleshooting
+---
 
-#### "Unmatched entities in common module"
+## Related Commands
+
+- `rdf-construct lint` - Check merged/split output for quality issues
+- `rdf-construct diff` - Compare merged result with original
+- `rdf-construct docs` - Generate documentation for merged ontology
+- `rdf-construct describe` - Quick overview of module contents
+
+## Troubleshooting
+
+### Merge: "No conflicts but labels differ"
+
+Some predicates like `rdfs:comment` may have multiple values legitimately. Use `--ignore-predicates` (in config) to skip these.
+
+### Merge: "Parse error on source file"
+
+Ensure source files are valid RDF. Run `rdf-construct lint` first.
+
+### Merge: "Too many unresolved conflicts"
+
+Consider:
+- Using `--strategy priority` with clear priority ordering
+- Breaking large merges into smaller steps
+- Using configuration file for fine-grained control
+
+### Split: "Unmatched entities in common module"
 
 Some entities don't match any module definition. Either:
 - Add them to a module's class/property list
@@ -707,10 +700,10 @@ Some entities don't match any module definition. Either:
 - Accept them in the common module
 - Use `--unmatched error` to identify what's missing
 
-#### "Too many cross-module dependencies"
+### Split: "Too many cross-module dependencies"
 
 Consider reorganising modules or accepting some coupling. Use the manifest's dependency graph to visualise.
 
-#### "Missing triples after split"
+### Split: "Missing triples after split"
 
 Ensure all entity types (classes, properties, individuals) are covered. The split only includes triples where the subject is an assigned entity.

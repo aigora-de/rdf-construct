@@ -12,6 +12,7 @@
 ## Features
 
 - **Semantic Ordering**: Serialise RDF/Turtle with intelligent ordering instead of alphabetical chaos
+- **Ontology Description**: Quick orientation to unfamiliar ontologies with profile detection
 - **Documentation Generation**: Create navigable HTML, Markdown, or JSON documentation from ontologies
 - **UML Generation**: Create PlantUML class diagrams from RDF ontologies
 - **PUML2RDF**: Convert PlantUML diagrams to RDF/OWL ontologies (diagram-first design)
@@ -26,6 +27,7 @@
 - **Ontology Statistics**: Comprehensive metrics with comparison mode
 - **Flexible Styling**: Configure colours, layouts, and visual themes for diagrams
 - **Profile-Based**: Define multiple strategies in YAML configuration
+- **Multi-Format Input**: Supports Turtle, RDF/XML, JSON-LD, N-Triples
 - **Deterministic**: Same input + profile = same output, always
 
 ## Why?
@@ -53,6 +55,19 @@ pip install -e .
 
 # For development
 poetry install
+```
+
+### Describe an Ontology
+
+```bash
+# Quick orientation to an unfamiliar ontology
+rdf-construct describe ontology.ttl
+
+# Brief summary (metadata + metrics + profile)
+rdf-construct describe ontology.ttl --brief
+
+# JSON output for scripting
+rdf-construct describe ontology.ttl --format json
 ```
 
 ### Compare Ontology Versions
@@ -205,15 +220,16 @@ rdf-construct localise report ontology.ttl --languages en,de,fr
 
 **For Users**:
 - [Getting Started](docs/user_guides/GETTING_STARTED.md) - 5-minute quick start
+- [Describe Guide](docs/user_guides/DESCRIBE_GUIDE.md) - Quick ontology orientation
 - [Docs Guide](docs/user_guides/DOCS_GUIDE.md) - Documentation generation
 - [UML Guide](docs/user_guides/UML_GUIDE.md) - Complete UML features
-- [PlantUML Import Guide](docs/user_guides/PLANTUML_IMPORT_GUIDE.md) - Diagram-first design
+- [PUML2RDF Guide](docs/user_guides/PUML2RDF_GUIDE.md) - Diagram-first design
 - [SHACL Guide](docs/user_guides/SHACL_GUIDE.md) - SHACL shape generation
 - [Diff Guide](docs/user_guides/DIFF_GUIDE.md) - Semantic ontology comparison
 - [Lint Guide](docs/user_guides/LINT_GUIDE.md) - Ontology quality checking
 - [CQ Testing Guide](docs/user_guides/CQ_TEST_GUIDE.md) - Competency question testing
 - [Stats Guide](docs/user_guides/STATS_GUIDE.md) - Ontology metrics
-- [Merge Guide](docs/user_guides/MERGE_GUIDE.md) - Combining ontologies
+- [Merge & Split Guide](docs/user_guides/MERGE_SPLIT_GUIDE.md) - Combining and modularising ontologies
 - [Refactor Guide](docs/user_guides/REFACTOR_GUIDE.md) - Renaming and deprecation
 - [Localise Guide](docs/user_guides/LOCALISE_GUIDE.md) - Multi-language translations
 - [CLI Reference](docs/user_guides/CLI_REFERENCE.md) - All commands and options
@@ -371,7 +387,7 @@ properties:
 
 ## Project Status
 
-**Current**: v0.2.0 - Feature complete for core ontology workflows  
+**Current**: v0.4.0 - Feature complete for core ontology workflows  
 **License**: MIT
 
 ### Implemented
@@ -387,10 +403,15 @@ properties:
 ✅ Ontology linting (11 rules)  
 ✅ Competency question testing  
 ✅ Ontology statistics  
+✅ Ontology merging and splitting  
+✅ Ontology refactoring (rename, deprecate)  
+✅ Multi-language translation management  
+✅ Ontology description and profile detection  
+✅ Multi-format input support (Turtle, RDF/XML, JSON-LD, N-Triples)  
 ✅ Comprehensive documentation
 
 ### (Possible) Roadmap
-- [ ] Multi-format input support (JSON-LD, RDF/XML)
+- [ ] OWL 2 named profile detection (EL, RL, QL)
 - [ ] Streaming mode for very large graphs
 - [ ] Web UI for diagram configuration
 - [ ] Additional lint rules
@@ -453,6 +474,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Status**: v0.2.0  
+**Status**: v0.4.0  
 **Python**: 3.10+ required  
 **Maintainer**: See [CONTRIBUTING.md](CONTRIBUTING.md)

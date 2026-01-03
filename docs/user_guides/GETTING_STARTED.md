@@ -2,536 +2,307 @@
 
 ## What is rdf-construct?
 
-**rdf-construct** is a toolkit for working with RDF ontologies. It helps you:
+**rdf-construct** is a toolkit for working with RDF ontologies. It provides 14 commands organised into categories:
 
-- **Reorder** RDF/Turtle files semantically (not just alphabetically)
-- **Generate** UML class diagrams from ontologies
-- **Visualize** semantic structures with flexible styling
+| Category | Commands | Purpose |
+|----------|----------|--------|
+| **Analysis** | `describe`, `stats` | Understand ontology structure and metrics |
+| **Documentation** | `docs`, `uml` | Generate documentation and diagrams |
+| **Validation** | `lint`, `shacl-gen`, `cq-test` | Check quality and run tests |
+| **Comparison** | `diff` | Compare ontology versions |
+| **Transformation** | `merge`, `split`, `refactor`, `localise` | Combine, modularise, rename, translate |
+| **Conversion** | `puml2rdf` | Convert PlantUML to RDF |
+| **Ordering** | `order` | Semantic RDF serialisation |
 
-Think of it as a Swiss Army knife for RDF—making ontologies more readable and easier to communicate.
+Named after the ROM construct from Gibson's *Neuromancer*—preserved, structured knowledge.
 
 ## Quick Start (5 Minutes)
 
 ### Installation
 
 ```bash
-# With Poetry (recommended)
-cd rdf-construct
-poetry install
-
-# With pip
+# From PyPI (recommended)
 pip install rdf-construct
 
-# From source
+# For development
 git clone https://github.com/aigora-de/rdf-construct.git
 cd rdf-construct
-pip install -e .
+poetry install
 ```
 
-### Your First Diagram
+### Your First Commands
 
 ```bash
-# Generate UML diagrams from an example ontology
-poetry run rdf-construct uml examples/animal_ontology.ttl examples/uml_contexts.yml
+# 1. Describe an ontology (what is this file?)
+rdf-construct describe examples/animal_ontology.ttl
 
-# Check the output
-ls diagrams/
-# animal_ontology-animal_taxonomy.puml
-# animal_ontology-mammals_only.puml
-# ... more diagrams
+# 2. Check quality
+rdf-construct lint examples/animal_ontology.ttl
+
+# 3. Generate a UML diagram
+rdf-construct uml examples/animal_ontology.ttl -C examples/uml_contexts.yml
+
+# 4. Generate documentation
+rdf-construct docs examples/animal_ontology.ttl -o my-docs/
 ```
 
-### View Your Diagrams
+## Command Categories Tour
 
-**Option 1: Online PlantUML Editor**
-- Go to https://www.plantuml.com/plantuml/
-- Copy/paste contents of a `.puml` file
-- View rendered diagram
+### Analysis: Understanding Ontologies
 
-**Option 2: VS Code**
-- Install "PlantUML" extension
-- Open a `.puml` file
-- Press `Alt+D` to preview
-
-**Option 3: Command Line**
-```bash
-# Install PlantUML
-brew install plantuml  # macOS
-apt install plantuml   # Ubuntu
-
-# Render diagram
-plantuml diagrams/animal_ontology-animal_taxonomy.puml
-# Creates .png file
-```
-
-## Basic Concepts
-
-### Ontologies
-
-RDF ontologies define classes, properties, and relationships. Example:
-
-```turtle
-@prefix ex: <http://example.org/animals#> .
-
-ex:Animal a owl:Class .
-ex:Mammal a owl:Class ;
-    rdfs:subClassOf ex:Animal .
-ex:Dog a owl:Class ;
-    rdfs:subClassOf ex:Mammal .
-```
-
-### UML Diagrams
-
-UML class diagrams show:
-- **Classes** as boxes
-- **Inheritance** as arrows with triangles
-- **Properties** as attributes or associations
-
-rdf-construct generates PlantUML syntax from RDF, which can then be rendered as images.
-
-### Contexts
-
-A **context** defines what to include in a diagram:
-
-```yaml
-contexts:
-  animal_taxonomy:
-    description: "Animal class hierarchy"
-    root_classes:
-      - ex:Animal
-    include_descendants: true
-    properties:
-      mode: domain_based
-```
-
-## Common Tasks
-
-### Generate All Diagrams
+**describe** - Quick orientation to an unfamiliar ontology:
 
 ```bash
-# Process all contexts in config
-poetry run rdf-construct uml ontology.ttl config.yml
+# What is this ontology? How big? What does it import?
+rdf-construct describe ontology.ttl
+
+# Brief summary for quick triage
+rdf-construct describe ontology.ttl --brief
+
+# JSON for scripting
+rdf-construct describe ontology.ttl --format json
 ```
 
-Output: Multiple `.puml` files in `diagrams/` directory.
+Output includes metadata, metrics, OWL profile detection, import status, and documentation coverage.
 
-### Generate Specific Diagram
+**stats** - Detailed metrics and comparison:
 
 ```bash
-# Just the "animal_taxonomy" context
-poetry run rdf-construct uml examples/animal_ontology.ttl examples/uml_contexts.yml -c animal_taxonomy
+# Full statistics
+rdf-construct stats ontology.ttl
+
+# Compare two versions
+rdf-construct stats v1.ttl v2.ttl --compare
 ```
 
-### Custom Output Directory
+### Documentation: Generating Outputs
+
+**docs** - Generate navigable documentation:
 
 ```bash
-# Put diagrams in "output/"
-poetry run rdf-construct uml ontology.ttl config.yml -o output/
+# HTML with search (default)
+rdf-construct docs ontology.ttl -o api-docs/
+
+# Markdown for GitHub wiki
+rdf-construct docs ontology.ttl --format markdown -o wiki/
+
+# JSON for custom rendering
+rdf-construct docs ontology.ttl --format json
 ```
 
-### List Available Contexts
+**uml** - Generate PlantUML class diagrams:
 
 ```bash
-# See what contexts are defined
-poetry run rdf-construct contexts examples/uml_contexts.yml
+# Generate diagrams using context configuration
+rdf-construct uml ontology.ttl -C contexts.yml
+
+# With styling
+rdf-construct uml ontology.ttl -C contexts.yml \
+  --style-config styles.yml --style default
 ```
 
-Output:
-```
-Available UML contexts:
+### Validation: Checking Quality
 
-  animal_taxonomy
-    Animal class hierarchy
-    Roots: ex:Animal
-    Includes descendants (unlimited)
-    Properties: domain_based
+**lint** - Check for structural issues and best practices:
 
-  mammals_only
-    Mammal classes
-    Roots: ex:Mammal
-    Includes descendants (depth=2)
-    Properties: domain_based
-```
-
-## Understanding Contexts
-
-### Root Classes Strategy
-
-**Use When**: You want to show a hierarchy starting from specific concepts.
-
-```yaml
-animal_taxonomy:
-  root_classes:
-    - ex:Animal      # Start here
-  include_descendants: true  # Include subclasses
-  max_depth: null    # No limit (or set to 2, 3, etc.)
-```
-
-**Result**: Animal, Mammal, Dog, Cat, Bird, Eagle, Sparrow (full hierarchy).
-
-### Focus Classes Strategy
-
-**Use When**: You want to hand-pick specific classes.
-
-```yaml
-key_classes:
-  focus_classes:
-    - ex:Animal
-    - ex:Dog
-    - ex:Eagle
-  include_descendants: false  # Just these
-```
-
-**Result**: Only Animal, Dog, and Eagle.
-
-### Property Modes
-
-**domain_based** (default): Show properties where domain matches selected classes.
-```yaml
-properties:
-  mode: domain_based
-```
-
-**connected**: Show only properties between selected classes.
-```yaml
-properties:
-  mode: connected
-```
-
-**explicit**: Hand-pick properties.
-```yaml
-properties:
-  mode: explicit
-  include:
-    - ex:hasParent
-    - ex:eats
-```
-
-**all**: Show everything.
-```yaml
-properties:
-  mode: all
-```
-
-**none**: No properties.
-```yaml
-properties:
-  mode: none
-```
-
-# Getting Started - Explicit Mode Addition
-
-## Section to Add After "Understanding Contexts"
-
-### Selection Modes
-
-rdf-construct supports two modes for specifying diagram contents:
-
-#### Default Mode (Automatic Selection)
-
-Uses strategies to automatically select entities:
-- **Root classes** with descendants
-- **Focus classes** with optional expansion
-- **Property modes** (domain_based, connected, etc.)
-
-**Best for**: Standard hierarchies, complete branches, automatic property inclusion.
-
-```yaml
-animal_taxonomy:
-  root_classes:
-    - ex:Animal
-  include_descendants: true
-  properties:
-    mode: domain_based
-```
-
-#### Explicit Mode (Manual Selection)
-
-Directly list every class, property, and instance:
-
-**Best for**: Cross-branch views, partial hierarchies, precise control.
-
-```yaml
-animal_care:
-  mode: explicit
-  classes:
-    - ex:Animal
-    - ex:Dog
-    - ex:Eagle  # From different branch
-  object_properties:
-    - ex:hasParent
-  datatype_properties:
-    - ex:lifespan
-```
-
-**When to use which**:
-- Default mode: Faster, good for complete hierarchies
-- Explicit mode: Maximum control, cross-cutting views
-
-### Example: Cross-Branch Diagram
-
-Create a diagram with concepts from multiple hierarchies:
-
-```yaml
-contexts:
-  cross_branch:
-    description: "Concepts across taxonomy"
-    mode: explicit
-    
-    classes:
-      - ex:Mammal      # From one branch
-      - ex:Dog         # Deeper in that branch
-      - ex:Eagle       # From different branch
-    
-    object_properties:
-      - ex:hasParent
-      - ex:eats
-    
-    datatype_properties:
-      - ex:lifespan
-```
-
-Generate:
 ```bash
-poetry run rdf-construct uml examples/animal_ontology.ttl config.yml \
-  -c cross_branch
+# Run all rules
+rdf-construct lint ontology.ttl
+
+# Strict mode
+rdf-construct lint ontology.ttl --level strict
+
+# See available rules
+rdf-construct lint --list-rules
 ```
 
-Result: Clean diagram with just these concepts, ignoring other hierarchy members.
+**shacl-gen** - Generate SHACL validation shapes:
 
-## Examples
-
-### Example 1: Simple Class Hierarchy
-
-**Ontology**: Animal → Mammal → Dog/Cat
-
-**Context**:
-```yaml
-contexts:
-  simple:
-    root_classes:
-      - ex:Animal
-    include_descendants: true
-    properties:
-      mode: domain_based
-```
-
-**Output**:
-```plantuml
-@startuml
-
-class "ex:Animal" {
-  +averageWeight : decimal
-  +lifespan : integer
-}
-
-class "ex:Mammal"
-class "ex:Dog"
-class "ex:Cat"
-
-"ex:Mammal" --|> "ex:Animal"
-"ex:Dog" --|> "ex:Mammal"
-"ex:Cat" --|> "ex:Mammal"
-
-@enduml
-```
-
-### Example 2: With Instances
-
-**Context**:
-```yaml
-contexts:
-  with_instances:
-    root_classes:
-      - ex:Mammal
-    include_descendants: true
-    include_instances: true  # Show individuals
-    properties:
-      mode: domain_based
-```
-
-**Output**:
-```plantuml
-class "ex:Dog"
-
-object "Fido" as "ex:Fido" {
-  lifespan = 12
-  averageWeight = 25.5
-}
-
-"ex:Fido" ..|> "ex:Dog"
-```
-
-### Example 3: Specific Properties
-
-**Context**:
-```yaml
-contexts:
-  relationships:
-    focus_classes:
-      - ex:Animal
-    properties:
-      mode: explicit
-      include:
-        - ex:hasParent
-        - ex:eats
-      exclude:
-        - ex:scientificName
-```
-
-**Output**: Just Animal class with hasParent and eats properties shown.
-
-## Tips & Tricks
-
-### Start Simple
-
-Begin with a basic context:
-```yaml
-contexts:
-  basic:
-    root_classes:
-      - your:RootClass
-    include_descendants: true
-    properties:
-      mode: domain_based
-```
-
-Generate and view. Then add complexity.
-
-### Check Your Prefixes
-
-RDFlib may assign different prefixes than expected. Check with:
-
-```python
-from rdflib import Graph
-g = Graph().parse("your_ontology.ttl", format="turtle")
-for pfx, ns in g.namespace_manager.namespaces():
-    if pfx: print(f"{pfx}: {ns}")
-```
-
-Use the assigned prefix in your YAML config.
-
-### Limit Depth for Large Hierarchies
-
-If your diagram is too large:
-
-```yaml
-root_classes:
-  - your:RootClass
-include_descendants: true
-max_depth: 2  # Only 2 levels deep
-```
-
-### Preview Quickly
-
-Use the online PlantUML editor for fast iteration:
-1. Generate `.puml` file
-2. Copy contents
-3. Paste at https://www.plantuml.com/plantuml/
-4. Adjust config
-5. Repeat
-
-### Choosing Selection Mode
-
-**Use Default Mode when:**
-- Working with a single hierarchy
-- Want all descendants of a root
-- Property modes (domain_based, etc.) work well
-
-**Use Explicit Mode when:**
-- Need concepts from multiple hierarchies
-- Want specific depth that's hard to specify
-- Creating thematic/conceptual views
-- Default modes include too much/too little
-
-### Quick Decision Tree
-
-```
-Do you need classes from multiple hierarchies?
-├─ Yes → Use explicit mode
-└─ No
-   └─ Do you want a complete hierarchy branch?
-      ├─ Yes → Use default mode with root_classes
-      └─ No → Consider explicit mode for precision
-```
-
-## Troubleshooting
-
-### "Context not found"
-
-**Problem**: `Error: Context 'my_context' not found`
-
-**Solution**: Check spelling in YAML file. List available contexts:
 ```bash
-poetry run rdf-construct contexts config.yml
+# Generate shapes from OWL definitions
+rdf-construct shacl-gen ontology.ttl -o shapes.ttl
+
+# Strict mode with closed shapes
+rdf-construct shacl-gen ontology.ttl --level strict --closed
 ```
 
-### Empty Diagram
+**cq-test** - Run competency question tests:
 
-**Problem**: Generated `.puml` file has no classes.
+```bash
+# SPARQL-based validation
+rdf-construct cq-test ontology.ttl tests.yml
 
-**Possible Causes**:
-1. **Wrong selector**: Check `root_classes` or `focus_classes` CURIEs
-2. **Namespace mismatch**: Verify prefix in ontology
-3. **No matching classes**: Check if classes exist in ontology
-
-**Debug**:
-```python
-from rdflib import Graph
-g = Graph().parse("ontology.ttl", format="turtle")
-from rdflib.namespace import OWL, RDF
-classes = list(g.subjects(RDF.type, OWL.Class))
-print(f"Found {len(classes)} classes")
-for cls in classes[:5]:
-    print(f"  {g.namespace_manager.normalizeUri(cls)}")
+# JUnit output for CI
+rdf-construct cq-test ontology.ttl tests.yml --format junit -o results.xml
 ```
 
-### PlantUML Rendering Errors
+### Comparison: Tracking Changes
 
-**Problem**: PlantUML won't render `.puml` file.
+**diff** - Semantic comparison of ontology versions:
 
-**Solution**: Check for syntax errors. Our generated PlantUML should be valid, but if you edited it:
-- Ensure class names with `:` are quoted
-- Check matching braces
-- Verify arrow syntax
+```bash
+# See what changed
+rdf-construct diff v1.0.ttl v1.1.ttl
 
-### Layout Not as Expected
-
-**Problem**: Hierarchy doesn't look right in rendered diagram.
-
-**Explanation**: PlantUML's layout engine is heuristic-based. We provide hints (arrow direction), but can't guarantee exact layout.
-
-**Try**:
-- Different PlantUML themes
-- Adjusting window size
-- Manually tweaking `.puml` file (add `!pragma layout` directives)
-
-### Explicit Mode: "Cannot expand CURIE"
-
-**Problem**: `ValueError: Cannot expand CURIE: xyz:Something`
-
-**Solution**: Check that prefix is defined in ontology:
-
-```python
-from rdflib import Graph
-g = Graph().parse("ontology.ttl", format="turtle")
-for pfx, ns in g.namespace_manager.namespaces():
-    if pfx: print(f"{pfx}: {ns}")
+# Generate markdown changelog
+rdf-construct diff v1.0.ttl v1.1.ttl --format markdown -o CHANGELOG.md
 ```
 
-Use the actual prefix assigned by rdflib.
+Unlike text diff, this ignores reordering, prefix changes, and whitespace.
+
+### Transformation: Modifying Ontologies
+
+**merge** - Combine multiple ontologies:
+
+```bash
+# Basic merge
+rdf-construct merge core.ttl extension.ttl -o merged.ttl
+
+# With conflict resolution priorities
+rdf-construct merge core.ttl extension.ttl -o merged.ttl -p 1 -p 2
+```
+
+**split** - Modularise large ontologies:
+
+```bash
+# Split by namespace
+rdf-construct split large.ttl -o modules/ --by-namespace
+
+# Preview without writing
+rdf-construct split large.ttl -o modules/ --by-namespace --dry-run
+```
+
+**refactor** - Rename URIs or deprecate entities:
+
+```bash
+# Fix a typo
+rdf-construct refactor rename ontology.ttl \
+  --from "ex:Buiding" --to "ex:Building" -o fixed.ttl
+
+# Deprecate with replacement
+rdf-construct refactor deprecate ontology.ttl \
+  --entity "ex:Legacy" --replaced-by "ex:Modern" -o updated.ttl
+```
+
+**localise** - Multi-language translation management:
+
+```bash
+# Extract strings for translation
+rdf-construct localise extract ontology.ttl -l de -o translations/de.yml
+
+# Merge translations back
+rdf-construct localise merge ontology.ttl translations/de.yml -o localised.ttl
+```
+
+### Conversion: Format Transformation
+
+**puml2rdf** - Convert PlantUML diagrams to RDF:
+
+```bash
+# Diagram-first ontology design
+rdf-construct puml2rdf design.puml -n http://example.org/ont#
+
+# Validate without generating
+rdf-construct puml2rdf design.puml --validate
+```
+
+### Ordering: Semantic Serialisation
+
+**order** - Reorder RDF with semantic structure:
+
+```bash
+# Apply ordering profiles
+rdf-construct order ontology.ttl order.yml
+
+# See available profiles
+rdf-construct profiles order.yml
+```
+
+## Common Patterns
+
+### CI/CD Integration
+
+```bash
+# Quality gate
+rdf-construct lint ontology.ttl --format json -o lint.json
+rdf-construct cq-test ontology.ttl tests.yml --format junit -o results.xml
+
+# Documentation generation
+rdf-construct docs ontology.ttl -o docs/
+rdf-construct describe ontology.ttl --format markdown >> README.md
+```
+
+### Exploring a New Ontology
+
+```bash
+# 1. What is it?
+rdf-construct describe unknown.ttl
+
+# 2. Any obvious issues?
+rdf-construct lint unknown.ttl
+
+# 3. Generate visual overview
+rdf-construct uml unknown.ttl -C simple_contexts.yml
+```
+
+### Version Comparison Workflow
+
+```bash
+# Compare versions
+rdf-construct diff v1.0.ttl v1.1.ttl --format markdown > release-notes.md
+
+# Detailed metric changes
+rdf-construct stats v1.0.ttl v1.1.ttl --compare
+```
+
+## Configuration Files
+
+Most commands support YAML configuration:
+
+| File Type | Commands | Purpose |
+|-----------|----------|--------|
+| `contexts.yml` | `uml` | Define diagram contexts |
+| `styles.yml` | `uml` | Visual styling |
+| `order.yml` | `order` | Ordering profiles |
+| `.rdf-lint.yml` | `lint` | Rule configuration |
+| `merge.yml` | `merge` | Merge configuration |
+| `split.yml` | `split` | Split configuration |
+
+Generate defaults with `--init`:
+
+```bash
+rdf-construct lint --init          # Creates .rdf-lint.yml
+rdf-construct merge --init         # Creates merge.yml
+rdf-construct split --init         # Creates split.yml
+```
+
+## Getting Help
+
+```bash
+# General help
+rdf-construct --help
+
+# Command-specific help
+rdf-construct describe --help
+rdf-construct uml --help
+
+# List available configurations
+rdf-construct contexts config.yml
+rdf-construct profiles order.yml
+rdf-construct lint --list-rules
+```
 
 ## Next Steps
 
 Now that you've got the basics, explore:
 
-- **[UML Guide](UML_GUIDE.md)**: Complete feature documentation
-- **[CLI Reference](CLI_REFERENCE.md)**: All commands and options
-- **[Examples](../archive/examples/)**: More ontology examples
+- **[Quick Reference](QUICK_REFERENCE.md)**: Condensed cheat sheet
+- **[CLI Reference](CLI_REFERENCE.md)**: Complete command documentation
+- **[Describe Guide](DESCRIBE_GUIDE.md)**: Quick ontology orientation
+- **[UML Guide](UML_GUIDE.md)**: Complete diagram features
+- **[Lint Guide](LINT_GUIDE.md)**: Quality checking rules
 
 ## Questions?
 
 - **Issues**: https://github.com/aigora-de/rdf-construct/issues
 - **Discussions**: https://github.com/aigora-de/rdf-construct/discussions
-
-Happy diagramming!

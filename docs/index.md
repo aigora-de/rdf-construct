@@ -3,6 +3,7 @@
 ## Quick Links
 
 **New User?** → [Getting Started](user_guides/GETTING_STARTED.md)  
+**Quick Ontology Overview?** → [Describe Guide](user_guides/DESCRIBE_GUIDE.md)  
 **Generate Documentation?** → [Docs Guide](user_guides/DOCS_GUIDE.md)  
 **Generate Diagrams?** → [UML Guide](user_guides/UML_GUIDE.md)  
 **Import from PlantUML?** → [PUML2RDF Guide](user_guides/PUML2RDF_GUIDE.md)  
@@ -11,10 +12,10 @@
 **Check Quality?** → [Lint Guide](user_guides/LINT_GUIDE.md)  
 **Test Competency Questions?** → [CQ Testing Guide](user_guides/CQ_TEST_GUIDE.md)  
 **Ontology Metrics?** → [Stats Guide](user_guides/STATS_GUIDE.md)  
-**Merge Ontologies?** → [Merge Guide](user_guides/MERGE_GUIDE.md)
-**Split Ontologies?** → [Merge Guide](user_guides/MERGE_GUIDE.md#split-command)
-**Refactor URIs?** → [Refactor Guide](user_guides/REFACTOR_GUIDE.md)
-**Multi-Language Support?** → [Localise Guide](user_guides/LOCALISE_GUIDE.md)
+**Merge Ontologies?** → [Merge & Split Guide](user_guides/MERGE_SPLIT_GUIDE.md)  
+**Split Ontologies?** → [Merge & Split Guide](user_guides/MERGE_SPLIT_GUIDE.md#split-command)  
+**Refactor URIs?** → [Refactor Guide](user_guides/REFACTOR_GUIDE.md)  
+**Multi-Language Support?** → [Localise Guide](user_guides/LOCALISE_GUIDE.md)  
 **Need Command Syntax?** → [CLI Reference](user_guides/CLI_REFERENCE.md)  
 **Quick Cheat Sheet?** → [Quick Reference](user_guides/QUICK_REFERENCE.md)  
 **Contributing?** → [Contributing Guide](../CONTRIBUTING.md)  
@@ -28,10 +29,15 @@ For users of rdf-construct who want to generate diagrams and work with RDF ontol
 
 - **[Getting Started](user_guides/GETTING_STARTED.md)** - 5-minute quick start
   - Installation
-  - Your first diagram
+  - Command categories overview
   - Basic concepts
   - Common tasks
-  - Simple examples
+
+- **[Describe Guide](user_guides/DESCRIBE_GUIDE.md)** - Quick ontology orientation
+  - Metadata and metrics extraction
+  - OWL profile detection
+  - Import resolution analysis
+  - Hierarchy and documentation coverage
 
 - **[Docs Guide](user_guides/DOCS_GUIDE.md)** - Documentation generation
   - HTML, Markdown, and JSON output
@@ -87,11 +93,11 @@ For users of rdf-construct who want to generate diagrams and work with RDF ontol
   - Comparison mode
   - Output formats (text, JSON, markdown)
 
-- **[Merge Guide](user_guides/MERGE_GUIDE.md)** - Combining and splitting ontologies
-  - Conflict detection and resolution
+- **[Merge & Split Guide](user_guides/MERGE_SPLIT_GUIDE.md)** - Combining and modularising ontologies
+  - Merging with conflict detection and resolution
   - Namespace remapping
   - Data migration
-  - **Splitting monolithic ontologies into modules**
+  - Splitting monolithic ontologies into modules
   - Configuration options
 
 - **[Refactor Guide](user_guides/REFACTOR_GUIDE.md)** - Renaming and deprecation
@@ -153,6 +159,7 @@ For contributors and maintainers who want to understand or extend rdf-construct.
 A Python CLI toolkit for RDF operations:
 
 - **Semantic Ordering**: Serialise RDF/Turtle with meaningful order (not alphabetical)
+- **Ontology Description**: Quick orientation with profile detection and metrics
 - **Documentation Generation**: Create navigable HTML/Markdown docs from ontologies
 - **UML Generation**: Create PlantUML class diagrams from ontologies
 - **PlantUML Import**: Convert PlantUML diagrams to RDF ontologies
@@ -172,6 +179,19 @@ Named after the ROM construct from William Gibson's *Neuromancer*—preserved, s
 ## Quick Examples
 
 > **Note**: If installed via pip, use `rdf-construct` directly. If using Poetry for development, prefix with `poetry run`.
+
+### Describe an Ontology
+
+```bash
+# Quick orientation to an unfamiliar ontology
+poetry run rdf-construct describe ontology.ttl
+
+# Brief summary (metadata + metrics + profile)
+poetry run rdf-construct describe ontology.ttl --brief
+
+# JSON output for scripting
+poetry run rdf-construct describe ontology.ttl --format json
+```
 
 ### Generate Documentation
 

@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Nothing yet.
 
+## [0.4.0] - 2026-01-03
+
+### Added
+
+- **New `describe` command** for quick ontology orientation
+  - Provides comprehensive analysis of unfamiliar ontology files
+  - Metadata extraction: title, version, description, license, creators
+  - Basic metrics: triples, classes, properties (object, datatype, annotation), individuals
+  - Profile detection: RDF, RDFS, OWL 2 DL (simple/expressive), OWL 2 Full
+  - Import analysis with resolution status checking
+  - Namespace categorisation: local, standard, external (with unimported detection)
+  - Hierarchy analysis: root/leaf classes, max depth, orphans, cycle detection
+  - Documentation coverage percentages for classes and properties
+  - One-line "verdict" summary for quick triage
+  - Three output formats: `text` (coloured), `json`, `markdown`
+  - Brief mode (`--brief`) for quick overview without deep analysis
+  - Skip import resolution (`--no-resolve`) for offline/fast usage
+  - Exit codes: 0 (success), 1 (warnings e.g. unresolvable imports), 2 (error)
+- New module: `src/rdf_construct/describe/`
+  - `analyser.py` - Core ontology analysis logic
+  - `profile.py` - OWL profile detection
+  - `imports.py` - Import resolution and status checking
+  - `hierarchy.py` - Class hierarchy analysis
+  - `formatters/` - Text, JSON, Markdown output formatters
+- New documentation: `docs/user_guides/DESCRIBE_GUIDE.md`
+- New examples: `examples/describe/`
+- New tests: `tests/test_describe.py` (67 test cases)
+
+### Changed
+
+- Updated documentation to include `describe` command across all relevant guides
+- Expanded `QUICK_REFERENCE.md` to cover all 14 commands
+- Expanded `GETTING_STARTED.md` with grouped command category tour
+- Renamed `MERGE_GUIDE.md` to `MERGE_SPLIT_GUIDE.md` with expanded split documentation
+- Fixed broken documentation links (`PLANTUML_IMPORT_GUIDE.md` → `PUML2RDF_GUIDE.md`)
+- Updated README roadmap to reflect implemented features
+- Added `CODE_OF_CONDUCT.md` (Contributor Covenant v2.1)
+
 ## [0.3.0] - 2025-12-04
 
 ### Added
@@ -335,11 +373,13 @@ Initial public release.
 
 | Version | Date       | Highlights                                                                                          |
 |---------|------------|-----------------------------------------------------------------------------------------------------|
+| [0.4.0] | 2026-01-03 | Add describe command, documentation improvements |
 | [0.3.0] | 2025-12-04 | Add merge/split, refactor, and localise |
 | [0.2.0] | 2025-12-03 | Stats, CQ testing, SHACL gen, docs gen, diff, lint, puml2rdf                                        |
 | [0.1.0] | 2025-11-30 | Initial release: ordering, UML generation, styling                                                  |
 
-[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.0
 [0.3.0]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.3.0
 [0.2.1]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.2.1
 [0.2.0]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.2.0
