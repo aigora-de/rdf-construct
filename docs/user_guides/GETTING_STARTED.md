@@ -5,7 +5,7 @@
 **rdf-construct** is a toolkit for working with RDF ontologies. It provides 14 commands organised into categories:
 
 | Category | Commands | Purpose |
-|----------|----------|---------|
+|----------|----------|--------|
 | **Analysis** | `describe`, `stats` | Understand ontology structure and metrics |
 | **Documentation** | `docs`, `uml` | Generate documentation and diagrams |
 | **Validation** | `lint`, `shacl-gen`, `cq-test` | Check quality and run tests |
@@ -260,7 +260,7 @@ rdf-construct stats v1.0.ttl v1.1.ttl --compare
 Most commands support YAML configuration:
 
 | File Type | Commands | Purpose |
-|-----------|----------|---------|
+|-----------|----------|--------|
 | `contexts.yml` | `uml` | Define diagram contexts |
 | `styles.yml` | `uml` | Visual styling |
 | `order.yml` | `order` | Ordering profiles |

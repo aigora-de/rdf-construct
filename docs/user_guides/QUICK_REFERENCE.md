@@ -132,7 +132,7 @@ rdf-construct localise report ontology.ttl -l en,de,fr
 ## Common Options
 
 | Option | Meaning |
-|--------|---------|
+|--------|--------|
 | `-o, --output` | Output file/directory |
 | `-f, --format` | Output format (text, json, markdown, etc.) |
 | `-c, --config` | Configuration file |
@@ -143,7 +143,7 @@ rdf-construct localise report ontology.ttl -l en,de,fr
 ## Exit Codes
 
 | Code | Meaning |
-|------|---------|
+|------|--------|
 | `0` | Success / No issues |
 | `1` | Warnings / Differences found / Tests failed |
 | `2` | Errors / Invalid input |
@@ -151,7 +151,7 @@ rdf-construct localise report ontology.ttl -l en,de,fr
 ## Output Formats
 
 | Command | Formats |
-|---------|---------|
+|---------|--------|
 | `describe` | text, json, markdown |
 | `docs` | html, markdown, json |
 | `diff` | text, markdown, json |
@@ -164,7 +164,7 @@ rdf-construct localise report ontology.ttl -l en,de,fr
 ## Configuration Files
 
 | File | Used By |
-|------|---------|
+|------|--------|
 | `*_contexts.yml` | `uml` - diagram contexts |
 | `*_styles.yml` | `uml` - visual styling |
 | `*_layouts.yml` | `uml` - diagram layout |
