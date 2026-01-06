@@ -33,7 +33,7 @@ from rdf_construct.lint import (
     LintConfig,
     load_lint_config,
     find_config_file,
-    get_formatter,
+    get_formatter as get_lint_formatter,
     list_rules,
     get_all_rules,
 )
@@ -691,7 +691,7 @@ def lint(
 
     # Format and output results
     use_colour = not no_colour and output_format == "text"
-    formatter = get_formatter(output_format, use_colour=use_colour)
+    formatter = get_lint_formatter(output_format, use_colour=use_colour)
 
     output = formatter.format_summary(summary)
     click.echo(output)

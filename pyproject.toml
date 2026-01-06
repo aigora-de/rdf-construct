@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "rdf-construct"
-version = "0.4.0"
+version = "0.4.1"
 description = "Semantic RDF manipulation toolkit - order, serialize, and diff RDF ontologies"
 license = "MIT"
 readme = "README.md"
