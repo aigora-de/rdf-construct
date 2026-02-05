@@ -246,7 +246,8 @@ def build_section_graph(base: Graph, subjects_ordered: list) -> Graph:
 
     Creates a filtered view of the base graph that includes all triples
     where the subject is in the provided list. Only namespace bindings
-    that are actually used by the included triples are carried over.
+    that are actually used by the included triples are carried over;
+    rdflib's built-in well-known namespace defaults are suppressed.
 
     Args:
         base: Source RDF graph to filter
@@ -255,14 +256,16 @@ def build_section_graph(base: Graph, subjects_ordered: list) -> Graph:
     Returns:
         New graph containing only triples for the specified subjects
     """
-    sg = Graph()
+    # Suppress rdflib's automatic well-known namespace bindings so the
+    # sub-graph starts with a clean namespace manager.
+    sg = Graph(bind_namespaces="none")
 
     # Copy triples for each subject
     for s in subjects_ordered:
         for p, o in base.predicate_objects(s):
             sg.add((s, p, o))
 
-    # Copy only namespace bindings that are actually used in the sub-graph
+    # Bind only namespace prefixes that are actually used in the sub-graph
     used_ns = collect_used_namespaces(sg)
     for pfx, uri in base.namespace_manager.namespaces():
         if str(uri) in used_ns:
