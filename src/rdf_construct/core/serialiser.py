@@ -26,6 +26,39 @@ except ImportError:
     )
 
 
+def collect_used_namespaces(graph: Graph) -> set[str]:
+    """Collect namespace URIs that are actually used in the graph's triples.
+
+    Scans all subjects, predicates, and objects to find which registered
+    namespace URIs are referenced. Uses longest-match-first ordering to
+    correctly handle overlapping namespaces (e.g. ``dc:`` vs ``dcterms:``).
+
+    Args:
+        graph: RDF graph to scan.
+
+    Returns:
+        Set of namespace URI strings that appear in the graph's triples.
+    """
+    used_ns: set[str] = set()
+    # Sort namespaces longest-first so we match the most specific prefix
+    ns_uris = sorted(
+        [str(uri) for _, uri in graph.namespace_manager.namespaces()],
+        key=len,
+        reverse=True,
+    )
+
+    for s, p, o in graph:
+        for term in (s, p, o):
+            if isinstance(term, URIRef):
+                term_str = str(term)
+                for ns_uri in ns_uris:
+                    if term_str.startswith(ns_uri):
+                        used_ns.add(ns_uri)
+                        break
+
+    return used_ns
+
+
 def format_term(graph: Graph, term, use_prefixes: bool = True) -> str:
     """Format an RDF term as a Turtle string.
 
@@ -79,8 +112,11 @@ def serialise_turtle(
     This custom serialiser respects the exact order of subjects provided,
     unlike rdflib's built-in serialisers which always sort alphabetically.
 
+    Only prefix declarations for namespaces actually used in the graph's
+    triples are emitted, filtering out rdflib's built-in defaults.
+
     Formatting features:
-    - Prefixes sorted alphabetically at top
+    - Prefixes sorted alphabetically at top (used namespaces only)
     - Subjects in specified order
     - rdf:type predicate listed first for each subject
     - Predicates ordered according to predicate_order config (or alphabetically)
@@ -95,10 +131,11 @@ def serialise_turtle(
     """
     lines = []
 
-    # Write prefixes
+    # Write prefixes — only those actually used in the graph
+    used_ns = collect_used_namespaces(graph)
     prefixes = sorted(graph.namespace_manager.namespaces(), key=lambda x: x[0])
     for prefix, namespace in prefixes:
-        if prefix:  # Skip the default namespace
+        if prefix and str(namespace) in used_ns:
             lines.append(f"PREFIX {prefix}: <{namespace}>")
     lines.append("")  # Blank line after prefixes
 
@@ -208,8 +245,8 @@ def build_section_graph(base: Graph, subjects_ordered: list) -> Graph:
     """Build a new graph containing only the specified subjects and their triples.
 
     Creates a filtered view of the base graph that includes all triples
-    where the subject is in the provided list. Preserves all namespace
-    bindings from the base graph.
+    where the subject is in the provided list. Only namespace bindings
+    that are actually used by the included triples are carried over.
 
     Args:
         base: Source RDF graph to filter
@@ -220,13 +257,15 @@ def build_section_graph(base: Graph, subjects_ordered: list) -> Graph:
     """
     sg = Graph()
 
-    # Copy namespace bindings
-    for pfx, uri in base.namespace_manager.namespaces():
-        sg.namespace_manager.bind(pfx, uri, override=True, replace=True)
-
     # Copy triples for each subject
     for s in subjects_ordered:
         for p, o in base.predicate_objects(s):
             sg.add((s, p, o))
+
+    # Copy only namespace bindings that are actually used in the sub-graph
+    used_ns = collect_used_namespaces(sg)
+    for pfx, uri in base.namespace_manager.namespaces():
+        if str(uri) in used_ns:
+            sg.namespace_manager.bind(pfx, uri, override=True, replace=True)
 
     return sg
