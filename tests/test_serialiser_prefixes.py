@@ -21,6 +21,9 @@ from rdf_construct.core.serialiser import (
 
 
 # -- Namespace constants used across tests --
+# NOTE: Avoid attribute names that shadow str built-in methods (e.g.
+# .count, .index, .format) — rdflib's Namespace extends str, so those
+# resolve to the method rather than constructing a URIRef.
 
 EX = Namespace("http://example.org/ont#")
 DC = Namespace("http://purl.org/dc/elements/1.1/")
@@ -109,7 +112,9 @@ class TestCollectUsedNamespaces:
         g = Graph()
         g.bind("ex", EX)
         g.bind("xsd", XSD)
-        g.add((EX.Thing, EX.count, Literal(42, datatype=XSD.integer)))
+        # Use explicit URIRef for the predicate to avoid shadowing str
+        # built-in methods (e.g. Namespace("...").count -> str.count).
+        g.add((EX.Thing, EX.itemCount, Literal(42, datatype=XSD.integer)))
 
         used = collect_used_namespaces(g)
         assert str(XSD) in used
@@ -184,17 +189,18 @@ class TestBuildSectionGraphPrefixes:
         # Build a section with only EX.Animal
         sg = build_section_graph(small_graph, [EX.Animal])
 
-        sg_ns = {pfx: str(uri) for pfx, uri in sg.namespace_manager.namespaces()}
+        sg_prefixes = {pfx for pfx, _ in sg.namespace_manager.namespaces()}
 
         # Should have namespaces used by Animal's triples
-        assert "ex" in sg_ns
-        assert "owl" in sg_ns
-        assert "rdfs" in sg_ns
+        assert "ex" in sg_prefixes
+        assert "owl" in sg_prefixes
+        assert "rdfs" in sg_prefixes
 
         # Should NOT carry over unused rdflib defaults
-        assert "brick" not in sg_ns or sg_ns.get("brick") not in {
-            str(uri) for uri in collect_used_namespaces(sg)
-        }
+        assert "brick" not in sg_prefixes
+        assert "foaf" not in sg_prefixes
+        assert "csvw" not in sg_prefixes
+        assert "schema" not in sg_prefixes
 
     def test_section_graph_triples_preserved(self, small_graph: Graph) -> None:
         """All triples for the specified subjects should be present."""
