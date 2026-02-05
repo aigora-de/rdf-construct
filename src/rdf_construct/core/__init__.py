@@ -3,7 +3,7 @@
 from .ordering import sort_subjects, topo_sort_subset, sort_with_roots
 from .profile import OrderingConfig, OrderingProfile, load_yaml
 from .selector import select_subjects
-from .serialiser import serialise_turtle, build_section_graph
+from .serialiser import collect_used_namespaces, serialise_turtle, build_section_graph
 from .utils import (
     expand_curie,
     extract_prefix_map,
@@ -23,6 +23,7 @@ __all__ = [
     # Selector
     "select_subjects",
     # Serialiser
+    "collect_used_namespaces",
     "serialise_turtle",
     "build_section_graph",
     # Utils
