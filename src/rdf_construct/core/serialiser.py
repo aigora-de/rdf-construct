@@ -26,35 +26,50 @@ except ImportError:
     )
 
 
-def collect_used_namespaces(graph: Graph) -> set[str]:
+def collect_used_namespaces(
+    graph: Graph,
+    namespace_source: Graph | None = None,
+) -> set[str]:
     """Collect namespace URIs that are actually used in the graph's triples.
 
-    Scans all subjects, predicates, and objects to find which registered
-    namespace URIs are referenced. Uses longest-match-first ordering to
-    correctly handle overlapping namespaces (e.g. ``dc:`` vs ``dcterms:``).
+    Scans all subjects, predicates, and objects (including Literal datatype
+    URIs) to find which registered namespace URIs are referenced. Uses
+    longest-match-first ordering to correctly handle overlapping namespaces
+    (e.g. ``dc:`` vs ``dcterms:``).
 
     Args:
-        graph: RDF graph to scan.
+        graph: RDF graph whose triples to scan.
+        namespace_source: Optional graph whose namespace registry to match
+            against. Defaults to *graph* itself. Use this when the graph
+            being scanned has a stripped namespace manager (e.g. built
+            with ``bind_namespaces="none"``).
 
     Returns:
         Set of namespace URI strings that appear in the graph's triples.
     """
+    ns_graph = namespace_source if namespace_source is not None else graph
+
     used_ns: set[str] = set()
     # Sort namespaces longest-first so we match the most specific prefix
     ns_uris = sorted(
-        [str(uri) for _, uri in graph.namespace_manager.namespaces()],
+        [str(uri) for _, uri in ns_graph.namespace_manager.namespaces()],
         key=len,
         reverse=True,
     )
 
+    def _match_uri(uri_str: str) -> None:
+        """Add the best-matching namespace for *uri_str* to used_ns."""
+        for ns_uri in ns_uris:
+            if uri_str.startswith(ns_uri):
+                used_ns.add(ns_uri)
+                return
+
     for s, p, o in graph:
         for term in (s, p, o):
             if isinstance(term, URIRef):
-                term_str = str(term)
-                for ns_uri in ns_uris:
-                    if term_str.startswith(ns_uri):
-                        used_ns.add(ns_uri)
-                        break
+                _match_uri(str(term))
+            elif isinstance(term, Literal) and term.datatype is not None:
+                _match_uri(str(term.datatype))
 
     return used_ns
 
@@ -265,8 +280,9 @@ def build_section_graph(base: Graph, subjects_ordered: list) -> Graph:
         for p, o in base.predicate_objects(s):
             sg.add((s, p, o))
 
-    # Bind only namespace prefixes that are actually used in the sub-graph
-    used_ns = collect_used_namespaces(sg)
+    # Match sub-graph triples against the *base* graph's namespace registry
+    # (the sub-graph's own registry is intentionally empty at this point).
+    used_ns = collect_used_namespaces(sg, namespace_source=base)
     for pfx, uri in base.namespace_manager.namespaces():
         if str(uri) in used_ns:
             sg.namespace_manager.bind(pfx, uri, override=True, replace=True)
