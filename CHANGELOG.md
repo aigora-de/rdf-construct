@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Nothing yet.
 
+## [0.4.2] - 2026-02-05
+
+### Fixed
+- Fixed `order` command outputting extraneous prefix declarations (e.g. `brick:`, `csvw:`, `foaf:`, `odrl:`) that were not present in the source file. rdflib's `Graph()` auto-registers ~30 well-known namespace defaults; the serialiser now uses `bind_namespaces="none"` and explicitly binds only namespaces actually used in the output triples (#49)
+- Fixed `collect_used_namespaces` not scanning `Literal.datatype` URIs, causing datatype namespaces like `xsd:` to be dropped from the output when no other terms used them
+- Added `namespace_source` parameter to `collect_used_namespaces` to support scanning one graph's triples while matching against another graph's namespace registry
+
+### Changed
+- `build_section_graph` now creates its sub-graph with `bind_namespaces="none"` and binds only used namespaces from the base graph, ensuring clean prefix declarations in output
+
 ## [0.4.1] - 2026-01-06
 
 ### Fixed
@@ -378,13 +388,15 @@ Initial public release.
 
 | Version | Date       | Highlights                                                                                          |
 |---------|------------|-----------------------------------------------------------------------------------------------------|
+| [0.4.2] | 2026-02-05 | Fix extraneous prefix declarations in order output |
 | [0.4.1] | 2026-01-06 | Fix lint command import collision |
 | [0.4.0] | 2026-01-03 | Add describe command, documentation improvements |
 | [0.3.0] | 2025-12-04 | Add merge/split, refactor, and localise |
 | [0.2.0] | 2025-12-03 | Stats, CQ testing, SHACL gen, docs gen, diff, lint, puml2rdf                                        |
 | [0.1.0] | 2025-11-30 | Initial release: ordering, UML generation, styling                                                  |
 
-[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.2
 [0.4.1]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.1
 [0.4.0]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.0
 [0.3.0]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.3.0
