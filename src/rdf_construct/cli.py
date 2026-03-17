@@ -17,6 +17,14 @@ from rdf_construct.core import (
     sort_subjects,
     expand_curie,
 )
+from rdf_construct.core.formats import (
+    CAST_FORMAT_CHOICES,
+    default_cast_formats,
+    infer_format as infer_rdf_format,
+    normalise_format,
+)
+
+from rdf_construct.cast import CastConverter
 
 from rdf_construct.uml import (
     load_uml_config,
@@ -136,6 +144,137 @@ def cli():
 
 @cli.command()
 @click.argument("source", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--format",
+    "-f",
+    "formats",
+    multiple=True,
+    type=click.Choice(CAST_FORMAT_CHOICES, case_sensitive=False),
+    help=(
+        "Output format (repeatable). Omit for all standard formats except source. "
+        "Single format writes to stdout (pipe-friendly)."
+    ),
+)
+@click.option(
+    "--output-dir",
+    "-o",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Output directory (default: same directory as source file)",
+)
+@click.option(
+    "--allow-flatten",
+    is_flag=True,
+    help=(
+        "Merge all named graphs into the default graph when converting from "
+        "a quad format (TriG, N-Quads) to a single-graph format."
+    ),
+)
+def cast(
+    source: Path,
+    formats: tuple[str, ...],
+    output_dir: Path | None,
+    allow_flatten: bool,
+) -> None:
+    """Convert an RDF file to one or more serialisation formats.
+
+    SOURCE: Input RDF file (any format rdflib can parse).
+
+    \b
+    Pipe-friendly: a single --format writes to stdout; all diagnostics go to
+    stderr so the output can be piped cleanly:
+
+        rdf-construct cast ontology.ttl --format n3 | grep rdf:type
+
+    \b
+    Multiple --format flags write files to the output directory:
+
+        rdf-construct cast ontology.ttl --format ttl --format xml
+
+    \b
+    Omitting --format converts to ttl, xml, and json-ld (excluding source format):
+
+        rdf-construct cast ontology.rdf
+
+    \b
+    Prefix bindings are preserved for Turtle and N3 sources. Other source
+    formats will use rdflib default prefix bindings in the output.
+
+    \b
+    Exit codes:
+        0 - All conversions succeeded
+        1 - Partial failure (some formats failed, some succeeded)
+        2 - Complete failure (parse error, or all formats failed)
+    """
+    source_format = infer_rdf_format(source)
+
+    # Normalise the requested formats
+    if formats:
+        try:
+            normalised: list[str] = [normalise_format(f) for f in formats]
+        except ValueError as exc:
+            click.secho(f"Error: {exc}", fg="red", err=True)
+            raise SystemExit(2)
+    else:
+        normalised = default_cast_formats(source_format)
+
+    # Decide pipe mode: exactly one format AND no explicit output dir → stdout
+    pipe_mode = len(normalised) == 1 and output_dir is None
+
+    # Diagnostics always go to stderr so stdout stays clean for piping
+    click.echo(f"Casting {source.name}...", err=True)
+    if not pipe_mode:
+        effective_dir = output_dir or source.parent
+        click.echo(f"  Formats: {', '.join(normalised)}", err=True)
+        click.echo(f"  Output:  {effective_dir}/", err=True)
+
+    converter = CastConverter()
+    result = converter.convert(
+        source=source,
+        formats=normalised,
+        output_dir=output_dir,
+        pipe_mode=pipe_mode,
+        allow_flatten=allow_flatten,
+    )
+
+    # Emit warnings to stderr
+    for warning in result.warnings:
+        click.secho(f"  \u26a0 {warning}", fg="yellow", err=True)
+
+    if result.success:
+        if pipe_mode and result.stdout_content is not None:
+            # Write RDF data to stdout — no trailing noise
+            click.echo(result.stdout_content, nl=False)
+        else:
+            effective_dir = output_dir or source.parent
+            click.echo("", err=True)
+            for path in result.written_files:
+                click.secho(f"  \u2713 {path.name}", fg="green", err=True)
+            click.secho(
+                f"\nCast {len(result.written_files)} file(s) to {effective_dir}/",
+                fg="cyan",
+                err=True,
+            )
+        raise SystemExit(0)
+
+    elif result.partial_failure:
+        click.secho(
+            f"\u2717 Partial failure: {', '.join(result.failed_formats)} could not be converted.",
+            fg="red",
+            err=True,
+        )
+        effective_dir = output_dir or source.parent
+        for path in result.written_files:
+            click.secho(f"  \u2713 {path.name}", fg="green", err=True)
+        raise SystemExit(1)
+
+    else:
+        click.secho(f"\u2717 {result.error}", fg="red", err=True)
+        raise SystemExit(2)
+
+
+@cli.command()
+@click.argument("source", type=click.Path(exists=True, path_type=Path))
 @click.argument("config", type=click.Path(exists=True, path_type=Path))
 @click.option(
     "--profile",
@@ -251,7 +390,7 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path):
         # Serialise with predicate ordering
         out_file = outdir / f"{source.stem}-{prof_name}.ttl"
         serialise_turtle(out_graph, ordered_subjects, out_file, predicate_order)
-        click.secho(f"  ✓ {out_file}", fg="green")
+        click.secho(f"  \u2713 {out_file}", fg="green")
 
     click.secho(
         f"\nConstructed {len(profiles_to_gen)} profile(s) in {outdir}/", fg="cyan"
@@ -451,7 +590,7 @@ def uml(sources, config, context, outdir, style_config, style, layout_config, la
         else:
             render_plantuml(graph, entities, out_file, style_scheme, layout_cfg)
 
-        click.secho(f"  ✓ {out_file}", fg="green")
+        click.secho(f"  \u2713 {out_file}", fg="green")
         click.echo(
             f"    Classes: {len(entities['classes'])}, "
             f"Properties: {len(entities['object_properties']) + len(entities['datatype_properties'])}, "
@@ -787,7 +926,7 @@ def diff(
                     )
 
         # Perform comparison
-        click.echo(f"Comparing {old_file.name} → {new_file.name}...", err=True)
+        click.echo(f"Comparing {old_file.name} \u2192 {new_file.name}...", err=True)
         diff_result = compare_files(old_file, new_file, ignore_predicates=ignore_preds)
 
         # Apply filters
@@ -815,7 +954,7 @@ def diff(
         # Write output
         if output:
             output.write_text(formatted)
-            click.secho(f"✓ Wrote diff to {output}", fg="green", err=True)
+            click.secho(f"\u2713 Wrote diff to {output}", fg="green", err=True)
         else:
             click.echo(formatted)
 
@@ -1016,7 +1155,7 @@ def docs(
 
     # Summary
     click.echo()
-    click.secho(f"✓ Generated {result.total_pages} files to {result.output_dir}/", fg="green")
+    click.secho(f"\u2713 Generated {result.total_pages} files to {result.output_dir}/", fg="green")
     click.echo(f"  Classes: {result.classes_count}")
     click.echo(f"  Properties: {result.properties_count}")
     click.echo(f"  Instances: {result.instances_count}")
@@ -1202,7 +1341,7 @@ def shacl_gen(
             predicate=None, object=SH.NodeShape
         )))
 
-        click.secho(f"✓ Generated {num_shapes} shape(s) to {output}", fg="green")
+        click.secho(f"\u2713 Generated {num_shapes} shape(s) to {output}", fg="green")
 
         if shacl_config.closed:
             click.echo("  (closed shapes enabled)")
@@ -1457,7 +1596,7 @@ def puml2rdf(
     # Serialise output
     try:
         graph.serialize(str(output), format=rdf_format)
-        click.secho(f"✓ Wrote {output}", fg="green")
+        click.secho(f"\u2713 Wrote {output}", fg="green")
         click.echo(
             f"  Classes: {len(conversion_result.class_uris)}, "
             f"Properties: {len(conversion_result.property_uris)}"
@@ -1595,7 +1734,7 @@ def cq_test(
         # Write output
         if output:
             output.write_text(formatted)
-            click.secho(f"✓ Results written to {output}", fg="green", err=True)
+            click.secho(f"\u2713 Results written to {output}", fg="green", err=True)
         else:
             click.echo(formatted)
 
@@ -1619,7 +1758,12 @@ def cq_test(
 
 
 def _infer_format(path: Path) -> str:
-    """Infer RDF format from file extension."""
+    """Infer RDF format from file extension.
+
+    Note: This private helper is kept for backward compatibility with commands
+    that pre-date the core.formats module. New commands should use
+    ``rdf_construct.core.formats.infer_format`` directly.
+    """
     suffix = path.suffix.lower()
     format_map = {
         ".ttl": "turtle",
@@ -1793,7 +1937,7 @@ def stats(
         # Write output
         if output:
             output.write_text(formatted)
-            click.secho(f"✓ Wrote stats to {output}", fg="green", err=True)
+            click.secho(f"\u2713 Wrote stats to {output}", fg="green", err=True)
         else:
             click.echo(formatted)
 
@@ -1916,7 +2060,7 @@ def describe(
         if output:
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(formatted)
-            click.secho(f"✓ Wrote description to {output}", fg="green", err=True)
+            click.secho(f"\u2713 Wrote description to {output}", fg="green", err=True)
         else:
             click.echo(formatted)
 
@@ -2145,7 +2289,7 @@ def merge(
     result = merger.merge()
 
     if not result.success:
-        click.secho(f"✗ Merge failed: {result.error}", fg="red", err=True)
+        click.secho(f"\u2717 Merge failed: {result.error}", fg="red", err=True)
         raise SystemExit(2)
 
     # Display results
@@ -2157,7 +2301,7 @@ def merge(
     if not dry_run and result.merged_graph and config.output:
         merger.write_output(result, config.output.path)
         click.echo()
-        click.secho(f"✓ Wrote {config.output.path}", fg="green")
+        click.secho(f"\u2713 Wrote {config.output.path}", fg="green")
 
     # Generate conflict report if requested
     if report and result.conflicts:
@@ -2200,12 +2344,12 @@ def merge(
             click.echo(text_formatter.format_migration_result(migration_result))
             if config.migrate_data.output_path and not dry_run:
                 click.secho(
-                    f"✓ Wrote migrated data to {config.migrate_data.output_path}",
+                    f"\u2713 Wrote migrated data to {config.migrate_data.output_path}",
                     fg="green",
                 )
         else:
             click.secho(
-                f"✗ Data migration failed: {migration_result.error}",
+                f"\u2717 Data migration failed: {migration_result.error}",
                 fg="red",
                 err=True,
             )
@@ -2214,7 +2358,7 @@ def merge(
     if result.unresolved_conflicts:
         click.echo()
         click.secho(
-            f"⚠ {len(result.unresolved_conflicts)} unresolved conflict(s) "
+            f"\u26a0 {len(result.unresolved_conflicts)} unresolved conflict(s) "
             "marked in output",
             fg="yellow",
         )
@@ -2356,7 +2500,7 @@ def split(
         result = split_by_namespace(source, output_dir, dry_run=dry_run)
 
         if not result.success:
-            click.secho(f"✗ Split failed: {result.error}", fg="red", err=True)
+            click.secho(f"\u2717 Split failed: {result.error}", fg="red", err=True)
             raise SystemExit(2)
 
         _display_split_result(result, output_dir, dry_run, not no_colour)
@@ -2424,7 +2568,7 @@ def split(
     result = splitter.split()
 
     if not result.success:
-        click.secho(f"✗ Split failed: {result.error}", fg="red", err=True)
+        click.secho(f"\u2717 Split failed: {result.error}", fg="red", err=True)
         raise SystemExit(2)
 
     # Write output (unless dry run)
@@ -2439,7 +2583,7 @@ def split(
     if result.unmatched_entities and config.unmatched.strategy == "common":
         click.echo()
         click.secho(
-            f"⚠ {len(result.unmatched_entities)} unmatched entities placed in "
+            f"\u26a0 {len(result.unmatched_entities)} unmatched entities placed in "
             f"{config.unmatched.common_module} module",
             fg="yellow",
         )
@@ -2498,9 +2642,9 @@ def _display_split_result(
     if not dry_run:
         click.echo()
         if use_colour:
-            click.secho(f"✓ Wrote modules to {output_dir}/", fg="green")
+            click.secho(f"\u2713 Wrote modules to {output_dir}/", fg="green")
         else:
-            click.echo(f"✓ Wrote modules to {output_dir}/")
+            click.echo(f"\u2713 Wrote modules to {output_dir}/")
 
 
 # Refactor command group
@@ -2744,7 +2888,7 @@ def refactor_rename(
         try:
             graph.parse(source_path.as_posix())
         except Exception as e:
-            click.secho(f"✗ Failed to parse: {e}", fg="red", err=True)
+            click.secho(f"\u2717 Failed to parse: {e}", fg="red", err=True)
             raise SystemExit(2)
 
         # Build mappings for preview
@@ -2765,7 +2909,7 @@ def refactor_rename(
             result = renamer.rename(graph, config.rename)
 
             if not result.success:
-                click.secho(f"✗ Rename failed: {result.error}", fg="red", err=True)
+                click.secho(f"\u2717 Rename failed: {result.error}", fg="red", err=True)
                 raise SystemExit(2)
 
             # Show result
@@ -2777,7 +2921,7 @@ def refactor_rename(
                 if out_path:
                     out_path.parent.mkdir(parents=True, exist_ok=True)
                     result.renamed_graph.serialize(destination=out_path.as_posix(), format="turtle")
-                    click.secho(f"✓ Wrote {out_path}", fg="green")
+                    click.secho(f"\u2713 Wrote {out_path}", fg="green")
 
     # Handle data migration
     if migrate_data and not dry_run:
@@ -2799,7 +2943,7 @@ def refactor_rename(
                 try:
                     data_graph.parse(data_path.as_posix())
                 except Exception as e:
-                    click.secho(f"✗ Failed to parse data file {data_path}: {e}", fg="red", err=True)
+                    click.secho(f"\u2717 Failed to parse data file {data_path}: {e}", fg="red", err=True)
                     continue
 
                 migration_result = migrator.migrate(data_graph, uri_map=uri_map)
@@ -2818,7 +2962,7 @@ def refactor_rename(
                         destination=out_path.as_posix(), format="turtle"
                     )
                     click.echo(f"  Migrated {data_path.name}: {migration_result.stats.total_changes} changes")
-                    click.secho(f"  ✓ Wrote {out_path}", fg="green")
+                    click.secho(f"  \u2713 Wrote {out_path}", fg="green")
 
     raise SystemExit(0)
 
@@ -3007,7 +3151,7 @@ def refactor_deprecate(
         try:
             graph.parse(source_path.as_posix())
         except Exception as e:
-            click.secho(f"✗ Failed to parse: {e}", fg="red", err=True)
+            click.secho(f"\u2717 Failed to parse: {e}", fg="red", err=True)
             raise SystemExit(2)
 
         if dry_run:
@@ -3033,7 +3177,7 @@ def refactor_deprecate(
             result = deprecator.deprecate_bulk(graph, config.deprecations)
 
             if not result.success:
-                click.secho(f"✗ Deprecation failed: {result.error}", fg="red", err=True)
+                click.secho(f"\u2717 Deprecation failed: {result.error}", fg="red", err=True)
                 raise SystemExit(2)
 
             # Show result
@@ -3044,12 +3188,12 @@ def refactor_deprecate(
                 out_path = config.output or source_path.with_stem(f"{source_path.stem}_deprecated")
                 out_path.parent.mkdir(parents=True, exist_ok=True)
                 result.deprecated_graph.serialize(destination=out_path.as_posix(), format="turtle")
-                click.secho(f"✓ Wrote {out_path}", fg="green")
+                click.secho(f"\u2713 Wrote {out_path}", fg="green")
 
             # Warn about entities not found
             if result.stats.entities_not_found > 0:
                 click.secho(
-                    f"\n⚠ {result.stats.entities_not_found} entity/entities not found in graph",
+                    f"\n\u26a0 {result.stats.entities_not_found} entity/entities not found in graph",
                     fg="yellow",
                 )
                 raise SystemExit(1)
@@ -3201,7 +3345,7 @@ def localise_extract(
     if result.translation_file:
         result.translation_file.save(output_path)
         click.echo()
-        click.secho(f"✓ Wrote {output_path}", fg="green")
+        click.secho(f"\u2713 Wrote {output_path}", fg="green")
 
     raise SystemExit(0)
 
@@ -3305,7 +3449,7 @@ def localise_merge(
         output.parent.mkdir(parents=True, exist_ok=True)
         result.merged_graph.serialize(destination=output, format="turtle")
         click.echo()
-        click.secho(f"✓ Wrote {output}", fg="green")
+        click.secho(f"\u2713 Wrote {output}", fg="green")
 
     # Exit code based on warnings
     if result.stats.errors > 0:
@@ -3418,7 +3562,7 @@ def localise_report(
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(report_text)
-        click.secho(f"✓ Wrote {output}", fg="green")
+        click.secho(f"\u2713 Wrote {output}", fg="green")
     else:
         click.echo()
         click.echo(report_text)
@@ -3495,7 +3639,7 @@ def localise_init(
     if result.translation_file:
         result.translation_file.save(output_path)
         click.echo()
-        click.secho(f"✓ Created {output_path}", fg="green")
+        click.secho(f"\u2713 Created {output_path}", fg="green")
         click.echo(f"  Fill in translations and run:")
         click.echo(f"    rdf-construct localise merge {source} {output_path} -o localised.ttl")
 

@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Nothing yet.
 
+## [0.4.4] - 2026-03-17
+
+### Added
+- **New `cast` command** for converting an RDF file between serialisation formats (#53)
+  - Accepts any format rdflib can parse: `ttl`, `turtle`, `n3`, `nt`, `ntriples`, `xml`, `rdf`,
+    `rdfxml`, `json-ld`, `jsonld`, `trig`, `nq`, `nquads`
+  - **Unix pipe-friendly**: a single `--format` flag writes RDF to stdout with all diagnostics
+    routed to stderr — `rdf-construct cast ontology.ttl --format n3 | grep rdf:type` works as
+    expected
+  - Multiple `--format` flags write one output file per format to the output directory
+  - Default output (no `--format`): converts to `ttl`, `xml`, and `json-ld`, excluding the
+    source format
+  - `--output-dir` overrides the output directory (default: same directory as source)
+  - `--allow-flatten` merges all named graphs into the default graph when converting from a
+    quad format (TriG, N-Quads) to a single-graph format; without this flag, such conversions
+    are rejected with a clear error
+  - Source format equal to target format: warns and skips without error
+  - Exit codes: 0 (success), 1 (partial failure — some formats failed), 2 (complete failure)
+- New module `src/rdf_construct/core/formats.py` — shared format utilities
+  - `normalise_format()`: normalises format aliases (`"ttl"` → `"turtle"`, etc.)
+  - `infer_format()`: infers rdflib format from file extension
+  - `extension_for_format()`: returns preferred output extension for a canonical format
+  - `is_quad_format()`: detects multi-graph formats (TriG, N-Quads)
+  - `default_cast_formats()`: computes default output format set excluding source format
+  - Exported from `rdf_construct.core` for use by other commands
+- New module `src/rdf_construct/cast/` — programmatic conversion API
+  - `CastConverter.convert()`: callable as a Python API independently of the CLI
+  - `ConversionResult` dataclass with `success`, `partial_failure`, `written_files`,
+    `stdout_content`, `warnings`, `failed_formats`, and `error` fields
+
 ## [0.4.3] - 2026-03-17
 
 ### Fixed
@@ -394,6 +424,7 @@ Initial public release.
 
 | Version | Date       | Highlights                                                                                          |
 |---------|------------|-----------------------------------------------------------------------------------------------------|
+| [0.4.4] | 2026-03-17 | Add `cast` command for pipe-friendly RDF format conversion |
 | [0.4.3] | 2026-03-17 | Fix inline blank node serialisation in `order` output |
 | [0.4.2] | 2026-02-05 | Fix extraneous prefix declarations in order output |
 | [0.4.1] | 2026-01-06 | Fix lint command import collision |
@@ -402,7 +433,8 @@ Initial public release.
 | [0.2.0] | 2025-12-03 | Stats, CQ testing, SHACL gen, docs gen, diff, lint, puml2rdf                                        |
 | [0.1.0] | 2025-11-30 | Initial release: ordering, UML generation, styling                                                  |
 
-[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.4
 [0.4.3]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.3
 [0.4.2]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.2
 [0.4.1]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.1
