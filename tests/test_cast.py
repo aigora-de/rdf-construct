@@ -55,16 +55,25 @@ SIMPLE_TRIG = dedent("""\
 
 @pytest.fixture()
 def ttl_file(tmp_path: Path) -> Path:
-    """Write a simple Turtle file and return its path."""
-    p = tmp_path / "ontology.ttl"
+    """Write a simple Turtle source file into a dedicated ``src/`` subdirectory.
+
+    Using a subdirectory keeps the source file separate from any output
+    directory used in tests, so directory listings of the output dir are
+    not polluted by the source ``.ttl`` file.
+    """
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    p = src_dir / "ontology.ttl"
     p.write_text(SIMPLE_TTL, encoding="utf-8")
     return p
 
 
 @pytest.fixture()
 def trig_file(tmp_path: Path) -> Path:
-    """Write a simple TriG file and return its path."""
-    p = tmp_path / "multi.trig"
+    """Write a simple TriG source file into a dedicated ``src/`` subdirectory."""
+    src_dir = tmp_path / "src"
+    src_dir.mkdir(exist_ok=True)
+    p = src_dir / "multi.trig"
     p.write_text(SIMPLE_TRIG, encoding="utf-8")
     return p
 
@@ -296,11 +305,12 @@ class TestCastConverterEdgeCases:
     def test_source_equals_target_format_skips_with_warning(
         self, ttl_file: Path, tmp_path: Path
     ) -> None:
+        out_dir = tmp_path / "out"
         converter = CastConverter()
         result = converter.convert(
             source=ttl_file,
             formats=["turtle"],
-            output_dir=tmp_path,
+            output_dir=out_dir,
             pipe_mode=False,
         )
         # Should succeed overall but have a warning and no output file
@@ -311,11 +321,12 @@ class TestCastConverterEdgeCases:
     def test_quad_source_to_single_graph_raises(
         self, trig_file: Path, tmp_path: Path
     ) -> None:
+        out_dir = tmp_path / "out"
         converter = CastConverter()
         result = converter.convert(
             source=trig_file,
             formats=["turtle"],
-            output_dir=tmp_path,
+            output_dir=out_dir,
             pipe_mode=False,
         )
         assert not result.success
@@ -329,11 +340,12 @@ class TestCastConverterEdgeCases:
     def test_quad_source_with_allow_flatten_succeeds(
         self, trig_file: Path, tmp_path: Path
     ) -> None:
+        out_dir = tmp_path / "out"
         converter = CastConverter()
         result = converter.convert(
             source=trig_file,
             formats=["turtle"],
-            output_dir=tmp_path,
+            output_dir=out_dir,
             pipe_mode=False,
             allow_flatten=True,
         )
@@ -346,6 +358,7 @@ class TestCastConverterEdgeCases:
         self, ttl_file: Path, tmp_path: Path
     ) -> None:
         """When one format fails but another succeeds, result reflects partial failure."""
+        out_dir = tmp_path / "out"
         converter = CastConverter()
         # Patch rdflib serialise to fail for json-ld but succeed for xml
         original_serialise = Graph.serialize
@@ -359,7 +372,7 @@ class TestCastConverterEdgeCases:
             result = converter.convert(
                 source=ttl_file,
                 formats=["xml", "json-ld"],
-                output_dir=tmp_path,
+                output_dir=out_dir,
                 pipe_mode=False,
             )
 
@@ -412,8 +425,9 @@ class TestCastCLI:
     def test_cast_stdout_content_is_rdf(self, ttl_file: Path) -> None:
         """Single --format in pipe mode should produce parseable RDF.
 
-        We test this at the converter level rather than through the CLI runner
-        so that stdout/stderr mixing does not interfere with RDF parsing.
+        Tested at the converter level rather than through the CLI runner so
+        that stdout/stderr mixing in CliRunner does not interfere with RDF
+        parsing.
         """
         converter = CastConverter()
         result = converter.convert(
@@ -429,17 +443,25 @@ class TestCastCLI:
         assert len(g) > 0
 
     def test_cast_default_formats_writes_files(self, ttl_file: Path, tmp_path: Path) -> None:
-        """Omitting --format should write xml and json-ld (not ttl) to output-dir."""
+        """Omitting --format should write xml and json-ld (not ttl) to output-dir.
+
+        The output directory is ``tmp_path`` while the source lives in
+        ``tmp_path/src/``, so the directory listing of ``tmp_path`` contains
+        only the output files produced by cast.
+        """
         from click.testing import CliRunner
         from rdf_construct.cli import cli
+
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
 
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            ["cast", str(ttl_file), "--output-dir", str(tmp_path)],
+            ["cast", str(ttl_file), "--output-dir", str(out_dir)],
         )
         assert result.exit_code == 0
-        written = list(tmp_path.iterdir())
+        written = list(out_dir.iterdir())
         # Should have .rdf and .jsonld, but NOT .ttl (source format excluded)
         extensions = {f.suffix for f in written}
         assert ".rdf" in extensions
@@ -450,6 +472,9 @@ class TestCastCLI:
         from click.testing import CliRunner
         from rdf_construct.cli import cli
 
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+
         runner = CliRunner()
         result = runner.invoke(
             cli,
@@ -457,7 +482,7 @@ class TestCastCLI:
                 "cast",
                 str(trig_file),
                 "--format", "turtle",
-                "--output-dir", str(tmp_path),
+                "--output-dir", str(out_dir),
                 "--allow-flatten",
             ],
         )
@@ -467,6 +492,9 @@ class TestCastCLI:
         from click.testing import CliRunner
         from rdf_construct.cli import cli
 
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+
         runner = CliRunner()
         result = runner.invoke(
             cli,
@@ -474,7 +502,7 @@ class TestCastCLI:
                 "cast",
                 str(trig_file),
                 "--format", "turtle",
-                "--output-dir", str(tmp_path),
+                "--output-dir", str(out_dir),
             ],
         )
         assert result.exit_code == 2
