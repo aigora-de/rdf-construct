@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Nothing yet.
 
+## [0.4.5] - 2026-03-17
+
+### Added
+- New documentation guide: `docs/user_guides/CAST_GUIDE.md` covering pipe mode, file output,
+  format aliases, quad flattening, prefix binding behaviour, programmatic API, and examples
+
+### Changed
+- Updated `docs/user_guides/CLI_REFERENCE.md` with full `cast` command section (options, format
+  aliases table, pipe mode note, examples, workflow snippet)
+- Updated `docs/user_guides/QUICK_REFERENCE.md` — added `cast` to commands table, new Format
+  Conversion section, output formats table, and Cast Guide link
+- Updated `docs/user_guides/GETTING_STARTED.md` — command count 14 → 15, added Format
+  conversion category with `cast` and `puml2rdf`, added cast to CI/CD pattern and Next Steps
+
 ## [0.4.4] - 2026-03-17
 
 ### Added
@@ -424,6 +438,7 @@ Initial public release.
 
 | Version | Date       | Highlights                                                                                          |
 |---------|------------|-----------------------------------------------------------------------------------------------------|
+| [0.4.5] | 2026-03-17 | Documentation for `cast` command |
 | [0.4.4] | 2026-03-17 | Add `cast` command for pipe-friendly RDF format conversion |
 | [0.4.3] | 2026-03-17 | Fix inline blank node serialisation in `order` output |
 | [0.4.2] | 2026-02-05 | Fix extraneous prefix declarations in order output |
@@ -433,7 +448,8 @@ Initial public release.
 | [0.2.0] | 2025-12-03 | Stats, CQ testing, SHACL gen, docs gen, diff, lint, puml2rdf                                        |
 | [0.1.0] | 2025-11-30 | Initial release: ordering, UML generation, styling                                                  |
 
-[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.5
 [0.4.4]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.4
 [0.4.3]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.3
 [0.4.2]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.2
