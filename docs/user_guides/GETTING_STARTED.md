@@ -2,7 +2,7 @@
 
 ## What is rdf-construct?
 
-**rdf-construct** is a toolkit for working with RDF ontologies. It provides 14 commands organised into categories:
+**rdf-construct** is a toolkit for working with RDF ontologies. It provides 15 commands organised into categories:
 
 | Category | Commands | Purpose |
 |----------|----------|--------|
@@ -11,7 +11,7 @@
 | **Validation** | `lint`, `shacl-gen`, `cq-test` | Check quality and run tests |
 | **Comparison** | `diff` | Compare ontology versions |
 | **Transformation** | `merge`, `split`, `refactor`, `localise` | Combine, modularise, rename, translate |
-| **Conversion** | `puml2rdf` | Convert PlantUML to RDF |
+| **Format conversion** | `cast`, `puml2rdf` | Convert between RDF serialisation formats; import from PlantUML |
 | **Ordering** | `order` | Semantic RDF serialisation |
 
 Named after the ROM construct from Gibson's *Neuromancer*—preserved, structured knowledge.
@@ -44,6 +44,9 @@ rdf-construct uml examples/animal_ontology.ttl -C examples/uml_contexts.yml
 
 # 4. Generate documentation
 rdf-construct docs examples/animal_ontology.ttl -o my-docs/
+
+# 5. Convert to another format
+rdf-construct cast examples/animal_ontology.ttl --format xml
 ```
 
 ## Command Categories Tour
@@ -194,7 +197,22 @@ rdf-construct localise extract ontology.ttl -l de -o translations/de.yml
 rdf-construct localise merge ontology.ttl translations/de.yml -o localised.ttl
 ```
 
-### Conversion: Format Transformation
+### Format Conversion
+
+**cast** - Convert an RDF file between serialisation formats:
+
+```bash
+# Pipe-friendly: single --format writes RDF to stdout
+rdf-construct cast ontology.ttl --format n3 | grep rdf:type
+
+# Write multiple formats to files (default: ttl + xml + json-ld, minus source)
+rdf-construct cast ontology.rdf
+
+# Convert to specific formats in a given directory
+rdf-construct cast ontology.ttl --format xml --format json-ld --output-dir dist/
+```
+
+`cast` always sends diagnostic messages to stderr, keeping stdout clean for piping.
 
 **puml2rdf** - Convert PlantUML diagrams to RDF:
 
@@ -230,6 +248,9 @@ rdf-construct cq-test ontology.ttl tests.yml --format junit -o results.xml
 # Documentation generation
 rdf-construct docs ontology.ttl -o docs/
 rdf-construct describe ontology.ttl --format markdown >> README.md
+
+# Build distribution in all standard formats
+rdf-construct cast ontology.ttl --output-dir dist/
 ```
 
 ### Exploring a New Ontology
@@ -284,6 +305,7 @@ rdf-construct --help
 
 # Command-specific help
 rdf-construct describe --help
+rdf-construct cast --help
 rdf-construct uml --help
 
 # List available configurations
@@ -298,6 +320,7 @@ Now that you've got the basics, explore:
 
 - **[Quick Reference](QUICK_REFERENCE.md)**: Condensed cheat sheet
 - **[CLI Reference](CLI_REFERENCE.md)**: Complete command documentation
+- **[Cast Guide](CAST_GUIDE.md)**: RDF format conversion and piping
 - **[Describe Guide](DESCRIBE_GUIDE.md)**: Quick ontology orientation
 - **[UML Guide](UML_GUIDE.md)**: Complete diagram features
 - **[Lint Guide](LINT_GUIDE.md)**: Quality checking rules
