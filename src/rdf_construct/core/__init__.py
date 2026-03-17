@@ -10,6 +10,17 @@ from .utils import (
     qname_sort_key,
     rebind_prefixes,
 )
+from .formats import (
+    FormatInfo,
+    FORMAT_REGISTRY,
+    FORMAT_ALIASES,
+    CAST_FORMAT_CHOICES,
+    normalise_format,
+    extension_for_format,
+    infer_format,
+    is_quad_format,
+    default_cast_formats,
+)
 
 __all__ = [
     # Ordering
@@ -31,4 +42,14 @@ __all__ = [
     "extract_prefix_map",
     "qname_sort_key",
     "rebind_prefixes",
+    # Formats
+    "FormatInfo",
+    "FORMAT_REGISTRY",
+    "FORMAT_ALIASES",
+    "CAST_FORMAT_CHOICES",
+    "normalise_format",
+    "extension_for_format",
+    "infer_format",
+    "is_quad_format",
+    "default_cast_formats",
 ]
