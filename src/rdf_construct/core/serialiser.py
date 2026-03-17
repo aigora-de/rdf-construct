@@ -7,7 +7,7 @@ the exact subject order provided.
 
 from pathlib import Path
 
-from rdflib import Graph, URIRef, Literal, RDF
+from rdflib import BNode, Graph, URIRef, Literal, RDF
 from rdflib.namespace import RDFS, OWL, XSD
 
 try:
@@ -74,6 +74,44 @@ def collect_used_namespaces(
     return used_ns
 
 
+def collect_inline_bnodes(graph: Graph) -> set[BNode]:
+    """Identify blank nodes eligible for inline ``[ … ]`` serialisation.
+
+    A blank node is eligible if both conditions hold:
+
+    1. It appears as the object of **exactly one** triple in the graph
+       (a single incoming arc).
+    2. It is **not** the subject of an ``rdf:type rdf:Statement`` triple
+       (reification stubs must remain as top-level blocks).
+
+    Args:
+        graph: RDF graph to inspect.
+
+    Returns:
+        Set of :class:`~rdflib.BNode` instances that should be rendered
+        inline rather than as top-level subjects.
+    """
+    # Count incoming arcs for every blank-node object.
+    incoming: dict[BNode, int] = {}
+    for _s, _p, o in graph:
+        if isinstance(o, BNode):
+            incoming[o] = incoming.get(o, 0) + 1
+
+    # Keep only bnodes with exactly one incoming arc.
+    candidates = {bn for bn, count in incoming.items() if count == 1}
+
+    # Exclude reification stubs: any bnode that is the subject of
+    # rdf:type rdf:Statement must stay as a top-level block.
+    reification_subjects = {
+        s
+        for s, p, o in graph
+        if isinstance(s, BNode) and p == RDF.type and o == RDF.Statement
+    }
+    candidates -= reification_subjects
+
+    return candidates
+
+
 def format_term(graph: Graph, term, use_prefixes: bool = True) -> str:
     """Format an RDF term as a Turtle string.
 
@@ -116,6 +154,84 @@ def format_term(graph: Graph, term, use_prefixes: bool = True) -> str:
         return str(term)
 
 
+def _format_inline_bnode(
+    graph: Graph,
+    bnode: BNode,
+    inline_bnodes: set[BNode],
+    predicate_order: PredicateOrderConfig | None,
+    indent: int,
+) -> str:
+    """Render a blank node as a Turtle ``[ … ]`` inline block.
+
+    Recursively renders any nested blank nodes that are themselves eligible
+    for inline serialisation.  Predicate ordering within the block follows
+    the same rules as for named subjects: ``rdf:type`` first, then
+    according to *predicate_order* (or alphabetically if ``None``).
+
+    Args:
+        graph: RDF graph containing the blank node's triples.
+        bnode: The blank node to render inline.
+        inline_bnodes: Set of all blank nodes eligible for inlining,
+            used to detect nested inline candidates.
+        predicate_order: Optional predicate ordering configuration.
+        indent: Current indentation depth (in 4-space units).  The
+            opening ``[`` appears on the caller's line; each
+            predicate-object line inside uses ``(indent + 1) * 4``
+            spaces; the closing ``]`` uses ``indent * 4`` spaces.
+
+    Returns:
+        A multi-line string for the ``[ … ]`` block, starting with
+        ``[\\n`` and ending with the indented ``]`` (no trailing
+        punctuation — the caller appends ``;`` or ``.`` as needed).
+    """
+    inner_pad = " " * ((indent + 1) * 4)
+    close_pad = " " * (indent * 4)
+
+    # Collect predicate-object pairs for this bnode.
+    pred_dict: dict[URIRef, list] = {}
+    for p, o in graph.predicate_objects(bnode):
+        if p not in pred_dict:
+            pred_dict[p] = []
+        pred_dict[p].append(o)
+
+    sorted_preds = _order_subject_predicates(graph, bnode, pred_dict, predicate_order)
+
+    block_lines = ["["]
+    for i, (pred, objects) in enumerate(sorted_preds):
+        pred_str = "a" if pred == RDF.type else format_term(graph, pred)
+        objects_sorted = sorted(objects, key=lambda x: format_term(graph, x))
+        is_last_pred = i == len(sorted_preds) - 1
+
+        if len(objects_sorted) == 1:
+            obj = objects_sorted[0]
+            if isinstance(obj, BNode) and obj in inline_bnodes:
+                obj_str = _format_inline_bnode(
+                    graph, obj, inline_bnodes, predicate_order, indent + 1
+                )
+            else:
+                obj_str = format_term(graph, obj)
+            terminator = "" if is_last_pred else " ;"
+            block_lines.append(f"{inner_pad}{pred_str} {obj_str}{terminator}")
+        else:
+            # Multiple objects for the same predicate.
+            for j, obj in enumerate(objects_sorted):
+                if isinstance(obj, BNode) and obj in inline_bnodes:
+                    obj_str = _format_inline_bnode(
+                        graph, obj, inline_bnodes, predicate_order, indent + 1
+                    )
+                else:
+                    obj_str = format_term(graph, obj)
+                is_last_obj = j == len(objects_sorted) - 1
+                if not is_last_obj:
+                    block_lines.append(f"{inner_pad}{pred_str} {obj_str} ,")
+                else:
+                    terminator = "" if is_last_pred else " ;"
+                    block_lines.append(f"{inner_pad}{pred_str} {obj_str}{terminator}")
+
+    block_lines.append(f"{close_pad}]")
+    return "\n".join(block_lines)
+
+
 def serialise_turtle(
     graph: Graph,
     subjects_ordered: list,
@@ -130,10 +246,16 @@ def serialise_turtle(
     Only prefix declarations for namespaces actually used in the graph's
     triples are emitted, filtering out rdflib's built-in defaults.
 
+    Blank nodes that are the object of exactly one triple are serialised
+    using Turtle's anonymous ``[ … ]`` inline syntax, preserving authorial
+    intent and improving readability.  Blank nodes referenced by more than
+    one triple, or that are reification stubs, remain as top-level subjects.
+
     Formatting features:
     - Prefixes sorted alphabetically at top (used namespaces only)
     - Subjects in specified order
-    - rdf:type predicate listed first for each subject
+    - Single-arc blank nodes rendered inline (not as top-level stubs)
+    - rdf:type predicate listed first for each subject and inline block
     - Predicates ordered according to predicate_order config (or alphabetically)
     - Objects sorted alphabetically within each predicate
     - Proper indentation and punctuation
@@ -146,6 +268,9 @@ def serialise_turtle(
     """
     lines = []
 
+    # Pre-pass: identify blank nodes to be rendered inline.
+    inline_bnodes = collect_inline_bnodes(graph)
+
     # Write prefixes — only those actually used in the graph
     used_ns = collect_used_namespaces(graph)
     prefixes = sorted(graph.namespace_manager.namespaces(), key=lambda x: x[0])
@@ -156,6 +281,10 @@ def serialise_turtle(
 
     # Write subjects in order
     for subject in subjects_ordered:
+        # Skip blank nodes that will be rendered inline at their point of use.
+        if isinstance(subject, BNode) and subject in inline_bnodes:
+            continue
+
         preds = list(graph.predicate_objects(subject))
         if not preds:
             continue
@@ -181,10 +310,17 @@ def serialise_turtle(
             # Use 'a' shorthand for rdf:type
             pred_str = "a" if pred == RDF.type else format_term(graph, pred)
             objects_sorted = sorted(objects, key=lambda x: format_term(graph, x))
+            is_last_pred = i == len(sorted_preds) - 1
 
             if len(objects_sorted) == 1:
-                obj_str = format_term(graph, objects_sorted[0])
-                if i == len(sorted_preds) - 1:
+                obj = objects_sorted[0]
+                if isinstance(obj, BNode) and obj in inline_bnodes:
+                    obj_str = _format_inline_bnode(
+                        graph, obj, inline_bnodes, predicate_order, indent=1
+                    )
+                else:
+                    obj_str = format_term(graph, obj)
+                if is_last_pred:
                     lines.append(f"    {pred_str} {obj_str} .")
                 else:
                     lines.append(f"    {pred_str} {obj_str} ;")
@@ -192,14 +328,20 @@ def serialise_turtle(
                 # Multiple objects for same predicate
                 lines.append(f"    {pred_str}")
                 for j, obj in enumerate(objects_sorted):
-                    obj_str = format_term(graph, obj)
-                    if j == len(objects_sorted) - 1:
-                        if i == len(sorted_preds) - 1:
+                    if isinstance(obj, BNode) and obj in inline_bnodes:
+                        obj_str = _format_inline_bnode(
+                            graph, obj, inline_bnodes, predicate_order, indent=2
+                        )
+                    else:
+                        obj_str = format_term(graph, obj)
+                    is_last_obj = j == len(objects_sorted) - 1
+                    if not is_last_obj:
+                        lines.append(f"        {obj_str} ,")
+                    else:
+                        if is_last_pred:
                             lines.append(f"        {obj_str} .")
                         else:
                             lines.append(f"        {obj_str} ;")
-                    else:
-                        lines.append(f"        {obj_str} ,")
 
         lines.append("")  # Blank line after each subject
 
