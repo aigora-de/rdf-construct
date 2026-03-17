@@ -11,6 +11,7 @@ A condensed cheat sheet for all rdf-construct commands. For detailed documentati
 | `uml` | Generate UML diagrams | `rdf-construct uml ontology.ttl -C contexts.yml` |
 | `docs` | Generate documentation | `rdf-construct docs ontology.ttl -o api/` |
 | `puml2rdf` | PlantUML to RDF conversion | `rdf-construct puml2rdf design.puml` |
+| `cast` | Convert between RDF formats | `rdf-construct cast ontology.ttl --format xml` |
 | `diff` | Compare ontology versions | `rdf-construct diff v1.ttl v2.ttl` |
 | `lint` | Check ontology quality | `rdf-construct lint ontology.ttl` |
 | `shacl-gen` | Generate SHACL shapes | `rdf-construct shacl-gen ontology.ttl` |
@@ -82,6 +83,21 @@ rdf-construct order ontology.ttl config.yml -p profile_name
 rdf-construct profiles config.yml                     # List available profiles
 ```
 
+## Format Conversion
+
+```bash
+# Pipe-friendly: single --format writes to stdout
+rdf-construct cast ontology.ttl --format n3 | grep rdf:type
+rdf-construct cast ontology.rdf --format ttl > converted.ttl
+
+# Write multiple formats to files
+rdf-construct cast ontology.ttl --format xml --format json-ld
+rdf-construct cast ontology.ttl --output-dir dist/   # Default: ttl + xml + json-ld
+
+# Quad format flattening
+rdf-construct cast dataset.trig --format ttl --allow-flatten
+```
+
 ## Transformation
 
 ```bash
@@ -145,8 +161,8 @@ rdf-construct localise report ontology.ttl -l en,de,fr
 | Code | Meaning |
 |------|--------|
 | `0` | Success / No issues |
-| `1` | Warnings / Differences found / Tests failed |
-| `2` | Errors / Invalid input |
+| `1` | Warnings / Differences found / Tests failed / Partial failure |
+| `2` | Errors / Invalid input / Complete failure |
 
 ## Output Formats
 
@@ -159,6 +175,7 @@ rdf-construct localise report ontology.ttl -l en,de,fr
 | `stats` | text, json, markdown |
 | `cq-test` | text, json, junit |
 | `shacl-gen` | turtle, json-ld |
+| `cast` | ttl, xml, json-ld, nt, n3, trig, nquads (and aliases) |
 | `localise report` | text, markdown |
 
 ## Configuration Files
@@ -193,5 +210,6 @@ rdf-construct stats ontology.ttl --format json
 
 - **Full CLI Reference**: [CLI_REFERENCE.md](CLI_REFERENCE.md)
 - **Getting Started**: [GETTING_STARTED.md](GETTING_STARTED.md)
+- **Cast Guide**: [CAST_GUIDE.md](CAST_GUIDE.md)
 - **GitHub**: https://github.com/aigora-de/rdf-construct
 - **Issues**: https://github.com/aigora-de/rdf-construct/issues
