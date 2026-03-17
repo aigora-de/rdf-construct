@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Nothing yet.
 
+## [0.4.3] - 2026-03-17
+
+### Fixed
+- Fixed `order` command expanding anonymous (implicit) blank nodes into separate top-level named stubs. Blank nodes with exactly one incoming arc are now serialised using Turtle's `[ … ]` inline syntax, preserving authorial intent and readability. Blank nodes referenced by more than one triple, or that are reification stubs, continue to be emitted as top-level `_:bN` subjects (#51)
+- Fixed `format_term()` emitting bare rdflib internal identifiers (e.g. `Nff2ed53a…`) for stub blank nodes instead of the `_:id` form required by the Turtle grammar, which caused parse failures on round-trip
+
 ## [0.4.2] - 2026-02-05
 
 ### Fixed
@@ -388,6 +394,7 @@ Initial public release.
 
 | Version | Date       | Highlights                                                                                          |
 |---------|------------|-----------------------------------------------------------------------------------------------------|
+| [0.4.3] | 2026-03-17 | Fix inline blank node serialisation in `order` output |
 | [0.4.2] | 2026-02-05 | Fix extraneous prefix declarations in order output |
 | [0.4.1] | 2026-01-06 | Fix lint command import collision |
 | [0.4.0] | 2026-01-03 | Add describe command, documentation improvements |
@@ -395,7 +402,8 @@ Initial public release.
 | [0.2.0] | 2025-12-03 | Stats, CQ testing, SHACL gen, docs gen, diff, lint, puml2rdf                                        |
 | [0.1.0] | 2025-11-30 | Initial release: ordering, UML generation, styling                                                  |
 
-[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.3
 [0.4.2]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.2
 [0.4.1]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.1
 [0.4.0]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.0
