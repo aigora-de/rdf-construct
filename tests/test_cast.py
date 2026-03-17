@@ -320,7 +320,11 @@ class TestCastConverterEdgeCases:
         )
         assert not result.success
         assert result.error is not None
-        assert "flatten" in result.error.lower() or "quad" in result.error.lower() or "named graph" in result.error.lower()
+        assert (
+            "flatten" in result.error.lower()
+            or "quad" in result.error.lower()
+            or "named graph" in result.error.lower()
+        )
 
     def test_quad_source_with_allow_flatten_succeeds(
         self, trig_file: Path, tmp_path: Path
@@ -371,7 +375,17 @@ class TestCastConverterEdgeCases:
 
 
 class TestCastCLI:
-    """Smoke tests for the 'cast' CLI command."""
+    """Smoke tests for the 'cast' CLI command.
+
+    Notes on Click's CliRunner:
+    - ``mix_stderr`` was removed from ``CliRunner.__init__()`` in Click 8.2.
+    - We use the plain ``CliRunner()`` constructor (default behaviour mixes
+      stdout and stderr into ``result.output``) which is compatible with all
+      Click 8.x versions.
+    - For the stdout-purity test we call CastConverter directly instead of
+      going through the CLI runner, which avoids the mixed-stream ambiguity
+      entirely and is a cleaner unit test anyway.
+    """
 
     def test_cast_help(self) -> None:
         from click.testing import CliRunner
@@ -388,29 +402,30 @@ class TestCastCLI:
         from click.testing import CliRunner
         from rdf_construct.cli import cli
 
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(
             cli,
             ["cast", str(ttl_file), "--format", "xml"],
         )
         assert result.exit_code == 0
 
-    def test_cast_stdout_content_is_rdf(
-        self, ttl_file: Path
-    ) -> None:
-        """Single --format should write RDF to stdout with no progress noise."""
-        from click.testing import CliRunner
-        from rdf_construct.cli import cli
+    def test_cast_stdout_content_is_rdf(self, ttl_file: Path) -> None:
+        """Single --format in pipe mode should produce parseable RDF.
 
-        runner = CliRunner(mix_stderr=False)
-        result = runner.invoke(
-            cli,
-            ["cast", str(ttl_file), "--format", "xml"],
+        We test this at the converter level rather than through the CLI runner
+        so that stdout/stderr mixing does not interfere with RDF parsing.
+        """
+        converter = CastConverter()
+        result = converter.convert(
+            source=ttl_file,
+            formats=["xml"],
+            output_dir=None,
+            pipe_mode=True,
         )
-        assert result.exit_code == 0
-        # stdout should contain parseable RDF/XML
+        assert result.success
+        assert result.stdout_content is not None
         g = Graph()
-        g.parse(data=result.output, format="xml")
+        g.parse(data=result.stdout_content, format="xml")
         assert len(g) > 0
 
     def test_cast_default_formats_writes_files(self, ttl_file: Path, tmp_path: Path) -> None:
@@ -418,7 +433,7 @@ class TestCastCLI:
         from click.testing import CliRunner
         from rdf_construct.cli import cli
 
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(
             cli,
             ["cast", str(ttl_file), "--output-dir", str(tmp_path)],
@@ -435,7 +450,7 @@ class TestCastCLI:
         from click.testing import CliRunner
         from rdf_construct.cli import cli
 
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(
             cli,
             [
@@ -452,7 +467,7 @@ class TestCastCLI:
         from click.testing import CliRunner
         from rdf_construct.cli import cli
 
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(
             cli,
             [
