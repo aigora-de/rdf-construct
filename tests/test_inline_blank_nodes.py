@@ -1,14 +1,9 @@
 """Tests for inline blank node serialisation in the order command.
 
 Verifies that blank nodes with exactly one incoming arc are written using
-Turtle's anonymous ``[ … ]`` syntax, matching authorial intent and
+Turtle's anonymous ``[ \u2026 ]`` syntax, matching authorial intent and
 preserving readability.  Blank nodes referenced by more than one triple
 should continue to be emitted as top-level ``_:bN`` stubs.
-
-All tests in this module are marked ``xfail`` until the implementation
-landed in #51 is complete.  Using ``xfail`` (rather than ``skip``) means
-pytest can still collect and report them; a test that unexpectedly passes
-will be promoted to ``xpass``, signalling the feature is ready.
 
 Relates to: #51
 """
@@ -20,39 +15,7 @@ from rdflib import Graph, BNode, Namespace, RDF, Literal
 from rdflib.namespace import RDFS
 from rdflib.compare import isomorphic
 
-# ---------------------------------------------------------------------------
-# Conditional import: collect_inline_bnodes does not exist yet.
-# Tests that use it are marked xfail so the suite can still be collected
-# and run without an ImportError halting everything.
-# ---------------------------------------------------------------------------
-try:
-    from rdf_construct.core.serialiser import collect_inline_bnodes
-    _COLLECT_INLINE_MISSING = False
-except ImportError:
-    collect_inline_bnodes = None  # type: ignore[assignment]
-    _COLLECT_INLINE_MISSING = True
-
-# serialise_turtle exists today; import it normally so serialisation tests
-# that currently pass (e.g. round-trip on shared bnodes) continue to run.
-from rdf_construct.core.serialiser import serialise_turtle
-
-
-# ---------------------------------------------------------------------------
-# Markers
-# ---------------------------------------------------------------------------
-
-#: Applied to every test that exercises the not-yet-implemented behaviour.
-_xfail_not_implemented = pytest.mark.xfail(
-    reason="inline blank-node serialisation not yet implemented (#51)",
-    strict=True,
-)
-
-#: Applied only when the helper function itself is missing.
-_xfail_missing_helper = pytest.mark.xfail(
-    _COLLECT_INLINE_MISSING,
-    reason="collect_inline_bnodes not yet defined in serialiser (#51)",
-    strict=True,
-)
+from rdf_construct.core.serialiser import collect_inline_bnodes, serialise_turtle
 
 
 # ---------------------------------------------------------------------------
@@ -86,12 +49,8 @@ def _serialise(graph: Graph, subjects: list, tmp_path) -> str:
 
 
 class TestCollectInlineBnodes:
-    """Unit tests for the collect_inline_bnodes() helper function.
+    """Unit tests for the collect_inline_bnodes() helper function."""
 
-    All tests are xfail until collect_inline_bnodes() is implemented.
-    """
-
-    @_xfail_missing_helper
     def test_single_arc_bnode_is_inline_candidate(self) -> None:
         """A blank node referenced by exactly one triple is eligible for inlining."""
         g = Graph()
@@ -105,7 +64,6 @@ class TestCollectInlineBnodes:
 
         assert bn in inline
 
-    @_xfail_missing_helper
     def test_multi_arc_bnode_is_not_inline_candidate(self) -> None:
         """A blank node referenced by more than one triple must not be inlined."""
         g = Graph()
@@ -120,7 +78,6 @@ class TestCollectInlineBnodes:
 
         assert bn not in inline
 
-    @_xfail_missing_helper
     def test_reification_bnode_is_not_inline_candidate(self) -> None:
         """A blank node that is the subject of rdf:type rdf:Statement must not be inlined."""
         g = Graph()
@@ -130,20 +87,18 @@ class TestCollectInlineBnodes:
         g.add((stmt, RDF.subject, EX.Thing))
         g.add((stmt, RDF.predicate, RDFS.label))
         g.add((stmt, RDF.object, Literal("A thing")))
-        # Only one incoming arc — but it's a reification stub
+        # Only one incoming arc \u2014 but it's a reification stub
         g.add((EX.Thing, EX.reifiedAs, stmt))
 
         inline = collect_inline_bnodes(g)
 
         assert stmt not in inline
 
-    @_xfail_missing_helper
     def test_empty_graph_returns_empty_set(self) -> None:
         """An empty graph should yield no inline candidates."""
         g = Graph()
         assert collect_inline_bnodes(g) == set()
 
-    @_xfail_missing_helper
     def test_graph_without_bnodes_returns_empty_set(self) -> None:
         """A graph with only named nodes should yield no inline candidates."""
         g = Graph()
@@ -151,7 +106,6 @@ class TestCollectInlineBnodes:
         g.add((EX.Dog, RDFS.subClassOf, EX.Animal))
         assert collect_inline_bnodes(g) == set()
 
-    @_xfail_missing_helper
     def test_multiple_independent_bnodes_all_inline(self) -> None:
         """Multiple unconnected single-arc bnodes should all be inline candidates."""
         g = Graph()
@@ -170,7 +124,6 @@ class TestCollectInlineBnodes:
         assert bn2 in inline
         assert bn3 in inline
 
-    @_xfail_missing_helper
     def test_nested_bnodes_both_inline(self) -> None:
         """A bnode that is the sole object of another bnode should also be inline."""
         g = Graph()
@@ -194,13 +147,8 @@ class TestCollectInlineBnodes:
 
 
 class TestInlineBnodeSerialisation:
-    """Integration tests: blank nodes rendered inline in serialise_turtle().
+    """Integration tests: blank nodes rendered inline in serialise_turtle()."""
 
-    All tests are xfail until the serialiser emits [ … ] syntax for
-    single-arc blank nodes.
-    """
-
-    @_xfail_not_implemented
     def test_single_inline_bnode_no_stub(self, tmp_path) -> None:
         """A single-arc bnode should not appear as a top-level subject."""
         g = Graph()
@@ -213,7 +161,7 @@ class TestInlineBnodeSerialisation:
 
         content = _serialise(g, [EX.Thing], tmp_path)
 
-        # The inline blank node must appear using [ … ] syntax
+        # The inline blank node must appear using [ \u2026 ] syntax
         assert "[" in content
         assert "]" in content
         # The bnode must NOT appear as a standalone top-level subject block
@@ -227,9 +175,8 @@ class TestInlineBnodeSerialisation:
         ]
         assert not any(line.startswith("_:") for line in top_level)
 
-    @_xfail_not_implemented
     def test_inline_bnode_syntax_structure(self, tmp_path) -> None:
-        """Inline blank node must be written as `ex:pred [ … ]`, not a bare ref."""
+        """Inline blank node must be written as `ex:pred [ \u2026 ]`, not a bare ref."""
         turtle_in = """
             @prefix ex: <http://example.org/ont#> .
 
@@ -246,7 +193,6 @@ class TestInlineBnodeSerialisation:
         assert "ex:Name" in content
         assert "Alice" in content
 
-    @_xfail_not_implemented
     def test_multiple_inline_bnodes(self, tmp_path) -> None:
         """Multiple inline blank nodes on the same subject are all rendered inline."""
         turtle_in = """
@@ -259,7 +205,7 @@ class TestInlineBnodeSerialisation:
         g = _parse(turtle_in)
         content = _serialise(g, [EX.Thing], tmp_path)
 
-        # Both bnodes inline — no top-level _: stubs
+        # Both bnodes inline \u2014 no top-level _: stubs
         lines = content.splitlines()
         assert not any(
             line.strip().startswith("_:") and not line.startswith(" ")
@@ -268,9 +214,8 @@ class TestInlineBnodeSerialisation:
         assert content.count("[") >= 2
         assert content.count("]") >= 2
 
-    @_xfail_not_implemented
     def test_nested_inline_bnodes(self, tmp_path) -> None:
-        """Nested single-arc bnodes are rendered as nested [ [ … ] ] blocks."""
+        """Nested single-arc bnodes are rendered as nested [ [ \u2026 ] ] blocks."""
         turtle_in = """
             @prefix ex: <http://example.org/ont#> .
 
@@ -295,10 +240,7 @@ class TestInlineBnodeSerialisation:
         )
 
     def test_shared_bnode_remains_top_level_stub(self, tmp_path) -> None:
-        """A bnode referenced by two triples must remain a top-level stub.
-
-        This is existing correct behaviour — no xfail needed.
-        """
+        """A bnode referenced by two triples must remain a top-level stub."""
         g = Graph()
         g.bind("ex", EX)
         shared = BNode()
@@ -321,11 +263,7 @@ class TestInlineBnodeSerialisation:
         assert len(top_level_bnodes) >= 1
 
     def test_reification_stub_remains_top_level(self, tmp_path) -> None:
-        """A reification bnode (rdf:type rdf:Statement) must stay top-level.
-
-        This guards against accidentally inlining reification stubs once
-        the feature is implemented.
-        """
+        """A reification bnode (rdf:type rdf:Statement) must stay top-level."""
         g = Graph()
         g.bind("ex", EX)
         g.bind("rdf", RDF)
@@ -349,13 +287,8 @@ class TestInlineBnodeSerialisation:
 
 
 class TestInlineBnodeRoundTrip:
-    """Verify that parse(serialise(parse(x))) is isomorphic to parse(x).
+    """Verify that parse(serialise(parse(x))) is isomorphic to parse(x)."""
 
-    Round-trip tests for inline rendering are xfail until the feature lands.
-    The shared-bnode round-trip exercises existing behaviour and needs no mark.
-    """
-
-    @_xfail_not_implemented
     def test_round_trip_single_inline(self, tmp_path) -> None:
         """Single inline bnode: round-trip preserves graph semantics."""
         source = """
@@ -374,7 +307,6 @@ class TestInlineBnodeRoundTrip:
             f"Round-trip produced a non-isomorphic graph.\nOutput was:\n{content}"
         )
 
-    @_xfail_not_implemented
     def test_round_trip_multiple_inline(self, tmp_path) -> None:
         """Multiple inline bnodes: round-trip preserves graph semantics."""
         source = """
@@ -392,7 +324,6 @@ class TestInlineBnodeRoundTrip:
             f"Round-trip produced a non-isomorphic graph.\nOutput was:\n{content}"
         )
 
-    @_xfail_not_implemented
     def test_round_trip_nested_inline(self, tmp_path) -> None:
         """Nested inline bnodes: round-trip preserves graph semantics."""
         source = """
@@ -414,10 +345,7 @@ class TestInlineBnodeRoundTrip:
         )
 
     def test_round_trip_shared_bnode(self, tmp_path) -> None:
-        """Shared bnode (multi-arc): round-trip preserves graph semantics.
-
-        Exercises existing stub-serialisation behaviour — no xfail.
-        """
+        """Shared bnode (multi-arc): round-trip preserves graph semantics."""
         g_orig = Graph()
         g_orig.bind("ex", EX)
         shared = BNode()
@@ -441,7 +369,6 @@ class TestInlineBnodeRoundTrip:
 class TestInlineBnodePredicateOrdering:
     """Predicate ordering must apply inside inline blank node blocks."""
 
-    @_xfail_not_implemented
     def test_rdf_type_first_inside_inline(self, tmp_path) -> None:
         """rdf:type should appear first within an inline blank node block."""
         source = """

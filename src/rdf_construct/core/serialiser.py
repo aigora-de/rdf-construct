@@ -75,7 +75,7 @@ def collect_used_namespaces(
 
 
 def collect_inline_bnodes(graph: Graph) -> set[BNode]:
-    """Identify blank nodes eligible for inline ``[ … ]`` serialisation.
+    """Identify blank nodes eligible for inline ``[ \u2026 ]`` serialisation.
 
     A blank node is eligible if both conditions hold:
 
@@ -132,6 +132,11 @@ def format_term(graph: Graph, term, use_prefixes: bool = True) -> str:
                 return f"<{term}>"
         return f"<{term}>"
 
+    elif isinstance(term, BNode):
+        # Emit the Turtle blank-node label syntax required by the grammar.
+        # rdflib's str(BNode) gives the raw identifier without the prefix.
+        return f"_:{term}"
+
     elif isinstance(term, Literal):
         value = str(term)
         # Escape special characters
@@ -161,7 +166,7 @@ def _format_inline_bnode(
     predicate_order: PredicateOrderConfig | None,
     indent: int,
 ) -> str:
-    """Render a blank node as a Turtle ``[ … ]`` inline block.
+    """Render a blank node as a Turtle ``[ \u2026 ]`` inline block.
 
     Recursively renders any nested blank nodes that are themselves eligible
     for inline serialisation.  Predicate ordering within the block follows
@@ -180,9 +185,9 @@ def _format_inline_bnode(
             spaces; the closing ``]`` uses ``indent * 4`` spaces.
 
     Returns:
-        A multi-line string for the ``[ … ]`` block, starting with
+        A multi-line string for the ``[ \u2026 ]`` block, starting with
         ``[\\n`` and ending with the indented ``]`` (no trailing
-        punctuation — the caller appends ``;`` or ``.`` as needed).
+        punctuation \u2014 the caller appends ``;`` or ``.`` as needed).
     """
     inner_pad = " " * ((indent + 1) * 4)
     close_pad = " " * (indent * 4)
@@ -247,7 +252,7 @@ def serialise_turtle(
     triples are emitted, filtering out rdflib's built-in defaults.
 
     Blank nodes that are the object of exactly one triple are serialised
-    using Turtle's anonymous ``[ … ]`` inline syntax, preserving authorial
+    using Turtle's anonymous ``[ \u2026 ]`` inline syntax, preserving authorial
     intent and improving readability.  Blank nodes referenced by more than
     one triple, or that are reification stubs, remain as top-level subjects.
 
@@ -271,7 +276,7 @@ def serialise_turtle(
     # Pre-pass: identify blank nodes to be rendered inline.
     inline_bnodes = collect_inline_bnodes(graph)
 
-    # Write prefixes — only those actually used in the graph
+    # Write prefixes \u2014 only those actually used in the graph
     used_ns = collect_used_namespaces(graph)
     prefixes = sorted(graph.namespace_manager.namespaces(), key=lambda x: x[0])
     for prefix, namespace in prefixes:
