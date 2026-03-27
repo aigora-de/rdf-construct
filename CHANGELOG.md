@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Nothing yet.
 
+## [0.4.6] - 2026-03-27
+
+### Fixed
+- Fixed `order` command emitting SPARQL-style `PREFIX` declarations instead of valid Turtle
+  `@prefix … .` directives. Strictly conformant parsers (triple stores, validators, rdflib in
+  strict mode) reject the `PREFIX` form, which is N3/SPARQL syntax not valid Turtle per the
+  W3C spec (#56)
+
 ## [0.4.5] - 2026-03-17
 
 ### Added
@@ -438,6 +446,7 @@ Initial public release.
 
 | Version | Date       | Highlights                                                                                          |
 |---------|------------|-----------------------------------------------------------------------------------------------------|
+| [0.4.6] | 2026-03-27 | Fix invalid Turtle prefix declarations in `order` output |
 | [0.4.5] | 2026-03-17 | Documentation for `cast` command |
 | [0.4.4] | 2026-03-17 | Add `cast` command for pipe-friendly RDF format conversion |
 | [0.4.3] | 2026-03-17 | Fix inline blank node serialisation in `order` output |
@@ -448,7 +457,8 @@ Initial public release.
 | [0.2.0] | 2025-12-03 | Stats, CQ testing, SHACL gen, docs gen, diff, lint, puml2rdf                                        |
 | [0.1.0] | 2025-11-30 | Initial release: ordering, UML generation, styling                                                  |
 
-[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.4.6...HEAD
+[0.4.6]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.6
 [0.4.5]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.5
 [0.4.4]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.4
 [0.4.3]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.3

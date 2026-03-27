@@ -137,11 +137,11 @@ class TestSerialiseTurtlePrefixes:
 
         content = out.read_text(encoding="utf-8")
         prefix_lines = [
-            line for line in content.splitlines() if line.startswith("PREFIX ")
+            line for line in content.splitlines() if line.startswith("@prefix ")
         ]
 
         # Extract declared prefix names
-        declared = {line.split(":")[0].replace("PREFIX ", "") for line in prefix_lines}
+        declared = {line.split(":")[0].replace("@prefix ", "") for line in prefix_lines}
 
         # Should include prefixes we actually use
         assert "ex" in declared
@@ -157,6 +157,48 @@ class TestSerialiseTurtlePrefixes:
         assert "prov" not in declared
         assert "sosa" not in declared
 
+    def test_prefix_declarations_use_turtle_syntax(
+        self, small_graph: Graph, tmp_path: Path
+    ) -> None:
+        """Every prefix line must use Turtle @prefix syntax, not SPARQL PREFIX.
+
+        Turtle requires ``@prefix ex: <…> .`` — the SPARQL form ``PREFIX ex: <…>``
+        (without ``@`` and without a trailing period) is not valid Turtle per the
+        W3C spec (https://www.w3.org/TR/turtle/#prefixed-name).
+        """
+        out = tmp_path / "output.ttl"
+        subjects = [EX.Animal, EX.Dog]
+
+        serialise_turtle(small_graph, subjects, out)
+
+        content = out.read_text(encoding="utf-8")
+        for line in content.splitlines():
+            if line.startswith("@prefix ") or line.startswith("PREFIX "):
+                assert line.startswith("@prefix "), (
+                    f"Prefix declaration uses invalid syntax (expected @prefix): {line!r}"
+                )
+                assert line.endswith(" ."), (
+                    f"Turtle @prefix declaration must end with ' .': {line!r}"
+                )
+
+    def test_no_sparql_prefix_in_output(
+        self, small_graph: Graph, tmp_path: Path
+    ) -> None:
+        """Output must not contain any bare SPARQL-style PREFIX declarations."""
+        out = tmp_path / "output.ttl"
+        subjects = [EX.Animal, EX.Dog]
+
+        serialise_turtle(small_graph, subjects, out)
+
+        content = out.read_text(encoding="utf-8")
+        sparql_prefix_lines = [
+            line for line in content.splitlines() if line.startswith("PREFIX ")
+        ]
+        assert sparql_prefix_lines == [], (
+            f"Output contains SPARQL PREFIX declarations (invalid Turtle): "
+            f"{sparql_prefix_lines}"
+        )
+
     def test_output_with_overlapping_namespaces(
         self, overlapping_ns_graph: Graph, tmp_path: Path
     ) -> None:
@@ -168,9 +210,9 @@ class TestSerialiseTurtlePrefixes:
 
         content = out.read_text(encoding="utf-8")
         prefix_lines = [
-            line for line in content.splitlines() if line.startswith("PREFIX ")
+            line for line in content.splitlines() if line.startswith("@prefix ")
         ]
-        declared = {line.split(":")[0].replace("PREFIX ", "") for line in prefix_lines}
+        declared = {line.split(":")[0].replace("@prefix ", "") for line in prefix_lines}
 
         assert "dc" in declared
         assert "dcterms" in declared
