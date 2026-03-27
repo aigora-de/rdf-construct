@@ -276,12 +276,13 @@ def serialise_turtle(
     # Pre-pass: identify blank nodes to be rendered inline.
     inline_bnodes = collect_inline_bnodes(graph)
 
-    # Write prefixes \u2014 only those actually used in the graph
+    # Write prefixes — only those actually used in the graph.
+    # Turtle requires the @prefix directive with a trailing ' .' (not SPARQL PREFIX).
     used_ns = collect_used_namespaces(graph)
     prefixes = sorted(graph.namespace_manager.namespaces(), key=lambda x: x[0])
     for prefix, namespace in prefixes:
         if prefix and str(namespace) in used_ns:
-            lines.append(f"PREFIX {prefix}: <{namespace}>")
+            lines.append(f"@prefix {prefix}: <{namespace}> .")
     lines.append("")  # Blank line after prefixes
 
     # Write subjects in order
