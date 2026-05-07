@@ -1025,14 +1025,19 @@ def diff(
     help="Exclude instances from documentation",
 )
 @click.option(
+    "--no-shapes",
+    is_flag=True,
+    help="Exclude SHACL shapes from documentation",
+)
+@click.option(
     "--include",
     type=str,
-    help="Include only these entity types (comma-separated: classes,properties,instances)",
+    help="Include only these entity types (comma-separated: classes,properties,instances,shapes)",
 )
 @click.option(
     "--exclude",
     type=str,
-    help="Exclude these entity types (comma-separated: classes,properties,instances)",
+    help="Exclude these entity types (comma-separated: classes,properties,instances,shapes)",
 )
 def docs(
     sources: tuple[Path, ...],
@@ -1044,6 +1049,7 @@ def docs(
     title: str | None,
     no_search: bool,
     no_instances: bool,
+    no_shapes: bool,
     include: str | None,
     exclude: str | None,
 ):
@@ -1093,6 +1099,7 @@ def docs(
     doc_config.single_page = single_page
     doc_config.include_search = not no_search
     doc_config.include_instances = not no_instances
+    doc_config.include_shapes = not no_shapes
 
     if template:
         doc_config.template_dir = template
@@ -1107,6 +1114,7 @@ def docs(
         doc_config.include_datatype_properties = "properties" in types or "datatype_properties" in types
         doc_config.include_annotation_properties = "properties" in types or "annotation_properties" in types
         doc_config.include_instances = "instances" in types
+        doc_config.include_shapes = "shapes" in types
 
     if exclude:
         types = [t.strip().lower() for t in exclude.split(",")]
@@ -1118,6 +1126,8 @@ def docs(
             doc_config.include_annotation_properties = False
         if "instances" in types:
             doc_config.include_instances = False
+        if "shapes" in types:
+            doc_config.include_shapes = False
 
     # Load RDF sources
     click.echo(f"Loading {len(sources)} source file(s)...")

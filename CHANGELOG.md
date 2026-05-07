@@ -32,6 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   root, `../` under `classes/` and `instances/`, `../../` under `properties/object/` and its
   siblings); an explicitly configured `base_url` still takes precedence and produces the same
   absolute URLs as before (#59)
+- Fixed `_walk_rdf_list` and `extract_property_shape_info` silently truncating
+  `rdf:List` members at the first cell when the list-rest pointer was a blank
+  node (the rdflib default representation). In practice this meant `sh:in`
+  constraints with multiple values lost everything except the first member
+  during extraction. Both call sites now accept blank-node list pointers.
+  Found while writing tests for #60
 
 ### Added
 - New `other_props` selector for properties whose kind is not implied by their declaration —
@@ -40,6 +46,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   section before `individuals` groups them instead
 - New `rdf_construct.core.vocab` module holding the class and property type sets in one place,
   so consumers no longer reproduce (and shorten) the list
+- **First-class SHACL shape support in the `docs` command** (#60). NodeShapes
+  (`sh:NodeShape`) and named PropertyShapes (`sh:PropertyShape` with their own
+  URI) are now rendered as a distinct entity type alongside Classes, Properties,
+  and Instances, in HTML, Markdown, and JSON output:
+  - Each shape gets its own page under `shapes/`, with kind badges
+    (`shape`, `node_shape`, `property_shape`) distinguishing NodeShapes from
+    named PropertyShapes
+  - The 21 most-used SHACL constraints (`sh:path`, `sh:minCount`, `sh:maxCount`,
+    `sh:datatype`, `sh:class`, `sh:nodeKind`, `sh:in`, `sh:hasValue`,
+    `sh:pattern`, `sh:minLength`, `sh:maxLength`, `sh:minInclusive`,
+    `sh:maxInclusive`, `sh:targetClass`, `sh:targetNode`, `sh:targetSubjectsOf`,
+    `sh:targetObjectsOf`, `sh:closed`, `sh:ignoredProperties`, `sh:name`,
+    `sh:description`) get explicit per-format rendering; everything else
+    (including `sh:severity`, `sh:order`, `sh:qualifiedValueShape`, etc.) falls
+    back to a generic visible-but-plain key-value display rather than being
+    silently dropped
+  - Blank-node PropertyShapes attached to a NodeShape via `sh:property` render
+    inline on the parent shape's page as a constraint table; named
+    PropertyShapes get their own pages plus an inline reference + link from any
+    NodeShape that uses them
+  - `sh:targetClass`, `sh:path`, and references to named PropertyShapes resolve
+    to clickable cross-references when the target is in the ontology, falling
+    back to plain code-formatted URIs otherwise
+  - Logical operators (`sh:and`, `sh:or`, `sh:xone`) and `sh:qualifiedValueShape`
+    are deferred — they need their own design pass and will be handled in a
+    future release
+- **Multi-kind data model.** Entities now carry a `kinds` list of
+  `EntityKind` enum members. Default values: `[CLASS]` for classes,
+  `[PROPERTY, <type>_PROPERTY]` for properties, `[INSTANCE]` for instances,
+  and `[SHAPE, NODE_SHAPE]` / `[SHAPE, PROPERTY_SHAPE]` for shapes. A NodeShape
+  that's also typed `owl:NamedIndividual` carries both kinds and is placed in
+  the Shapes section (not Instances). This is the extension point for
+  upcoming work on SKOS support and `owl:NamedIndividual` recognition
+- New `EntityKind` enum (str-mixin) exported from `rdf_construct.docs`,
+  centralising kind values. Members: `CLASS`, `PROPERTY`, `OBJECT_PROPERTY`,
+  `DATATYPE_PROPERTY`, `ANNOTATION_PROPERTY`, `RDF_PROPERTY`, `INSTANCE`,
+  `SHAPE`, `NODE_SHAPE`, `PROPERTY_SHAPE`. Compares equal to its string
+  values and serialises to JSON as plain strings
+- New `ShapeInfo` and `PropertyShapeInfo` dataclasses, exported from
+  `rdf_construct.docs`. `ShapeInfo` covers NodeShapes and named PropertyShapes;
+  `PropertyShapeInfo` covers individual property constraint blocks (whether
+  blank-node arcs of a NodeShape or top-level constraint sets of a named
+  PropertyShape)
+- New `extract_all_shapes()` extractor and `extract_shape_info()` /
+  `extract_property_shape_info()` helpers
+- New `ExtractedEntities.shapes`, `node_shapes`, and `property_shapes` fields
+  / computed properties
+- New `DocsConfig.include_shapes` flag (default `True`) parallels
+  `include_instances`. When `False`, shapes are excluded from the output
+  pages and from the search index
+- New `--no-shapes` CLI flag and `shapes` accepted in the `--include` /
+  `--exclude` filter values
+- New `shape.html.jinja` template; `shape` entity type added to
+  `entity_to_path` / `entity_to_url` routing under `shapes/`
+- CSS for shape badges in HTML output: `.entity-type.shape` (`#dc2626`,
+  4.83:1 contrast), `.entity-type.node_shape` (`#b91c1c`, 6.47:1),
+  `.entity-type.property_shape` (`#e11d48`, 4.70:1) — all WCAG AA against
+  the badge's white text. Single hue family (red-rose) signals
+  NodeShape/PropertyShape kinship; brightness gradient reads as
+  parent-child. Distinct from the existing purple/cyan/amber/green
+  badges under common colour-vision deficiencies; descriptive uppercase
+  badge text labels (`"NODE SHAPE"`, `"PROPERTY SHAPE"`) carry the
+  category meaning regardless of perceived colour
+- `BaseRenderer.render_shape()` abstract method, implemented in all three
+  renderers (HTML / Markdown / JSON)
+- Comprehensive test coverage: 44 new tests in 7 classes covering shape
+  extraction, multi-kind handling, all three renderers, JSON schema, search
+  index integration, the `include_shapes` toggle, routing, and the
+  `EntityKind` enum contract
+
+### Changed
+- **Breaking change to JSON output**: SHACL shapes used to appear in the
+  `instances` array of `index.json` and `ontology.json` because the extractor
+  didn't filter them out. They now have their own top-level `shapes` array,
+  and shapes have been removed from `instances`. JSON consumers updating from
+  v0.4.x must read both arrays to see all entities. The new top-level
+  `shapes` array contains complete `ShapeInfo` JSON for each shape (single-page
+  mode) or summary entries (index mode) — see `docs/user_guides/DOCS_GUIDE.md`
+  for the full schema. The `statistics` object also gains a `shapes` count (#60)
+- All entity entries in JSON output now include a `kinds` array carrying the
+  full multi-kind list. Existing fields are unchanged. This is additive —
+  consumers that ignore unknown fields are unaffected (#60)
 
 ### Contributors
 - Thanks to @otellomaria for reporting #59 with a clean reproducer
