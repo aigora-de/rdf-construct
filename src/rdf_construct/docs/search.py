@@ -4,25 +4,43 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from rdf_construct.docs.config import DocsConfig
-    from rdf_construct.docs.extractors import ClassInfo, ExtractedEntities, InstanceInfo, PropertyInfo
+    from rdf_construct.docs.extractors import (
+        ClassInfo,
+        ExtractedEntities,
+        InstanceInfo,
+        PropertyInfo,
+        ShapeInfo,
+    )
 
 
 @dataclass
 class SearchEntry:
-    """A single entry in the search index."""
+    """A single entry in the search index.
+
+    The ``entity_type`` field is the primary discriminator (used by
+    the client-side search to choose a badge colour); ``kinds`` is the
+    full multi-kind list, mainly there so JSON consumers and future
+    smarter search UIs can distinguish, e.g., a NodeShape from a
+    named PropertyShape, both of which share ``entity_type='shape'``.
+
+    Adding ``kinds`` to the index is additive — the existing
+    ``assets/search.js`` ignores fields it doesn't know about, so
+    existing search behaviour is unchanged.
+    """
 
     uri: str
     qname: str
-    entity_type: str  # class, object_property, datatype_property, instance
+    entity_type: str  # class, object_property, datatype_property, instance, shape
     label: str
     keywords: list[str]
     url: str
+    kinds: list[str] = field(default_factory=list)
 
 
 def extract_keywords(text: str | None) -> list[str]:
@@ -105,6 +123,7 @@ def class_to_search_entry(
         label=class_info.label or class_info.qname,
         keywords=list(set(keywords)),
         url=entity_to_url(class_info.qname, "class", config),
+        kinds=[str(k) for k in class_info.kinds],
     )
 
 
@@ -157,6 +176,7 @@ def property_to_search_entry(
         label=prop_info.label or prop_info.qname,
         keywords=list(set(keywords)),
         url=entity_to_url(prop_info.qname, entity_type, config),
+        kinds=[str(k) for k in prop_info.kinds],
     )
 
 
@@ -207,6 +227,68 @@ def instance_to_search_entry(
         label=instance_info.label or instance_info.qname,
         keywords=list(set(keywords)),
         url=entity_to_url(instance_info.qname, "instance", config),
+        kinds=[str(k) for k in instance_info.kinds],
+    )
+
+
+def shape_to_search_entry(
+    shape_info: "ShapeInfo",
+    config: "DocsConfig",
+) -> SearchEntry:
+    """Convert a ShapeInfo to a SearchEntry.
+
+    Indexes target class names alongside the shape's own qname/label
+    so a search for the underlying class also surfaces the shape that
+    constrains it. The full ``kinds`` list is preserved so future
+    smarter search UIs can distinguish NodeShape from named
+    PropertyShape — currently both share ``entity_type='shape'``.
+
+    Args:
+        shape_info: Shape information.
+        config: Documentation configuration.
+
+    Returns:
+        SearchEntry for the shape.
+    """
+    keywords = []
+
+    # QName parts
+    if ":" in shape_info.qname:
+        prefix, local = shape_info.qname.split(":", 1)
+        keywords.extend(extract_keywords(local))
+        keywords.append(prefix.lower())
+
+    # Label and definition
+    if shape_info.label:
+        keywords.extend(extract_keywords(shape_info.label))
+    if shape_info.definition:
+        keywords.extend(extract_keywords(shape_info.definition))
+
+    # Each kind as a keyword so a literal search for "node_shape" works
+    for k in shape_info.kinds:
+        keywords.append(str(k))
+    # Also add the human-friendly form so searches for "shape" or
+    # "node shape" both match.
+    keywords.append("shape")
+
+    # Target class names as keywords — searching for the constrained
+    # class should surface its shape.
+    for uri in shape_info.target_classes:
+        uri_str = str(uri)
+        if "#" in uri_str:
+            keywords.extend(extract_keywords(uri_str.split("#")[-1]))
+        elif "/" in uri_str:
+            keywords.extend(extract_keywords(uri_str.split("/")[-1]))
+
+    from .config import entity_to_url
+    return SearchEntry(
+        uri=str(shape_info.uri),
+        qname=shape_info.qname,
+        entity_type="shape",
+        label=shape_info.label or shape_info.qname,
+        keywords=list(set(keywords)),
+        url=entity_to_url(shape_info.qname, "shape", config),
+        kinds=[str(k) for k in shape_info.kinds],
     )
 
 
@@ -247,6 +329,11 @@ def generate_search_index(
     if config.include_instances:
         for instance_info in entities.instances:
             entries.append(instance_to_search_entry(instance_info, config))
+
+    # Shapes (#60)
+    if config.include_shapes:
+        for shape_info in entities.shapes:
+            entries.append(shape_to_search_entry(shape_info, config))
 
     return entries
 
