@@ -136,6 +136,16 @@ class DocsGenerator:
                     result.files_created.append(instance_path)
                     result.instances_count += 1
 
+            # SHACL shapes (#60). NodeShapes and named PropertyShapes
+            # both go through render_shape — the kind badges differentiate
+            # them on the page. Blank-node PropertyShapes render inline
+            # on their parent NodeShape's page and do not iterate here.
+            if self.config.include_shapes:
+                for shape_info in entities.shapes:
+                    shape_path = self.renderer.render_shape(shape_info, entities)
+                    result.files_created.append(shape_path)
+                    result.shapes_count += 1
+
             # Namespace page
             namespace_path = self.renderer.render_namespaces(entities)
             result.files_created.append(namespace_path)
@@ -202,6 +212,7 @@ class GenerationResult:
         self.classes_count = 0
         self.properties_count = 0
         self.instances_count = 0
+        self.shapes_count = 0
 
     @property
     def total_pages(self) -> int:
@@ -210,12 +221,15 @@ class GenerationResult:
 
     def __str__(self) -> str:
         """Get a summary string."""
-        return (
-            f"Generated {self.total_pages} files to {self.output_dir}/\n"
-            f"  Classes: {self.classes_count}\n"
-            f"  Properties: {self.properties_count}\n"
-            f"  Instances: {self.instances_count}"
-        )
+        lines = [
+            f"Generated {self.total_pages} files to {self.output_dir}/",
+            f"  Classes: {self.classes_count}",
+            f"  Properties: {self.properties_count}",
+            f"  Instances: {self.instances_count}",
+        ]
+        if self.shapes_count > 0:
+            lines.append(f"  Shapes: {self.shapes_count}")
+        return "\n".join(lines)
 
 
 # Public interface from this module
