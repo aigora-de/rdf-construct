@@ -1,0 +1,206 @@
+{% extends "base.html.jinja" %}
+
+{% block title %}{{ shape_info.label or shape_info.qname }} - {{ ontology.title or "Documentation" }}{% endblock %}
+
+{# Render a constraint table for a single PropertyShape (inline blank-node
+   or top-level named). Shows only the first-class constraints that are
+   actually populated; falls back to a generic key-value table for any
+   long-tail SHACL predicates in `other_constraints`. #}
+{% macro render_property_shape(ps, classes, properties) %}
+<table class="property-shape-constraints">
+    <tbody>
+        {% if ps.path %}
+        <tr><th>Path</th><td>
+            {% set found = namespace(value=false) %}
+            {% for p in properties %}
+                {% if p.uri|string == ps.path|string %}
+                <a href="{{ p.qname | entity_url(p.property_type + '_property') }}">{{ p.label or p.qname }}</a>
+                {% set found.value = true %}
+                {% endif %}
+            {% endfor %}
+            {% if not found.value %}<code>{{ ps.path }}</code>{% endif %}
+        </td></tr>
+        {% endif %}
+        {% if ps.name %}<tr><th>Name</th><td>{{ ps.name }}</td></tr>{% endif %}
+        {% if ps.description %}<tr><th>Description</th><td>{{ ps.description }}</td></tr>{% endif %}
+        {% if ps.datatype %}
+        <tr><th>Datatype</th><td><code>{{ ps.datatype }}</code></td></tr>
+        {% endif %}
+        {% if ps.class_ %}
+        <tr><th>Class</th><td>
+            {% set found = namespace(value=false) %}
+            {% for c in classes %}
+                {% if c.uri|string == ps.class_|string %}
+                <a href="{{ c.qname | entity_url('class') }}">{{ c.label or c.qname }}</a>
+                {% set found.value = true %}
+                {% endif %}
+            {% endfor %}
+            {% if not found.value %}<code>{{ ps.class_ }}</code>{% endif %}
+        </td></tr>
+        {% endif %}
+        {% if ps.node_kind %}<tr><th>Node Kind</th><td><code>{{ ps.node_kind }}</code></td></tr>{% endif %}
+        {% if ps.min_count is not none %}<tr><th>Min Count</th><td>{{ ps.min_count }}</td></tr>{% endif %}
+        {% if ps.max_count is not none %}<tr><th>Max Count</th><td>{{ ps.max_count }}</td></tr>{% endif %}
+        {% if ps.min_length is not none %}<tr><th>Min Length</th><td>{{ ps.min_length }}</td></tr>{% endif %}
+        {% if ps.max_length is not none %}<tr><th>Max Length</th><td>{{ ps.max_length }}</td></tr>{% endif %}
+        {% if ps.min_inclusive is not none %}<tr><th>Min Inclusive</th><td>{{ ps.min_inclusive }}</td></tr>{% endif %}
+        {% if ps.max_inclusive is not none %}<tr><th>Max Inclusive</th><td>{{ ps.max_inclusive }}</td></tr>{% endif %}
+        {% if ps.pattern %}<tr><th>Pattern</th><td><code>{{ ps.pattern }}</code></td></tr>{% endif %}
+        {% if ps.has_value is not none %}
+        <tr><th>Has Value</th><td><code>{{ ps.has_value }}</code></td></tr>
+        {% endif %}
+        {% if ps.in_values %}
+        <tr><th>In</th><td>
+            {% for v in ps.in_values %}<code>{{ v }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+        </td></tr>
+        {% endif %}
+        {% for pred, vals in ps.other_constraints.items() %}
+        <tr><th><code>{{ pred }}</code></th><td>
+            {% for v in vals %}<code>{{ v }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+        </td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endmacro %}
+
+{% block content %}
+<article class="entity-card">
+    <h1>
+        {{ shape_info.label or shape_info.qname }}
+        {% for kind in shape_info.kinds %}
+        <span class="entity-type {{ kind }}">{{ kind | replace('_', ' ') }}</span>
+        {% endfor %}
+    </h1>
+    <p class="uri">{{ shape_info.uri }}</p>
+
+    {% if shape_info.definition %}
+    <p class="definition">{{ shape_info.definition }}</p>
+    {% endif %}
+
+    {# Targets: targetClass, targetNode, targetSubjectsOf, targetObjectsOf #}
+    {% if shape_info.target_classes or shape_info.target_nodes
+        or shape_info.target_subjects_of or shape_info.target_objects_of %}
+    <section class="section">
+        <h3>Targets</h3>
+        <table>
+            <tbody>
+                {% if shape_info.target_classes %}
+                <tr><th>Target Class</th><td>
+                    {% for uri in shape_info.target_classes %}
+                    {% set found = namespace(value=false) %}
+                    {% for c in classes %}
+                        {% if c.uri|string == uri|string %}
+                        <a href="{{ c.qname | entity_url('class') }}">{{ c.label or c.qname }}</a>
+                        {% set found.value = true %}
+                        {% endif %}
+                    {% endfor %}
+                    {% if not found.value %}<code>{{ uri }}</code>{% endif %}
+                    {% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                </td></tr>
+                {% endif %}
+                {% if shape_info.target_nodes %}
+                <tr><th>Target Node</th><td>
+                    {% for uri in shape_info.target_nodes %}<code>{{ uri }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+                </td></tr>
+                {% endif %}
+                {% if shape_info.target_subjects_of %}
+                <tr><th>Target Subjects Of</th><td>
+                    {% for uri in shape_info.target_subjects_of %}<code>{{ uri }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+                </td></tr>
+                {% endif %}
+                {% if shape_info.target_objects_of %}
+                <tr><th>Target Objects Of</th><td>
+                    {% for uri in shape_info.target_objects_of %}<code>{{ uri }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+                </td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+
+    {# NodeShape structural fields #}
+    {% if 'node_shape' in shape_info.kinds %}
+        {% if shape_info.closed or shape_info.ignored_properties %}
+        <section class="section">
+            <h3>Structure</h3>
+            <table>
+                <tbody>
+                    {% if shape_info.closed %}
+                    <tr><th>Closed</th><td>true</td></tr>
+                    {% endif %}
+                    {% if shape_info.ignored_properties %}
+                    <tr><th>Ignored Properties</th><td>
+                        {% for uri in shape_info.ignored_properties %}<code>{{ uri }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+                    </td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </section>
+        {% endif %}
+
+        {% if shape_info.properties %}
+        <section class="section">
+            <h3>Property Constraints</h3>
+            {% for ps in shape_info.properties %}
+            <div class="property-shape">
+                <h4>
+                    {% if ps.is_blank %}
+                        {% if ps.path %}<code>{{ ps.path }}</code>{% else %}(blank-node constraint){% endif %}
+                    {% else %}
+                        <a href="{{ ps.qname | entity_url('shape') }}">{{ ps.name or ps.qname }}</a>
+                        <span class="entity-type property_shape">property shape</span>
+                    {% endif %}
+                </h4>
+                {{ render_property_shape(ps, classes, object_properties + datatype_properties + annotation_properties) }}
+            </div>
+            {% endfor %}
+        </section>
+        {% endif %}
+    {% endif %}
+
+    {# Top-level PropertyShape constraints (when this shape itself is a PropertyShape) #}
+    {% if 'property_shape' in shape_info.kinds and shape_info.property_shape %}
+    <section class="section">
+        <h3>Constraints</h3>
+        {{ render_property_shape(shape_info.property_shape, classes, object_properties + datatype_properties + annotation_properties) }}
+    </section>
+    {% endif %}
+
+    {# Generic fallback for any non-first-class SHACL predicates at the top level #}
+    {% if shape_info.other_constraints %}
+    <section class="section">
+        <h3>Other Constraints</h3>
+        <table>
+            <thead><tr><th>Predicate</th><th>Value</th></tr></thead>
+            <tbody>
+                {% for pred, vals in shape_info.other_constraints.items() %}
+                {% for v in vals %}
+                <tr><td><code>{{ pred }}</code></td><td><code>{{ v }}</code></td></tr>
+                {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+
+    {% if shape_info.annotations %}
+    <section class="section">
+        <h3>Annotations</h3>
+        <table>
+            <thead><tr><th>Property</th><th>Value</th></tr></thead>
+            <tbody>
+                {% for name, values in shape_info.annotations.items() %}
+                {% for value in values %}
+                <tr>
+                    <td><code>{{ name }}</code></td>
+                    <td>{{ value }}</td>
+                </tr>
+                {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+</article>
+{% endblock %}

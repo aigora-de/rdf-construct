@@ -12,6 +12,9 @@
         {% if annotation_properties %}
         <li><a href="#annotation-properties">Annotation Properties</a></li>
         {% endif %}
+        {% if shapes and config.include_shapes %}
+        <li><a href="#shapes">Shapes</a></li>
+        {% endif %}
         {% if instances and config.include_instances %}
         <li><a href="#instances">Instances</a></li>
         {% endif %}
@@ -28,6 +31,12 @@
         <div class="number">{{ object_properties | length + datatype_properties | length }}</div>
         <div class="label">Properties</div>
     </div>
+    {% if shapes and config.include_shapes %}
+    <div class="stat-card">
+        <div class="number">{{ shapes | length }}</div>
+        <div class="label">Shapes</div>
+    </div>
+    {% endif %}
     {% if instances %}
     <div class="stat-card">
         <div class="number">{{ instances | length }}</div>
@@ -119,6 +128,36 @@
         <p class="uri">{{ prop.uri }}</p>
         {% if prop.definition %}
         <p class="definition">{{ prop.definition }}</p>
+        {% endif %}
+    </article>
+    {% endfor %}
+</section>
+{% endif %}
+
+{% if shapes and config.include_shapes %}
+<section id="shapes">
+    <h2>Shapes</h2>
+    {% for shape in shapes %}
+    <article class="entity-card" id="shape-{{ shape.qname | qname_local }}">
+        <h3>
+            {{ shape.label or shape.qname }}
+            {% for kind in shape.kinds %}
+            {% if kind != 'shape' %}
+            <span class="entity-type {{ kind }}">{{ kind | replace('_', ' ') }}</span>
+            {% endif %}
+            {% endfor %}
+        </h3>
+        <p class="uri">{{ shape.uri }}</p>
+        {% if shape.definition %}
+        <p class="definition">{{ shape.definition }}</p>
+        {% endif %}
+        {% if shape.target_classes %}
+        <p><strong>Target classes:</strong>
+        {% for uri in shape.target_classes %}<code>{{ uri }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+        </p>
+        {% endif %}
+        {% if 'node_shape' in shape.kinds and shape.properties %}
+        <p><strong>Property constraints:</strong> {{ shape.properties | length }}</p>
         {% endif %}
     </article>
     {% endfor %}

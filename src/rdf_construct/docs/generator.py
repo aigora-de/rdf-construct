@@ -303,6 +303,27 @@ class BaseRenderer:
         """
         raise NotImplementedError
 
+    def render_shape(
+        self,
+        shape_info: "ShapeInfo",
+        entities: ExtractedEntities,
+    ) -> Path:
+        """Render a SHACL shape documentation page.
+
+        Renders both NodeShapes and named PropertyShapes; the kind
+        badges on the page distinguish them. Inline (blank-node)
+        PropertyShapes are rendered within their parent NodeShape and
+        do not get standalone pages.
+
+        Args:
+            shape_info: Shape to render.
+            entities: All extracted entities (for cross-references).
+
+        Returns:
+            Path to the rendered file.
+        """
+        raise NotImplementedError
+
     def render_namespaces(self, entities: ExtractedEntities) -> Path:
         """Render the namespace reference page.
 

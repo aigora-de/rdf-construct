@@ -12,6 +12,12 @@
         <div class="number">{{ total_properties }}</div>
         <div class="label">Properties</div>
     </div>
+    {% if shapes and config.include_shapes %}
+    <div class="stat-card">
+        <div class="number">{{ shapes | length }}</div>
+        <div class="label">Shapes</div>
+    </div>
+    {% endif %}
     {% if instances %}
     <div class="stat-card">
         <div class="number">{{ total_instances }}</div>
@@ -86,6 +92,29 @@
                 {{ prop.label or prop.qname }}
             </a>
             <span class="entity-type annotation">Annotation</span>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+{% if shapes and config.include_shapes %}
+<section class="section">
+    <h2>Shapes</h2>
+    <ul class="entity-list">
+        {% for shape in shapes %}
+        <li>
+            <a href="{{ shape.qname | entity_url('shape') }}">
+                {{ shape.label or shape.qname }}
+            </a>
+            {% for kind in shape.kinds %}
+            {% if kind != 'shape' %}
+            <span class="entity-type {{ kind }}">{{ kind | replace('_', ' ') }}</span>
+            {% endif %}
+            {% endfor %}
+            {% if shape.definition %}
+            <span class="definition">— {{ shape.definition[:80] }}{% if shape.definition|length > 80 %}...{% endif %}</span>
+            {% endif %}
         </li>
         {% endfor %}
     </ul>
