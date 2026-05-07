@@ -210,5 +210,5 @@ level: standard
 #   orphan-class: warning
 
 # Available rules:
-# {chr(10).join(f'#   - {r}' for r in known_rules)}
+{chr(10).join(f'#   - {r}' for r in known_rules)}
 """
