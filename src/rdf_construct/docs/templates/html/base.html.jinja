@@ -1,10 +1,16 @@
+{# `link_root` resolves to `config.base_url` when explicitly set (e.g. for a
+   hosted deployment under a known prefix), otherwise to `relative_root` —
+   a per-page value like "." or ".." or "../.." computed by the renderer so
+   that layout assets work regardless of the page's depth in the output tree
+   (file://, sub-paths, GitHub Pages project sites). See issue #59. #}
+{% set link_root = config.base_url if config.base_url else (relative_root or ".") %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ ontology.title or "Ontology Documentation" }}{% endblock %}</title>
-    <link rel="stylesheet" href="{{ config.base_url }}/assets/style.css">
+    <link rel="stylesheet" href="{{ link_root }}/assets/style.css">
     {% block head %}{% endblock %}
 </head>
 <body>
@@ -16,9 +22,9 @@
     </header>
 
     <nav class="nav">
-        <a href="{{ config.base_url }}/index.html">Index</a>
-        <a href="{{ config.base_url }}/hierarchy.html">Hierarchy</a>
-        <a href="{{ config.base_url }}/namespaces.html">Namespaces</a>
+        <a href="{{ link_root }}/index.html">Index</a>
+        <a href="{{ link_root }}/hierarchy.html">Hierarchy</a>
+        <a href="{{ link_root }}/namespaces.html">Namespaces</a>
     </nav>
 
     {% if config.include_search %}
@@ -37,7 +43,7 @@
     </footer>
 
     {% if config.include_search %}
-    <script src="{{ config.base_url }}/assets/search.js"></script>
+    <script src="{{ link_root }}/assets/search.js"></script>
     {% endif %}
     {% block scripts %}{% endblock %}
 </body>
