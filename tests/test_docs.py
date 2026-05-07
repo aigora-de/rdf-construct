@@ -16,7 +16,12 @@ from rdf_construct.docs import (
     extract_all,
     generate_docs,
 )
-from rdf_construct.docs.config import entity_to_filename, entity_to_path
+from rdf_construct.docs.config import (
+    entity_to_filename,
+    entity_to_path,
+    entity_to_url,
+    relative_url_prefix,
+)
 from rdf_construct.docs.search import extract_keywords, generate_search_index
 
 
@@ -453,3 +458,195 @@ class TestEdgeCases:
         # Should not crash
         result = generator.generate(g)
         assert result.classes_count == 2
+
+
+class TestPathResolution:
+    """Tests for HTML path resolution across the docs output tree.
+
+    Regression tests for issue #59: with the default empty ``base_url``,
+    generated HTML used leading-slash references (``/assets/style.css``,
+    ``/index.html``, …) that resolve against the filesystem or web root
+    rather than the docs directory, breaking ``file://`` browsing and
+    sub-path hosting (GitHub Pages project sites, etc.).
+    """
+
+    def test_relative_url_prefix_top_level(self):
+        """A page at the root has prefix '.'."""
+        assert relative_url_prefix(Path("index.html")) == "."
+        assert relative_url_prefix("hierarchy.html") == "."
+
+    def test_relative_url_prefix_one_level_deep(self):
+        """A page in a sub-folder has prefix '..'."""
+        assert relative_url_prefix(Path("classes/Foo.html")) == ".."
+        assert relative_url_prefix(Path("instances/Bar.html")) == ".."
+
+    def test_relative_url_prefix_two_levels_deep(self):
+        """A page two levels deep has prefix '../..'."""
+        assert relative_url_prefix(Path("properties/object/has_foo.html")) == "../.."
+        assert relative_url_prefix(Path("properties/datatype/has_bar.html")) == "../.."
+
+    def test_entity_to_url_default_no_from_path(self):
+        """Without from_path, entity_to_url returns a bare relative path."""
+        config = DocsConfig(format="html")
+        url = entity_to_url("ex:Building", "class", config)
+        assert url == "classes/Building.html"
+
+    def test_entity_to_url_with_from_path_top_level(self):
+        """From a top-level page, entity_to_url returns the bare path."""
+        config = DocsConfig(format="html")
+        url = entity_to_url("ex:Building", "class", config, from_path=Path("index.html"))
+        assert url == "classes/Building.html"
+
+    def test_entity_to_url_with_from_path_sub_folder(self):
+        """From a sub-folder page, entity_to_url returns a '..'-prefixed path."""
+        config = DocsConfig(format="html")
+        url = entity_to_url(
+            "ex:Building",
+            "class",
+            config,
+            from_path=Path("classes/Other.html"),
+        )
+        assert url == "../classes/Building.html"
+
+    def test_entity_to_url_with_from_path_two_levels(self):
+        """From a two-level-deep page, entity_to_url uses '../..'."""
+        config = DocsConfig(format="html")
+        url = entity_to_url(
+            "ex:Building",
+            "class",
+            config,
+            from_path=Path("properties/object/has_part.html"),
+        )
+        assert url == "../../classes/Building.html"
+
+    def test_entity_to_url_base_url_overrides_from_path(self):
+        """When base_url is set, from_path is ignored (existing behaviour)."""
+        config = DocsConfig(format="html", base_url="https://example.com/docs")
+        url = entity_to_url(
+            "ex:Building",
+            "class",
+            config,
+            from_path=Path("classes/Other.html"),
+        )
+        assert url == "https://example.com/docs/classes/Building.html"
+
+    def test_no_leading_slash_paths_in_any_output(
+        self, simple_ontology: Graph, output_dir: Path
+    ):
+        """Default config must not emit leading-slash href/src refs anywhere.
+
+        With ``base_url=""`` (the default), every layout asset and nav link
+        used to be written as ``/assets/style.css``, ``/index.html``, etc.
+        These break under ``file://`` and sub-path hosting. None should
+        appear in any output file.
+        """
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(simple_ontology)
+
+        offenders: list[tuple[Path, str]] = []
+        for html_file in output_dir.rglob("*.html"):
+            for line in html_file.read_text().splitlines():
+                if 'href="/' in line or "src=\"/" in line:
+                    offenders.append((html_file.relative_to(output_dir), line.strip()))
+
+        assert not offenders, (
+            "Found leading-slash href/src references that would break under "
+            "file:// or sub-path hosting:\n" + "\n".join(
+                f"  {p}: {line}" for p, line in offenders
+            )
+        )
+
+    def test_layout_assets_resolve_from_top_level_pages(
+        self, simple_ontology: Graph, output_dir: Path
+    ):
+        """The CSS reference on a top-level page resolves to assets/style.css."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(simple_ontology)
+
+        index_html = (output_dir / "index.html").read_text()
+        assert 'href="./assets/style.css"' in index_html
+        assert 'href="./index.html"' in index_html
+        assert 'href="./hierarchy.html"' in index_html
+        assert 'href="./namespaces.html"' in index_html
+
+    def test_layout_assets_resolve_from_sub_folder_pages(
+        self, simple_ontology: Graph, output_dir: Path
+    ):
+        """A class page at depth 1 references layout assets via '..'."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(simple_ontology)
+
+        dog_html = (output_dir / "classes" / "Dog.html").read_text()
+        assert 'href="../assets/style.css"' in dog_html
+        assert 'href="../index.html"' in dog_html
+        assert 'href="../hierarchy.html"' in dog_html
+        assert 'href="../namespaces.html"' in dog_html
+
+    def test_layout_assets_resolve_from_two_level_pages(
+        self, simple_ontology: Graph, output_dir: Path
+    ):
+        """A property page at depth 2 references layout assets via '../..'."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(simple_ontology)
+
+        prop_html = (output_dir / "properties" / "object" / "hasOwner.html").read_text()
+        assert 'href="../../assets/style.css"' in prop_html
+        assert 'href="../../index.html"' in prop_html
+        assert 'href="../../hierarchy.html"' in prop_html
+        assert 'href="../../namespaces.html"' in prop_html
+
+    def test_entity_links_resolve_to_existing_files(
+        self, simple_ontology: Graph, output_dir: Path
+    ):
+        """Entity-to-entity links must resolve to files that actually exist.
+
+        The bug also affected entity links from sub-folder pages: from
+        ``classes/Dog.html``, the link ``classes/Animal.html`` resolved
+        to ``classes/classes/Animal.html``. Following each ``href`` in
+        every page should land on a real file.
+        """
+        import re
+
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(simple_ontology)
+
+        broken: list[tuple[Path, str, Path]] = []
+        href_pat = re.compile(r'href="([^"#?]+)"')
+        for html_file in output_dir.rglob("*.html"):
+            page_dir = html_file.parent
+            for href in href_pat.findall(html_file.read_text()):
+                # Skip external links and anchors
+                if href.startswith(("http://", "https://", "mailto:", "#")):
+                    continue
+                # Skip script/CSS — covered by separate tests
+                if href.endswith((".css", ".js")):
+                    continue
+                target = (page_dir / href).resolve()
+                if not target.exists():
+                    broken.append(
+                        (html_file.relative_to(output_dir), href, target)
+                    )
+
+        assert not broken, (
+            "Internal links did not resolve to existing files:\n"
+            + "\n".join(f"  {p}: href={h!r} -> {t}" for p, h, t in broken)
+        )
+
+    def test_explicit_base_url_still_used(
+        self, simple_ontology: Graph, output_dir: Path
+    ):
+        """When base_url is set, layout/entity URLs use it (not relative paths)."""
+        config = DocsConfig(
+            output_dir=output_dir,
+            format="html",
+            base_url="https://example.com/docs",
+        )
+        DocsGenerator(config).generate(simple_ontology)
+
+        for rel in ("index.html", "classes/Dog.html"):
+            html = (output_dir / rel).read_text()
+            assert 'href="https://example.com/docs/assets/style.css"' in html
+            assert 'href="https://example.com/docs/index.html"' in html
+            # And no relative-prefix paths on layout assets
+            assert 'href="./assets/style.css"' not in html
+            assert 'href="../assets/style.css"' not in html
