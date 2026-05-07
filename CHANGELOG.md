@@ -21,6 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `building:Building` inside `[ … ]` is rejected by stricter YAML parsers than the one this project
   uses, so the example failed to load for anyone whose toolchain is spec-conformant. The parsed
   data is unchanged
+- `docs` no longer emits leading-slash paths (`/assets/style.css`, `/index.html`, …) for the
+  stylesheet, the navigation tabs and the search script when `base_url` is unset. These
+  resolved against the filesystem or web root rather than the docs directory, so the generated
+  documentation was unstyled and unnavigable under `file://` and under any sub-path host
+  (GitHub Pages project sites among them). The same root cause also broke entity-to-entity
+  links from sub-folder pages, where a bare `classes/Animal.html` resolved as
+  `classes/classes/Animal.html` — 62 of the 157 broken references in a 19-page sample. Layout
+  assets and entity links are now resolved relative to the page being rendered (`./` at the
+  root, `../` under `classes/` and `instances/`, `../../` under `properties/object/` and its
+  siblings); an explicitly configured `base_url` still takes precedence and produces the same
+  absolute URLs as before (#59)
 
 ### Added
 - New `other_props` selector for properties whose kind is not implied by their declaration —
@@ -30,8 +41,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New `rdf_construct.core.vocab` module holding the class and property type sets in one place,
   so consumers no longer reproduce (and shorten) the list
 
+### Contributors
+- Thanks to @otellomaria for reporting #59 with a clean reproducer
+- Thanks to @algojogacor, @hyldmh and @mayank-dev-15, who each independently diagnosed the same
+  root cause and proposed a fix for it in #67, #68, #70 and #71
+
 **Note:** the equivalent gap in the `docs` command's entity extraction is not addressed here, to
 avoid conflicting with the in-flight entity-taxonomy work in #62.
+
+**Note:** the #59 fix covers the generated HTML only. Two related defects with the same root
+cause remain: `assets/search.js` fetches `search.json` page-relatively and stores root-relative
+result URLs, so the search overlay is inert on any sub-folder page; and the Markdown renderer
+emits the same root-relative entity links, so `classes/Dog.md` → `classes/Mammal.md` resolves as
+`classes/classes/Mammal.md`. Both predate this change.
 
 ## [0.4.7] - 2026-05-07
 
