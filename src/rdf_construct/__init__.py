@@ -4,7 +4,7 @@ Named after the ROM construct from William Gibson's Neuromancer -
 preserved, structured knowledge that can be queried and transformed.
 """
 
-__version__ = "0.4.6"
+__version__ = "0.4.7"
 
 from . import core, uml
 from .cli import cli
