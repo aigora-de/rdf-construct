@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Nothing yet.
 
+## [0.4.7] - 2026-05-07
+
+### Fixed
+- Fixed `lint --init` generating a malformed first line in the "Available rules" comment
+  block: a stray `# ` prefix outside the f-string caused the first rule to render as
+  `# #   - <rule>` while subsequent rules rendered correctly. Cosmetic only — the
+  generated config remained valid YAML — but visually inconsistent (#58)
+
+### Contributors
+- Thanks to @otellomaria for their first contribution to rdf-construct
+
 ## [0.4.6] - 2026-03-27
 
 ### Fixed
@@ -446,18 +457,20 @@ Initial public release.
 
 | Version | Date       | Highlights                                                                                          |
 |---------|------------|-----------------------------------------------------------------------------------------------------|
-| [0.4.6] | 2026-03-27 | Fix invalid Turtle prefix declarations in `order` output |
-| [0.4.5] | 2026-03-17 | Documentation for `cast` command |
-| [0.4.4] | 2026-03-17 | Add `cast` command for pipe-friendly RDF format conversion |
-| [0.4.3] | 2026-03-17 | Fix inline blank node serialisation in `order` output |
-| [0.4.2] | 2026-02-05 | Fix extraneous prefix declarations in order output |
-| [0.4.1] | 2026-01-06 | Fix lint command import collision |
-| [0.4.0] | 2026-01-03 | Add describe command, documentation improvements |
-| [0.3.0] | 2025-12-04 | Add merge/split, refactor, and localise |
+| [0.4.7] | 2026-05-07 | Fix cosmetic glitch in `lint --init` generated config                                               |
+| [0.4.6] | 2026-03-27 | Fix invalid Turtle prefix declarations in `order` output                                            |
+| [0.4.5] | 2026-03-17 | Documentation for `cast` command                                                                    |
+| [0.4.4] | 2026-03-17 | Add `cast` command for pipe-friendly RDF format conversion                                          |
+| [0.4.3] | 2026-03-17 | Fix inline blank node serialisation in `order` output                                               |
+| [0.4.2] | 2026-02-05 | Fix extraneous prefix declarations in order output                                                  |
+| [0.4.1] | 2026-01-06 | Fix lint command import collision                                                                   |
+| [0.4.0] | 2026-01-03 | Add describe command, documentation improvements                                                    |
+| [0.3.0] | 2025-12-04 | Add merge/split, refactor, and localise                                                             |
 | [0.2.0] | 2025-12-03 | Stats, CQ testing, SHACL gen, docs gen, diff, lint, puml2rdf                                        |
 | [0.1.0] | 2025-11-30 | Initial release: ordering, UML generation, styling                                                  |
 
-[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.4.6...HEAD
+[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.4.7...HEAD
+[0.4.7]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.7
 [0.4.6]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.6
 [0.4.5]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.5
 [0.4.4]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.4
