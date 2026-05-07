@@ -21,6 +21,10 @@ class DocsConfig:
         template_dir: Custom template directory (overrides defaults).
         single_page: Generate single-page documentation.
         include_instances: Whether to include instances in output.
+        include_shapes: Whether to include SHACL shapes (NodeShapes and
+            named PropertyShapes) as a first-class entity type. Default
+            True. When False, shapes are excluded entirely from output
+            and from the search index.
         include_imports: List of namespaces to treat as "internal".
         exclude_namespaces: List of namespaces to exclude from output.
         language: Preferred language for labels/definitions.
@@ -39,6 +43,7 @@ class DocsConfig:
     template_dir: Path | None = None
     single_page: bool = False
     include_instances: bool = True
+    include_shapes: bool = True
     include_imports: list[str] = field(default_factory=list)
     exclude_namespaces: list[str] = field(default_factory=list)
     language: str = "en"
@@ -81,6 +86,8 @@ class DocsConfig:
             config.single_page = data["single_page"]
         if "include_instances" in data:
             config.include_instances = data["include_instances"]
+        if "include_shapes" in data:
+            config.include_shapes = data["include_shapes"]
         if "include_imports" in data:
             config.include_imports = data["include_imports"]
         if "exclude_namespaces" in data:
@@ -186,7 +193,11 @@ def entity_to_path(
 
     Args:
         qname: Entity qualified name.
-        entity_type: Type of entity (class, object_property, datatype_property, instance).
+        entity_type: Type of entity. Accepts ``"class"``,
+            ``"object_property"``, ``"datatype_property"``,
+            ``"annotation_property"``, ``"instance"``, or ``"shape"``.
+            ``EntityKind`` members are also accepted directly (they
+            compare equal to their string values).
         config: Documentation configuration.
         extension: File extension (defaults based on format).
 
@@ -202,13 +213,16 @@ def entity_to_path(
 
     filename = entity_to_filename(qname) + extension
 
-    # Organise by entity type
+    # Organise by entity type. NodeShapes and named PropertyShapes share
+    # the shapes/ directory — the kind badge on the page distinguishes
+    # them. See issue #60.
     type_dirs = {
         "class": "classes",
         "object_property": "properties/object",
         "datatype_property": "properties/datatype",
         "annotation_property": "properties/annotation",
         "instance": "instances",
+        "shape": "shapes",
     }
 
     subdir = type_dirs.get(entity_type, "other")
