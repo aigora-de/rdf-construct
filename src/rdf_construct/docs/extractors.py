@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from rdflib import RDF, RDFS, Literal, URIRef
+from rdflib import BNode, RDF, RDFS, Literal, URIRef
 from rdflib.namespace import DCTERMS, OWL, SH, SKOS
 
 if TYPE_CHECKING:
@@ -625,12 +625,18 @@ def extract_instance_info(graph: Graph, uri: URIRef) -> InstanceInfo:
     return info
 
 
-def _walk_rdf_list(graph: Graph, head: URIRef | None) -> list[URIRef | str]:
+def _walk_rdf_list(graph: Graph, head: URIRef | BNode | None) -> list[URIRef | str]:
     """Walk an ``rdf:List`` and return its members as a Python list.
 
     SHACL uses ``rdf:List`` for ``sh:in``, ``sh:ignoredProperties``, and
     similar collection constraints. Returns raw terms (URIRefs preserved
     as URIRef, Literals as ``str``); non-list inputs return empty.
+
+    rdflib represents the list cells as blank nodes by default, so the
+    walker accepts both ``URIRef`` and ``BNode`` as valid list-pointers
+    — earlier versions that only accepted ``URIRef`` silently truncated
+    lists at the first cell because the ``rdf:rest`` pointer is a
+    blank node, not a URI.
 
     Args:
         graph: RDF graph to query.
@@ -640,14 +646,13 @@ def _walk_rdf_list(graph: Graph, head: URIRef | None) -> list[URIRef | str]:
         List of members. Empty if ``head`` is None or rdf:nil.
     """
     members: list[URIRef | str] = []
-    current = head
-    seen: set[URIRef] = set()
+    current: URIRef | BNode | None = head
+    seen: set[URIRef | BNode] = set()
     while current is not None and current != RDF.nil:
         # Cycle protection — malformed lists shouldn't loop forever.
-        if isinstance(current, URIRef):
-            if current in seen:
-                break
-            seen.add(current)
+        if current in seen:
+            break
+        seen.add(current)
         first = next(iter(graph.objects(current, RDF.first)), None)
         if first is not None:
             if isinstance(first, Literal):
@@ -655,7 +660,7 @@ def _walk_rdf_list(graph: Graph, head: URIRef | None) -> list[URIRef | str]:
             elif isinstance(first, URIRef):
                 members.append(first)
         rest = next(iter(graph.objects(current, RDF.rest)), None)
-        current = rest if isinstance(rest, URIRef) else None
+        current = rest if isinstance(rest, (URIRef, BNode)) else None
     return members
 
 
@@ -756,7 +761,7 @@ def extract_property_shape_info(
             elif isinstance(obj, URIRef):
                 info.has_value = obj
         elif pred == SH["in"]:
-            if isinstance(obj, URIRef):
+            if isinstance(obj, (URIRef, BNode)):
                 info.in_values = _walk_rdf_list(graph, obj)
         else:
             # Generic fallback for anything not first-class.
