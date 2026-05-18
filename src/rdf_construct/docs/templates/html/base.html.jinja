@@ -37,7 +37,7 @@
     </footer>
 
     {% if config.include_search %}
-    <script src="{{ config.base_url }}/assets/search.js"></script>
+    <script src="{{ config.base_url }}{{ "/" if config.base_url else "" }}assets/search.js"></script>
     {% endif %}
     {% block scripts %}{% endblock %}
 </body>
