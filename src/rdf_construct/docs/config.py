@@ -89,6 +89,8 @@ class DocsConfig:
             config.language = data["language"]
         if "base_url" in data:
             config.base_url = data["base_url"].rstrip("/")
+            if config.base_url:
+                config.base_url += "/"
         if "logo_path" in data:
             config.logo_path = Path(data["logo_path"])
         if "css_path" in data:
@@ -234,5 +236,5 @@ def entity_to_url(
     url = str(path).replace("\\", "/")  # Ensure forward slashes
 
     if config.base_url:
-        return f"{config.base_url}/{url}"
+        return f"{config.base_url}{url}"
     return url
