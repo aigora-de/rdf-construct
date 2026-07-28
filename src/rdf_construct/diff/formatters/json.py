@@ -80,12 +80,14 @@ def _format_entity_json(entity: EntityChange, graph: Graph | None = None) -> dic
     """Format a single entity for JSON output."""
     result = {
         "uri": str(entity.uri),
+        "uri_curie": _format_uri(entity.uri, graph),
         "label": entity.label,
         "type": entity.entity_type.value,
     }
 
     if entity.superclasses:
         result["superclasses"] = [str(sc) for sc in entity.superclasses]
+        result["superclasses_curie"] = [_format_uri(sc, graph) for sc in entity.superclasses]
 
     return result
 
@@ -99,6 +101,7 @@ def _format_modified_entities_json(
     for entity in entities:
         entity_dict = {
             "uri": str(entity.uri),
+            "uri_curie": _format_uri(entity.uri, graph),
             "label": entity.label,
             "type": entity.entity_type.value,
             "changes": [],

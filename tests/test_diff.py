@@ -395,6 +395,16 @@ class TestFormatters:
         assert data["summary"]["removed"] == 1
         assert data["summary"]["modified"] == 1
         assert "classes" in data["added"]
+        assert "uri_curie" in data["added"]["classes"][0]
+
+    def test_json_format_curies_with_graph(self, sample_diff):
+        """Test JSON output includes CURIE fields for entities when graph is provided."""
+        g = Graph()
+        output = format_json(sample_diff, graph=g)
+        data = json.loads(output)
+
+        assert "uri_curie" in data["added"]["classes"][0]
+        assert "uri_curie" in data["modified"][0]
 
     def test_identical_diff_output(self):
         """Test output for identical graphs."""
