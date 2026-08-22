@@ -7,13 +7,55 @@ from RDF ontologies for use in generating navigable documentation.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import TYPE_CHECKING
 
-from rdflib import RDF, RDFS, Literal, URIRef
-from rdflib.namespace import DCTERMS, OWL, SKOS
+from rdflib import BNode, RDF, RDFS, Literal, URIRef
+from rdflib.namespace import DCTERMS, OWL, SH, SKOS
 
 if TYPE_CHECKING:
     from rdflib import Graph
+
+
+class EntityKind(str, Enum):
+    """Discrete entity kinds for the docs taxonomy.
+
+    Subclassing ``str`` is the pre-3.11 idiom for what 3.11's ``StrEnum``
+    does natively: members compare equal to their string values
+    (``EntityKind.SHAPE == "shape"`` is ``True``), serialise to JSON as
+    plain strings, and work as dict keys interchangeably with strings.
+
+    The ``__str__`` override below restores the 3.10-era behaviour of
+    returning the value (``"shape"``) rather than ``"EntityKind.SHAPE"``
+    — Python 3.11 changed the default for ``str`` mixin enums in a way
+    that breaks f-string and template rendering. Without the override,
+    a Jinja template ``{{ kind }}`` would emit ``"EntityKind.SHAPE"``.
+
+    This is the central registry of kind values across the docs module.
+    Adding a new kind (e.g. for SKOS support in stage 2 of the v0.5.0
+    milestone) should land here first; everything else flows through.
+    See issue #60 panel review for the rationale on the multi-kind
+    data model.
+    """
+
+    # Existing taxonomy
+    CLASS = "class"
+    PROPERTY = "property"
+    OBJECT_PROPERTY = "object_property"
+    DATATYPE_PROPERTY = "datatype_property"
+    ANNOTATION_PROPERTY = "annotation_property"
+    RDF_PROPERTY = "rdf_property"
+    INSTANCE = "instance"
+
+    # SHACL shapes (#60)
+    SHAPE = "shape"
+    NODE_SHAPE = "node_shape"
+    PROPERTY_SHAPE = "property_shape"
+
+    def __str__(self) -> str:
+        # Return the string value so f-strings and Jinja render
+        # "shape" rather than "EntityKind.SHAPE". See class docstring.
+        return self.value
 
 
 # Common annotation predicates for extracting labels and definitions
@@ -36,6 +78,7 @@ class PropertyInfo:
 
     uri: URIRef
     qname: str
+    kinds: list[EntityKind] = field(default_factory=list)
     label: str | None = None
     definition: str | None = None
     property_type: str = "property"  # object, datatype, annotation, rdf
@@ -55,6 +98,7 @@ class ClassInfo:
 
     uri: URIRef
     qname: str
+    kinds: list[EntityKind] = field(default_factory=list)
     label: str | None = None
     definition: str | None = None
     superclasses: list[URIRef] = field(default_factory=list)
@@ -74,6 +118,7 @@ class InstanceInfo:
 
     uri: URIRef
     qname: str
+    kinds: list[EntityKind] = field(default_factory=list)
     label: str | None = None
     definition: str | None = None
     types: list[URIRef] = field(default_factory=list)
@@ -94,6 +139,115 @@ class OntologyInfo:
     imports: list[URIRef] = field(default_factory=list)
     namespaces: dict[str, str] = field(default_factory=dict)
     annotations: dict[str, list[str]] = field(default_factory=dict)
+
+
+# First-class SHACL constraints rendered explicitly by the renderers.
+# Anything not in this list falls back to the generic key-value display
+# in PropertyShapeInfo.other_constraints / ShapeInfo.other_constraints.
+# See issue #60 panel review for the rationale on what's included.
+FIRST_CLASS_SHACL_CONSTRAINTS = frozenset(
+    [
+        SH.path,
+        SH.minCount,
+        SH.maxCount,
+        SH.datatype,
+        SH["class"],  # 'class' is a Python keyword
+        SH.nodeKind,
+        SH["in"],  # 'in' is a Python keyword
+        SH.hasValue,
+        SH.pattern,
+        SH.minLength,
+        SH.maxLength,
+        SH.minInclusive,
+        SH.maxInclusive,
+        SH.targetClass,
+        SH.targetNode,
+        SH.targetSubjectsOf,
+        SH.targetObjectsOf,
+        SH.closed,
+        SH.ignoredProperties,
+        SH.name,
+        SH.description,
+    ]
+)
+
+
+@dataclass
+class PropertyShapeInfo:
+    """Information about a SHACL PropertyShape (named or blank-node).
+
+    PropertyShapes attached to a NodeShape via ``sh:property`` are usually
+    blank nodes — they represent constraints on a single property and have
+    no stable identity outside their parent shape. Named PropertyShapes
+    (with their own URI) can be referenced from multiple NodeShapes and
+    are also rendered as standalone pages — see :class:`ShapeInfo`.
+
+    Constraint values are stored as raw RDF terms (URIRef or Literal) so
+    renderers can format them per-output-format. The 20 first-class
+    constraints (see ``FIRST_CLASS_SHACL_CONSTRAINTS``) are stored in
+    named fields; everything else lands in ``other_constraints`` keyed by
+    the predicate URI for visible-but-plain rendering.
+    """
+
+    # Identity. URI is None for blank-node PropertyShapes.
+    uri: URIRef | None = None
+    qname: str | None = None
+    is_blank: bool = True
+
+    # First-class constraints. Most are at-most-one; sh:in is a list.
+    path: URIRef | None = None
+    name: str | None = None
+    description: str | None = None
+    datatype: URIRef | None = None
+    class_: URIRef | None = None  # sh:class
+    node_kind: URIRef | None = None
+    min_count: int | None = None
+    max_count: int | None = None
+    min_length: int | None = None
+    max_length: int | None = None
+    min_inclusive: str | None = None
+    max_inclusive: str | None = None
+    pattern: str | None = None
+    has_value: URIRef | str | None = None
+    in_values: list[URIRef | str] = field(default_factory=list)
+
+    # Anything not first-class: predicate URI -> list of raw object terms.
+    other_constraints: dict[URIRef, list[URIRef | str]] = field(default_factory=dict)
+
+
+@dataclass
+class ShapeInfo:
+    """Information about a SHACL shape (NodeShape or named PropertyShape).
+
+    Captures top-level shape metadata, target declarations, and any
+    PropertyShape arcs (``sh:property``). PropertyShape arcs are
+    extracted as :class:`PropertyShapeInfo` instances so renderers can
+    show them inline on the parent NodeShape's page.
+    """
+
+    uri: URIRef
+    qname: str
+    kinds: list[EntityKind] = field(default_factory=list)  # e.g. [SHAPE, NODE_SHAPE]
+    label: str | None = None
+    definition: str | None = None
+
+    # Target declarations
+    target_classes: list[URIRef] = field(default_factory=list)
+    target_nodes: list[URIRef] = field(default_factory=list)
+    target_subjects_of: list[URIRef] = field(default_factory=list)
+    target_objects_of: list[URIRef] = field(default_factory=list)
+
+    # NodeShape-only structural fields
+    closed: bool = False
+    ignored_properties: list[URIRef] = field(default_factory=list)
+    properties: list[PropertyShapeInfo] = field(default_factory=list)
+
+    # When this is itself a PropertyShape, its own constraints
+    property_shape: PropertyShapeInfo | None = None
+
+    # Generic annotations and any unknown SHACL predicates on the shape
+    annotations: dict[str, list[str]] = field(default_factory=dict)
+    other_constraints: dict[URIRef, list[URIRef | str]] = field(default_factory=dict)
 
 
 def get_qname(graph: Graph, uri: URIRef) -> str:
@@ -296,6 +450,7 @@ def extract_class_info(graph: Graph, uri: URIRef) -> ClassInfo:
     info = ClassInfo(
         uri=uri,
         qname=get_qname(graph, uri),
+        kinds=[EntityKind.CLASS],
         label=get_label(graph, uri),
         definition=get_definition(graph, uri),
         annotations=get_annotations(graph, uri),
@@ -374,6 +529,21 @@ def extract_property_info(graph: Graph, uri: URIRef) -> PropertyInfo:
     elif (uri, RDF.type, RDF.Property) in graph:
         info.property_type = "rdf"
 
+    # Kinds: [PROPERTY, <type>_PROPERTY] — base PROPERTY plus the
+    # specific subtype, so renderers can match on either. The string
+    # value of property_type ("object", "datatype", ...) maps to the
+    # corresponding EntityKind member.
+    _PROPERTY_TYPE_TO_KIND = {
+        "object": EntityKind.OBJECT_PROPERTY,
+        "datatype": EntityKind.DATATYPE_PROPERTY,
+        "annotation": EntityKind.ANNOTATION_PROPERTY,
+        "rdf": EntityKind.RDF_PROPERTY,
+    }
+    info.kinds = [EntityKind.PROPERTY]
+    specific = _PROPERTY_TYPE_TO_KIND.get(info.property_type)
+    if specific is not None:
+        info.kinds.append(specific)
+
     # Domain
     for obj in graph.objects(uri, RDFS.domain):
         if isinstance(obj, URIRef):
@@ -422,6 +592,7 @@ def extract_instance_info(graph: Graph, uri: URIRef) -> InstanceInfo:
     info = InstanceInfo(
         uri=uri,
         qname=get_qname(graph, uri),
+        kinds=[EntityKind.INSTANCE],
         label=get_label(graph, uri),
         definition=get_definition(graph, uri),
         annotations=get_annotations(graph, uri),
@@ -452,6 +623,298 @@ def extract_instance_info(graph: Graph, uri: URIRef) -> InstanceInfo:
             info.properties[pred].append(obj)
 
     return info
+
+
+def _walk_rdf_list(graph: Graph, head: URIRef | BNode | None) -> list[URIRef | str]:
+    """Walk an ``rdf:List`` and return its members as a Python list.
+
+    SHACL uses ``rdf:List`` for ``sh:in``, ``sh:ignoredProperties``, and
+    similar collection constraints. Returns raw terms (URIRefs preserved
+    as URIRef, Literals as ``str``); non-list inputs return empty.
+
+    rdflib represents the list cells as blank nodes by default, so the
+    walker accepts both ``URIRef`` and ``BNode`` as valid list-pointers
+    — earlier versions that only accepted ``URIRef`` silently truncated
+    lists at the first cell because the ``rdf:rest`` pointer is a
+    blank node, not a URI.
+
+    Args:
+        graph: RDF graph to query.
+        head: Head of the rdf:List (or None).
+
+    Returns:
+        List of members. Empty if ``head`` is None or rdf:nil.
+    """
+    members: list[URIRef | str] = []
+    current: URIRef | BNode | None = head
+    seen: set[URIRef | BNode] = set()
+    while current is not None and current != RDF.nil:
+        # Cycle protection — malformed lists shouldn't loop forever.
+        if current in seen:
+            break
+        seen.add(current)
+        first = next(iter(graph.objects(current, RDF.first)), None)
+        if first is not None:
+            if isinstance(first, Literal):
+                members.append(str(first))
+            elif isinstance(first, URIRef):
+                members.append(first)
+        rest = next(iter(graph.objects(current, RDF.rest)), None)
+        current = rest if isinstance(rest, (URIRef, BNode)) else None
+    return members
+
+
+def _coerce_int(value: object) -> int | None:
+    """Coerce a Literal-or-string SHACL constraint value to an int.
+
+    SHACL count constraints are typed ``xsd:integer`` but rdflib hands
+    them to us as Literals. We convert through ``str`` -> ``int`` and
+    swallow conversion failures rather than crash on malformed shapes.
+    """
+    if value is None:
+        return None
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def extract_property_shape_info(
+    graph: Graph,
+    node: URIRef | None,
+) -> PropertyShapeInfo:
+    """Extract constraint information from a PropertyShape node.
+
+    Works for both named PropertyShapes (when ``node`` is a URIRef and
+    has its own URI) and blank-node PropertyShapes (when ``node`` is a
+    blank node — represented in rdflib as a ``BNode``). The ``is_blank``
+    field on the result reflects the input shape.
+
+    First-class constraints (see ``FIRST_CLASS_SHACL_CONSTRAINTS``) are
+    stored in named fields; everything else lands in
+    ``other_constraints`` keyed by the predicate URI for visible-but-
+    plain rendering.
+
+    Args:
+        graph: RDF graph to query.
+        node: The PropertyShape node (URIRef or blank node).
+
+    Returns:
+        PropertyShapeInfo with extracted constraints.
+    """
+    info = PropertyShapeInfo()
+
+    if isinstance(node, URIRef):
+        info.uri = node
+        info.qname = get_qname(graph, node)
+        info.is_blank = False
+    else:
+        info.is_blank = True
+
+    if node is None:
+        return info
+
+    for pred, obj in graph.predicate_objects(node):
+        if not isinstance(pred, URIRef):
+            continue
+        # Skip rdf:type — handled at the shape level
+        if pred == RDF.type:
+            continue
+
+        # First-class: dispatch by predicate URI.
+        if pred == SH.path:
+            if isinstance(obj, URIRef):
+                info.path = obj
+        elif pred == SH.name:
+            if isinstance(obj, Literal):
+                info.name = str(obj)
+        elif pred == SH.description:
+            if isinstance(obj, Literal):
+                info.description = str(obj)
+        elif pred == SH.datatype:
+            if isinstance(obj, URIRef):
+                info.datatype = obj
+        elif pred == SH["class"]:
+            if isinstance(obj, URIRef):
+                info.class_ = obj
+        elif pred == SH.nodeKind:
+            if isinstance(obj, URIRef):
+                info.node_kind = obj
+        elif pred == SH.minCount:
+            info.min_count = _coerce_int(obj)
+        elif pred == SH.maxCount:
+            info.max_count = _coerce_int(obj)
+        elif pred == SH.minLength:
+            info.min_length = _coerce_int(obj)
+        elif pred == SH.maxLength:
+            info.max_length = _coerce_int(obj)
+        elif pred == SH.minInclusive:
+            info.min_inclusive = str(obj)
+        elif pred == SH.maxInclusive:
+            info.max_inclusive = str(obj)
+        elif pred == SH.pattern:
+            if isinstance(obj, Literal):
+                info.pattern = str(obj)
+        elif pred == SH.hasValue:
+            if isinstance(obj, Literal):
+                info.has_value = str(obj)
+            elif isinstance(obj, URIRef):
+                info.has_value = obj
+        elif pred == SH["in"]:
+            if isinstance(obj, (URIRef, BNode)):
+                info.in_values = _walk_rdf_list(graph, obj)
+        else:
+            # Generic fallback for anything not first-class.
+            if pred not in info.other_constraints:
+                info.other_constraints[pred] = []
+            if isinstance(obj, Literal):
+                info.other_constraints[pred].append(str(obj))
+            elif isinstance(obj, URIRef):
+                info.other_constraints[pred].append(obj)
+
+    return info
+
+
+def extract_shape_info(graph: Graph, uri: URIRef) -> ShapeInfo:
+    """Extract comprehensive information about a SHACL shape.
+
+    Handles both NodeShapes and named PropertyShapes (distinguished
+    via the ``kinds`` field). For NodeShapes, ``sh:property`` arcs
+    are recursively extracted as :class:`PropertyShapeInfo` entries
+    so renderers can inline them on the shape's page.
+
+    Args:
+        graph: RDF graph to query.
+        uri: Shape URI to extract info for.
+
+    Returns:
+        ShapeInfo with all available metadata.
+    """
+    info = ShapeInfo(
+        uri=uri,
+        qname=get_qname(graph, uri),
+        label=get_label(graph, uri),
+        definition=get_definition(graph, uri),
+        annotations=get_annotations(graph, uri),
+    )
+
+    is_node_shape = (uri, RDF.type, SH.NodeShape) in graph
+    is_property_shape = (uri, RDF.type, SH.PropertyShape) in graph
+
+    info.kinds = [EntityKind.SHAPE]
+    if is_node_shape:
+        info.kinds.append(EntityKind.NODE_SHAPE)
+    if is_property_shape:
+        info.kinds.append(EntityKind.PROPERTY_SHAPE)
+    # If neither (shouldn't happen since the caller only passes shape URIs)
+    # we still mark it as a shape so renderers don't crash on missing kind.
+
+    # Top-level (NodeShape and PropertyShape both can have these)
+    for obj in graph.objects(uri, SH.targetClass):
+        if isinstance(obj, URIRef):
+            info.target_classes.append(obj)
+    for obj in graph.objects(uri, SH.targetNode):
+        if isinstance(obj, URIRef):
+            info.target_nodes.append(obj)
+    for obj in graph.objects(uri, SH.targetSubjectsOf):
+        if isinstance(obj, URIRef):
+            info.target_subjects_of.append(obj)
+    for obj in graph.objects(uri, SH.targetObjectsOf):
+        if isinstance(obj, URIRef):
+            info.target_objects_of.append(obj)
+
+    # NodeShape structural fields
+    if is_node_shape:
+        for obj in graph.objects(uri, SH.closed):
+            if isinstance(obj, Literal):
+                info.closed = bool(obj)
+                break
+        ignored_head = next(iter(graph.objects(uri, SH.ignoredProperties)), None)
+        if ignored_head is not None:
+            members = _walk_rdf_list(graph, ignored_head)
+            info.ignored_properties = [m for m in members if isinstance(m, URIRef)]
+
+        # Property shape arcs — extract each as a PropertyShapeInfo
+        for prop_node in graph.objects(uri, SH.property):
+            # prop_node is typically a blank node; extract_property_shape_info
+            # handles both blank and named cases.
+            info.properties.append(extract_property_shape_info(graph, prop_node))
+
+    # If this shape is itself a PropertyShape, capture its own constraints.
+    if is_property_shape:
+        info.property_shape = extract_property_shape_info(graph, uri)
+
+    # Generic fallback for any non-first-class SHACL predicate at the
+    # top level — same approach as PropertyShapeInfo.other_constraints.
+    handled_at_top_level = {
+        SH.targetClass,
+        SH.targetNode,
+        SH.targetSubjectsOf,
+        SH.targetObjectsOf,
+        SH.closed,
+        SH.ignoredProperties,
+        SH.property,
+        # Also skip things already captured via get_label/get_definition/etc.
+        RDFS.label,
+        RDFS.comment,
+        RDF.type,
+    }
+    for pred, obj in graph.predicate_objects(uri):
+        if not isinstance(pred, URIRef):
+            continue
+        if pred in handled_at_top_level:
+            continue
+        # Only collect predicates in the SHACL namespace as "other constraints";
+        # arbitrary annotations are already captured via get_annotations().
+        if not str(pred).startswith(str(SH)):
+            continue
+        # Skip predicates we capture per-PropertyShape (they shouldn't
+        # appear at the top level of a NodeShape, but PropertyShape-as-shape
+        # captures them via info.property_shape above).
+        if is_property_shape and pred in FIRST_CLASS_SHACL_CONSTRAINTS:
+            continue
+        if pred not in info.other_constraints:
+            info.other_constraints[pred] = []
+        if isinstance(obj, Literal):
+            info.other_constraints[pred].append(str(obj))
+        elif isinstance(obj, URIRef):
+            info.other_constraints[pred].append(obj)
+
+    return info
+
+
+def extract_all_shapes(graph: Graph) -> list[ShapeInfo]:
+    """Extract information for all SHACL shapes in the graph.
+
+    Returns NodeShapes and *named* PropertyShapes. Blank-node
+    PropertyShapes attached to NodeShapes via ``sh:property`` are
+    extracted as part of their parent shape (see
+    :func:`extract_shape_info`) and do not appear as standalone entries.
+
+    Args:
+        graph: RDF graph to query.
+
+    Returns:
+        List of ShapeInfo objects, sorted by qname.
+    """
+    shapes = []
+    seen: set[URIRef] = set()
+
+    # NodeShapes (named only — blank-node NodeShapes are unusual but
+    # would be unreachable in our docs anyway, so we ignore them).
+    for uri in graph.subjects(RDF.type, SH.NodeShape):
+        if isinstance(uri, URIRef) and uri not in seen:
+            seen.add(uri)
+            shapes.append(extract_shape_info(graph, uri))
+
+    # Named PropertyShapes
+    for uri in graph.subjects(RDF.type, SH.PropertyShape):
+        if isinstance(uri, URIRef) and uri not in seen:
+            seen.add(uri)
+            shapes.append(extract_shape_info(graph, uri))
+
+    shapes.sort(key=lambda s: s.qname)
+    return shapes
 
 
 def extract_all_classes(graph: Graph) -> list[ClassInfo]:
@@ -517,7 +980,7 @@ def extract_all_instances(graph: Graph) -> list[InstanceInfo]:
     """Extract information for all instances in the graph.
 
     Instances are entities that have rdf:type but are not themselves
-    classes or properties.
+    classes, properties, or SHACL shapes.
 
     Args:
         graph: RDF graph to query.
@@ -549,10 +1012,25 @@ def extract_all_instances(graph: Graph) -> list[InstanceInfo]:
         if isinstance(uri, URIRef):
             class_uris.add(uri)
 
-    # Find all subjects with rdf:type that aren't classes or properties
+    # Exclude SHACL shapes (#60) — they have their own bucket via
+    # extract_all_shapes(). Without this filter shapes would render as
+    # generic instances. Only excludes URIs (named shapes); blank-node
+    # PropertyShapes never had URIs to begin with so they don't reach
+    # the instance loop.
+    shape_uris: set[URIRef] = set()
+    for shape_type in [SH.NodeShape, SH.PropertyShape]:
+        for uri in graph.subjects(RDF.type, shape_type):
+            if isinstance(uri, URIRef):
+                shape_uris.add(uri)
+
+    # Find all subjects with rdf:type that aren't classes, properties, or shapes
     for subj, _, obj in graph.triples((None, RDF.type, None)):
         if isinstance(subj, URIRef) and subj not in seen:
-            if subj not in class_uris and subj not in property_uris:
+            if (
+                subj not in class_uris
+                and subj not in property_uris
+                and subj not in shape_uris
+            ):
                 seen.add(subj)
                 instances.append(extract_instance_info(graph, subj))
 
@@ -569,6 +1047,7 @@ class ExtractedEntities:
     classes: list[ClassInfo]
     properties: list[PropertyInfo]
     instances: list[InstanceInfo]
+    shapes: list[ShapeInfo] = field(default_factory=list)
 
     @property
     def object_properties(self) -> list[PropertyInfo]:
@@ -585,6 +1064,20 @@ class ExtractedEntities:
         """Get only annotation properties."""
         return [p for p in self.properties if p.property_type == "annotation"]
 
+    @property
+    def node_shapes(self) -> list[ShapeInfo]:
+        """Get only NodeShapes (named only — blank-node NodeShapes are not extracted)."""
+        return [s for s in self.shapes if EntityKind.NODE_SHAPE in s.kinds]
+
+    @property
+    def property_shapes(self) -> list[ShapeInfo]:
+        """Get only named PropertyShapes.
+
+        Blank-node PropertyShapes attached via ``sh:property`` are
+        captured inline on their parent NodeShape and do not appear here.
+        """
+        return [s for s in self.shapes if EntityKind.PROPERTY_SHAPE in s.kinds]
+
 
 def extract_all(graph: Graph) -> ExtractedEntities:
     """Extract all entities from an ontology graph.
@@ -593,11 +1086,13 @@ def extract_all(graph: Graph) -> ExtractedEntities:
         graph: RDF graph to extract from.
 
     Returns:
-        ExtractedEntities containing all classes, properties, and instances.
+        ExtractedEntities containing all classes, properties, instances,
+        and SHACL shapes.
     """
     return ExtractedEntities(
         ontology=extract_ontology_info(graph),
         classes=extract_all_classes(graph),
         properties=extract_all_properties(graph),
         instances=extract_all_instances(graph),
+        shapes=extract_all_shapes(graph),
     )

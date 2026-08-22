@@ -4,15 +4,17 @@ import json
 from pathlib import Path
 
 import pytest
-from rdflib import Graph, Literal, Namespace, RDF, RDFS, URIRef
-from rdflib.namespace import OWL, XSD
+from rdflib import BNode, Graph, Literal, Namespace, RDF, RDFS, URIRef
+from rdflib.namespace import OWL, SH, XSD
 
 from rdf_construct.docs import (
     ClassInfo,
     DocsConfig,
     DocsGenerator,
+    EntityKind,
     ExtractedEntities,
     PropertyInfo,
+    ShapeInfo,
     extract_all,
     generate_docs,
 )
@@ -650,3 +652,630 @@ class TestPathResolution:
             # And no relative-prefix paths on layout assets
             assert 'href="./assets/style.css"' not in html
             assert 'href="../assets/style.css"' not in html
+
+    def test_all_links_resolve_for_every_entity_kind(
+        self, shape_ontology: Graph, output_dir: Path
+    ):
+        """Every page of every entity kind must have resolvable links.
+
+        The sibling tests above run against ``simple_ontology``, which has
+        no SHACL shapes — so they cannot see a render method that skips
+        ``_render_page()`` and leaves its pages on the ``.`` fallback.
+        ``render_shape`` was added that way in #60 and every reference on a
+        ``shapes/`` page broke.
+
+        This runs the same walk over an ontology carrying a class, an
+        instance, a property and both shape kinds, so a new entity type
+        added without going through ``_render_page()`` fails here rather
+        than shipping.
+        """
+        import re
+
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(shape_ontology)
+
+        # The point of the test is lost if the fixture stops producing
+        # pages at depth — assert the tree actually has them.
+        assert list(output_dir.glob("shapes/*.html")), "fixture generated no shape pages"
+
+        broken: list[tuple[Path, str, Path]] = []
+        ref_pat = re.compile(r'(?:href|src)="([^"#?]+)"')
+        for html_file in output_dir.rglob("*.html"):
+            for ref in ref_pat.findall(html_file.read_text()):
+                if ref.startswith(("http://", "https://", "mailto:", "#")):
+                    continue
+                target = (html_file.parent / ref).resolve()
+                if not target.exists():
+                    broken.append((html_file.relative_to(output_dir), ref, target))
+
+        assert not broken, (
+            "References did not resolve to existing files:\n"
+            + "\n".join(f"  {p}: {r!r} -> {t}" for p, r, t in broken)
+        )
+
+
+# ---------------------------------------------------------------------------
+# SHACL shape support — issue #60 / milestone v0.5.0 stage 1
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def shape_ontology() -> Graph:
+    """Create an ontology with SHACL shapes for testing.
+
+    Includes:
+    - A class (Person) and an instance (Alice) — for verifying that
+      shapes don't pollute the instance bucket and for cross-references.
+    - A datatype property (hasName) — referenced by sh:path.
+    - A NodeShape (PersonShape) with one blank-node PropertyShape
+      (constraints on hasName) and one named PropertyShape arc
+      (AgeConstraint).
+    - A named PropertyShape (AgeConstraint) with its own URI and
+      constraints — referenced from PersonShape.property and also
+      standing alone.
+    - A long-tail SHACL constraint (sh:severity) on the blank-node
+      PropertyShape — exercises the generic fallback rendering.
+    """
+    g = Graph()
+    g.bind("ex", EX)
+    g.bind("sh", SH)
+
+    g.add((EX.MyOnt, RDF.type, OWL.Ontology))
+    g.add((EX.MyOnt, RDFS.label, Literal("Shape Demo")))
+
+    # Class + property + instance for context
+    g.add((EX.Person, RDF.type, OWL.Class))
+    g.add((EX.Person, RDFS.label, Literal("Person")))
+    g.add((EX.hasName, RDF.type, OWL.DatatypeProperty))
+    g.add((EX.hasName, RDFS.domain, EX.Person))
+    g.add((EX.hasName, RDFS.range, XSD.string))
+    g.add((EX.hasName, RDFS.label, Literal("has name")))
+    g.add((EX.Alice, RDF.type, EX.Person))
+    g.add((EX.Alice, RDFS.label, Literal("Alice")))
+
+    # NodeShape with blank-node and named PropertyShape arcs
+    g.add((EX.PersonShape, RDF.type, SH.NodeShape))
+    g.add((EX.PersonShape, RDFS.label, Literal("Person Shape")))
+    g.add((EX.PersonShape, RDFS.comment, Literal("Constraints on Person.")))
+    g.add((EX.PersonShape, SH.targetClass, EX.Person))
+    g.add((EX.PersonShape, SH.closed, Literal(False)))
+
+    ps_name = BNode()
+    g.add((EX.PersonShape, SH.property, ps_name))
+    g.add((ps_name, SH.path, EX.hasName))
+    g.add((ps_name, SH.minCount, Literal(1)))
+    g.add((ps_name, SH.maxCount, Literal(1)))
+    g.add((ps_name, SH.datatype, XSD.string))
+    g.add((ps_name, SH.maxLength, Literal(100)))
+    # Long-tail SHACL constraint — exercises the generic fallback
+    g.add((ps_name, SH.severity, SH.Violation))
+
+    # Named PropertyShape, also referenced from PersonShape
+    g.add((EX.AgeConstraint, RDF.type, SH.PropertyShape))
+    g.add((EX.AgeConstraint, RDFS.label, Literal("Age Constraint")))
+    g.add((EX.AgeConstraint, SH.path, EX.hasAge))
+    g.add((EX.AgeConstraint, SH.datatype, XSD.integer))
+    g.add((EX.AgeConstraint, SH.minInclusive, Literal(0)))
+    g.add((EX.AgeConstraint, SH.maxInclusive, Literal(150)))
+    g.add((EX.PersonShape, SH.property, EX.AgeConstraint))
+
+    return g
+
+
+class TestShapeExtraction:
+    """Tests for ShapeInfo extraction (acceptance criteria 1 & 2 of #60)."""
+
+    def test_node_shape_extracted(self, shape_ontology: Graph):
+        """NodeShape is recognised as a shape with the right kinds."""
+        entities = extract_all(shape_ontology)
+        person_shape = next(
+            (s for s in entities.shapes if "PersonShape" in s.qname),
+            None,
+        )
+        assert person_shape is not None
+        assert EntityKind.SHAPE in person_shape.kinds
+        assert EntityKind.NODE_SHAPE in person_shape.kinds
+        assert EntityKind.PROPERTY_SHAPE not in person_shape.kinds
+
+    def test_named_property_shape_extracted(self, shape_ontology: Graph):
+        """Named PropertyShape gets its own ShapeInfo entry."""
+        entities = extract_all(shape_ontology)
+        age_constraint = next(
+            (s for s in entities.shapes if "AgeConstraint" in s.qname),
+            None,
+        )
+        assert age_constraint is not None
+        assert EntityKind.SHAPE in age_constraint.kinds
+        assert EntityKind.PROPERTY_SHAPE in age_constraint.kinds
+        assert EntityKind.NODE_SHAPE not in age_constraint.kinds
+
+    def test_node_shape_target_class(self, shape_ontology: Graph):
+        """NodeShape's sh:targetClass populates target_classes."""
+        entities = extract_all(shape_ontology)
+        person_shape = next(s for s in entities.shapes if "PersonShape" in s.qname)
+        assert len(person_shape.target_classes) == 1
+        assert str(person_shape.target_classes[0]) == str(EX.Person)
+
+    def test_blank_node_property_shape_inline_on_parent(self, shape_ontology: Graph):
+        """Blank-node PropertyShapes appear inline on their parent NodeShape.
+
+        They do NOT get their own standalone ShapeInfo entry — they're
+        only accessible via the parent's `properties` list.
+        """
+        entities = extract_all(shape_ontology)
+        person_shape = next(s for s in entities.shapes if "PersonShape" in s.qname)
+
+        # Should have 2 property arcs: one blank (hasName), one named (AgeConstraint)
+        assert len(person_shape.properties) == 2
+        blank_props = [p for p in person_shape.properties if p.is_blank]
+        named_props = [p for p in person_shape.properties if not p.is_blank]
+        assert len(blank_props) == 1
+        assert len(named_props) == 1
+
+        # The blank one constrains hasName
+        assert str(blank_props[0].path) == str(EX.hasName)
+
+        # And it has no standalone ShapeInfo entry
+        blank_node_shapes = [
+            s for s in entities.shapes
+            if s.uri is None or "hasName" in str(s.uri).lower()
+        ]
+        assert blank_node_shapes == [], "Blank-node PropertyShape leaked as standalone"
+
+    def test_named_property_shape_referenced_inline_too(self, shape_ontology: Graph):
+        """Named PropertyShape appears both standalone and inline on parent."""
+        entities = extract_all(shape_ontology)
+        person_shape = next(s for s in entities.shapes if "PersonShape" in s.qname)
+        # Inline reference on parent
+        named_inline = [p for p in person_shape.properties if not p.is_blank]
+        assert len(named_inline) == 1
+        assert "AgeConstraint" in (named_inline[0].qname or "")
+        # Standalone entry
+        age_constraint = next(s for s in entities.shapes if "AgeConstraint" in s.qname)
+        assert age_constraint is not None
+
+    def test_first_class_constraints_extracted(self, shape_ontology: Graph):
+        """All populated first-class constraints land in named fields."""
+        entities = extract_all(shape_ontology)
+        person_shape = next(s for s in entities.shapes if "PersonShape" in s.qname)
+        blank_ps = next(p for p in person_shape.properties if p.is_blank)
+
+        assert str(blank_ps.path) == str(EX.hasName)
+        assert blank_ps.min_count == 1
+        assert blank_ps.max_count == 1
+        assert str(blank_ps.datatype) == str(XSD.string)
+        assert blank_ps.max_length == 100
+
+    def test_long_tail_constraint_falls_back(self, shape_ontology: Graph):
+        """Unknown SHACL predicates land in other_constraints, not silently dropped."""
+        entities = extract_all(shape_ontology)
+        person_shape = next(s for s in entities.shapes if "PersonShape" in s.qname)
+        blank_ps = next(p for p in person_shape.properties if p.is_blank)
+
+        # sh:severity isn't first-class — should be in other_constraints
+        severity_pred = SH.severity
+        assert severity_pred in blank_ps.other_constraints
+        values = blank_ps.other_constraints[severity_pred]
+        assert len(values) == 1
+
+    def test_shapes_excluded_from_instances(self, shape_ontology: Graph):
+        """Shapes do not appear in the instances list (the central #60 bug)."""
+        entities = extract_all(shape_ontology)
+        instance_qnames = {i.qname for i in entities.instances}
+        # Alice should be there
+        assert "ex:Alice" in instance_qnames
+        # PersonShape and AgeConstraint should NOT
+        assert "ex:PersonShape" not in instance_qnames
+        assert "ex:AgeConstraint" not in instance_qnames
+
+    def test_node_shapes_property_filters_correctly(self, shape_ontology: Graph):
+        """ExtractedEntities.node_shapes returns only NodeShapes."""
+        entities = extract_all(shape_ontology)
+        ns = entities.node_shapes
+        assert len(ns) == 1
+        assert "PersonShape" in ns[0].qname
+
+    def test_property_shapes_property_filters_correctly(self, shape_ontology: Graph):
+        """ExtractedEntities.property_shapes returns only PropertyShapes."""
+        entities = extract_all(shape_ontology)
+        ps = entities.property_shapes
+        assert len(ps) == 1
+        assert "AgeConstraint" in ps[0].qname
+
+    def test_multi_kind_node_shape_also_named_individual(self):
+        """A NodeShape that's also owl:NamedIndividual still appears in shapes.
+
+        This is the canonical multi-kind case the panel review highlighted.
+        Should appear in shapes (priority order places shape ahead of
+        named_individual) — and must NOT also appear in instances.
+        """
+        g = Graph()
+        g.bind("ex", EX)
+        g.add((EX.MyShape, RDF.type, SH.NodeShape))
+        g.add((EX.MyShape, RDF.type, OWL.NamedIndividual))
+
+        entities = extract_all(g)
+        shape_qnames = {s.qname for s in entities.shapes}
+        instance_qnames = {i.qname for i in entities.instances}
+
+        assert "ex:MyShape" in shape_qnames
+        # And shouldn't double-up in instances
+        assert "ex:MyShape" not in instance_qnames
+
+    def test_sh_in_walks_rdf_list(self):
+        """sh:in is an rdf:List — its members should be walked into in_values."""
+        g = Graph()
+        g.bind("ex", EX)
+        g.add((EX.S, RDF.type, SH.PropertyShape))
+        g.add((EX.S, SH.path, EX.colour))
+
+        # rdf:List of three values: red, green, blue
+        list_head = BNode()
+        list_mid = BNode()
+        list_tail = BNode()
+        g.add((EX.S, SH["in"], list_head))
+        g.add((list_head, RDF.first, Literal("red")))
+        g.add((list_head, RDF.rest, list_mid))
+        g.add((list_mid, RDF.first, Literal("green")))
+        g.add((list_mid, RDF.rest, list_tail))
+        g.add((list_tail, RDF.first, Literal("blue")))
+        g.add((list_tail, RDF.rest, RDF.nil))
+
+        entities = extract_all(g)
+        shape = next(s for s in entities.shapes if "S" == s.qname.split(":")[-1])
+        assert shape.property_shape is not None
+        assert shape.property_shape.in_values == ["red", "green", "blue"]
+
+
+class TestShapeRendering:
+    """Tests for shape rendering across HTML, Markdown, and JSON formats.
+
+    Covers acceptance criteria 3, 4, 5, 6, 7 of #60: shape pages
+    appear with kind badges, blank-node and named PropertyShapes
+    render correctly, all 21 first-class constraints render, the
+    generic fallback works, and JSON output uses the new schema.
+    """
+
+    def test_html_renders_shape_pages(self, shape_ontology: Graph, output_dir: Path):
+        """HTML format produces shape pages under shapes/."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        result = DocsGenerator(config).generate(shape_ontology)
+
+        assert result.shapes_count == 2
+        assert (output_dir / "shapes" / "PersonShape.html").exists()
+        assert (output_dir / "shapes" / "AgeConstraint.html").exists()
+
+    def test_markdown_renders_shape_pages(self, shape_ontology: Graph, output_dir: Path):
+        """Markdown format produces shape pages under shapes/."""
+        config = DocsConfig(output_dir=output_dir, format="markdown")
+        result = DocsGenerator(config).generate(shape_ontology)
+
+        assert result.shapes_count == 2
+        assert (output_dir / "shapes" / "PersonShape.md").exists()
+        assert (output_dir / "shapes" / "AgeConstraint.md").exists()
+
+    def test_json_renders_shape_pages(self, shape_ontology: Graph, output_dir: Path):
+        """JSON format produces shape pages under shapes/."""
+        config = DocsConfig(output_dir=output_dir, format="json")
+        result = DocsGenerator(config).generate(shape_ontology)
+
+        assert result.shapes_count == 2
+        assert (output_dir / "shapes" / "PersonShape.json").exists()
+        assert (output_dir / "shapes" / "AgeConstraint.json").exists()
+
+    def test_html_kind_badges(self, shape_ontology: Graph, output_dir: Path):
+        """HTML shape pages include kind badges (node_shape / property_shape)."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(shape_ontology)
+
+        ns_html = (output_dir / "shapes" / "PersonShape.html").read_text()
+        assert "node_shape" in ns_html
+        assert "node shape" in ns_html  # human-readable label
+
+        ps_html = (output_dir / "shapes" / "AgeConstraint.html").read_text()
+        assert "property_shape" in ps_html
+        assert "property shape" in ps_html
+
+    def test_html_blank_property_shape_inline(self, shape_ontology: Graph, output_dir: Path):
+        """Blank-node PropertyShape constraints render inline on parent NodeShape."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(shape_ontology)
+
+        ns_html = (output_dir / "shapes" / "PersonShape.html").read_text()
+        # Constraint table values from the blank-node PropertyShape
+        assert "Min Count" in ns_html
+        assert "Max Length" in ns_html
+        assert "Datatype" in ns_html
+        # Path should resolve to a link (hasName is in the ontology)
+        assert 'href="' in ns_html and "hasName" in ns_html
+
+    def test_html_named_property_shape_linked_inline(self, shape_ontology: Graph, output_dir: Path):
+        """Named PropertyShape inline reference includes a link to its own page."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(shape_ontology)
+
+        ns_html = (output_dir / "shapes" / "PersonShape.html").read_text()
+        # Should link to AgeConstraint.html somewhere in the page
+        assert "AgeConstraint.html" in ns_html
+
+    def test_html_long_tail_constraint_visible(self, shape_ontology: Graph, output_dir: Path):
+        """Long-tail SHACL predicates render in the generic fallback area, not silently dropped."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(shape_ontology)
+
+        ns_html = (output_dir / "shapes" / "PersonShape.html").read_text()
+        # sh:severity is a long-tail constraint — should appear by URI
+        assert "shacl#severity" in ns_html
+
+    def test_html_target_class_cross_reference(self, shape_ontology: Graph, output_dir: Path):
+        """sh:targetClass links to the class's docs page when in the ontology."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(shape_ontology)
+
+        ns_html = (output_dir / "shapes" / "PersonShape.html").read_text()
+        # The target class Person is in the ontology — should link
+        assert 'href="' in ns_html and "Person.html" in ns_html
+
+    def test_markdown_kind_in_frontmatter(self, shape_ontology: Graph, output_dir: Path):
+        """Markdown frontmatter type field carries the most-specific kind."""
+        config = DocsConfig(output_dir=output_dir, format="markdown")
+        DocsGenerator(config).generate(shape_ontology)
+
+        ns_md = (output_dir / "shapes" / "PersonShape.md").read_text()
+        assert "type: node_shape" in ns_md
+
+        ps_md = (output_dir / "shapes" / "AgeConstraint.md").read_text()
+        assert "type: property_shape" in ps_md
+
+    def test_markdown_constraint_table(self, shape_ontology: Graph, output_dir: Path):
+        """Markdown shape pages include a GFM constraint table."""
+        config = DocsConfig(output_dir=output_dir, format="markdown")
+        DocsGenerator(config).generate(shape_ontology)
+
+        ns_md = (output_dir / "shapes" / "PersonShape.md").read_text()
+        # GFM table header
+        assert "| Constraint | Value |" in ns_md
+        assert "| --- | --- |" in ns_md
+        # First-class constraint values
+        assert "Min Count" in ns_md
+        assert "Datatype" in ns_md
+
+    def test_json_breaking_change_shapes_not_in_instances(
+        self, shape_ontology: Graph, output_dir: Path
+    ):
+        """Breaking change: shapes are NOT in the instances array of index.json."""
+        config = DocsConfig(output_dir=output_dir, format="json")
+        DocsGenerator(config).generate(shape_ontology)
+
+        idx = json.loads((output_dir / "index.json").read_text())
+        instance_qnames = {i["qname"] for i in idx["instances"]}
+        assert "ex:PersonShape" not in instance_qnames
+        assert "ex:AgeConstraint" not in instance_qnames
+        # And ex:Alice (a real instance) IS there
+        assert "ex:Alice" in instance_qnames
+
+    def test_json_top_level_shapes_array(self, shape_ontology: Graph, output_dir: Path):
+        """index.json gains a top-level 'shapes' array with shape summaries."""
+        config = DocsConfig(output_dir=output_dir, format="json")
+        DocsGenerator(config).generate(shape_ontology)
+
+        idx = json.loads((output_dir / "index.json").read_text())
+        assert "shapes" in idx
+        shape_qnames = {s["qname"] for s in idx["shapes"]}
+        assert "ex:PersonShape" in shape_qnames
+        assert "ex:AgeConstraint" in shape_qnames
+        # Each summary entry includes kinds
+        for s in idx["shapes"]:
+            assert "kinds" in s
+            assert isinstance(s["kinds"], list)
+
+    def test_json_statistics_includes_shapes(self, shape_ontology: Graph, output_dir: Path):
+        """index.json statistics object includes a 'shapes' count."""
+        config = DocsConfig(output_dir=output_dir, format="json")
+        DocsGenerator(config).generate(shape_ontology)
+
+        idx = json.loads((output_dir / "index.json").read_text())
+        assert idx["statistics"]["shapes"] == 2
+
+    def test_json_full_shape_schema(self, shape_ontology: Graph, output_dir: Path):
+        """A full shape JSON file has the agreed schema keys."""
+        config = DocsConfig(output_dir=output_dir, format="json")
+        DocsGenerator(config).generate(shape_ontology)
+
+        ps_json = json.loads((output_dir / "shapes" / "PersonShape.json").read_text())
+        # Top-level keys
+        for key in [
+            "uri", "qname", "kinds", "label", "definition",
+            "target_classes", "target_nodes", "target_subjects_of", "target_objects_of",
+            "closed", "ignored_properties", "properties", "property_shape",
+            "annotations", "other_constraints",
+        ]:
+            assert key in ps_json, f"shape JSON missing key: {key}"
+
+        # Inline blank PropertyShape schema
+        prop = ps_json["properties"][0]
+        for key in [
+            "uri", "qname", "is_blank", "path", "name", "description",
+            "datatype", "class", "node_kind",
+            "min_count", "max_count", "min_length", "max_length",
+            "min_inclusive", "max_inclusive", "pattern", "has_value",
+            "in_values", "other_constraints",
+        ]:
+            assert key in prop, f"property shape JSON missing key: {key}"
+
+    def test_json_uses_class_not_class_underscore(
+        self, shape_ontology: Graph, output_dir: Path
+    ):
+        """JSON key is 'class' (matches SHACL spec), not 'class_'."""
+        # Add a sh:class constraint to verify
+        g = shape_ontology
+        ps_extra = BNode()
+        g.add((EX.PersonShape, SH.property, ps_extra))
+        g.add((ps_extra, SH.path, EX.knows))
+        g.add((ps_extra, SH["class"], EX.Person))
+
+        config = DocsConfig(output_dir=output_dir, format="json")
+        DocsGenerator(config).generate(g)
+
+        ps_json = json.loads((output_dir / "shapes" / "PersonShape.json").read_text())
+        # Find the property shape that has a class constraint
+        with_class = [p for p in ps_json["properties"] if p.get("class") is not None]
+        assert len(with_class) >= 1
+        assert "class_" not in with_class[0]
+
+
+class TestShapeIndexAndSinglePage:
+    """Tests for shapes appearing in index and single-page outputs."""
+
+    def test_html_index_has_shapes_section(
+        self, shape_ontology: Graph, output_dir: Path
+    ):
+        """HTML index.html includes a Shapes section."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(shape_ontology)
+
+        idx = (output_dir / "index.html").read_text()
+        assert "<h2>Shapes</h2>" in idx
+        assert "PersonShape" in idx or "Person Shape" in idx
+
+    def test_markdown_index_has_shapes_section(
+        self, shape_ontology: Graph, output_dir: Path
+    ):
+        """Markdown index.md includes a Shapes section."""
+        config = DocsConfig(output_dir=output_dir, format="markdown")
+        DocsGenerator(config).generate(shape_ontology)
+
+        idx = (output_dir / "index.md").read_text()
+        assert "## Shapes" in idx
+
+    def test_html_single_page_has_shapes(
+        self, shape_ontology: Graph, output_dir: Path
+    ):
+        """HTML single-page output includes a Shapes section."""
+        config = DocsConfig(output_dir=output_dir, format="html", single_page=True)
+        DocsGenerator(config).generate(shape_ontology)
+
+        text = (output_dir / "index.html").read_text()
+        assert '<section id="shapes">' in text
+
+
+class TestShapeSearchIndex:
+    """Tests for shapes appearing in the search index."""
+
+    def test_shapes_appear_in_search_index(self, shape_ontology: Graph):
+        """Shapes appear with entity_type='shape' and the right kinds."""
+        entities = extract_all(shape_ontology)
+        config = DocsConfig()
+        index = generate_search_index(entities, config)
+
+        shape_entries = [e for e in index if e.entity_type == "shape"]
+        assert len(shape_entries) == 2
+        qnames = {e.qname for e in shape_entries}
+        assert "ex:PersonShape" in qnames
+        assert "ex:AgeConstraint" in qnames
+
+    def test_search_entry_kinds_field_populated(self, shape_ontology: Graph):
+        """SearchEntry.kinds carries the full multi-kind list."""
+        entities = extract_all(shape_ontology)
+        config = DocsConfig()
+        index = generate_search_index(entities, config)
+
+        ns_entry = next(e for e in index if e.qname == "ex:PersonShape")
+        assert "node_shape" in ns_entry.kinds
+        assert "shape" in ns_entry.kinds
+
+    def test_search_target_class_indexed(self, shape_ontology: Graph):
+        """Searching for the target class name surfaces the shape."""
+        entities = extract_all(shape_ontology)
+        config = DocsConfig()
+        index = generate_search_index(entities, config)
+
+        ns_entry = next(e for e in index if e.qname == "ex:PersonShape")
+        # 'person' (from Person target class) should be a keyword
+        assert "person" in ns_entry.keywords
+
+
+class TestIncludeShapesFlag:
+    """Tests for the --include-shapes / config.include_shapes toggle."""
+
+    def test_default_include_shapes_true(self):
+        """include_shapes defaults to True."""
+        assert DocsConfig().include_shapes is True
+
+    def test_include_shapes_from_dict(self):
+        """include_shapes is settable via from_dict (YAML config)."""
+        cfg = DocsConfig.from_dict({"include_shapes": False})
+        assert cfg.include_shapes is False
+
+    def test_include_shapes_false_excludes_pages(
+        self, shape_ontology: Graph, output_dir: Path
+    ):
+        """include_shapes=False produces no shape pages or shapes/ dir."""
+        config = DocsConfig(
+            output_dir=output_dir,
+            format="html",
+            include_shapes=False,
+        )
+        result = DocsGenerator(config).generate(shape_ontology)
+        assert result.shapes_count == 0
+        assert not (output_dir / "shapes").exists()
+
+    def test_include_shapes_false_excludes_from_search(self, shape_ontology: Graph):
+        """include_shapes=False excludes shapes from the search index."""
+        entities = extract_all(shape_ontology)
+        config = DocsConfig(include_shapes=False)
+        index = generate_search_index(entities, config)
+        shape_entries = [e for e in index if e.entity_type == "shape"]
+        assert shape_entries == []
+
+
+class TestShapeRouting:
+    """Tests for shape URL/path generation."""
+
+    def test_shape_path_under_shapes_directory(self):
+        """entity_to_path routes shapes under shapes/."""
+        config = DocsConfig(format="html")
+        path = entity_to_path("ex:PersonShape", "shape", config)
+        assert path == Path("shapes/PersonShape.html")
+
+    def test_shape_path_with_entity_kind_enum(self):
+        """entity_to_path accepts an EntityKind member directly (str-equivalent)."""
+        config = DocsConfig(format="html")
+        path = entity_to_path("ex:PersonShape", EntityKind.SHAPE, config)
+        assert path == Path("shapes/PersonShape.html")
+
+
+class TestEntityKindEnum:
+    """Tests for the EntityKind enum behaviour.
+
+    These verify the str-mixin contract that the rest of the docs
+    module relies on: enum members compare equal to their string
+    values, render as their values in templates and JSON, and survive
+    round-tripping through json.dumps as plain strings.
+    """
+
+    def test_enum_equals_string_value(self):
+        assert EntityKind.SHAPE == "shape"
+        assert "shape" == EntityKind.SHAPE
+        assert EntityKind.NODE_SHAPE == "node_shape"
+
+    def test_str_returns_value(self):
+        """str() returns the enum value (overrides 3.11+ default)."""
+        assert str(EntityKind.SHAPE) == "shape"
+        assert str(EntityKind.NODE_SHAPE) == "node_shape"
+
+    def test_fstring_renders_value(self):
+        """f-strings render the value, not 'EntityKind.SHAPE'."""
+        assert f"{EntityKind.SHAPE}" == "shape"
+
+    def test_json_serialises_as_plain_string(self):
+        """json.dumps emits the value as a plain string."""
+        assert json.dumps(EntityKind.SHAPE) == '"shape"'
+        assert json.dumps([EntityKind.SHAPE, EntityKind.NODE_SHAPE]) == '["shape", "node_shape"]'
+
+    def test_enum_in_string_list(self):
+        """String-based 'in' checks work both ways."""
+        kinds = [EntityKind.SHAPE, EntityKind.NODE_SHAPE]
+        assert "shape" in kinds
+        assert EntityKind.SHAPE in kinds
+        assert "instance" not in kinds

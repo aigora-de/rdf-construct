@@ -84,6 +84,141 @@ The JSON output includes:
 - Hierarchy structure
 - Suitable for building custom documentation UIs
 
+#### JSON schema (v0.5.0+)
+
+The top-level shape of `index.json` is:
+
+```json
+{
+  "ontology": { "uri": "...", "title": "...", ... },
+  "statistics": {
+    "classes": 12,
+    "object_properties": 8,
+    "datatype_properties": 5,
+    "annotation_properties": 2,
+    "instances": 3,
+    "shapes": 4
+  },
+  "classes":               [{ "uri": "...", "qname": "...", "label": "..." }, ...],
+  "object_properties":     [{ "uri": "...", "qname": "...", "label": "..." }, ...],
+  "datatype_properties":   [{ "uri": "...", "qname": "...", "label": "..." }, ...],
+  "annotation_properties": [{ "uri": "...", "qname": "...", "label": "..." }, ...],
+  "instances":             [{ "uri": "...", "qname": "...", "label": "..." }, ...],
+  "shapes":                [{ "uri": "...", "qname": "...", "label": "...",
+                              "kinds": ["shape", "node_shape"] }, ...]
+}
+```
+
+Each entity also gets a full per-page JSON file under its type directory
+(`classes/`, `properties/object/`, `properties/datatype/`,
+`properties/annotation/`, `instances/`, or `shapes/`). Per-page files
+contain the complete entity record including all fields.
+
+> **Breaking change in v0.5.0.** SHACL shapes
+> (`sh:NodeShape` / `sh:PropertyShape` instances) used to appear in the
+> `instances` array because the extractor didn't filter them out.
+> v0.5.0 introduces a top-level `shapes` array; shapes no longer appear
+> in `instances`. JSON consumers updating from v0.4.x must read both
+> arrays. See "SHACL Shapes" below for the per-page schema.
+
+## SHACL Shapes
+
+`rdf-construct docs` recognises SHACL shapes (`sh:NodeShape` and
+`sh:PropertyShape`) as a first-class entity type, alongside Classes,
+Properties, and Instances. NodeShapes and named PropertyShapes get
+their own pages; blank-node PropertyShapes attached to a NodeShape via
+`sh:property` are rendered inline on the parent shape's page.
+
+A NodeShape that is also typed as `owl:NamedIndividual` is treated as a
+shape (it appears in the Shapes section, not in Instances). The
+`kinds` field on each shape entry carries the full multi-kind list so
+JSON consumers can distinguish, for example, an
+`owl:NamedIndividual`-flagged NodeShape from a plain one.
+
+Twenty-one SHACL constraints get explicit per-format rendering:
+
+`sh:path`, `sh:minCount`, `sh:maxCount`, `sh:datatype`, `sh:class`,
+`sh:nodeKind`, `sh:in`, `sh:hasValue`, `sh:pattern`, `sh:minLength`,
+`sh:maxLength`, `sh:minInclusive`, `sh:maxInclusive`, `sh:targetClass`,
+`sh:targetNode`, `sh:targetSubjectsOf`, `sh:targetObjectsOf`,
+`sh:closed`, `sh:ignoredProperties`, `sh:name`, `sh:description`.
+
+Anything outside that list (e.g. `sh:severity`, `sh:order`,
+`sh:qualifiedValueShape`) is rendered in a generic key-value fallback
+so it stays visible without bespoke template work. Logical operators
+(`sh:and` / `sh:or` / `sh:xone`) are deferred — a future release will
+give them dedicated rendering.
+
+### Shape JSON schema
+
+A full shape entry (in per-page files and in the `shapes` array of
+`render_single_page` output) looks like:
+
+```json
+{
+  "uri": "http://example.org/PersonShape",
+  "qname": "ex:PersonShape",
+  "kinds": ["shape", "node_shape"],
+  "label": "Person Shape",
+  "definition": "Constraints on Person instances.",
+  "target_classes":      ["http://example.org/Person"],
+  "target_nodes":        [],
+  "target_subjects_of":  [],
+  "target_objects_of":   [],
+  "closed": false,
+  "ignored_properties": [],
+  "properties": [
+    {
+      "uri": null,
+      "qname": null,
+      "is_blank": true,
+      "path": "http://example.org/hasName",
+      "name": null,
+      "description": null,
+      "datatype": "http://www.w3.org/2001/XMLSchema#string",
+      "class": null,
+      "node_kind": null,
+      "min_count": 1,
+      "max_count": 1,
+      "min_length": null,
+      "max_length": 100,
+      "min_inclusive": null,
+      "max_inclusive": null,
+      "pattern": null,
+      "has_value": null,
+      "in_values": [],
+      "other_constraints": {
+        "http://www.w3.org/ns/shacl#severity": [
+          "http://www.w3.org/ns/shacl#Violation"
+        ]
+      }
+    }
+  ],
+  "property_shape": null,
+  "annotations": {},
+  "other_constraints": {}
+}
+```
+
+Schema notes:
+
+- `kinds` is the multi-kind list (always includes `"shape"`; also
+  contains `"node_shape"` and/or `"property_shape"` as appropriate).
+- `class` (without trailing underscore) is used as the JSON key for
+  the `sh:class` constraint on PropertyShapes — matching the SHACL
+  spec.
+- `in_values` (rather than `in`) avoids the Python keyword issue at
+  the consumer end too.
+- `is_blank` distinguishes blank-node PropertyShapes (no stable URI)
+  from named PropertyShapes (which also appear as standalone entries
+  in the `shapes` array).
+- `property_shape` is non-`null` only when the entity is itself a
+  PropertyShape; for NodeShapes it is `null` and the property
+  constraints live in `properties`.
+- `other_constraints` is a `predicate URI -> [values]` map for any
+  SHACL predicate not in the first-class set. Order is the order in
+  which the predicates were encountered.
+
 ## Command Options
 
 ```bash
@@ -101,6 +236,7 @@ rdf-construct docs [OPTIONS] SOURCES...
 | `--title TEXT` | Override ontology title |
 | `--no-search` | Disable search index (HTML only) |
 | `--no-instances` | Exclude instances from output |
+| `--no-shapes` | Exclude SHACL shapes from output |
 | `--include TYPES` | Include only these types (comma-separated) |
 | `--exclude TYPES` | Exclude these types (comma-separated) |
 
@@ -109,17 +245,17 @@ rdf-construct docs [OPTIONS] SOURCES...
 Filter which entity types appear in the documentation:
 
 ```bash
-# Only classes and properties (no instances)
-poetry run rdf-construct docs ontology.ttl --exclude instances
+# Only classes and properties (no instances or shapes)
+poetry run rdf-construct docs ontology.ttl --exclude instances,shapes
 
 # Only classes
 poetry run rdf-construct docs ontology.ttl --include classes
 
-# Classes and object properties only
-poetry run rdf-construct docs ontology.ttl --include classes,object_properties
+# Classes and shapes only
+poetry run rdf-construct docs ontology.ttl --include classes,shapes
 ```
 
-Valid type names: `classes`, `properties`, `object_properties`, `datatype_properties`, `annotation_properties`, `instances`
+Valid type names: `classes`, `properties`, `object_properties`, `datatype_properties`, `annotation_properties`, `instances`, `shapes`
 
 ## Configuration File
 
@@ -137,6 +273,7 @@ include_object_properties: true
 include_datatype_properties: true
 include_annotation_properties: false
 include_instances: true
+include_shapes: true
 
 include_search: true
 include_hierarchy: true
@@ -191,6 +328,9 @@ All templates receive these context variables:
 | `datatype_properties` | List of datatype PropertyInfo objects |
 | `annotation_properties` | List of annotation PropertyInfo objects |
 | `instances` | List of InstanceInfo objects |
+| `shapes` | List of all ShapeInfo objects (NodeShapes and named PropertyShapes) |
+| `node_shapes` | NodeShapes only (filtered subset of `shapes`) |
+| `property_shapes` | Named PropertyShapes only (filtered subset of `shapes`) |
 | `config` | DocsConfig settings |
 
 Entity-specific templates also receive:
@@ -198,6 +338,7 @@ Entity-specific templates also receive:
 - `class.html.jinja`: `class_info`, `inherited_properties`
 - `property.html.jinja`: `property_info`
 - `instance.html.jinja`: `instance_info`
+- `shape.html.jinja`: `shape_info`
 - `hierarchy.html.jinja`: `hierarchy` (tree structure)
 
 ### Custom Filters

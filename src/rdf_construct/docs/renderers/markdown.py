@@ -7,7 +7,14 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..config import DocsConfig
-    from ..extractors import ClassInfo, ExtractedEntities, InstanceInfo, PropertyInfo
+    from ..extractors import (
+        ClassInfo,
+        ExtractedEntities,
+        InstanceInfo,
+        PropertyInfo,
+        PropertyShapeInfo,
+        ShapeInfo,
+    )
 
 
 class MarkdownRenderer:
@@ -128,6 +135,8 @@ class MarkdownRenderer:
         lines.append(f"- **Object Properties:** {len(entities.object_properties)}")
         lines.append(f"- **Datatype Properties:** {len(entities.datatype_properties)}")
         lines.append(f"- **Annotation Properties:** {len(entities.annotation_properties)}")
+        if entities.shapes and self.config.include_shapes:
+            lines.append(f"- **Shapes:** {len(entities.shapes)}")
         if entities.instances:
             lines.append(f"- **Instances:** {len(entities.instances)}")
         lines.append("")
@@ -168,6 +177,24 @@ class MarkdownRenderer:
             for p in entities.datatype_properties:
                 link = self._entity_link(p.qname, "datatype_property", p.label or p.qname)
                 lines.append(f"- {link}")
+            lines.append("")
+
+        # Shapes section (#60). Listed before instances would be (when
+        # the existing renderer ever gets that section), reflecting the
+        # priority that shapes carry more semantic weight than plain
+        # individuals.
+        if entities.shapes and self.config.include_shapes:
+            lines.append("## Shapes")
+            lines.append("")
+            for s in entities.shapes:
+                link = self._entity_link(s.qname, "shape", s.label or s.qname)
+                kind_tags = " ".join(
+                    f"`{k}`" for k in s.kinds if k != "shape"
+                )
+                if kind_tags:
+                    lines.append(f"- {link} {kind_tags}")
+                else:
+                    lines.append(f"- {link}")
             lines.append("")
 
         content = "\n".join(lines)
@@ -344,6 +371,10 @@ class MarkdownRenderer:
     ) -> str:
         """Convert a URI to a display string, linking if possible.
 
+        Searches classes, properties, instances, and shapes (in that
+        order — most specific match wins). Falls back to the URI's
+        local name in code formatting when no entity matches.
+
         Args:
             uri: URI to convert.
             entities: All entities for lookups.
@@ -359,10 +390,21 @@ class MarkdownRenderer:
             if str(c.uri) == uri_str:
                 return self._entity_link(c.qname, "class", c.label or c.qname)
 
+        # Check if it's a known property
+        for p in entities.properties:
+            if str(p.uri) == uri_str:
+                entity_type = f"{p.property_type}_property"
+                return self._entity_link(p.qname, entity_type, p.label or p.qname)
+
         # Check if it's a known instance
         for i in entities.instances:
             if str(i.uri) == uri_str:
                 return self._entity_link(i.qname, "instance", i.label or i.qname)
+
+        # Check if it's a known shape
+        for s in entities.shapes:
+            if str(s.uri) == uri_str:
+                return self._entity_link(s.qname, "shape", s.label or s.qname)
 
         # Fall back to extracting local name
         if "#" in uri_str:
@@ -518,6 +560,213 @@ class MarkdownRenderer:
         rel_path = entity_to_path(instance_info.qname, "instance", self.config, extension=".md")
         return self._write_file(self.config.output_dir / rel_path, content)
 
+    def _render_property_shape_table(
+        self,
+        ps: "PropertyShapeInfo",
+        entities: "ExtractedEntities",
+    ) -> list[str]:
+        """Render a PropertyShape's constraints as a Markdown table.
+
+        Output is a GFM 2-column table (constraint -> value). Only
+        populated first-class fields are included; long-tail SHACL
+        predicates from ``other_constraints`` get a generic key-value
+        row each so they remain visible without per-predicate template
+        work.
+
+        Returns the lines of the table (no trailing blank line — caller
+        adds spacing).
+        """
+        rows: list[tuple[str, str]] = []
+
+        if ps.path is not None:
+            # Try to resolve to a known property for a clickable link.
+            display = self._uri_to_display(ps.path, entities)
+            rows.append(("Path", display))
+        if ps.name:
+            rows.append(("Name", ps.name))
+        if ps.description:
+            rows.append(("Description", ps.description))
+        if ps.datatype is not None:
+            rows.append(("Datatype", f"`{ps.datatype}`"))
+        if ps.class_ is not None:
+            rows.append(("Class", self._uri_to_display(ps.class_, entities)))
+        if ps.node_kind is not None:
+            rows.append(("Node Kind", f"`{ps.node_kind}`"))
+        if ps.min_count is not None:
+            rows.append(("Min Count", str(ps.min_count)))
+        if ps.max_count is not None:
+            rows.append(("Max Count", str(ps.max_count)))
+        if ps.min_length is not None:
+            rows.append(("Min Length", str(ps.min_length)))
+        if ps.max_length is not None:
+            rows.append(("Max Length", str(ps.max_length)))
+        if ps.min_inclusive is not None:
+            rows.append(("Min Inclusive", str(ps.min_inclusive)))
+        if ps.max_inclusive is not None:
+            rows.append(("Max Inclusive", str(ps.max_inclusive)))
+        if ps.pattern is not None:
+            rows.append(("Pattern", f"`{ps.pattern}`"))
+        if ps.has_value is not None:
+            rows.append(("Has Value", f"`{ps.has_value}`"))
+        if ps.in_values:
+            joined = ", ".join(f"`{v}`" for v in ps.in_values)
+            rows.append(("In", joined))
+
+        # Long-tail fallback
+        for pred, vals in ps.other_constraints.items():
+            joined = ", ".join(f"`{v}`" for v in vals)
+            rows.append((f"`{pred}`", joined))
+
+        if not rows:
+            return []
+
+        lines = ["| Constraint | Value |", "| --- | --- |"]
+        for k, v in rows:
+            # Pipe characters in cell values would break the table layout.
+            v_safe = v.replace("|", "\\|")
+            lines.append(f"| {k} | {v_safe} |")
+        return lines
+
+    def render_shape(
+        self,
+        shape_info: "ShapeInfo",
+        entities: "ExtractedEntities",
+    ) -> Path:
+        """Render a SHACL shape documentation page.
+
+        Renders both NodeShapes and named PropertyShapes from the same
+        method (the kind in the frontmatter and the section headings
+        differ).
+
+        Args:
+            shape_info: Shape to render.
+            entities: All extracted entities.
+
+        Returns:
+            Path to the rendered file.
+        """
+        lines = []
+
+        # Frontmatter — pick the most-specific kind for the type field
+        # so static-site generators can filter on it.
+        primary = "shape"
+        if "node_shape" in shape_info.kinds:
+            primary = "node_shape"
+        elif "property_shape" in shape_info.kinds:
+            primary = "property_shape"
+        lines.append(self._frontmatter(
+            title=shape_info.label or shape_info.qname,
+            type=primary,
+        ))
+
+        lines.append(f"# {shape_info.label or shape_info.qname}")
+        lines.append("")
+        # All kinds as a Markdown badge-style line, mirroring HTML output.
+        kind_labels = " ".join(
+            f"`{kind}`" for kind in shape_info.kinds if kind != "shape"
+        )
+        if kind_labels:
+            lines.append(f"**Kinds:** {kind_labels}")
+            lines.append("")
+        lines.append(f"**URI:** `{shape_info.uri}`")
+        lines.append("")
+
+        if shape_info.definition:
+            lines.append(shape_info.definition)
+            lines.append("")
+
+        # Targets
+        target_rows: list[tuple[str, list]] = []
+        if shape_info.target_classes:
+            target_rows.append(("Target class", shape_info.target_classes))
+        if shape_info.target_nodes:
+            target_rows.append(("Target node", shape_info.target_nodes))
+        if shape_info.target_subjects_of:
+            target_rows.append(("Target subjects of", shape_info.target_subjects_of))
+        if shape_info.target_objects_of:
+            target_rows.append(("Target objects of", shape_info.target_objects_of))
+        if target_rows:
+            lines.append("## Targets")
+            lines.append("")
+            for label, uris in target_rows:
+                joined = ", ".join(self._uri_to_display(u, entities) for u in uris)
+                lines.append(f"- **{label}:** {joined}")
+            lines.append("")
+
+        # NodeShape structural fields
+        if "node_shape" in shape_info.kinds:
+            structure_rows: list[str] = []
+            if shape_info.closed:
+                structure_rows.append("- **Closed:** true")
+            if shape_info.ignored_properties:
+                joined = ", ".join(f"`{u}`" for u in shape_info.ignored_properties)
+                structure_rows.append(f"- **Ignored properties:** {joined}")
+            if structure_rows:
+                lines.append("## Structure")
+                lines.append("")
+                lines.extend(structure_rows)
+                lines.append("")
+
+            # Property arcs
+            if shape_info.properties:
+                lines.append("## Property Constraints")
+                lines.append("")
+                for ps in shape_info.properties:
+                    if ps.is_blank:
+                        # Heading: the property path if available, else a placeholder.
+                        if ps.path is not None:
+                            heading = self._uri_to_display(ps.path, entities)
+                        else:
+                            heading = "_(blank-node constraint)_"
+                        lines.append(f"### {heading}")
+                    else:
+                        # Named PropertyShape — link to its standalone page.
+                        link = self._entity_link(
+                            ps.qname or "",
+                            "shape",
+                            ps.name or ps.qname or "",
+                        )
+                        lines.append(f"### {link} `property_shape`")
+                    lines.append("")
+                    table_lines = self._render_property_shape_table(ps, entities)
+                    if table_lines:
+                        lines.extend(table_lines)
+                    lines.append("")
+
+        # PropertyShape constraints (when the top-level shape is itself a PropertyShape)
+        if "property_shape" in shape_info.kinds and shape_info.property_shape is not None:
+            lines.append("## Constraints")
+            lines.append("")
+            table_lines = self._render_property_shape_table(shape_info.property_shape, entities)
+            if table_lines:
+                lines.extend(table_lines)
+            lines.append("")
+
+        # Long-tail SHACL predicates at the top level
+        if shape_info.other_constraints:
+            lines.append("## Other Constraints")
+            lines.append("")
+            lines.append("| Predicate | Value |")
+            lines.append("| --- | --- |")
+            for pred, vals in shape_info.other_constraints.items():
+                joined = ", ".join(f"`{v}`" for v in vals)
+                lines.append(f"| `{pred}` | {joined} |")
+            lines.append("")
+
+        # Annotations
+        if shape_info.annotations:
+            lines.append("## Annotations")
+            lines.append("")
+            for name, values in shape_info.annotations.items():
+                for value in values:
+                    lines.append(f"- **{name}:** {value}")
+            lines.append("")
+
+        content = "\n".join(lines)
+        from ..config import entity_to_path
+        rel_path = entity_to_path(shape_info.qname, "shape", self.config, extension=".md")
+        return self._write_file(self.config.output_dir / rel_path, content)
+
     def render_namespaces(self, entities: "ExtractedEntities") -> Path:
         """Render the namespace reference page.
 
@@ -572,6 +821,8 @@ class MarkdownRenderer:
         lines.append("- [Classes](#classes)")
         lines.append("- [Object Properties](#object-properties)")
         lines.append("- [Datatype Properties](#datatype-properties)")
+        if entities.shapes and self.config.include_shapes:
+            lines.append("- [Shapes](#shapes)")
         lines.append("- [Namespaces](#namespaces)")
         lines.append("")
 
@@ -609,6 +860,32 @@ class MarkdownRenderer:
             if p.definition:
                 lines.append(p.definition)
                 lines.append("")
+
+        # Shapes (#60)
+        if entities.shapes and self.config.include_shapes:
+            lines.append("## Shapes")
+            lines.append("")
+            for s in entities.shapes:
+                lines.append(f"### {s.label or s.qname}")
+                lines.append("")
+                kind_tags = " ".join(
+                    f"`{k}`" for k in s.kinds if k != "shape"
+                )
+                if kind_tags:
+                    lines.append(f"**Kinds:** {kind_tags}")
+                    lines.append("")
+                lines.append(f"**URI:** `{s.uri}`")
+                lines.append("")
+                if s.definition:
+                    lines.append(s.definition)
+                    lines.append("")
+                if s.target_classes:
+                    joined = ", ".join(self._uri_to_display(u, entities) for u in s.target_classes)
+                    lines.append(f"**Target classes:** {joined}")
+                    lines.append("")
+                if "node_shape" in s.kinds and s.properties:
+                    lines.append(f"**Property constraints:** {len(s.properties)}")
+                    lines.append("")
 
         # Namespaces
         lines.append("## Namespaces")

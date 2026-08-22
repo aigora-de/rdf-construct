@@ -10,7 +10,13 @@ from jinja2 import Environment, FileSystemLoader, PackageLoader, select_autoesca
 
 if TYPE_CHECKING:
     from ..config import DocsConfig
-    from ..extractors import ClassInfo, ExtractedEntities, InstanceInfo, PropertyInfo
+    from ..extractors import (
+        ClassInfo,
+        ExtractedEntities,
+        InstanceInfo,
+        PropertyInfo,
+        ShapeInfo,
+    )
 
 
 class HTMLRenderer:
@@ -162,6 +168,9 @@ class HTMLRenderer:
             "datatype_properties": entities.datatype_properties,
             "annotation_properties": entities.annotation_properties,
             "instances": entities.instances,
+            "shapes": entities.shapes,
+            "node_shapes": entities.node_shapes,
+            "property_shapes": entities.property_shapes,
             "config": self.config,
             **extra,
         }
@@ -395,6 +404,32 @@ class HTMLRenderer:
         rel_path = entity_to_path(instance_info.qname, "instance", self.config)
         return self._render_page("instance.html.jinja", rel_path, context)
 
+    def render_shape(
+        self,
+        shape_info: "ShapeInfo",
+        entities: "ExtractedEntities",
+    ) -> Path:
+        """Render a SHACL shape documentation page.
+
+        Renders both NodeShapes and named PropertyShapes from the same
+        template; the kind badges on the page distinguish them. Inline
+        PropertyShape arcs (blank-node ``sh:property`` children of a
+        NodeShape) are rendered as a constraint table within the parent
+        NodeShape's page — they do not get their own pages.
+
+        Args:
+            shape_info: Shape to render.
+            entities: All extracted entities (for cross-references).
+
+        Returns:
+            Path to the rendered file.
+        """
+        context = self._build_context(entities, shape_info=shape_info)
+
+        from ..config import entity_to_path
+        rel_path = entity_to_path(shape_info.qname, "shape", self.config)
+        return self._render_page("shape.html.jinja", rel_path, context)
+
     def render_namespaces(self, entities: "ExtractedEntities") -> Path:
         """Render the namespace reference page.
 
@@ -621,6 +656,52 @@ h4 { font-size: 1.1rem; }
 .entity-type.datatype { background: #06b6d4; }
 .entity-type.annotation { background: #f59e0b; }
 .entity-type.instance { background: #10b981; }
+
+/* Shape badges (#60). Red-to-rose hue family signals kinship between
+   NodeShape and PropertyShape; brightness gradient (NodeShape darker
+   than PropertyShape) reads as parent-child. All three pass WCAG AA
+   contrast against the badge's white text:
+     .shape          #dc2626  4.83:1
+     .node_shape     #b91c1c  6.47:1
+     .property_shape #e11d48  4.70:1
+   The hue family is distinct from the other four badges under common
+   colour-vision deficiencies (amber goes pale-yellow under
+   deuteranopia; reds stay warm-saturated). Badge text labels
+   ("node shape" / "property shape") carry the category regardless of
+   perceived colour. */
+.entity-type.shape { background: #dc2626; }
+.entity-type.node_shape { background: #b91c1c; }
+.entity-type.property_shape { background: #e11d48; }
+
+/* PropertyShape constraint table on shape pages. Tighter than the
+   default annotations table — the `th` is the constraint name, the
+   `td` is the value. */
+.property-shape-constraints {
+    margin: 0.5rem 0 1rem 0;
+}
+.property-shape-constraints th {
+    width: 10rem;
+    font-weight: 600;
+    text-align: left;
+    background: var(--surface);
+    padding: 0.5rem 0.75rem;
+}
+.property-shape-constraints td {
+    padding: 0.5rem 0.75rem;
+}
+
+.property-shape {
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 0.375rem;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+}
+.property-shape h4 {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+    font-size: 1rem;
+}
 
 .definition {
     color: var(--text-muted);

@@ -8,7 +8,14 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..config import DocsConfig
-    from ..extractors import ClassInfo, ExtractedEntities, InstanceInfo, PropertyInfo
+    from ..extractors import (
+        ClassInfo,
+        ExtractedEntities,
+        InstanceInfo,
+        PropertyInfo,
+        PropertyShapeInfo,
+        ShapeInfo,
+    )
 
 
 class JSONRenderer:
@@ -71,6 +78,7 @@ class JSONRenderer:
         return {
             "uri": str(class_info.uri),
             "qname": class_info.qname,
+            "kinds": [str(k) for k in class_info.kinds],
             "label": class_info.label,
             "definition": class_info.definition,
             "superclasses": [str(uri) for uri in class_info.superclasses],
@@ -95,6 +103,7 @@ class JSONRenderer:
         return {
             "uri": str(prop_info.uri),
             "qname": prop_info.qname,
+            "kinds": [str(k) for k in prop_info.kinds],
             "label": prop_info.label,
             "definition": prop_info.definition,
             "property_type": prop_info.property_type,
@@ -126,11 +135,95 @@ class JSONRenderer:
         return {
             "uri": str(instance_info.uri),
             "qname": instance_info.qname,
+            "kinds": [str(k) for k in instance_info.kinds],
             "label": instance_info.label,
             "definition": instance_info.definition,
             "types": [str(uri) for uri in instance_info.types],
             "properties": properties,
             "annotations": instance_info.annotations,
+        }
+
+    def _property_shape_to_dict(
+        self,
+        ps: "PropertyShapeInfo",
+    ) -> dict[str, Any]:
+        """Convert a PropertyShapeInfo to a dictionary.
+
+        Schema is stable for downstream consumers (#60). Naming choices:
+        ``class`` (matches the SHACL spec key) instead of the dataclass
+        field ``class_`` which was renamed for Python keyword reasons;
+        ``in_values`` (more readable in JSON than ``in`` and avoids the
+        keyword issue at the consumer end too).
+
+        Args:
+            ps: PropertyShape info.
+
+        Returns:
+            Dictionary representation.
+        """
+        return {
+            "uri": str(ps.uri) if ps.uri is not None else None,
+            "qname": ps.qname,
+            "is_blank": ps.is_blank,
+            "path": str(ps.path) if ps.path is not None else None,
+            "name": ps.name,
+            "description": ps.description,
+            "datatype": str(ps.datatype) if ps.datatype is not None else None,
+            "class": str(ps.class_) if ps.class_ is not None else None,
+            "node_kind": str(ps.node_kind) if ps.node_kind is not None else None,
+            "min_count": ps.min_count,
+            "max_count": ps.max_count,
+            "min_length": ps.min_length,
+            "max_length": ps.max_length,
+            "min_inclusive": ps.min_inclusive,
+            "max_inclusive": ps.max_inclusive,
+            "pattern": ps.pattern,
+            "has_value": str(ps.has_value) if ps.has_value is not None else None,
+            "in_values": [str(v) for v in ps.in_values],
+            "other_constraints": {
+                str(pred): [str(v) for v in vals]
+                for pred, vals in ps.other_constraints.items()
+            },
+        }
+
+    def _shape_to_dict(self, shape_info: "ShapeInfo") -> dict[str, Any]:
+        """Convert a ShapeInfo to a dictionary.
+
+        Args:
+            shape_info: Shape to convert.
+
+        Returns:
+            Dictionary representation.
+        """
+        return {
+            "uri": str(shape_info.uri),
+            "qname": shape_info.qname,
+            "kinds": [str(k) for k in shape_info.kinds],
+            "label": shape_info.label,
+            "definition": shape_info.definition,
+            "target_classes": [str(uri) for uri in shape_info.target_classes],
+            "target_nodes": [str(uri) for uri in shape_info.target_nodes],
+            "target_subjects_of": [
+                str(uri) for uri in shape_info.target_subjects_of
+            ],
+            "target_objects_of": [
+                str(uri) for uri in shape_info.target_objects_of
+            ],
+            "closed": shape_info.closed,
+            "ignored_properties": [str(uri) for uri in shape_info.ignored_properties],
+            "properties": [
+                self._property_shape_to_dict(ps) for ps in shape_info.properties
+            ],
+            "property_shape": (
+                self._property_shape_to_dict(shape_info.property_shape)
+                if shape_info.property_shape is not None
+                else None
+            ),
+            "annotations": shape_info.annotations,
+            "other_constraints": {
+                str(pred): [str(v) for v in vals]
+                for pred, vals in shape_info.other_constraints.items()
+            },
         }
 
     def _ontology_to_dict(self, entities: "ExtractedEntities") -> dict[str, Any]:
@@ -172,6 +265,7 @@ class JSONRenderer:
                 "datatype_properties": len(entities.datatype_properties),
                 "annotation_properties": len(entities.annotation_properties),
                 "instances": len(entities.instances),
+                "shapes": len(entities.shapes),
             },
             "classes": [
                 {
@@ -212,6 +306,21 @@ class JSONRenderer:
                     "label": i.label,
                 }
                 for i in entities.instances
+            ],
+            # Top-level shapes array (#60). Breaking change from v0.4.x:
+            # shapes used to appear in the 'instances' array because the
+            # extractor didn't filter them out; they're now their own
+            # bucket. Each entry includes the multi-kind list so
+            # consumers can distinguish NodeShape, PropertyShape, and
+            # any further kinds added in later milestone stages.
+            "shapes": [
+                {
+                    "uri": str(s.uri),
+                    "qname": s.qname,
+                    "kinds": [str(k) for k in s.kinds],
+                    "label": s.label,
+                }
+                for s in entities.shapes
             ],
         }
 
@@ -343,6 +452,31 @@ class JSONRenderer:
         rel_path = entity_to_path(instance_info.qname, "instance", self.config, extension=".json")
         return self._write_json(self.config.output_dir / rel_path, data)
 
+    def render_shape(
+        self,
+        shape_info: "ShapeInfo",
+        entities: "ExtractedEntities",
+    ) -> Path:
+        """Render a SHACL shape as JSON.
+
+        The full shape representation is documented in the docstring of
+        :meth:`_shape_to_dict`. NodeShapes and named PropertyShapes are
+        both rendered through this method; the ``kinds`` field carries
+        the discriminator.
+
+        Args:
+            shape_info: Shape to render.
+            entities: All extracted entities.
+
+        Returns:
+            Path to the rendered file.
+        """
+        data = self._shape_to_dict(shape_info)
+
+        from ..config import entity_to_path
+        rel_path = entity_to_path(shape_info.qname, "shape", self.config, extension=".json")
+        return self._write_json(self.config.output_dir / rel_path, data)
+
     def render_namespaces(self, entities: "ExtractedEntities") -> Path:
         """Render namespaces as JSON.
 
@@ -381,6 +515,11 @@ class JSONRenderer:
             "instances": [
                 self._instance_to_dict(i) for i in entities.instances
             ],
+            # Full shape representations. Breaking change from v0.4.x:
+            # shapes used to be lumped into 'instances' because the
+            # extractor didn't filter them out. They now have their
+            # own top-level array.
+            "shapes": [self._shape_to_dict(s) for s in entities.shapes],
         }
 
         return self._write_json(self._get_output_path("ontology.json"), data)

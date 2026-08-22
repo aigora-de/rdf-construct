@@ -29,10 +29,13 @@ For more control, use the DocsGenerator class directly:
 from rdf_construct.docs.config import DocsConfig, load_docs_config
 from rdf_construct.docs.extractors import (
     ClassInfo,
+    EntityKind,
     ExtractedEntities,
     InstanceInfo,
     OntologyInfo,
     PropertyInfo,
+    PropertyShapeInfo,
+    ShapeInfo,
     extract_all,
 )
 from rdf_construct.docs.generator import DocsGenerator, GenerationResult, generate_docs
@@ -52,6 +55,9 @@ __all__ = [
     "InstanceInfo",
     "OntologyInfo",
     "ExtractedEntities",
+    "ShapeInfo",
+    "PropertyShapeInfo",
+    "EntityKind",
     # Extraction
     "extract_all",
     # Search
