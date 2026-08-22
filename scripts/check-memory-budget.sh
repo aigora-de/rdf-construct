@@ -2,7 +2,7 @@
 #
 # check-memory-budget.sh — size guard for rdf-construct's instruction/memory surface.
 #
-# Copyright (c) 2026 Dave Dyke. MIT licence.
+# Copyright (c) 2026 Dave Dyke / Agilit Ltd. MIT licence.
 #
 # The always-loaded steering files (CLAUDE.md, the project-memory MEMORY.md index and its
 # topic files) drift towards carrying inline reference detail that should be *routed to*
