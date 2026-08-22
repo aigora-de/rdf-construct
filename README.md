@@ -387,7 +387,7 @@ properties:
 
 ## Project Status
 
-**Current**: v0.4.1 - Feature complete for core ontology workflows
+**Current**: v0.5.0 - Feature complete for core ontology workflows
 **License**: MIT
 
 ### Implemented
@@ -399,6 +399,7 @@ properties:
 ✅ Configurable styling and layouts
 ✅ Semantic diff (compare ontology versions)
 ✅ Documentation generation (HTML, Markdown, JSON)
+✅ SHACL shapes documented as a first-class entity type
 ✅ SHACL shape generation
 ✅ Ontology linting (11 rules)
 ✅ Competency question testing
@@ -474,6 +475,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Status**: v0.4.1
+**Status**: v0.5.0
 **Python**: 3.10+ required
 **Maintainer**: See [CONTRIBUTING.md](CONTRIBUTING.md)
