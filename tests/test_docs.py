@@ -653,6 +653,46 @@ class TestPathResolution:
             assert 'href="./assets/style.css"' not in html
             assert 'href="../assets/style.css"' not in html
 
+    def test_all_links_resolve_for_every_entity_kind(
+        self, shape_ontology: Graph, output_dir: Path
+    ):
+        """Every page of every entity kind must have resolvable links.
+
+        The sibling tests above run against ``simple_ontology``, which has
+        no SHACL shapes — so they cannot see a render method that skips
+        ``_render_page()`` and leaves its pages on the ``.`` fallback.
+        ``render_shape`` was added that way in #60 and every reference on a
+        ``shapes/`` page broke.
+
+        This runs the same walk over an ontology carrying a class, an
+        instance, a property and both shape kinds, so a new entity type
+        added without going through ``_render_page()`` fails here rather
+        than shipping.
+        """
+        import re
+
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(shape_ontology)
+
+        # The point of the test is lost if the fixture stops producing
+        # pages at depth — assert the tree actually has them.
+        assert list(output_dir.glob("shapes/*.html")), "fixture generated no shape pages"
+
+        broken: list[tuple[Path, str, Path]] = []
+        ref_pat = re.compile(r'(?:href|src)="([^"#?]+)"')
+        for html_file in output_dir.rglob("*.html"):
+            for ref in ref_pat.findall(html_file.read_text()):
+                if ref.startswith(("http://", "https://", "mailto:", "#")):
+                    continue
+                target = (html_file.parent / ref).resolve()
+                if not target.exists():
+                    broken.append((html_file.relative_to(output_dir), ref, target))
+
+        assert not broken, (
+            "References did not resolve to existing files:\n"
+            + "\n".join(f"  {p}: {r!r} -> {t}" for p, r, t in broken)
+        )
+
 
 # ---------------------------------------------------------------------------
 # SHACL shape support — issue #60 / milestone v0.5.0 stage 1

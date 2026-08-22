@@ -424,13 +424,11 @@ class HTMLRenderer:
         Returns:
             Path to the rendered file.
         """
-        template = self.env.get_template("shape.html.jinja")
         context = self._build_context(entities, shape_info=shape_info)
-        content = template.render(context)
 
         from ..config import entity_to_path
         rel_path = entity_to_path(shape_info.qname, "shape", self.config)
-        return self._write_file(self.config.output_dir / rel_path, content)
+        return self._render_page("shape.html.jinja", rel_path, context)
 
     def render_namespaces(self, entities: "ExtractedEntities") -> Path:
         """Render the namespace reference page.
