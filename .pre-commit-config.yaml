@@ -1,37 +1,29 @@
 # See https://pre-commit.com for more information
-# Install: pip install pre-commit
-# Setup: pre-commit install
+# Install: pip install pre-commit  (or: poetry install --with dev)
+# Setup:   pre-commit install
+#
+# This config holds only hooks that a contributor can actually live with today.
+# black, ruff and mypy are NOT here: each carries repo-wide pre-existing debt
+# (#77, #78, #79), so as commit hooks they either rewrote files well beyond the
+# change being committed or, in mypy's case, refused the commit outright. They
+# run as advisory steps in scripts/ci-local.sh instead — run that before opening
+# a PR. Each is restored here as its debt reaches zero. See #74.
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
+      # These two rewrite the staged file. Repo-wide they would touch 21 and 34
+      # files respectively (#77), but scoped to what you are already editing the
+      # churn is small and it stops new debt accruing.
       - id: trailing-whitespace
       - id: end-of-file-fixer
+      # Read-only checks; all pass repo-wide as at 2026-08-22.
       - id: check-yaml
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: check-toml
       - id: debug-statements
-
-  - repo: https://github.com/psf/black
-    rev: 24.1.1
-    hooks:
-      - id: black
-        language_version: python3.10
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.1.14
-    hooks:
-      - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
-    hooks:
-      - id: mypy
-        additional_dependencies: [types-PyYAML]
-        args: [--strict]
 
   # Size guard for the instruction/memory surface (#73). Runs only when the
   # tracked half changes; the memory store itself is local, so the script warns

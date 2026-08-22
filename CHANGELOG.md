@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   properties rather than classified as individuals. Each is a subclass of `owl:ObjectProperty`
   in OWL 2, and declaring one alone is legal and common in older ontologies
 - `owl:DeprecatedClass` is now recognised by the `classes` selector
+- Quoted the CURIEs in the `together:` flow sequences of `examples/uml/uml_layouts.yml`. Unquoted
+  `building:Building` inside `[ … ]` is rejected by stricter YAML parsers than the one this project
+  uses, so the example failed to load for anyone whose toolchain is spec-conformant. The parsed
+  data is unchanged
 
 ### Added
 - New `other_props` selector for properties whose kind is not implied by their declaration —

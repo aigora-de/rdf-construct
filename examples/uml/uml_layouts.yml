@@ -175,11 +175,11 @@ layouts:
     # Group related classes together
     together:
       # Core building concepts should be adjacent
-      - [building:Building, building:BuildingUnit, building:Envelope]
+      - ["building:Building", "building:BuildingUnit", "building:Envelope"]
       # Metaclasses grouped
-      - [building:ClassOfBuilding, building:ClassOfBuildingUnit, building:ClassOfEnvelope]
+      - ["building:ClassOfBuilding", "building:ClassOfBuildingUnit", "building:ClassOfEnvelope"]
       # Space types grouped
-      - [building:EnclosedSpace, building:OpenSpace, building:PartiallyEnclosedSpace]
+      - ["building:EnclosedSpace", "building:OpenSpace", "building:PartiallyEnclosedSpace"]
 
     # Hidden links to influence positioning
     layout_hints:
