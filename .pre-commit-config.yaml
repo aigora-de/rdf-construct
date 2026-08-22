@@ -32,3 +32,15 @@ repos:
       - id: mypy
         additional_dependencies: [types-PyYAML]
         args: [--strict]
+
+  # Size guard for the instruction/memory surface (#73). Runs only when the
+  # tracked half changes; the memory store itself is local, so the script warns
+  # rather than fails when it is absent.
+  - repo: local
+    hooks:
+      - id: memory-budget
+        name: instruction/memory surface size guard
+        entry: scripts/check-memory-budget.sh
+        language: script
+        pass_filenames: false
+        files: ^(CLAUDE\.md|docs/dev/EXPERTS\.md)$
