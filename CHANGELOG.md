@@ -632,17 +632,17 @@ Initial public release.
 | [0.2.0] | 2025-12-03 | Stats, CQ testing, SHACL gen, docs gen, diff, lint, puml2rdf                                        |
 | [0.1.0] | 2025-11-30 | Initial release: ordering, UML generation, styling                                                  |
 
-[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.4.7...HEAD
-[0.5.0]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.5.0
-[0.4.7]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.7
-[0.4.6]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.6
-[0.4.5]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.5
-[0.4.4]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.4
-[0.4.3]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.3
-[0.4.2]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.2
-[0.4.1]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.1
-[0.4.0]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.4.0
-[0.3.0]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.3.0
-[0.2.1]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.2.1
-[0.2.0]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.2.0
+[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/aigora-de/rdf-construct/compare/v0.4.7...v0.5.0
+[0.4.7]: https://github.com/aigora-de/rdf-construct/compare/v0.4.6...v0.4.7
+[0.4.6]: https://github.com/aigora-de/rdf-construct/compare/v0.4.5...v0.4.6
+[0.4.5]: https://github.com/aigora-de/rdf-construct/compare/v0.4.4...v0.4.5
+[0.4.4]: https://github.com/aigora-de/rdf-construct/compare/v0.4.3...v0.4.4
+[0.4.3]: https://github.com/aigora-de/rdf-construct/compare/v0.4.2...v0.4.3
+[0.4.2]: https://github.com/aigora-de/rdf-construct/compare/v0.4.1...v0.4.2
+[0.4.1]: https://github.com/aigora-de/rdf-construct/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/aigora-de/rdf-construct/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/aigora-de/rdf-construct/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/aigora-de/rdf-construct/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/aigora-de/rdf-construct/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/aigora-de/rdf-construct/releases/tag/v0.1.0
