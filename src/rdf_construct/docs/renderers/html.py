@@ -24,6 +24,11 @@ class HTMLRenderer:
         """
         self.config = config
         self._env: Environment | None = None
+        # Path of the page currently being rendered, relative to the docs
+        # output directory. Used by `_entity_url_filter` to produce URLs
+        # that resolve correctly from the page's own location when no
+        # absolute `config.base_url` is set. See issue #59.
+        self._current_page: Path | None = None
 
     @property
     def env(self) -> Environment:
@@ -73,7 +78,8 @@ class HTMLRenderer:
             entity_type: Type of entity.
 
         Returns:
-            URL to the entity's documentation page.
+            URL to the entity's documentation page, made relative to the
+            page currently being rendered when no ``config.base_url`` is set.
         """
         from ..config import entity_to_url
 
@@ -88,7 +94,7 @@ class HTMLRenderer:
         else:
             qname = uri_or_qname
 
-        return entity_to_url(qname, entity_type, self.config)
+        return entity_to_url(qname, entity_type, self.config, from_path=self._current_page)
 
     def _qname_local_filter(self, qname: str) -> str:
         """Jinja2 filter to get the local part of a QName.
@@ -160,6 +166,41 @@ class HTMLRenderer:
             **extra,
         }
 
+    def _render_page(
+        self,
+        template_name: str,
+        rel_path: Path,
+        context: dict[str, Any],
+    ) -> Path:
+        """Render a template to its output file with correct path handling.
+
+        Sets the renderer's notion of the "current page" for the duration
+        of the render so that the ``entity_url`` filter and the
+        ``relative_root`` template variable resolve to URLs that are
+        correct from this page's location. See issue #59.
+
+        Args:
+            template_name: Name of the Jinja2 template to render.
+            rel_path: Path of the output file, relative to the docs output
+                directory.
+            context: Template context (will be augmented with
+                ``relative_root``).
+
+        Returns:
+            Path of the written output file.
+        """
+        from ..config import relative_url_prefix
+
+        previous_page = self._current_page
+        self._current_page = rel_path
+        try:
+            template = self.env.get_template(template_name)
+            context["relative_root"] = relative_url_prefix(rel_path)
+            content = template.render(context)
+            return self._write_file(self.config.output_dir / rel_path, content)
+        finally:
+            self._current_page = previous_page
+
     def render_index(self, entities: "ExtractedEntities") -> Path:
         """Render the main index page.
 
@@ -169,15 +210,13 @@ class HTMLRenderer:
         Returns:
             Path to the rendered file.
         """
-        template = self.env.get_template("index.html.jinja")
         context = self._build_context(
             entities,
             total_classes=len(entities.classes),
             total_properties=len(entities.properties),
             total_instances=len(entities.instances),
         )
-        content = template.render(context)
-        return self._write_file(self._get_output_path("index.html"), content)
+        return self._render_page("index.html.jinja", Path("index.html"), context)
 
     def render_hierarchy(self, entities: "ExtractedEntities") -> Path:
         """Render the class hierarchy page.
@@ -191,10 +230,8 @@ class HTMLRenderer:
         # Build hierarchy tree structure
         hierarchy = self._build_hierarchy_tree(entities.classes)
 
-        template = self.env.get_template("hierarchy.html.jinja")
         context = self._build_context(entities, hierarchy=hierarchy)
-        content = template.render(context)
-        return self._write_file(self._get_output_path("hierarchy.html"), content)
+        return self._render_page("hierarchy.html.jinja", Path("hierarchy.html"), context)
 
     def _build_hierarchy_tree(
         self,
@@ -260,17 +297,15 @@ class HTMLRenderer:
         # Find inherited properties (from superclasses)
         inherited = self._collect_inherited_properties(class_info, entities)
 
-        template = self.env.get_template("class.html.jinja")
         context = self._build_context(
             entities,
             class_info=class_info,
             inherited_properties=inherited,
         )
-        content = template.render(context)
 
         from ..config import entity_to_path
         rel_path = entity_to_path(class_info.qname, "class", self.config)
-        return self._write_file(self.config.output_dir / rel_path, content)
+        return self._render_page("class.html.jinja", rel_path, context)
 
     def _collect_inherited_properties(
         self,
@@ -333,14 +368,12 @@ class HTMLRenderer:
         Returns:
             Path to the rendered file.
         """
-        template = self.env.get_template("property.html.jinja")
         context = self._build_context(entities, property_info=prop_info)
-        content = template.render(context)
 
         entity_type = f"{prop_info.property_type}_property"
         from ..config import entity_to_path
         rel_path = entity_to_path(prop_info.qname, entity_type, self.config)
-        return self._write_file(self.config.output_dir / rel_path, content)
+        return self._render_page("property.html.jinja", rel_path, context)
 
     def render_instance(
         self,
@@ -356,13 +389,11 @@ class HTMLRenderer:
         Returns:
             Path to the rendered file.
         """
-        template = self.env.get_template("instance.html.jinja")
         context = self._build_context(entities, instance_info=instance_info)
-        content = template.render(context)
 
         from ..config import entity_to_path
         rel_path = entity_to_path(instance_info.qname, "instance", self.config)
-        return self._write_file(self.config.output_dir / rel_path, content)
+        return self._render_page("instance.html.jinja", rel_path, context)
 
     def render_namespaces(self, entities: "ExtractedEntities") -> Path:
         """Render the namespace reference page.
@@ -373,10 +404,8 @@ class HTMLRenderer:
         Returns:
             Path to the rendered file.
         """
-        template = self.env.get_template("namespaces.html.jinja")
         context = self._build_context(entities)
-        content = template.render(context)
-        return self._write_file(self._get_output_path("namespaces.html"), content)
+        return self._render_page("namespaces.html.jinja", Path("namespaces.html"), context)
 
     def render_single_page(self, entities: "ExtractedEntities") -> Path:
         """Render all documentation as a single page.
@@ -389,10 +418,8 @@ class HTMLRenderer:
         """
         hierarchy = self._build_hierarchy_tree(entities.classes)
 
-        template = self.env.get_template("single_page.html.jinja")
         context = self._build_context(entities, hierarchy=hierarchy)
-        content = template.render(context)
-        return self._write_file(self._get_output_path("index.html"), content)
+        return self._render_page("single_page.html.jinja", Path("index.html"), context)
 
     def copy_assets(self) -> None:
         """Copy static assets (CSS, JS) to the output directory."""

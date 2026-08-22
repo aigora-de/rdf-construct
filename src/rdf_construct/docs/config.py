@@ -215,10 +215,35 @@ def entity_to_path(
     return Path(subdir) / filename
 
 
+def relative_url_prefix(page_path: Path | str) -> str:
+    """Compute the relative URL prefix from a page back to the docs root.
+
+    Used so that generated HTML works regardless of where the docs are served
+    from (file://, sub-paths, GitHub Pages project sites) when no absolute
+    ``base_url`` is configured.
+
+    Args:
+        page_path: Path of the page relative to the docs output directory
+            (e.g. ``"index.html"``, ``"classes/Foo.html"``,
+            ``"properties/object/bar.html"``).
+
+    Returns:
+        ``"."`` for a top-level page, ``".."`` for one level deep,
+        ``"../.."`` for two levels deep, etc.
+    """
+    page = Path(page_path)
+    # Number of directory components above the page (i.e. excluding the file).
+    depth = len(page.parts) - 1
+    if depth <= 0:
+        return "."
+    return "/".join([".."] * depth)
+
+
 def entity_to_url(
     qname: str,
     entity_type: str,
     config: DocsConfig,
+    from_path: Path | str | None = None,
 ) -> str:
     """Generate the URL for an entity's documentation page.
 
@@ -226,6 +251,13 @@ def entity_to_url(
         qname: Entity qualified name.
         entity_type: Type of entity.
         config: Documentation configuration.
+        from_path: Optional path of the page the link is being rendered on
+            (relative to the docs output directory). When ``config.base_url``
+            is empty and ``from_path`` is provided, the returned URL is made
+            relative to that page so links work regardless of the page's
+            depth in the output tree. When ``config.base_url`` is set, that
+            value takes precedence and ``from_path`` is ignored, preserving
+            the previous behaviour.
 
     Returns:
         URL path for linking to the entity.
@@ -235,4 +267,9 @@ def entity_to_url(
 
     if config.base_url:
         return f"{config.base_url}/{url}"
+    if from_path is not None:
+        prefix = relative_url_prefix(from_path)
+        if prefix == ".":
+            return url
+        return f"{prefix}/{url}"
     return url
