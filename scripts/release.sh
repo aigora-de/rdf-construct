@@ -19,9 +19,13 @@
 #
 # Usage:
 #   scripts/release.sh -n | --check   # checks only; changes nothing, anywhere
-#   scripts/release.sh                # check, tag, push, build, verify, dry-run
+#   scripts/release.sh                # check, build, verify, tag, push, dry-run
 #   scripts/release.sh --post         # after publishing: GitHub release, milestone
 #   scripts/release.sh -h | --help
+#
+# The build comes before the tag deliberately. A tag that has been pushed cannot
+# be quietly retracted once anyone has fetched it, so nothing is published to
+# origin until the artefact exists and has been proven to work.
 #
 # Override the Python runner with CI_LOCAL_PYRUN (default "poetry run"), as for
 # ci-local.sh.
@@ -37,12 +41,16 @@ release.sh — the release runner for rdf-construct.
 Companion to ci-local.sh: that one gates a PR, this one gates a release.
 
   scripts/release.sh -n | --check   checks only; changes nothing, anywhere
-  scripts/release.sh                check, tag, push, build, verify, dry-run
+  scripts/release.sh                check, build, verify, tag, push, dry-run
   scripts/release.sh --post         after publishing: GitHub release, milestone
   scripts/release.sh -h | --help
 
 The default run stops before uploading to PyPI and prints the command for you
 to run. A published version can never be replaced, so that step stays human.
+
+The build happens before the tag: a pushed tag cannot be quietly retracted once
+anyone has fetched it, so nothing reaches origin until the artefact exists and
+has been proven to work.
 
 Checks performed:
 
@@ -53,8 +61,9 @@ Checks performed:
              and the footer carries this version's compare link
   tag        does not already exist, locally or on origin
 
-Then: annotated tag, pushed; a clean dist/; a build; the wheel installed into a
-throwaway venv and asked its own --version; and poetry publish --dry-run.
+Then: a clean dist/; a build; the wheel installed into a throwaway venv and
+asked its own --version; an annotated tag on the exact commit that was built,
+pushed; and poetry publish --dry-run.
 USAGE
 }
 
@@ -71,6 +80,9 @@ cd "$(git rev-parse --show-toplevel)" || { echo "not in a git repo" >&2; exit 2;
 
 PYRUN="${CI_LOCAL_PYRUN-poetry run}"
 FAILED=()
+# Set by do_build, read by do_tag. Initialised here so `set -u` gives a clear
+# failure rather than an unbound-variable crash if the order is ever changed.
+RELEASE_SHA=""
 
 say()  { printf '\n\033[1m──▶ %s\033[0m\n' "$1"; }
 ok()   { printf '   \033[32m✓ %s\033[0m\n' "$1"; }
@@ -201,14 +213,24 @@ check_tag() {
 
 # --- actions ------------------------------------------------------------------
 
+# Tags the commit that was actually built, captured before the build, rather
+# than whatever HEAD happens to be by now. Belt and braces — the checks refuse a
+# dirty tree, so these are the same commit — but it makes the tag a statement
+# about the artefact rather than about the clock.
 do_tag() {
   say "tagging $TAG"
-  git tag -a "$TAG" -m "Release $TAG" && ok "annotated tag created"
+  if [[ "$(git rev-parse HEAD)" != "$RELEASE_SHA" ]]; then
+    bad "HEAD moved during the run — refusing to tag"
+    note "built ${RELEASE_SHA:0:8}, HEAD is now $(git rev-parse --short HEAD)"
+    return
+  fi
+  git tag -a "$TAG" "$RELEASE_SHA" -m "Release $TAG" && ok "annotated tag on ${RELEASE_SHA:0:8}"
   git push origin "$TAG" >/dev/null 2>&1 && ok "pushed to origin" || bad "could not push $TAG"
 }
 
 do_build() {
-  say "building into a clean dist/"
+  RELEASE_SHA="$(git rev-parse HEAD)"
+  say "building into a clean dist/ (from ${RELEASE_SHA:0:8})"
   # Poetry only uploads artefacts matching the current version, so an old 0.4.x
   # in dist/ is harmless. A STALE 0.5.0 is not: it would publish an earlier tree
   # under the right filename. Clearing the directory makes that impossible.
@@ -321,9 +343,13 @@ case "$MODE" in
     printf '  run \033[1mscripts/release.sh\033[0m to tag, build and verify.\n'
     ;;
   run)
-    do_tag
+    # Build and prove the artefact before anything reaches origin. A failed
+    # build here leaves no public trace; the other order leaves a pushed tag to
+    # retract, which is the recovery this script exists to spare you.
     do_build
     do_verify
+    summary
+    do_tag
     summary
     do_dry_run
     printf '\n\033[1m── ready ───────────────────────────────\033[0m\n'

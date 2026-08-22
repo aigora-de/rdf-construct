@@ -247,7 +247,7 @@ Then:
 
 ```bash
 scripts/release.sh --check   # changes nothing; tells you what is not ready
-scripts/release.sh           # tag, push, clean build, verify the wheel, dry run
+scripts/release.sh           # clean build, verify the wheel, tag, push, dry run
 poetry publish               # yours to run — see below
 scripts/release.sh --post    # GitHub release from the CHANGELOG, close the milestone
 ```
@@ -255,6 +255,10 @@ scripts/release.sh --post    # GitHub release from the CHANGELOG, close the mile
 The script refuses rather than assists: every check names what to fix and it never edits a file
 to make itself pass. It also stops short of publishing. **A version can never be replaced on
 PyPI once uploaded**, so that one command stays deliberate and human.
+
+It builds *before* it tags, and tags the exact commit it built. A pushed tag cannot be quietly
+retracted once anyone has fetched it, so nothing reaches origin until the artefact exists and has
+been proven to work.
 
 `--check` verifies: `main`, clean, in sync; the `ci-local.sh` gate; that the version agrees across
 `pyproject.toml`, `__init__.py`, `CHANGELOG.md`, `README.md` and `CLAUDE.md`; that the CHANGELOG's
