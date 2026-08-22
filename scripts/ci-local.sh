@@ -10,8 +10,8 @@
 #
 # GATE vs ADVISORY
 #
-#   GATE     — the test suite and the instruction/memory size guard. A gate step's
-#              failure IS this script's exit code.
+#   GATE     — the test suite, the version-consistency check and the instruction/memory
+#              size guard. A gate step's failure IS this script's exit code.
 #   ADVISORY — black, ruff and mypy. They run and report but do NOT fail the script,
 #              because each carries substantial pre-existing debt measured across the
 #              whole repository (see the tracking issues below). Gating on them today
@@ -49,6 +49,17 @@ case "${1-}" in
   *)            echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
 esac
 
+# Preflight: fail once, clearly, if the Python runner is missing — rather than five
+# times with "command not found" as each step trips over it in turn.
+runner="${PYRUN%% *}"
+if [[ -n "$runner" ]] && ! command -v "$runner" >/dev/null 2>&1; then
+  echo "error: '$runner' is not on PATH." >&2
+  echo "       Install it (https://python-poetry.org/docs/#installation) and run" >&2
+  echo "       'poetry install --with dev', or set CI_LOCAL_PYRUN=\"\" if you are" >&2
+  echo "       already inside an activated virtualenv." >&2
+  exit 2
+fi
+
 GATE_FAILED=()
 ADVISORY_FAILED=()
 
@@ -82,6 +93,25 @@ s_pytest() { $PYRUN pytest -q; }
 # rather than fails when the memory dir is absent, so a fresh clone is never blocked.
 s_memory() { ./scripts/check-memory-budget.sh; }
 
+# GATE: the version string lives in two places and they must agree. A mismatch is not
+# caught by any test, and #66 records that `--version` reports the installed metadata
+# version rather than the source __version__ — so the symptom is a confusing --version
+# output at release time, not an error. Pure shell, so it works even without the runner.
+s_version() {
+  local pyproject init
+  pyproject="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)"
+  init="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/rdf_construct/__init__.py | head -1)"
+  if [[ -z "$pyproject" || -z "$init" ]]; then
+    echo "could not read a version string (pyproject.toml='$pyproject' __init__.py='$init')"
+    return 1
+  fi
+  if [[ "$pyproject" != "$init" ]]; then
+    echo "version mismatch: pyproject.toml=$pyproject but __init__.py=$init"
+    return 1
+  fi
+  echo "version $pyproject (pyproject.toml and __init__.py agree)"
+}
+
 # ADVISORY (#77): 93 of 142 files would be reformatted as at 2026-08-22.
 s_black() { $PYRUN black --check .; }
 
@@ -97,6 +127,7 @@ if [[ $RUN_TESTS -eq 1 ]]; then
   step gate "test suite (pytest)" s_pytest
 fi
 if [[ $RUN_OTHER -eq 1 ]]; then
+  step gate     "version consistency"  s_version
   step gate     "memory-budget guard"  s_memory
   step advisory "black formatting"     s_black
   step advisory "ruff lint"            s_ruff
