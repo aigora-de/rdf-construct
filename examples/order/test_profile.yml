@@ -28,8 +28,8 @@ shared:
   # For animal ontology
   animal_roots: &animal_roots
     - ex:Animal
-  
-  # For organization ontology  
+
+  # For organization ontology
   org_roots: &org_roots
     - org:Organization
     - org:Person

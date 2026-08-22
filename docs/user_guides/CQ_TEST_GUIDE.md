@@ -308,20 +308,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install dependencies
         run: pip install rdf-construct
-      
+
       - name: Run CQ tests
         run: |
           rdf-construct cq-test ontology.ttl tests/cq-tests.yml \
             --format junit -o test-results.xml
-      
+
       - name: Publish Test Results
         uses: dorny/test-reporter@v1
         if: always()
@@ -407,7 +407,7 @@ Include descriptions explaining what each test validates:
 - id: cq-001
   name: "Buildings have addresses"
   description: |
-    Validates CQ-7 from requirements: "What is the address 
+    Validates CQ-7 from requirements: "What is the address
     of a given building?" The ontology must support linking
     buildings to their postal addresses.
   query: |

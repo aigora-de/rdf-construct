@@ -59,7 +59,7 @@ def get_descendants(graph, root, max_depth=None):
     descendants = {root}
     current_level = {root}
     depth = 0
-    
+
     while current_level and (max_depth is None or depth < max_depth):
         next_level = set()
         for cls in current_level:
@@ -69,7 +69,7 @@ def get_descendants(graph, root, max_depth=None):
                     next_level.add(subclass)
         current_level = next_level
         depth += 1
-    
+
     return descendants
 ```
 
@@ -268,7 +268,7 @@ For instances:
 def get_class_style(self, graph, cls, is_instance=False):
     if is_instance and self.instance_style:
         return self.instance_style
-    
+
     # Check namespace
     qname = graph.namespace_manager.normalizeUri(cls)
     if ":" in qname:
@@ -276,7 +276,7 @@ def get_class_style(self, graph, cls, is_instance=False):
         ns_key = f"ns:{ns_prefix}"
         if ns_key in self.class_styles:
             return self.class_styles[ns_key]
-    
+
     # Default
     return self.class_styles.get("default")
 ```
@@ -290,12 +290,12 @@ def get_class_style(self, graph, cls, is_instance=False):
 def get_stereotype(self, graph, cls):
     if not self.show_stereotypes:
         return None
-    
+
     for rdf_type in graph.objects(cls, RDF.type):
         type_qname = graph.namespace_manager.normalizeUri(rdf_type)
         if type_qname in self.stereotype_map:
             return self.stereotype_map[type_qname]
-    
+
     return None
 ```
 

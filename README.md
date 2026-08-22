@@ -387,27 +387,27 @@ properties:
 
 ## Project Status
 
-**Current**: v0.4.1 - Feature complete for core ontology workflows  
+**Current**: v0.4.1 - Feature complete for core ontology workflows
 **License**: MIT
 
 ### Implemented
-✅ RDF semantic ordering  
-✅ Topological sorting with root-based branches  
-✅ Custom Turtle serialisation (preserves order)  
-✅ PlantUML diagram generation from RDF  
-✅ PlantUML to RDF conversion  
-✅ Configurable styling and layouts  
-✅ Semantic diff (compare ontology versions)  
-✅ Documentation generation (HTML, Markdown, JSON)  
-✅ SHACL shape generation  
-✅ Ontology linting (11 rules)  
-✅ Competency question testing  
-✅ Ontology statistics  
-✅ Ontology merging and splitting  
-✅ Ontology refactoring (rename, deprecate)  
-✅ Multi-language translation management  
-✅ Ontology description and profile detection  
-✅ Multi-format input support (Turtle, RDF/XML, JSON-LD, N-Triples)  
+✅ RDF semantic ordering
+✅ Topological sorting with root-based branches
+✅ Custom Turtle serialisation (preserves order)
+✅ PlantUML diagram generation from RDF
+✅ PlantUML to RDF conversion
+✅ Configurable styling and layouts
+✅ Semantic diff (compare ontology versions)
+✅ Documentation generation (HTML, Markdown, JSON)
+✅ SHACL shape generation
+✅ Ontology linting (11 rules)
+✅ Competency question testing
+✅ Ontology statistics
+✅ Ontology merging and splitting
+✅ Ontology refactoring (rename, deprecate)
+✅ Multi-language translation management
+✅ Ontology description and profile detection
+✅ Multi-format input support (Turtle, RDF/XML, JSON-LD, N-Triples)
 ✅ Comprehensive documentation
 
 ### (Possible) Roadmap
@@ -475,5 +475,5 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ---
 
 **Status**: v0.4.1
-**Python**: 3.10+ required  
+**Python**: 3.10+ required
 **Maintainer**: See [CONTRIBUTING.md](CONTRIBUTING.md)

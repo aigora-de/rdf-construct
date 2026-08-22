@@ -79,8 +79,8 @@ complete:
   properties:
     mode: domain_based
 ```
-✅ Concise  
-✅ Auto-updates with ontology  
+✅ Concise
+✅ Auto-updates with ontology
 
 **Explicit Mode**:
 ```yaml
@@ -96,8 +96,8 @@ complete:
     - ex:Sparrow
   # ... all properties listed
 ```
-❌ Verbose  
-❌ Must update manually  
+❌ Verbose
+❌ Must update manually
 
 **Winner**: Default mode
 
@@ -116,8 +116,8 @@ cross_branch:
   properties:
     mode: domain_based
 ```
-⚠️ Gets ALL domain-based properties  
-⚠️ Can't easily limit to specific properties  
+⚠️ Gets ALL domain-based properties
+⚠️ Can't easily limit to specific properties
 
 **Explicit Mode** (Better):
 ```yaml
@@ -132,9 +132,9 @@ cross_branch:
   datatype_properties:
     - ex:lifespan
 ```
-✅ Precise control  
-✅ Only specified properties  
-✅ Clean cross-branch view  
+✅ Precise control
+✅ Only specified properties
+✅ Clean cross-branch view
 
 **Winner**: Explicit mode
 
@@ -153,8 +153,8 @@ partial:
   properties:
     mode: domain_based
 ```
-✅ Concise  
-⚠️ Inflexible if you want different depths in different branches  
+✅ Concise
+⚠️ Inflexible if you want different depths in different branches
 
 **Explicit Mode**:
 ```yaml
@@ -168,9 +168,9 @@ partial:
   object_properties:
     - ex:hasParent
 ```
-✅ Precise control over depth  
-✅ Can vary depth per branch  
-⚠️ More verbose  
+✅ Precise control over depth
+✅ Can vary depth per branch
+⚠️ More verbose
 
 **Winner**: Tie (depends on needs)
 
@@ -191,8 +191,8 @@ themed:
     mode: explicit
     include: [ex:eats]
 ```
-⚠️ Mixed approach (focus + explicit props)  
-✅ Works, but not intuitive  
+⚠️ Mixed approach (focus + explicit props)
+✅ Works, but not intuitive
 
 **Explicit Mode** (Better):
 ```yaml
@@ -206,9 +206,9 @@ themed:
     - ex:eats  # Only predation
   datatype_properties: []
 ```
-✅ Clear intent  
-✅ Consistent approach  
-✅ Easy to understand  
+✅ Clear intent
+✅ Consistent approach
+✅ Easy to understand
 
 **Winner**: Explicit mode
 
@@ -392,8 +392,8 @@ predation:
 
 ## Summary
 
-**Default Mode**: Great for hierarchies, concise, auto-adjusting  
-**Explicit Mode**: Great for precision, cross-branch, themed views  
+**Default Mode**: Great for hierarchies, concise, auto-adjusting
+**Explicit Mode**: Great for precision, cross-branch, themed views
 
 **Best Practice**: Use default mode by default, switch to explicit mode when you need precise control.
 

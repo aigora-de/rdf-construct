@@ -50,7 +50,7 @@ contexts:
   context_name:
     description: "Human-readable description"
     mode: default  # or 'explicit'
-    
+
     # For default mode:
     root_classes: [...]        # Start from roots
     focus_classes: [...]       # Explicit list
@@ -62,7 +62,7 @@ contexts:
       include: [...]
       exclude: [...]
     include_instances: false
-    
+
     # For explicit mode:
     classes: [...]
     object_properties: [...]
@@ -106,19 +106,19 @@ Directly list every class, property, and instance to include. No automatic selec
 animal_care:
   description: "Animal care concepts across branches"
   mode: explicit
-  
+
   classes:
     - ex:Animal
     - ex:Dog          # From mammal branch
     - ex:Eagle        # From bird branch (cross-branch!)
-  
+
   object_properties:
     - ex:hasParent
     - ex:livesIn
-  
+
   datatype_properties:
     - ex:lifespan
-  
+
   instances:
     - ex:Fido
 ```
@@ -224,21 +224,21 @@ all_classes:
 animal_care:
   description: "Animal care cutting across taxonomy"
   mode: explicit
-  
+
   classes:
     - ex:Animal       # Root
     - ex:Mammal       # One branch
     - ex:Dog          # Deep in that branch
     - ex:Eagle        # Different branch!
     - ex:Veterinarian # Related but different hierarchy
-  
+
   object_properties:
     - ex:hasParent
     - ex:treatedBy
-  
+
   datatype_properties:
     - ex:lifespan
-  
+
   instances:
     - ex:Fido
 ```
@@ -253,16 +253,16 @@ animal_care:
 mammals_top_level:
   description: "Just Mammal and direct subclasses"
   mode: explicit
-  
+
   classes:
     - ex:Mammal
     - ex:Dog
     - ex:Cat
     # Deliberately omit deeper descendants
-  
+
   object_properties:
     - ex:hasParent
-  
+
   datatype_properties:
     - ex:averageWeight
 ```
@@ -279,16 +279,16 @@ mammals_top_level:
 predator_relationships:
   description: "Predator-prey relationships only"
   mode: explicit
-  
+
   classes:
     - ex:Dog
     - ex:Cat
     - ex:Eagle
     - ex:Sparrow  # Prey
-  
+
   object_properties:
     - ex:eats  # Only predation
-  
+
   datatype_properties: []  # None needed
 ```
 
@@ -298,12 +298,12 @@ predator_relationships:
 classes_only:
   description: "Structure without properties"
   mode: explicit
-  
+
   classes:
     - ex:Animal
     - ex:Mammal
     - ex:Bird
-  
+
   object_properties: []
   datatype_properties: []
 ```
@@ -407,14 +407,14 @@ with_examples:
 ```yaml
 specific_individuals:
   mode: explicit
-  
+
   classes:
     - ex:Dog
     - ex:Cat
-  
+
   datatype_properties:
     - ex:lifespan
-  
+
   instances:
     - ex:Fido     # Specific dog
     - ex:Whiskers # Specific cat
@@ -516,7 +516,7 @@ Create `my_styles.yml`:
 schemes:
   my_scheme:
     description: "My custom colors"
-    
+
     # Class styling
     classes:
       by_namespace:
@@ -524,33 +524,33 @@ schemes:
           border: "#2E7D32"  # Green border
           fill: "#E8F5E9"    # Light green fill
           line_style: bold
-      
+
       by_type:
         meta_class:
           border: "#CC0000"  # Red for metaclasses
           fill: "#FFE6E6"
-      
+
       default:
         border: "#000000"
         fill: "#FFFFFF"
-    
+
     # Instance styling
     instances:
       border: "#000000"
       fill: "#000000"
       text: "#FFFFFF"
       inherit_class_border: true  # Use parent class color
-    
+
     # Arrow styling
     arrows:
       subclass:
         color: "#0066CC"
         style: bold
-      
+
       rdf_type:
         color: "#D32F2F"
         style: bold
-    
+
     # Stereotypes
     show_stereotypes: true
     stereotype_map:
@@ -649,21 +649,21 @@ layouts:
 animal_care:
   description: "Care concepts across taxonomy"
   mode: explicit
-  
+
   classes:
     - ex:Animal
     - ex:Mammal
     - ex:Dog
     - ex:Eagle        # Different branch
-  
+
   object_properties:
     - ex:hasParent
     - ex:livesIn
-  
+
   datatype_properties:
     - ex:lifespan
     - ex:averageWeight
-  
+
   instances:
     - ex:Fido
     - ex:Baldy
@@ -691,16 +691,16 @@ poetry run rdf-construct uml examples/animal_ontology.ttl config.yml \
 mammals_top_level:
   description: "Mammal with direct subclasses only"
   mode: explicit
-  
+
   classes:
     - ex:Mammal
     - ex:Dog
     - ex:Cat
     # Stop here - no deeper levels
-  
+
   object_properties:
     - ex:hasParent
-  
+
   datatype_properties:
     - ex:averageWeight
 ```
@@ -758,7 +758,7 @@ hybrid_view:
     - ex:Mammal
   include_descendants: true
   max_depth: 1
-  
+
   # Additional classes to include
   additional_classes:  # PLANNED
     - ex:Eagle
@@ -865,7 +865,7 @@ for cls in classes:
 
 **Problem**: Explicit mode requires listing everything.
 
-**Solution**: 
+**Solution**:
 1. Use default mode for this diagram, or
 2. Create reusable YAML anchors:
 

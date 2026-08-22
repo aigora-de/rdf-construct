@@ -273,11 +273,11 @@ package "http://example.org/building#" as bld {
     floorArea : decimal
     constructionYear : gYear
   }
-  
+
   class Floor {
     level : integer
   }
-  
+
   class Room {
     area : decimal
     name : string
