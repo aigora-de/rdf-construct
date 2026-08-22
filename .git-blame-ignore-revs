@@ -1,0 +1,29 @@
+# Revisions that changed formatting only, and which `git blame` should skip.
+#
+# GitHub honours this file automatically in its blame view. Locally it does
+# nothing until you point git at it, once per clone:
+#
+#     git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# Only list a commit that changed no behaviour whatsoever — a formatter sweep, a
+# whitespace pass, a reindentation. A commit mixing formatting with a real
+# change must never be listed: blame would skip the real change too. Use full
+# 40-character SHAs; git rejects abbreviated ones.
+#
+# KNOWN LIMITATION, measured rather than assumed. Ignoring a revision only
+# helps where the line still exists in a recognisable earlier form, so blame has
+# somewhere to reassign it. It does NOT help where the sweep *created* the line
+# — black joining a wrapped call onto one line produces content that never
+# existed before, and blame keeps those on the sweep because there is no earlier
+# version to fall back to. For 04a02b1 below that is the whole of the effect:
+# 145 lines across the 92 reformatted files stay attributed to it either way.
+# The entry is kept for correctness and for future sweeps (a reindentation or a
+# style-year bump, where the mechanism does work). Do not assume listing a
+# commit here makes its churn disappear — check before relying on it.
+
+# chore: repo-wide black and whitespace sweep, and gate on black (#91)
+# 92 files reformatted by black at line length 100, plus trailing-whitespace and
+# end-of-file-fixer across 39 more. Verified inert: every reformatted file parses
+# to a byte-identical AST, and 129 of 130 generated output files were identical
+# either side (#77).
+04a02b109a2f63f39395232378716dd1ffb456e0
