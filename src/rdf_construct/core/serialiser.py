@@ -9,6 +9,7 @@ from pathlib import Path
 
 from rdflib import BNode, Graph, URIRef, Literal, RDF
 from rdflib.namespace import RDFS, OWL, XSD
+from rdflib.term import Node
 
 try:
     from .predicate_order import (
@@ -402,6 +403,43 @@ def _order_subject_predicates(
         sorted_preds.append((pred, pred_dict[pred]))
 
     return sorted_preds
+
+
+def bnode_closure(base: Graph, subjects: list[Node]) -> list[Node]:
+    """Collect the blank nodes reachable as objects from a set of subjects.
+
+    ``build_section_graph()`` copies triples by subject, so a blank node that
+    no section selected loses its own triples while the reference to it
+    survives in the selected subject — the description collapses to an empty
+    ``[ ]``, which is not a partial ontology but a different one (an anonymous
+    class with no axioms, an ``owl:unionOf`` pointing at a non-list).
+
+    A blank node has no identity a profile could select it *by*: it belongs to
+    the description of whatever references it. This walks object positions
+    transitively — blank nodes nest, both through ``rdf:rest`` chains and
+    through structures such as a quantity inside a measurement — and returns
+    the ones not already present.
+
+    Args:
+        base: Source RDF graph to walk.
+        subjects: Subjects already selected for output.
+
+    Returns:
+        Reachable blank nodes not already in *subjects*, in discovery order.
+    """
+    known: set[Node] = set(subjects)
+    discovered: list[Node] = []
+    queue: list[Node] = list(subjects)
+
+    while queue:
+        subject = queue.pop(0)
+        for obj in base.objects(subject, None):
+            if isinstance(obj, BNode) and obj not in known:
+                known.add(obj)
+                discovered.append(obj)
+                queue.append(obj)
+
+    return discovered
 
 
 def build_section_graph(base: Graph, subjects_ordered: list) -> Graph:

@@ -7,6 +7,16 @@ import yaml
 
 from .predicate_order import PredicateOrderConfig
 
+#: Policies for subjects that no section of a profile claims.
+#:
+#: - ``warn``   — emit only what the sections claimed, and report the loss (default)
+#: - ``emit``   — append the unclaimed subjects in a trailing section, losing nothing
+#: - ``ignore`` — emit only what the sections claimed, silently; for a profile that
+#:   filters deliberately
+UNCLAIMED_POLICIES = ("warn", "emit", "ignore")
+
+DEFAULT_UNCLAIMED_POLICY = "warn"
+
 
 class OrderingProfile:
     """Represents an ordering profile from a YAML configuration.
@@ -20,6 +30,8 @@ class OrderingProfile:
         description: Human-readable description
         sections: List of section configurations
         predicate_order: Optional predicate ordering configuration
+        unclaimed: Policy for subjects no section claims, or None to inherit
+            the config-level default
     """
 
     def __init__(self, name: str, config: dict[str, Any]):
@@ -32,6 +44,7 @@ class OrderingProfile:
         self.name = name
         self.description = config.get("description", "")
         self.sections = config.get("sections", [])
+        self.unclaimed = config.get("unclaimed")
         self.predicate_order = PredicateOrderConfig.from_dict(
             config.get("predicate_order")
         )
@@ -131,6 +144,36 @@ class OrderingConfig:
             return self.predicate_order
 
         return None
+
+    def get_unclaimed_policy(self, profile_name: str) -> str:
+        """Get the effective policy for subjects no section of a profile claims.
+
+        Profile-level ``unclaimed`` takes precedence over ``defaults.unclaimed``,
+        which in turn takes precedence over the built-in default (``warn``).
+
+        Args:
+            profile_name: Profile identifier
+
+        Returns:
+            One of :data:`UNCLAIMED_POLICIES`
+
+        Raises:
+            KeyError: If profile name not found
+            ValueError: If the configured policy is not a recognised value
+        """
+        profile = self.get_profile(profile_name)
+
+        policy = profile.unclaimed
+        if policy is None:
+            policy = self.defaults.get("unclaimed", DEFAULT_UNCLAIMED_POLICY)
+
+        if policy not in UNCLAIMED_POLICIES:
+            raise ValueError(
+                f"Unknown 'unclaimed' policy {policy!r} in profile '{profile_name}'. "
+                f"Expected one of: {', '.join(UNCLAIMED_POLICIES)}"
+            )
+
+        return str(policy)
 
     def list_profiles(self) -> list[str]:
         """Get list of available profile names.
