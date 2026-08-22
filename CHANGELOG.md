@@ -108,6 +108,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   consumers that ignore unknown fields are unaffected (#60)
 
 ### Fixed
+- `rdf-construct --version` reports the version in the source rather than the one recorded
+  in the installed distribution metadata. `@click.version_option()` with no argument
+  resolves through `importlib.metadata`, so an editable install whose metadata predated a
+  version bump reported the stale number — v0.4.0 for a v0.4.7 checkout — until someone
+  re-ran `poetry install`. The same call also named the group function rather than the
+  tool, printing `cli, version …`; it now prints `rdf-construct, version …` (#66)
 - `order` no longer emits an empty `[ ]` in place of a blank node that no section
   claimed. `build_section_graph()` copies triples by subject, so an `owl:Restriction`
   or an `owl:unionOf` list lost its own triples while the reference to it survived —
