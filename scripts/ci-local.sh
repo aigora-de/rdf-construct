@@ -10,26 +10,30 @@
 #
 # GATE vs ADVISORY
 #
-#   GATE     — the test suite, the version-consistency check and the instruction/memory
-#              size guard. A gate step's failure IS this script's exit code.
-#   ADVISORY — black, ruff and mypy. They run and report but do NOT fail the script,
-#              because each carries substantial pre-existing debt measured across the
-#              whole repository (see the tracking issues below). Gating on them today
-#              would mean the script failed on every run from day one, and a check that
+#   GATE     — the test suite, black, the version-consistency check and the
+#              instruction/memory size guard. A gate step's failure IS this script's
+#              exit code.
+#   ADVISORY — ruff and mypy. They run and report but do NOT fail the script, because
+#              each carries substantial pre-existing debt measured across the whole
+#              repository (see the tracking issues below). Gating on them today would
+#              mean the script failed on every run from day one, and a check that
 #              always fails is a check nobody reads.
 #
 # Keep the files YOUR change touches clean; you are not expected to fix the rest.
 # When a debt lands at zero, flip its step from `advisory` to `gate` below — a
-# one-word change — and, for black, restore its pre-commit hook.
+# one-word change — and restore its pre-commit hook.
 #
-#   black debt   — #77   ruff debt — #78   mypy --strict debt — #79
+#   ruff debt — #78   mypy --strict debt — #79
+#
+# black was the first to clear: #77 reformatted the repository, so it is a gate here
+# and a pre-commit hook again.
 #
 # Runs every selected check even if an earlier one fails, then prints a summary and
 # exits non-zero iff a GATE step failed. Override the Python runner with CI_LOCAL_PYRUN
 # (default "poetry run"; set to "" inside an already-active venv).
 #
 # Usage:
-#   scripts/ci-local.sh              # gates (pytest + memory guard) + advisory (black, ruff, mypy)
+#   scripts/ci-local.sh              # gates (pytest + black + memory guard) + advisory (ruff, mypy)
 #   scripts/ci-local.sh --tests-only # the pytest gate alone (fast)
 #   scripts/ci-local.sh --lint-only  # the non-pytest checks (black, ruff, mypy, memory guard)
 #   scripts/ci-local.sh -h|--help
@@ -44,7 +48,7 @@ RUN_OTHER=1
 case "${1-}" in
   --tests-only) RUN_OTHER=0 ;;
   --lint-only)  RUN_TESTS=0 ;;
-  -h|--help)    sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help)    sed -n '2,39p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
   "")           ;;
   *)            echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
 esac
@@ -112,13 +116,15 @@ s_version() {
   echo "version $pyproject (pyproject.toml and __init__.py agree)"
 }
 
-# ADVISORY (#77): 93 of 142 files would be reformatted as at 2026-08-22.
+# GATE (#77): clean repo-wide as at 2026-08-22 — 142 of 142 files. `black` is also a
+# pre-commit hook, so a failure here usually means the hook is not installed locally
+# (`pre-commit install`) rather than a genuine surprise.
 s_black() { $PYRUN black --check .; }
 
-# ADVISORY (#78): 597 errors as at 2026-08-22.
+# ADVISORY (#78): 610 errors as at 2026-08-22, after the #77 sweep.
 s_ruff() { $PYRUN ruff check .; }
 
-# ADVISORY (#79): 293 errors in 50 files as at 2026-08-22.
+# ADVISORY (#79): 296 errors in 51 files as at 2026-08-22, after the #77 sweep.
 s_mypy() { $PYRUN mypy src/rdf_construct; }
 
 # --- run --------------------------------------------------------------------
@@ -129,7 +135,7 @@ fi
 if [[ $RUN_OTHER -eq 1 ]]; then
   step gate     "version consistency"  s_version
   step gate     "memory-budget guard"  s_memory
-  step advisory "black formatting"     s_black
+  step gate     "black formatting"     s_black
   step advisory "ruff lint"            s_ruff
   step advisory "mypy type-check"      s_mypy
 fi

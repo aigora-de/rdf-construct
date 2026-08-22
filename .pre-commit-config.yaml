@@ -3,19 +3,24 @@
 # Setup:   pre-commit install
 #
 # This config holds only hooks that a contributor can actually live with today.
-# black, ruff and mypy are NOT here: each carries repo-wide pre-existing debt
-# (#77, #78, #79), so as commit hooks they either rewrote files well beyond the
-# change being committed or, in mypy's case, refused the commit outright. They
+# ruff and mypy are NOT here: each carries repo-wide pre-existing debt (#78,
+# #79), so as commit hooks they would either rewrite files well beyond the
+# change being committed or, in mypy's case, refuse the commit outright. They
 # run as advisory steps in scripts/ci-local.sh instead — run that before opening
 # a PR. Each is restored here as its debt reaches zero. See #74.
+#
+# black was the third of those and is now back: the #77 sweep took its debt to
+# zero repo-wide, so as a hook it can only touch the file you are already
+# editing. It is a gate in scripts/ci-local.sh too. Keep the rev below in step
+# with the black constraint in pyproject.toml's dev group, or the hook and the
+# gate will disagree about what "formatted" means.
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
-      # These two rewrite the staged file. Repo-wide they would touch 21 and 34
-      # files respectively (#77), but scoped to what you are already editing the
-      # churn is small and it stops new debt accruing.
+      # These two rewrite the staged file. Both pass repo-wide since the #77
+      # sweep, so they now only ever act on new debt as it is introduced.
       - id: trailing-whitespace
       - id: end-of-file-fixer
       # Read-only checks; all pass repo-wide as at 2026-08-22.
@@ -24,6 +29,13 @@ repos:
       - id: check-merge-conflict
       - id: check-toml
       - id: debug-statements
+
+  # Restored by #77. Reads its line length and target versions from
+  # [tool.black] in pyproject.toml — do not repeat them as args here.
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
 
   # Size guard for the instruction/memory surface (#73). Runs only when the
   # tracked half changes; the memory store itself is local, so the script warns
