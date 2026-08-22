@@ -7,7 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- Nothing yet.
+### Fixed
+- `order` no longer drops terms declared only as `rdf:Property`. They were excluded from the
+  `individuals` selector while no other selector claimed them, so their triples were silently
+  absent from the ordered output — 10 triples in, 8 out, with no warning
+- Terms declared only by an OWL property characteristic (`owl:TransitiveProperty`,
+  `owl:SymmetricProperty`, `owl:AsymmetricProperty`, `owl:ReflexiveProperty`,
+  `owl:IrreflexiveProperty`, `owl:InverseFunctionalProperty`) are now selected as object
+  properties rather than classified as individuals. Each is a subclass of `owl:ObjectProperty`
+  in OWL 2, and declaring one alone is legal and common in older ontologies
+- `owl:DeprecatedClass` is now recognised by the `classes` selector
+
+### Added
+- New `other_props` selector for properties whose kind is not implied by their declaration —
+  `rdf:Property`, `owl:FunctionalProperty`, `owl:DeprecatedProperty`. These remain visible to
+  the `individuals` selector, so existing profiles keep emitting them; adding an `other_props`
+  section before `individuals` groups them instead
+- New `rdf_construct.core.vocab` module holding the class and property type sets in one place,
+  so consumers no longer reproduce (and shorten) the list
+
+**Note:** the equivalent gap in the `docs` command's entity extraction is not addressed here, to
+avoid conflicting with the in-flight entity-taxonomy work in #62.
 
 ## [0.4.7] - 2026-05-07
 

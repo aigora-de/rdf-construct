@@ -3,6 +3,15 @@
 from .ordering import sort_subjects, topo_sort_subset, sort_with_roots
 from .profile import OrderingConfig, OrderingProfile, load_yaml
 from .selector import select_subjects
+from .vocab import (
+    ALL_PROPERTY_TYPES,
+    ANNOTATION_PROPERTY_TYPES,
+    CLASS_TYPES,
+    DATATYPE_PROPERTY_TYPES,
+    GENERIC_PROPERTY_TYPES,
+    KIND_SPECIFIC_PROPERTY_TYPES,
+    OBJECT_PROPERTY_TYPES,
+)
 from .serialiser import collect_used_namespaces, serialise_turtle, build_section_graph
 from .utils import (
     expand_curie,
@@ -33,6 +42,14 @@ __all__ = [
     "load_yaml",
     # Selector
     "select_subjects",
+    # Vocabulary
+    "ALL_PROPERTY_TYPES",
+    "ANNOTATION_PROPERTY_TYPES",
+    "CLASS_TYPES",
+    "DATATYPE_PROPERTY_TYPES",
+    "GENERIC_PROPERTY_TYPES",
+    "KIND_SPECIFIC_PROPERTY_TYPES",
+    "OBJECT_PROPERTY_TYPES",
     # Serialiser
     "collect_used_namespaces",
     "serialise_turtle",
