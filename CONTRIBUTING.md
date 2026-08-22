@@ -158,6 +158,10 @@ feat!: rename --output to --out (breaking change)
 git clone https://github.com/aigora-de/rdf-construct.git
 cd rdf-construct
 poetry install --with dev
+pre-commit install
+
+# Let `git blame` skip the repo-wide formatting sweep (once per clone)
+git config blame.ignoreRevsFile .git-blame-ignore-revs
 
 # Make changes
 git checkout -b dev/my-feature
@@ -179,24 +183,29 @@ the gate. It runs every check, reports them all, and fails only if a *gate* step
 | Step | Severity |
 |---|---|
 | test suite (`pytest`) | **gate** |
+| version consistency (`pyproject.toml` vs `__init__.py`) | **gate** |
 | instruction/memory size guard | **gate** |
-| `black --check` | advisory |
+| `black --check` | **gate** |
 | `ruff check` | advisory |
 | `mypy --strict` | advisory |
 
-The three advisory steps carry substantial pre-existing debt across the repository — see
-[#77](https://github.com/aigora-de/rdf-construct/issues/77),
+The two advisory steps carry substantial pre-existing debt across the repository — see
 [#78](https://github.com/aigora-de/rdf-construct/issues/78) and
 [#79](https://github.com/aigora-de/rdf-construct/issues/79). **Keep the files your change touches
-clean; you are not expected to fix the rest.** Each becomes a gate as its debt reaches zero.
+clean; you are not expected to fix the rest.** Each becomes a gate as its debt reaches zero, as
+black did in [#77](https://github.com/aigora-de/rdf-construct/issues/77).
 
 Useful variants: `--tests-only` (the fast gate alone), `--lint-only` (everything else), and
 `CI_LOCAL_PYRUN=""` if you are already inside an activated virtualenv.
 
-The pre-commit hooks (`pre-commit install`) are a lighter, separate thing: whitespace and file
-hygiene only. `black`, `ruff` and `mypy` are deliberately **not** commit hooks, because against the
-current debt they rewrote files far beyond the change being committed — or, for mypy, refused the
-commit outright.
+The pre-commit hooks (`pre-commit install`) are a lighter, separate thing: file hygiene plus
+`black`. Because the repository is black-clean, the hook only ever reformats the file you are
+already editing. `ruff` and `mypy` are deliberately **not** commit hooks — against their current
+debt the first rewrote files far beyond the change being committed, and mypy refused the commit
+outright.
+
+If the black gate fails, `poetry run black .` fixes it; the usual cause is not having run
+`pre-commit install`.
 
 ## Pull Request Process
 
