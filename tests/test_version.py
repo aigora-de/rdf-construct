@@ -10,7 +10,11 @@ from click.testing import CliRunner
 import rdf_construct
 from rdf_construct.cli import cli
 
-PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
+ROOT = Path(__file__).resolve().parent.parent
+PYPROJECT = ROOT / "pyproject.toml"
+README = ROOT / "README.md"
+CLAUDE_MD = ROOT / "CLAUDE.md"
+CHANGELOG = ROOT / "CHANGELOG.md"
 
 
 class TestVersionOption:
@@ -74,3 +78,69 @@ class TestVersionStringsAgree:
 
         assert match is not None, "no version line found in pyproject.toml"
         assert match.group(1) == rdf_construct.__version__
+
+
+class TestDocumentedVersionsAgree:
+    """Prose that states the version must not drift from the code (#98).
+
+    These are the strings that actually went stale: README claimed v0.4.1 for
+    four releases, and CLAUDE.md carried a wrong version alongside a wrong
+    command and subpackage count. `scripts/release.sh` checks all of this
+    before a release, but a release is a rare event and the script is easy not
+    to run — so the suite guards it on every commit too.
+    """
+
+    def test_readme_names_no_other_version(self) -> None:
+        """Every `vX.Y.Z` in README.md is the current version."""
+        found = set(re.findall(r"v(\d+\.\d+\.\d+)", README.read_text(encoding="utf-8")))
+
+        assert found, "README.md names no version at all — it used to name two"
+        assert found == {
+            rdf_construct.__version__
+        }, f"README.md names {sorted(found)}, expected only {rdf_construct.__version__}"
+
+    def test_claude_md_names_the_current_version(self) -> None:
+        """CLAUDE.md's stated version matches the code."""
+        text = CLAUDE_MD.read_text(encoding="utf-8")
+
+        assert (
+            f"v{rdf_construct.__version__}" in text
+        ), f"CLAUDE.md does not name v{rdf_construct.__version__}"
+
+    def test_changelog_top_entry_is_the_current_version(self) -> None:
+        """The newest dated CHANGELOG entry is this version, and it has a date."""
+        match = re.search(
+            r"^## \[(\d+\.\d+\.\d+)\] - (\d{4}-\d{2}-\d{2})$",
+            CHANGELOG.read_text(encoding="utf-8"),
+            re.MULTILINE,
+        )
+
+        assert match is not None, "no dated release heading found in CHANGELOG.md"
+        assert match.group(1) == rdf_construct.__version__
+
+
+class TestClaudeMdCounts:
+    """CLAUDE.md states counts as fact; the size guard measures bytes, not truth."""
+
+    def test_command_count_is_accurate(self) -> None:
+        """The stated command count matches the CLI's actual top-level commands."""
+        stated = re.search(r"^(\d+) commands across", CLAUDE_MD.read_text(encoding="utf-8"), re.M)
+
+        assert stated is not None, "CLAUDE.md no longer states a command count"
+        assert int(stated.group(1)) == len(cli.commands)
+
+    def test_subpackage_count_is_accurate(self) -> None:
+        """The stated subpackage count matches the directories on disk."""
+        stated = re.search(
+            r"commands across (\d+) subpackages", CLAUDE_MD.read_text(encoding="utf-8")
+        )
+        packages = [
+            d
+            for d in (ROOT / "src" / "rdf_construct").iterdir()
+            if d.is_dir() and not d.name.startswith("__")
+        ]
+
+        assert stated is not None, "CLAUDE.md no longer states a subpackage count"
+        assert int(stated.group(1)) == len(
+            packages
+        ), f"CLAUDE.md says {stated.group(1)}, found {sorted(p.name for p in packages)}"

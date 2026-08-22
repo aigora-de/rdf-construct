@@ -231,17 +231,45 @@ Not every merged PR triggers a release. Cut one when a milestone is complete, wh
 bug fix needs to reach users, when smaller improvements have accumulated, or immediately for a
 security fix. Partial features are not released.
 
-1. Ensure `main` is stable and the test suite passes
-2. Update version in `pyproject.toml` **and** `src/rdf_construct/__init__.py` — they must match
-3. Update CHANGELOG.md with the release notes and date, following
+**`scripts/release.sh` runs the release**, as `scripts/ci-local.sh` runs the pre-PR checks.
+
+Prepare the release by hand — these are judgement calls, so the script checks them rather than
+making them:
+
+1. Bump the version in `pyproject.toml` **and** `src/rdf_construct/__init__.py`, following
    [SemVer](https://semver.org/): MAJOR for breaking changes, MINOR for backward-compatible
    features, PATCH for backward-compatible fixes
-4. Create an annotated git tag: `git tag -a v0.5.0 -m "Release v0.5.0"`
-5. Push the tag: `git push origin v0.5.0`
-6. Build and publish: `poetry build && poetry publish`
+2. Date the CHANGELOG entry, empty `[Unreleased]`, add the version's `compare/…` link to the
+   footer, and move the `[Unreleased]` link on to the new version
+3. Update the version where prose states it — `README.md` and `CLAUDE.md`
 
-There is **no release automation** — `.github/workflows/` is empty, so nothing runs on push or on
-tag. Publishing is a manual step today.
+Then:
+
+```bash
+scripts/release.sh --check   # changes nothing; tells you what is not ready
+scripts/release.sh           # clean build, verify the wheel, tag, push, dry run
+poetry publish               # yours to run — see below
+scripts/release.sh --post    # GitHub release from the CHANGELOG, close the milestone
+```
+
+The script refuses rather than assists: every check names what to fix and it never edits a file
+to make itself pass. It also stops short of publishing. **A version can never be replaced on
+PyPI once uploaded**, so that one command stays deliberate and human.
+
+It builds *before* it tags, and tags the exact commit it built. A pushed tag cannot be quietly
+retracted once anyone has fetched it, so nothing reaches origin until the artefact exists and has
+been proven to work.
+
+`--check` verifies: `main`, clean, in sync; the `ci-local.sh` gate; that the version agrees across
+`pyproject.toml`, `__init__.py`, `CHANGELOG.md`, `README.md` and `CLAUDE.md`; that the CHANGELOG's
+top entry is dated and `[Unreleased]` is empty; and that the tag does not already exist. After
+building it installs the wheel into a throwaway virtualenv and asks it for `--version`, because a
+non-editable install is where a version read from package metadata goes wrong ([#66]).
+
+There is **no hosted release automation** — `.github/workflows/` is empty, so nothing runs on push
+or on tag. The script is local, like every other gate here.
+
+[#66]: https://github.com/aigora-de/rdf-construct/issues/66
 
 ## Ownership, Licensing, and AI Tools
 
