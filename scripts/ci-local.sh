@@ -118,8 +118,16 @@ s_version() {
 
 # GATE (#77): clean repo-wide as at 2026-08-22 — 142 of 142 files. `black` is also a
 # pre-commit hook, so a failure here usually means the hook is not installed locally
-# (`pre-commit install`) rather than a genuine surprise.
-s_black() { $PYRUN black --check .; }
+# rather than a genuine surprise. On failure it prints the recovery command, because
+# `black --check` names the files it would reformat but never what to run (#92). The
+# hint is safe to follow: the black version is pinned exactly in pyproject.toml, so
+# `black .` here and the hook agree about what "formatted" means.
+s_black() {
+  $PYRUN black --check . && return 0
+  printf '   \033[2m→ fix: %s black .\033[0m\n' "$PYRUN"
+  printf '   \033[2m  (if this keeps recurring, run `pre-commit install`)\033[0m\n'
+  return 1
+}
 
 # ADVISORY (#78): 610 errors as at 2026-08-22, after the #77 sweep.
 s_ruff() { $PYRUN ruff check .; }
