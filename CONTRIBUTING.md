@@ -13,26 +13,52 @@ Be respectful, constructive, and professional. We're all here to build better RD
 - Check existing issues first to avoid duplicates
 - Provide clear reproduction steps
 - Include Python version, OS, and rdflib version
-- Attach sample RDF files if relevant (anonymized if needed)
+- Attach sample RDF files if relevant (anonymised if needed)
 
 ### Suggesting Features
 
 - Open an issue with the `enhancement` label
-- Explain the use case and expected behavior
+- Explain the use case and expected behaviour
 - Consider backward compatibility implications
+
+### Labels and Milestones
+
+A minimal label set: `bug`, `enhancement`, `documentation`, `question`, `chore`,
+`good-first-issue`, `backlog`. Add `breaking-change` when a change affects the public API.
+
+Milestones group related issues into a release. A feature developed across several issues and PRs
+shares one milestone (e.g. `v0.5.0 - Entity-type taxonomy in docs`), which makes it clear what is
+required before that release is ready.
 
 ### Contributing Code
 
 1. **Fork and clone** the repository
-2. **Create a branch** for your feature/fix: `git checkout -b feature-name`
-3. **Install dev dependencies**: `pip install -e ".[dev]"`
+2. **Create a branch** for your feature/fix — see [Branches](#branches) for the naming convention
+3. **Install dependencies**: `poetry install --with dev`
 4. **Make your changes** following the code standards below
 5. **Add tests** for new functionality
-6. **Run the test suite**: `pytest`
-7. **Format your code**: `black src/ tests/`
-8. **Lint**: `ruff check src/ tests/`
-9. **Commit** with clear, descriptive messages
+6. **Run the test suite**: `poetry run pytest`
+7. **Format your code**: `poetry run black src/ tests/`
+8. **Lint**: `poetry run ruff check src/ tests/`
+9. **Commit** with clear, descriptive messages — see [Commits](#commits)
 10. **Push** and create a pull request
+
+### Branches
+
+`<type>/<short-description>` or `<type>/<description>-<issue-number>`, in kebab-case.
+
+| Type | Purpose | Example |
+|------|---------|---------|
+| `main` | Stable, release-ready code | — |
+| `dev/*` | Feature development | `dev/shacl-generation`, `dev/merge-tool-23` |
+| `fix/*` | Bug fixes | `fix/blank-node-handling`, `fix/cli-crash-45` |
+| `refactor/*` | Code restructuring (no new features) | `refactor/serializer-module` |
+| `docs/*` | Documentation only | `docs/cli-reference` |
+| `chore/*` | Tooling, process, repo hygiene | `chore/routed-memories-73` |
+| `experiment/*` | Exploratory work (may be discarded) | `experiment/sparql-support` |
+
+`main` is always deployable — never commit directly to it except for trivial fixes. Branch from
+`main`, and delete the branch once it is merged.
 
 ## Code Standards
 
@@ -76,14 +102,46 @@ def example_function(graph: Graph, subjects: set[URIRef]) -> list[URIRef]:
 
 ### Commits
 
-Write clear commit messages:
+[Conventional Commits](https://www.conventionalcommits.org/) style:
 
 ```
-Add topological sorting for properties
+<type>(<scope>): <subject>
 
-- Implement sort_with_roots() for property hierarchies
-- Handle rdfs:subPropertyOf relationships
-- Add tests for edge cases with disconnected properties
+[optional body]
+
+[optional footer]
+```
+
+| Type | When to use |
+|------|-------------|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation only |
+| `refactor` | Code change that neither fixes a bug nor adds a feature |
+| `test` | Adding or updating tests |
+| `chore` | Build, config, tooling changes |
+| `style` | Formatting, whitespace (no logic change) |
+| `perf` | Performance improvement |
+
+**Scope** is optional and names the area affected (`cli`, `serialiser`, `shacl`, `merge`, `uml`).
+
+**Subject:** imperative mood ("add", not "added" or "adds"), lowercase first letter, no full stop,
+around 50 characters.
+
+**Body:** use it when the subject alone is not enough. Explain *what* and *why*, not *how* — the
+code shows how.
+
+**Footer:** reference issues (`Closes #42`, `Fixes #17`) or note breaking changes
+(`BREAKING CHANGE: description`).
+
+```
+feat(cli): add --format option to order command
+fix(serialiser): handle blank nodes in property ranges
+docs: update CLI reference with merge examples
+refactor(core): extract triple sorting into separate module
+test(shacl): add coverage for circular dependencies
+chore: bump rdflib to 7.0.0
+feat!: rename --output to --out (breaking change)
 ```
 
 ### Documentation
@@ -97,29 +155,35 @@ Add topological sorting for properties
 
 ```bash
 # Setup
-git clone https://github.com/yourusername/rdf-construct.git
+git clone https://github.com/aigora-de/rdf-construct.git
 cd rdf-construct
-pip install -e ".[dev]"
+poetry install --with dev
 
 # Make changes
-git checkout -b my-feature
+git checkout -b dev/my-feature
 
 # Test
-pytest
-pytest --cov=rdf_construct --cov-report=html  # with coverage
+poetry run pytest
+poetry run pytest --cov=rdf_construct --cov-report=html  # with coverage
 
 # Format
-black src/ tests/
-ruff check --fix src/ tests/
+poetry run black src/ tests/
+poetry run ruff check --fix src/ tests/
 
 # Type check
-mypy src/
+poetry run mypy src/
 
 # Commit and push
 git add .
-git commit -m "Clear description of changes"
-git push origin my-feature
+git commit -m "feat(core): clear description of changes"
+git push origin dev/my-feature
 ```
+
+**A note on the current state of the checks:** the test suite is green, but `black`, `ruff` and
+`mypy --strict` all carry substantial pre-existing debt across the repository. Keep *your* changed
+files clean; you are not expected to fix the rest. See
+[#74](https://github.com/aigora-de/rdf-construct/issues/74), which tracks a local CI runner and the
+debt behind each check.
 
 ## Pull Request Process
 
@@ -131,15 +195,51 @@ git push origin my-feature
 6. Make requested changes if needed
 7. Once approved, maintainers will merge
 
+**PR title:** should read as a changelog entry — clear, imperative, concise.
+
+**PR description:** the repository template
+(`.github/PULL_REQUEST_TEMPLATE.md`) covers summary, related issues, changes, testing and breaking
+changes. Fill it in rather than replacing it.
+
 ## Release Process
 
 (For maintainers)
 
-1. Update version in `pyproject.toml` and `src/rdf_construct/__init__.py`
-2. Update CHANGELOG.md with release date
-3. Create git tag: `git tag -a v0.2.0 -m "Release 0.2.0"`
-4. Push tag: `git push origin v0.2.0`
-5. GitHub Actions will automatically publish to PyPI
+Not every merged PR triggers a release. Cut one when a milestone is complete, when a significant
+bug fix needs to reach users, when smaller improvements have accumulated, or immediately for a
+security fix. Partial features are not released.
+
+1. Ensure `main` is stable and the test suite passes
+2. Update version in `pyproject.toml` **and** `src/rdf_construct/__init__.py` — they must match
+3. Update CHANGELOG.md with the release notes and date, following
+   [SemVer](https://semver.org/): MAJOR for breaking changes, MINOR for backward-compatible
+   features, PATCH for backward-compatible fixes
+4. Create an annotated git tag: `git tag -a v0.5.0 -m "Release v0.5.0"`
+5. Push the tag: `git push origin v0.5.0`
+6. Build and publish: `poetry build && poetry publish`
+
+There is **no release automation** — `.github/workflows/` is empty, so nothing runs on push or on
+tag. Publishing is a manual step today.
+
+## Ownership, Licensing, and AI Tools
+
+**Using an LLM or AI coding assistant is fine, and you do not need to hide it.** They are used in
+this project's own development. Whether you mention your use of one in a PR is entirely your
+choice.
+
+What *is* binding is ownership and licensing, and it is the same whether or not a tool was
+involved:
+
+- Contributions are licensed to the project under the **MIT Licence** (see the section below).
+- Copyright and ownership of the codebase rest with **Dave Dyke / Agilit Ltd**. No AI tool, model
+  or vendor is named as an author, co-author or originator of anything in the repository — not in
+  copyright headers, and not in commit or PR metadata.
+- Practically, this means **no AI-attribution boilerplate in commits or PRs**: no
+  `Co-Authored-By: Claude …` trailer, no "🤖 Generated with …" footer. Some assistants add these
+  automatically — please strip them before pushing. You remain the author of your contribution.
+
+If you want to describe how you built something, the PR description is the right place; it is
+content, not attribution metadata.
 
 ## Questions?
 
