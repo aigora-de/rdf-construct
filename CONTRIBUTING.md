@@ -221,6 +221,26 @@ security fix. Partial features are not released.
 There is **no release automation** — `.github/workflows/` is empty, so nothing runs on push or on
 tag. Publishing is a manual step today.
 
+## Ownership, Licensing, and AI Tools
+
+**Using an LLM or AI coding assistant is fine, and you do not need to hide it.** They are used in
+this project's own development. Whether you mention your use of one in a PR is entirely your
+choice.
+
+What *is* binding is ownership and licensing, and it is the same whether or not a tool was
+involved:
+
+- Contributions are licensed to the project under the **MIT Licence** (see the section below).
+- Copyright and ownership of the codebase rest with **Dave Dyke / Agilit Ltd**. No AI tool, model
+  or vendor is named as an author, co-author or originator of anything in the repository — not in
+  copyright headers, and not in commit or PR metadata.
+- Practically, this means **no AI-attribution boilerplate in commits or PRs**: no
+  `Co-Authored-By: Claude …` trailer, no "🤖 Generated with …" footer. Some assistants add these
+  automatically — please strip them before pushing. You remain the author of your contribution.
+
+If you want to describe how you built something, the PR description is the right place; it is
+content, not attribution metadata.
+
 ## Questions?
 
 Open an issue with the `question` label or start a discussion.
