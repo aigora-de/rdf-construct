@@ -208,3 +208,10 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Local working files — never project content (#81)
+# Session handover prompts: written for a future session, deleted when that work completes.
+PROMPT-*.md
+# Local scratch script for generating the project tree, and its output.
+project_tree.py
+project-structure*.txt
