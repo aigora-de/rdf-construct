@@ -37,7 +37,7 @@ required before that release is ready.
 3. **Install dependencies**: `poetry install --with dev`
 4. **Make your changes** following the code standards below
 5. **Add tests** for new functionality
-6. **Run the test suite**: `poetry run pytest`
+6. **Run the checks**: `scripts/ci-local.sh` — see [the pre-PR ritual](#scriptsci-localsh--the-pre-pr-ritual)
 7. **Format your code**: `poetry run black src/ tests/`
 8. **Lint**: `poetry run ruff check src/ tests/`
 9. **Commit** with clear, descriptive messages — see [Commits](#commits)
@@ -162,16 +162,8 @@ poetry install --with dev
 # Make changes
 git checkout -b dev/my-feature
 
-# Test
-poetry run pytest
-poetry run pytest --cov=rdf_construct --cov-report=html  # with coverage
-
-# Format
-poetry run black src/ tests/
-poetry run ruff check --fix src/ tests/
-
-# Type check
-poetry run mypy src/
+# Check everything before opening a PR — this is the one command that matters
+scripts/ci-local.sh
 
 # Commit and push
 git add .
@@ -179,15 +171,36 @@ git commit -m "feat(core): clear description of changes"
 git push origin dev/my-feature
 ```
 
-**A note on the current state of the checks:** the test suite is green, but `black`, `ruff` and
-`mypy --strict` all carry substantial pre-existing debt across the repository. Keep *your* changed
-files clean; you are not expected to fix the rest. See
-[#74](https://github.com/aigora-de/rdf-construct/issues/74), which tracks a local CI runner and the
-debt behind each check.
+### `scripts/ci-local.sh` — the pre-PR ritual
+
+**There is no hosted CI.** Nothing runs on push or on a pull request, so `scripts/ci-local.sh` is
+the gate. It runs every check, reports them all, and fails only if a *gate* step failed:
+
+| Step | Severity |
+|---|---|
+| test suite (`pytest`) | **gate** |
+| instruction/memory size guard | **gate** |
+| `black --check` | advisory |
+| `ruff check` | advisory |
+| `mypy --strict` | advisory |
+
+The three advisory steps carry substantial pre-existing debt across the repository — see
+[#77](https://github.com/aigora-de/rdf-construct/issues/77),
+[#78](https://github.com/aigora-de/rdf-construct/issues/78) and
+[#79](https://github.com/aigora-de/rdf-construct/issues/79). **Keep the files your change touches
+clean; you are not expected to fix the rest.** Each becomes a gate as its debt reaches zero.
+
+Useful variants: `--tests-only` (the fast gate alone), `--lint-only` (everything else), and
+`CI_LOCAL_PYRUN=""` if you are already inside an activated virtualenv.
+
+The pre-commit hooks (`pre-commit install`) are a lighter, separate thing: whitespace and file
+hygiene only. `black`, `ruff` and `mypy` are deliberately **not** commit hooks, because against the
+current debt they rewrote files far beyond the change being committed — or, for mypy, refused the
+commit outright.
 
 ## Pull Request Process
 
-1. Ensure all tests pass
+1. Run `scripts/ci-local.sh` and ensure the gate is green
 2. Update documentation as needed
 3. Add entry to CHANGELOG.md under "Unreleased"
 4. Reference related issues in the PR description
