@@ -76,9 +76,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `EntityKind` enum members. Default values: `[CLASS]` for classes,
   `[PROPERTY, <type>_PROPERTY]` for properties, `[INSTANCE]` for instances,
   and `[SHAPE, NODE_SHAPE]` / `[SHAPE, PROPERTY_SHAPE]` for shapes. A NodeShape
-  that's also typed `owl:NamedIndividual` carries both kinds and is placed in
-  the Shapes section (not Instances). This is the extension point for
-  upcoming work on SKOS support and `owl:NamedIndividual` recognition
+  that is also typed `owl:NamedIndividual` is placed in the Shapes section
+  rather than Instances, so it is documented once rather than twice. It does
+  not yet carry a named-individual kind — there is no `NAMED_INDIVIDUAL` member
+  in the enum, and recognising that type is stage 2/3 work. The `kinds` list is
+  the extension point for it, and for SKOS support
 - New `EntityKind` enum (str-mixin) exported from `rdf_construct.docs`,
   centralising kind values. Members: `CLASS`, `PROPERTY`, `OBJECT_PROPERTY`,
   `DATATYPE_PROPERTY`, `ANNOTATION_PROPERTY`, `RDF_PROPERTY`, `INSTANCE`,
