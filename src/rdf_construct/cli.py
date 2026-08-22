@@ -8,6 +8,11 @@ from rdflib import BNode, Graph, RDF, URIRef
 from rdflib.namespace import OWL
 from rdflib.term import Node
 
+# Safe despite rdf_construct/__init__.py importing this module: __version__ is
+# assigned there before the `from .cli import cli` line, so it is bound by the
+# time this import runs. Keep it that way — moving __version__ below those
+# imports would make this circular (#66).
+from rdf_construct import __version__
 from rdf_construct.core import (
     OrderingConfig,
     bnode_closure,
@@ -129,7 +134,7 @@ RENDERING_MODES = ["default", "odm"]
 
 
 @click.group()
-@click.version_option()
+@click.version_option(__version__, prog_name="rdf-construct")
 def cli():
     """rdf-construct: Semantic RDF manipulation toolkit.
 
