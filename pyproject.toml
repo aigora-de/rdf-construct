@@ -68,7 +68,11 @@ rich = "^13.0.0"
 jinja2 = "^3.1.0"
 
 [tool.poetry.group.dev.dependencies]
-black = "^24.0.0"
+# Pinned exactly, not "^24.0.0" (#92). The black pre-commit hook carries its own
+# `rev`, so a caret range lets the hook and `scripts/ci-local.sh` resolve
+# different versions and disagree about whether the same file is formatted.
+# Keep this in step with `rev:` in .pre-commit-config.yaml.
+black = "24.10.0"
 ruff = "^0.1.0"
 mypy = "^1.8.0"
 pytest = "^8.0.0"
