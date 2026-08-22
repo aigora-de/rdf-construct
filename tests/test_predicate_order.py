@@ -33,10 +33,12 @@ class TestPredicateOrderSpec:
 
     def test_from_dict_with_values(self):
         """Dict with values populates spec."""
-        spec = PredicateOrderSpec.from_dict({
-            "first": ["rdfs:label", "rdfs:comment"],
-            "last": ["rdfs:subClassOf"],
-        })
+        spec = PredicateOrderSpec.from_dict(
+            {
+                "first": ["rdfs:label", "rdfs:comment"],
+                "last": ["rdfs:subClassOf"],
+            }
+        )
         assert spec.first == ["rdfs:label", "rdfs:comment"]
         assert spec.last == ["rdfs:subClassOf"]
 
@@ -52,15 +54,17 @@ class TestPredicateOrderConfig:
 
     def test_from_dict_with_values(self):
         """Dict with values populates config."""
-        config = PredicateOrderConfig.from_dict({
-            "classes": {
-                "first": ["rdfs:label"],
-                "last": ["rdfs:subClassOf"],
-            },
-            "properties": {
-                "first": ["rdfs:domain", "rdfs:range"],
-            },
-        })
+        config = PredicateOrderConfig.from_dict(
+            {
+                "classes": {
+                    "first": ["rdfs:label"],
+                    "last": ["rdfs:subClassOf"],
+                },
+                "properties": {
+                    "first": ["rdfs:domain", "rdfs:range"],
+                },
+            }
+        )
         assert config.classes.first == ["rdfs:label"]
         assert config.classes.last == ["rdfs:subClassOf"]
         assert config.properties.first == ["rdfs:domain", "rdfs:range"]
@@ -68,19 +72,23 @@ class TestPredicateOrderConfig:
 
     def test_get_spec_for_type_class(self):
         """get_spec_for_type returns class spec."""
-        config = PredicateOrderConfig.from_dict({
-            "classes": {"first": ["rdfs:label"]},
-            "default": {"first": ["rdfs:comment"]},
-        })
+        config = PredicateOrderConfig.from_dict(
+            {
+                "classes": {"first": ["rdfs:label"]},
+                "default": {"first": ["rdfs:comment"]},
+            }
+        )
         spec = config.get_spec_for_type("class")
         assert spec.first == ["rdfs:label"]
 
     def test_get_spec_for_type_falls_back_to_default(self):
         """get_spec_for_type falls back to default when type spec empty."""
-        config = PredicateOrderConfig.from_dict({
-            "classes": {},
-            "default": {"first": ["rdfs:comment"]},
-        })
+        config = PredicateOrderConfig.from_dict(
+            {
+                "classes": {},
+                "default": {"first": ["rdfs:comment"]},
+            }
+        )
         spec = config.get_spec_for_type("class")
         assert spec.first == ["rdfs:comment"]
 

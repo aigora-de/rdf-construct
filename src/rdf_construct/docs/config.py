@@ -163,6 +163,7 @@ def load_docs_config(path: Path | None = None) -> DocsConfig:
 
 # Utility functions for path generation
 
+
 def entity_to_filename(qname: str) -> str:
     """Convert an entity QName to a safe filename.
 

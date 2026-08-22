@@ -37,6 +37,7 @@ class LayoutHint:
         direction: Optional direction hint ('up', 'down', 'left', 'right')
         weight: Number of hidden links (higher = stronger influence)
     """
+
     from_entity: str
     to_entity: str
     direction: Optional[str] = None
@@ -102,12 +103,14 @@ class LayoutConfig:
         self.layout_hints: list[LayoutHint] = []
         for hint in config.get("layout_hints", []):
             if isinstance(hint, dict) and "from" in hint and "to" in hint:
-                self.layout_hints.append(LayoutHint(
-                    from_entity=hint["from"],
-                    to_entity=hint["to"],
-                    direction=hint.get("direction"),
-                    weight=hint.get("weight", 1),
-                ))
+                self.layout_hints.append(
+                    LayoutHint(
+                        from_entity=hint["from"],
+                        to_entity=hint["to"],
+                        direction=hint.get("direction"),
+                        weight=hint.get("weight", 1),
+                    )
+                )
 
     def _validate_direction(self, direction: str) -> LayoutDirection:
         """Validate and normalize layout direction.
@@ -345,9 +348,7 @@ class LayoutConfigManager:
 
         # Load layouts
         self.layouts = {}
-        for layout_name, layout_config in (
-            self.config.get("layouts", {}) or {}
-        ).items():
+        for layout_name, layout_config in (self.config.get("layouts", {}) or {}).items():
             self.layouts[layout_name] = LayoutConfig(layout_name, layout_config)
 
     def get_layout(self, name: str) -> LayoutConfig:

@@ -52,17 +52,11 @@ def test_graph_structure(sample_graph):
 def test_style_config_structure():
     """Test style configuration dictionary structure."""
     config = {
-        "classes": {
-            "by_type": {
-                "ies:Entity": {"border": "#FEFE54", "fill": "#FEFE54"}
-            }
-        },
+        "classes": {"by_type": {"ies:Entity": {"border": "#FEFE54", "fill": "#FEFE54"}}},
         "instances": {
-            "by_type": {
-                "ies:Entity": {"border": "#FEFE54", "fill": "#000000"}
-            },
-            "default": {"border": "#000000", "fill": "#000000"}
-        }
+            "by_type": {"ies:Entity": {"border": "#FEFE54", "fill": "#000000"}},
+            "default": {"border": "#000000", "fill": "#000000"},
+        },
     }
 
     assert "instances" in config

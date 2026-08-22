@@ -177,11 +177,13 @@ class TestConfig:
 
     def test_config_from_dict(self):
         """Test configuration from dictionary."""
-        config = DocsConfig.from_dict({
-            "format": "markdown",
-            "title": "Custom Title",
-            "include_instances": False,
-        })
+        config = DocsConfig.from_dict(
+            {
+                "format": "markdown",
+                "title": "Custom Title",
+                "include_instances": False,
+            }
+        )
 
         assert config.format == "markdown"
         assert config.title == "Custom Title"
@@ -389,7 +391,8 @@ class TestConvenienceFunction:
         """Test basic usage of generate_docs function."""
         # Create a minimal test ontology file
         ontology_file = tmp_path / "test.ttl"
-        ontology_file.write_text("""
+        ontology_file.write_text(
+            """
             @prefix ex: <http://example.org/> .
             @prefix owl: <http://www.w3.org/2002/07/owl#> .
             @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -399,7 +402,8 @@ class TestConvenienceFunction:
 
             ex:Thing a owl:Class ;
                 rdfs:label "Thing" .
-        """)
+        """
+        )
 
         output_dir = tmp_path / "docs"
 
@@ -532,9 +536,7 @@ class TestPathResolution:
         )
         assert url == "https://example.com/docs/classes/Building.html"
 
-    def test_no_leading_slash_paths_in_any_output(
-        self, simple_ontology: Graph, output_dir: Path
-    ):
+    def test_no_leading_slash_paths_in_any_output(self, simple_ontology: Graph, output_dir: Path):
         """Default config must not emit leading-slash href/src refs anywhere.
 
         With ``base_url=""`` (the default), every layout asset and nav link
@@ -548,14 +550,12 @@ class TestPathResolution:
         offenders: list[tuple[Path, str]] = []
         for html_file in output_dir.rglob("*.html"):
             for line in html_file.read_text().splitlines():
-                if 'href="/' in line or "src=\"/" in line:
+                if 'href="/' in line or 'src="/' in line:
                     offenders.append((html_file.relative_to(output_dir), line.strip()))
 
         assert not offenders, (
             "Found leading-slash href/src references that would break under "
-            "file:// or sub-path hosting:\n" + "\n".join(
-                f"  {p}: {line}" for p, line in offenders
-            )
+            "file:// or sub-path hosting:\n" + "\n".join(f"  {p}: {line}" for p, line in offenders)
         )
 
     def test_layout_assets_resolve_from_top_level_pages(
@@ -597,9 +597,7 @@ class TestPathResolution:
         assert 'href="../../hierarchy.html"' in prop_html
         assert 'href="../../namespaces.html"' in prop_html
 
-    def test_entity_links_resolve_to_existing_files(
-        self, simple_ontology: Graph, output_dir: Path
-    ):
+    def test_entity_links_resolve_to_existing_files(self, simple_ontology: Graph, output_dir: Path):
         """Entity-to-entity links must resolve to files that actually exist.
 
         The bug also affected entity links from sub-folder pages: from
@@ -625,18 +623,13 @@ class TestPathResolution:
                     continue
                 target = (page_dir / href).resolve()
                 if not target.exists():
-                    broken.append(
-                        (html_file.relative_to(output_dir), href, target)
-                    )
+                    broken.append((html_file.relative_to(output_dir), href, target))
 
-        assert not broken, (
-            "Internal links did not resolve to existing files:\n"
-            + "\n".join(f"  {p}: href={h!r} -> {t}" for p, h, t in broken)
+        assert not broken, "Internal links did not resolve to existing files:\n" + "\n".join(
+            f"  {p}: href={h!r} -> {t}" for p, h, t in broken
         )
 
-    def test_explicit_base_url_still_used(
-        self, simple_ontology: Graph, output_dir: Path
-    ):
+    def test_explicit_base_url_still_used(self, simple_ontology: Graph, output_dir: Path):
         """When base_url is set, layout/entity URLs use it (not relative paths)."""
         config = DocsConfig(
             output_dir=output_dir,
@@ -653,9 +646,7 @@ class TestPathResolution:
             assert 'href="./assets/style.css"' not in html
             assert 'href="../assets/style.css"' not in html
 
-    def test_all_links_resolve_for_every_entity_kind(
-        self, shape_ontology: Graph, output_dir: Path
-    ):
+    def test_all_links_resolve_for_every_entity_kind(self, shape_ontology: Graph, output_dir: Path):
         """Every page of every entity kind must have resolvable links.
 
         The sibling tests above run against ``simple_ontology``, which has
@@ -688,9 +679,8 @@ class TestPathResolution:
                 if not target.exists():
                     broken.append((html_file.relative_to(output_dir), ref, target))
 
-        assert not broken, (
-            "References did not resolve to existing files:\n"
-            + "\n".join(f"  {p}: {r!r} -> {t}" for p, r, t in broken)
+        assert not broken, "References did not resolve to existing files:\n" + "\n".join(
+            f"  {p}: {r!r} -> {t}" for p, r, t in broken
         )
 
 
@@ -817,8 +807,7 @@ class TestShapeExtraction:
 
         # And it has no standalone ShapeInfo entry
         blank_node_shapes = [
-            s for s in entities.shapes
-            if s.uri is None or "hasName" in str(s.uri).lower()
+            s for s in entities.shapes if s.uri is None or "hasName" in str(s.uri).lower()
         ]
         assert blank_node_shapes == [], "Blank-node PropertyShape leaked as standalone"
 
@@ -1085,27 +1074,50 @@ class TestShapeRendering:
         ps_json = json.loads((output_dir / "shapes" / "PersonShape.json").read_text())
         # Top-level keys
         for key in [
-            "uri", "qname", "kinds", "label", "definition",
-            "target_classes", "target_nodes", "target_subjects_of", "target_objects_of",
-            "closed", "ignored_properties", "properties", "property_shape",
-            "annotations", "other_constraints",
+            "uri",
+            "qname",
+            "kinds",
+            "label",
+            "definition",
+            "target_classes",
+            "target_nodes",
+            "target_subjects_of",
+            "target_objects_of",
+            "closed",
+            "ignored_properties",
+            "properties",
+            "property_shape",
+            "annotations",
+            "other_constraints",
         ]:
             assert key in ps_json, f"shape JSON missing key: {key}"
 
         # Inline blank PropertyShape schema
         prop = ps_json["properties"][0]
         for key in [
-            "uri", "qname", "is_blank", "path", "name", "description",
-            "datatype", "class", "node_kind",
-            "min_count", "max_count", "min_length", "max_length",
-            "min_inclusive", "max_inclusive", "pattern", "has_value",
-            "in_values", "other_constraints",
+            "uri",
+            "qname",
+            "is_blank",
+            "path",
+            "name",
+            "description",
+            "datatype",
+            "class",
+            "node_kind",
+            "min_count",
+            "max_count",
+            "min_length",
+            "max_length",
+            "min_inclusive",
+            "max_inclusive",
+            "pattern",
+            "has_value",
+            "in_values",
+            "other_constraints",
         ]:
             assert key in prop, f"property shape JSON missing key: {key}"
 
-    def test_json_uses_class_not_class_underscore(
-        self, shape_ontology: Graph, output_dir: Path
-    ):
+    def test_json_uses_class_not_class_underscore(self, shape_ontology: Graph, output_dir: Path):
         """JSON key is 'class' (matches SHACL spec), not 'class_'."""
         # Add a sh:class constraint to verify
         g = shape_ontology
@@ -1127,9 +1139,7 @@ class TestShapeRendering:
 class TestShapeIndexAndSinglePage:
     """Tests for shapes appearing in index and single-page outputs."""
 
-    def test_html_index_has_shapes_section(
-        self, shape_ontology: Graph, output_dir: Path
-    ):
+    def test_html_index_has_shapes_section(self, shape_ontology: Graph, output_dir: Path):
         """HTML index.html includes a Shapes section."""
         config = DocsConfig(output_dir=output_dir, format="html")
         DocsGenerator(config).generate(shape_ontology)
@@ -1138,9 +1148,7 @@ class TestShapeIndexAndSinglePage:
         assert "<h2>Shapes</h2>" in idx
         assert "PersonShape" in idx or "Person Shape" in idx
 
-    def test_markdown_index_has_shapes_section(
-        self, shape_ontology: Graph, output_dir: Path
-    ):
+    def test_markdown_index_has_shapes_section(self, shape_ontology: Graph, output_dir: Path):
         """Markdown index.md includes a Shapes section."""
         config = DocsConfig(output_dir=output_dir, format="markdown")
         DocsGenerator(config).generate(shape_ontology)
@@ -1148,9 +1156,7 @@ class TestShapeIndexAndSinglePage:
         idx = (output_dir / "index.md").read_text()
         assert "## Shapes" in idx
 
-    def test_html_single_page_has_shapes(
-        self, shape_ontology: Graph, output_dir: Path
-    ):
+    def test_html_single_page_has_shapes(self, shape_ontology: Graph, output_dir: Path):
         """HTML single-page output includes a Shapes section."""
         config = DocsConfig(output_dir=output_dir, format="html", single_page=True)
         DocsGenerator(config).generate(shape_ontology)
@@ -1207,9 +1213,7 @@ class TestIncludeShapesFlag:
         cfg = DocsConfig.from_dict({"include_shapes": False})
         assert cfg.include_shapes is False
 
-    def test_include_shapes_false_excludes_pages(
-        self, shape_ontology: Graph, output_dir: Path
-    ):
+    def test_include_shapes_false_excludes_pages(self, shape_ontology: Graph, output_dir: Path):
         """include_shapes=False produces no shape pages or shapes/ dir."""
         config = DocsConfig(
             output_dir=output_dir,

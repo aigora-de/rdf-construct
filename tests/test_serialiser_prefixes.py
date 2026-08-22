@@ -98,9 +98,7 @@ class TestCollectUsedNamespaces:
         g = Graph()
         assert collect_used_namespaces(g) == set()
 
-    def test_overlapping_namespaces_longest_match(
-        self, overlapping_ns_graph: Graph
-    ) -> None:
+    def test_overlapping_namespaces_longest_match(self, overlapping_ns_graph: Graph) -> None:
         """dc: and dcterms: should both be detected independently."""
         used = collect_used_namespaces(overlapping_ns_graph)
 
@@ -126,9 +124,7 @@ class TestCollectUsedNamespaces:
 class TestSerialiseTurtlePrefixes:
     """Tests for prefix filtering in serialise_turtle output."""
 
-    def test_output_contains_only_used_prefixes(
-        self, small_graph: Graph, tmp_path: Path
-    ) -> None:
+    def test_output_contains_only_used_prefixes(self, small_graph: Graph, tmp_path: Path) -> None:
         """Output file should only declare prefixes for used namespaces."""
         out = tmp_path / "output.ttl"
         subjects = [EX.Animal, EX.Dog]
@@ -136,9 +132,7 @@ class TestSerialiseTurtlePrefixes:
         serialise_turtle(small_graph, subjects, out)
 
         content = out.read_text(encoding="utf-8")
-        prefix_lines = [
-            line for line in content.splitlines() if line.startswith("@prefix ")
-        ]
+        prefix_lines = [line for line in content.splitlines() if line.startswith("@prefix ")]
 
         # Extract declared prefix names
         declared = {line.split(":")[0].replace("@prefix ", "") for line in prefix_lines}
@@ -174,16 +168,14 @@ class TestSerialiseTurtlePrefixes:
         content = out.read_text(encoding="utf-8")
         for line in content.splitlines():
             if line.startswith("@prefix ") or line.startswith("PREFIX "):
-                assert line.startswith("@prefix "), (
-                    f"Prefix declaration uses invalid syntax (expected @prefix): {line!r}"
-                )
-                assert line.endswith(" ."), (
-                    f"Turtle @prefix declaration must end with ' .': {line!r}"
-                )
+                assert line.startswith(
+                    "@prefix "
+                ), f"Prefix declaration uses invalid syntax (expected @prefix): {line!r}"
+                assert line.endswith(
+                    " ."
+                ), f"Turtle @prefix declaration must end with ' .': {line!r}"
 
-    def test_no_sparql_prefix_in_output(
-        self, small_graph: Graph, tmp_path: Path
-    ) -> None:
+    def test_no_sparql_prefix_in_output(self, small_graph: Graph, tmp_path: Path) -> None:
         """Output must not contain any bare SPARQL-style PREFIX declarations."""
         out = tmp_path / "output.ttl"
         subjects = [EX.Animal, EX.Dog]
@@ -191,9 +183,7 @@ class TestSerialiseTurtlePrefixes:
         serialise_turtle(small_graph, subjects, out)
 
         content = out.read_text(encoding="utf-8")
-        sparql_prefix_lines = [
-            line for line in content.splitlines() if line.startswith("PREFIX ")
-        ]
+        sparql_prefix_lines = [line for line in content.splitlines() if line.startswith("PREFIX ")]
         assert sparql_prefix_lines == [], (
             f"Output contains SPARQL PREFIX declarations (invalid Turtle): "
             f"{sparql_prefix_lines}"
@@ -209,9 +199,7 @@ class TestSerialiseTurtlePrefixes:
         serialise_turtle(overlapping_ns_graph, subjects, out)
 
         content = out.read_text(encoding="utf-8")
-        prefix_lines = [
-            line for line in content.splitlines() if line.startswith("@prefix ")
-        ]
+        prefix_lines = [line for line in content.splitlines() if line.startswith("@prefix ")]
         declared = {line.split(":")[0].replace("@prefix ", "") for line in prefix_lines}
 
         assert "dc" in declared
@@ -224,9 +212,7 @@ class TestSerialiseTurtlePrefixes:
 class TestBuildSectionGraphPrefixes:
     """Tests for prefix filtering in build_section_graph."""
 
-    def test_section_graph_has_only_used_prefixes(
-        self, small_graph: Graph
-    ) -> None:
+    def test_section_graph_has_only_used_prefixes(self, small_graph: Graph) -> None:
         """Sub-graph should only carry namespace bindings for its own triples."""
         # Build a section with only EX.Animal
         sg = build_section_graph(small_graph, [EX.Animal])
@@ -251,9 +237,7 @@ class TestBuildSectionGraphPrefixes:
         triples = list(sg.triples((EX.Animal, None, None)))
         assert len(triples) == 2  # rdf:type + rdfs:label
 
-    def test_section_graph_excludes_other_subjects(
-        self, small_graph: Graph
-    ) -> None:
+    def test_section_graph_excludes_other_subjects(self, small_graph: Graph) -> None:
         """Triples for subjects not in the list should be absent."""
         sg = build_section_graph(small_graph, [EX.Animal])
 

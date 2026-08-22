@@ -83,9 +83,15 @@ def format_text_stats(stats: OntologyStats, graph: Optional[Graph] = None) -> st
     cls_label_pct = _format_pct(stats.documentation.classes_labelled_pct)
     cls_doc_pct = _format_pct(stats.documentation.classes_documented_pct)
     prop_label_pct = _format_pct(stats.documentation.properties_labelled_pct)
-    lines.append(f"  Classes Labelled:         {stats.documentation.classes_labelled} ({cls_label_pct})")
-    lines.append(f"  Classes Documented:       {stats.documentation.classes_documented} ({cls_doc_pct})")
-    lines.append(f"  Properties Labelled:      {stats.documentation.properties_labelled} ({prop_label_pct})")
+    lines.append(
+        f"  Classes Labelled:         {stats.documentation.classes_labelled} ({cls_label_pct})"
+    )
+    lines.append(
+        f"  Classes Documented:       {stats.documentation.classes_documented} ({cls_doc_pct})"
+    )
+    lines.append(
+        f"  Properties Labelled:      {stats.documentation.properties_labelled} ({prop_label_pct})"
+    )
     lines.append("")
 
     # Complexity
@@ -101,7 +107,9 @@ def format_text_stats(stats: OntologyStats, graph: Optional[Graph] = None) -> st
     lines.append("CONNECTIVITY")
     if stats.connectivity.most_connected_class:
         most_connected = _shorten_uri(stats.connectivity.most_connected_class, graph)
-        lines.append(f"  Most Connected:           {most_connected} ({stats.connectivity.most_connected_count} refs)")
+        lines.append(
+            f"  Most Connected:           {most_connected} ({stats.connectivity.most_connected_count} refs)"
+        )
     else:
         lines.append(f"  Most Connected:           (none)")
     lines.append(f"  Isolated Classes:         {stats.connectivity.isolated_classes}")
@@ -110,8 +118,8 @@ def format_text_stats(stats: OntologyStats, graph: Optional[Graph] = None) -> st
 
 
 def format_text_comparison(
-        comparison: ComparisonResult,
-        graph: Optional[Graph] = None,
+    comparison: ComparisonResult,
+    graph: Optional[Graph] = None,
 ) -> str:
     """Format comparison results as aligned text.
 

@@ -28,6 +28,7 @@ class CQTest:
         skip: Whether to skip this test
         skip_reason: Reason for skipping (if skip is True)
     """
+
     id: str
     name: str
     query: str
@@ -50,6 +51,7 @@ class CQTestSuite:
         name: Optional suite name
         description: Optional suite description
     """
+
     prefixes: dict[str, str]
     questions: list[CQTest]
     data_graph: Graph | None = None
@@ -57,8 +59,9 @@ class CQTestSuite:
     name: str | None = None
     description: str | None = None
 
-    def filter_by_tags(self, include_tags: set[str] | None = None,
-                       exclude_tags: set[str] | None = None) -> "CQTestSuite":
+    def filter_by_tags(
+        self, include_tags: set[str] | None = None, exclude_tags: set[str] | None = None
+    ) -> "CQTestSuite":
         """Return a new suite with only tests matching tag criteria.
 
         Args:
@@ -156,8 +159,7 @@ def load_test_suite(path: Path, base_dir: Path | None = None) -> CQTestSuite:
     )
 
 
-def _load_data(data_config: dict | None, prefixes: dict[str, str],
-               base_dir: Path) -> Graph | None:
+def _load_data(data_config: dict | None, prefixes: dict[str, str], base_dir: Path) -> Graph | None:
     """Load sample data from configuration.
 
     Supports:
@@ -187,9 +189,7 @@ def _load_data(data_config: dict | None, prefixes: dict[str, str],
         inline = data_config["inline"]
         if isinstance(inline, str):
             # Build prefix declarations for parsing
-            prefix_decls = "\n".join(
-                f"@prefix {p}: <{u}> ." for p, u in prefixes.items()
-            )
+            prefix_decls = "\n".join(f"@prefix {p}: <{u}> ." for p, u in prefixes.items())
             turtle_data = f"{prefix_decls}\n\n{inline}"
             graph.parse(data=turtle_data, format="turtle")
 

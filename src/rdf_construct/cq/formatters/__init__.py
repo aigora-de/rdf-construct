@@ -17,8 +17,7 @@ __all__ = [
 ]
 
 
-def format_results(results, format_name: str = "text",
-                   verbose: bool = False) -> str:
+def format_results(results, format_name: str = "text", verbose: bool = False) -> str:
     """Format test results using the specified formatter.
 
     Args:

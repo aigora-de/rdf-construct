@@ -198,7 +198,9 @@ def _detect_owl_full(graph: Graph) -> list[str]:
         # Check if this class is an instance of another class (not owl:Class/rdfs:Class)
         for class_type in graph.objects(cls, RDF.type):
             if class_type not in {OWL.Class, RDFS.Class} and class_type in all_classes:
-                issues.append(f"Metaclass: {_curie(graph, cls)} is instance of class {_curie(graph, class_type)}")
+                issues.append(
+                    f"Metaclass: {_curie(graph, cls)} is instance of class {_curie(graph, class_type)}"
+                )
 
     # Check for owl:Class used in unexpected positions
     # For example, as the object of a property that expects individuals

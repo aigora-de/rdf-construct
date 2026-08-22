@@ -54,9 +54,7 @@ def expand_curie(graph: Graph, curie_or_iri: str) -> Optional[URIRef]:
     return None
 
 
-def rebind_prefixes(
-        graph: Graph, ordered_prefixes: list[str], prefix_map: dict[str, str]
-) -> None:
+def rebind_prefixes(graph: Graph, ordered_prefixes: list[str], prefix_map: dict[str, str]) -> None:
     """Rebind prefixes in a graph according to a specified order.
 
     This ensures deterministic prefix ordering in serialized output.

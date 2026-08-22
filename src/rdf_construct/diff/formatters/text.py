@@ -170,9 +170,7 @@ def _format_removed_entity(entity: EntityChange, graph: Graph | None = None) -> 
     return f"  - {type_name} {uri_str}"
 
 
-def _format_modified_entity(
-    entity: EntityChange, graph: Graph | None = None
-) -> list[str]:
+def _format_modified_entity(entity: EntityChange, graph: Graph | None = None) -> list[str]:
     """Format a modified entity with its changes."""
     lines: list[str] = []
 

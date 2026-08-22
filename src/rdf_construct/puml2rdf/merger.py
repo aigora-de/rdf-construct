@@ -161,9 +161,7 @@ class OntologyMerger:
                     existing_values = list(result.graph.objects(s, p))
                     for ev in existing_values:
                         if ev != o:
-                            conflicts.append(
-                                f"Conflict on {s} {p}: existing={ev}, new={o}"
-                            )
+                            conflicts.append(f"Conflict on {s} {p}: existing={ev}, new={o}")
                             if not self.preserve_existing:
                                 result.graph.remove((s, p, ev))
 

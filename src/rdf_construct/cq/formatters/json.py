@@ -9,8 +9,7 @@ from typing import Any
 from rdf_construct.cq.runner import CQTestResults, CQTestResult, CQStatus
 
 
-def format_json(results: CQTestResults, verbose: bool = False,
-                indent: int = 2) -> str:
+def format_json(results: CQTestResults, verbose: bool = False, indent: int = 2) -> str:
     """Format test results as JSON.
 
     Args:
@@ -40,9 +39,7 @@ def _build_json_data(results: CQTestResults, verbose: bool) -> dict[str, Any]:
         data["suite_version"] = results.suite.version
 
     # Test results
-    data["questions"] = [
-        _format_result(r, verbose) for r in results.results
-    ]
+    data["questions"] = [_format_result(r, verbose) for r in results.results]
 
     # Summary
     data["summary"] = {

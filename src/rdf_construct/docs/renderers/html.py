@@ -255,9 +255,7 @@ class HTMLRenderer:
             Nested list structure representing the hierarchy.
         """
         # Index classes by URI for lookup
-        class_by_uri: dict[str, "ClassInfo"] = {
-            str(c.uri): c for c in classes
-        }
+        class_by_uri: dict[str, "ClassInfo"] = {str(c.uri): c for c in classes}
 
         # Find root classes (no superclasses in our ontology)
         internal_uris = set(class_by_uri.keys())
@@ -265,9 +263,7 @@ class HTMLRenderer:
 
         for c in classes:
             # A class is a root if none of its superclasses are in our ontology
-            has_internal_parent = any(
-                str(parent) in internal_uris for parent in c.superclasses
-            )
+            has_internal_parent = any(str(parent) in internal_uris for parent in c.superclasses)
             if not has_internal_parent:
                 root_classes.append(c)
 
@@ -313,6 +309,7 @@ class HTMLRenderer:
         )
 
         from ..config import entity_to_path
+
         rel_path = entity_to_path(class_info.qname, "class", self.config)
         return self._render_page("class.html.jinja", rel_path, context)
 
@@ -381,6 +378,7 @@ class HTMLRenderer:
 
         entity_type = f"{prop_info.property_type}_property"
         from ..config import entity_to_path
+
         rel_path = entity_to_path(prop_info.qname, entity_type, self.config)
         return self._render_page("property.html.jinja", rel_path, context)
 
@@ -401,6 +399,7 @@ class HTMLRenderer:
         context = self._build_context(entities, instance_info=instance_info)
 
         from ..config import entity_to_path
+
         rel_path = entity_to_path(instance_info.qname, "instance", self.config)
         return self._render_page("instance.html.jinja", rel_path, context)
 
@@ -427,6 +426,7 @@ class HTMLRenderer:
         context = self._build_context(entities, shape_info=shape_info)
 
         from ..config import entity_to_path
+
         rel_path = entity_to_path(shape_info.qname, "shape", self.config)
         return self._render_page("shape.html.jinja", rel_path, context)
 

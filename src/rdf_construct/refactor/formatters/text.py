@@ -87,8 +87,16 @@ class TextFormatter:
                 from_str = str(m.from_uri)
                 to_str = str(m.to_uri)
                 # Find common prefix
-                ns_from = from_str.rsplit("#", 1)[0] + "#" if "#" in from_str else from_str.rsplit("/", 1)[0] + "/"
-                ns_to = to_str.rsplit("#", 1)[0] + "#" if "#" in to_str else to_str.rsplit("/", 1)[0] + "/"
+                ns_from = (
+                    from_str.rsplit("#", 1)[0] + "#"
+                    if "#" in from_str
+                    else from_str.rsplit("/", 1)[0] + "/"
+                )
+                ns_to = (
+                    to_str.rsplit("#", 1)[0] + "#"
+                    if "#" in to_str
+                    else to_str.rsplit("/", 1)[0] + "/"
+                )
                 key = f"{ns_from} → {ns_to}"
                 if key not in namespaces:
                     namespaces[key] = []
@@ -212,7 +220,7 @@ class TextFormatter:
                     if info.was_already_deprecated:
                         lines.append(f"    {self._colour('Already deprecated', 'yellow')}")
                     if info.current_labels:
-                        lines.append(f"    rdfs:label: \"{info.current_labels[0]}\"")
+                        lines.append(f'    rdfs:label: "{info.current_labels[0]}"')
                     if info.reference_count > 0:
                         lines.append(
                             f"    {self._colour(f'Referenced {info.reference_count} times', 'dim')}"
@@ -228,7 +236,7 @@ class TextFormatter:
 
             if spec.message:
                 msg_preview = spec.message[:50] + "..." if len(spec.message) > 50 else spec.message
-                lines.append(f"      rdfs:comment \"DEPRECATED: {msg_preview}\"")
+                lines.append(f'      rdfs:comment "DEPRECATED: {msg_preview}"')
 
             lines.append("")
 
@@ -288,9 +296,7 @@ class TextFormatter:
             )
 
         if result.stats.entities_already_deprecated > 0:
-            lines.append(
-                f"  - Already deprecated: {result.stats.entities_already_deprecated}"
-            )
+            lines.append(f"  - Already deprecated: {result.stats.entities_already_deprecated}")
 
         # Show details of deprecated entities
         if result.entity_info:

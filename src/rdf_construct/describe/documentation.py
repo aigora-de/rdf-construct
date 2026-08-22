@@ -54,9 +54,7 @@ def analyse_documentation(graph: Graph) -> DocumentationCoverage:
     properties_with_label = sum(1 for prop in properties if _has_label(graph, prop))
 
     # Count properties with definitions
-    properties_with_definition = sum(
-        1 for prop in properties if _has_definition(graph, prop)
-    )
+    properties_with_definition = sum(1 for prop in properties if _has_definition(graph, prop))
 
     return DocumentationCoverage(
         classes_with_label=classes_with_label,

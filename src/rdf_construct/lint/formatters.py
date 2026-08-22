@@ -161,10 +161,7 @@ class TextFormatter(Formatter):
 
         lines = []
         # Sort by line number (issues without lines go last)
-        sorted_issues = sorted(
-            result.issues,
-            key=lambda i: (i.line or float('inf'), i.severity)
-        )
+        sorted_issues = sorted(result.issues, key=lambda i: (i.line or float("inf"), i.severity))
         for issue in sorted_issues:
             lines.append(self.format_issue(issue, result.file_path, result.graph))
 
@@ -191,7 +188,9 @@ class TextFormatter(Formatter):
             summary_parts.append("0 errors")
 
         if summary.total_warnings > 0:
-            warn_text = f"{summary.total_warnings} warning{'s' if summary.total_warnings != 1 else ''}"
+            warn_text = (
+                f"{summary.total_warnings} warning{'s' if summary.total_warnings != 1 else ''}"
+            )
             summary_parts.append(self._colour(warn_text, self._severity_colour(Severity.WARNING)))
         else:
             summary_parts.append("0 warnings")
@@ -322,6 +321,8 @@ def get_formatter(format_name: str, **kwargs) -> Formatter:
     }
 
     if format_name not in formatters:
-        raise ValueError(f"Unknown format '{format_name}'. Available: {', '.join(formatters.keys())}")
+        raise ValueError(
+            f"Unknown format '{format_name}'. Available: {', '.join(formatters.keys())}"
+        )
 
     return formatters[format_name](**kwargs)

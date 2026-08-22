@@ -313,7 +313,7 @@ def create_default_config() -> str:
     Returns:
         YAML configuration template
     """
-    return '''# rdf-construct merge configuration
+    return """# rdf-construct merge configuration
 # See MERGE_GUIDE.md for full documentation
 
 # Source files to merge (in order of priority, lowest to highest)
@@ -351,4 +351,4 @@ imports: preserve  # preserve, remove, update, or merge
 #     - type: rename
 #       from: "http://old.example.org/ont#OldClass"
 #       to: "http://example.org/ont#NewClass"
-'''
+"""

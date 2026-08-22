@@ -57,12 +57,8 @@ def compare_graphs(
 
     # Filter out ignored predicates
     if ignore_predicates:
-        added_triples = {
-            (s, p, o) for s, p, o in added_triples if p not in ignore_predicates
-        }
-        removed_triples = {
-            (s, p, o) for s, p, o in removed_triples if p not in ignore_predicates
-        }
+        added_triples = {(s, p, o) for s, p, o in added_triples if p not in ignore_predicates}
+        removed_triples = {(s, p, o) for s, p, o in removed_triples if p not in ignore_predicates}
 
     # Group changes by subject
     changes_by_subject: dict[Node, dict[str, list[tuple]]] = defaultdict(
@@ -107,12 +103,10 @@ def compare_graphs(
 
         # Create triple changes
         added_triple_changes = [
-            TripleChange(predicate=p, object=o, is_addition=True)
-            for p, o in changes["added"]
+            TripleChange(predicate=p, object=o, is_addition=True) for p, o in changes["added"]
         ]
         removed_triple_changes = [
-            TripleChange(predicate=p, object=o, is_addition=False)
-            for p, o in changes["removed"]
+            TripleChange(predicate=p, object=o, is_addition=False) for p, o in changes["removed"]
         ]
 
         # Classify the entity change
@@ -331,8 +325,6 @@ def _get_superclasses(graph: Graph, subject: URIRef) -> list[URIRef] | None:
     if OWL.Class not in types and RDFS.Class not in types:
         return None
 
-    superclasses = [
-        sc for sc in graph.objects(subject, RDFS.subClassOf) if isinstance(sc, URIRef)
-    ]
+    superclasses = [sc for sc in graph.objects(subject, RDFS.subClassOf) if isinstance(sc, URIRef)]
 
     return superclasses if superclasses else None

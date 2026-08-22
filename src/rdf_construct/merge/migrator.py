@@ -40,10 +40,7 @@ class MigrationStats:
     def total_changes(self) -> int:
         """Total number of changes made."""
         return (
-            self.subjects_updated
-            + self.objects_updated
-            + self.triples_added
-            + self.triples_removed
+            self.subjects_updated + self.objects_updated + self.triples_added + self.triples_removed
         )
 
 
@@ -137,12 +134,8 @@ class DataMigrator:
                 if rule.type == "rename":
                     # Handle rename rules that weren't in uri_map
                     if rule.from_uri and rule.to_uri:
-                        single_map = {
-                            URIRef(rule.from_uri): URIRef(rule.to_uri)
-                        }
-                        migrated = self._apply_uri_substitution(
-                            migrated, single_map, result.stats
-                        )
+                        single_map = {URIRef(rule.from_uri): URIRef(rule.to_uri)}
+                        migrated = self._apply_uri_substitution(migrated, single_map, result.stats)
                         result.stats.rules_applied[rule.description or "rename"] = (
                             result.stats.rules_applied.get(rule.description or "rename", 0) + 1
                         )

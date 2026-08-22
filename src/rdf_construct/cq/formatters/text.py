@@ -6,8 +6,7 @@ Produces human-readable console output with colors using Click.
 from rdf_construct.cq.runner import CQTestResults, CQTestResult, CQStatus
 
 
-def format_text(results: CQTestResults, verbose: bool = False,
-                use_color: bool = True) -> str:
+def format_text(results: CQTestResults, verbose: bool = False, use_color: bool = True) -> str:
     """Format test results as human-readable text.
 
     Args:
@@ -63,8 +62,7 @@ def format_text(results: CQTestResults, verbose: bool = False,
     return "\n".join(lines)
 
 
-def _format_result_line(result: CQTestResult, verbose: bool,
-                        use_color: bool) -> str:
+def _format_result_line(result: CQTestResult, verbose: bool, use_color: bool) -> str:
     """Format a single test result line."""
     status_map = {
         CQStatus.PASS: ("PASS", "green"),

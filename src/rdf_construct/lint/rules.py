@@ -74,10 +74,10 @@ _RULE_REGISTRY: dict[str, RuleSpec] = {}
 
 
 def lint_rule(
-        rule_id: str,
-        description: str,
-        category: str,
-        default_severity: Severity,
+    rule_id: str,
+    description: str,
+    category: str,
+    default_severity: Severity,
 ) -> Callable:
     """Decorator to register a lint rule.
 
@@ -141,10 +141,10 @@ def get_properties(graph: Graph) -> set[URIRef]:
     """Get all properties (all property types)."""
     props: set[URIRef] = set()
     for prop_type in (
-            RDF.Property,
-            OWL.ObjectProperty,
-            OWL.DatatypeProperty,
-            OWL.AnnotationProperty,
+        RDF.Property,
+        OWL.ObjectProperty,
+        OWL.DatatypeProperty,
+        OWL.AnnotationProperty,
     ):
         for prop in graph.subjects(RDF.type, prop_type):
             if isinstance(prop, URIRef):
@@ -554,7 +554,7 @@ def check_redundant_subclass(graph: Graph) -> list[LintIssue]:
         # For each pair of direct superclasses, check if one is an ancestor of the other
         superclass_list = list(superclasses)
         for i, sup1 in enumerate(superclass_list):
-            for sup2 in superclass_list[i + 1:]:
+            for sup2 in superclass_list[i + 1 :]:
                 # Check if sup1 is an ancestor of sup2 (or vice versa)
                 if _is_ancestor(graph, sup1, sup2):
                     issues.append(
@@ -563,7 +563,7 @@ def check_redundant_subclass(graph: Graph) -> list[LintIssue]:
                             severity=Severity.INFO,
                             entity=cls,
                             message=f"Redundant subclass: inherits from both {sup1} and {sup2} "
-                                    f"(but {sup2} already inherits from {sup1})",
+                            f"(but {sup2} already inherits from {sup1})",
                         )
                     )
                 elif _is_ancestor(graph, sup2, sup1):
@@ -573,7 +573,7 @@ def check_redundant_subclass(graph: Graph) -> list[LintIssue]:
                             severity=Severity.INFO,
                             entity=cls,
                             message=f"Redundant subclass: inherits from both {sup1} and {sup2} "
-                                    f"(but {sup1} already inherits from {sup2})",
+                            f"(but {sup1} already inherits from {sup2})",
                         )
                     )
 
@@ -621,6 +621,7 @@ def check_property_no_domain(graph: Graph) -> list[LintIssue]:
 
     return issues
 
+
 @lint_rule(
     rule_id="property-no-range",
     description="Object property has no rdfs:range declaration (direct or inherited)",
@@ -645,6 +646,7 @@ def check_property_no_range(graph: Graph) -> list[LintIssue]:
             )
 
     return issues
+
 
 @lint_rule(
     rule_id="inconsistent-naming",

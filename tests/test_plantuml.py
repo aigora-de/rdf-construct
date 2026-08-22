@@ -4,12 +4,9 @@ from rdf_construct.uml.uml_style import ColorPalette
 
 def test_to_plantuml_full_spec():
     """Test complete color specification."""
-    palette = ColorPalette({
-        "border": "#968584",
-        "fill": "#FEFE54",
-        "text": "#000000",
-        "line_style": "bold"
-    })
+    palette = ColorPalette(
+        {"border": "#968584", "fill": "#FEFE54", "text": "#000000", "line_style": "bold"}
+    )
 
     result = palette.to_plantuml()
 
@@ -47,11 +44,13 @@ def test_to_plantuml_minimal():
 
 def test_to_plantuml_strips_hash():
     """Test that existing # prefixes are stripped."""
-    palette = ColorPalette({
-        "fill": "##FEFE54",  # Double hash
-        "border": "#968584",  # Single hash
-        "text": "000000"  # No hash
-    })
+    palette = ColorPalette(
+        {
+            "fill": "##FEFE54",  # Double hash
+            "border": "#968584",  # Single hash
+            "text": "000000",  # No hash
+        }
+    )
 
     result = palette.to_plantuml()
     assert result == "#back:FEFE54;line:968584;text:000000"
@@ -70,11 +69,7 @@ def test_to_plantuml_empty():
 
 def test_to_plantuml_explicit_none():
     """Test that explicit None values override defaults."""
-    palette = ColorPalette({
-        "fill": None,
-        "border": None,
-        "text": None
-    })
+    palette = ColorPalette({"fill": None, "border": None, "text": None})
     # When explicitly set to None, config.get() returns None (not default)
     # But ColorPalette uses config.get("fill", "#FFFFFF") so None becomes the value
     # Actually this still returns the default because get() with default only

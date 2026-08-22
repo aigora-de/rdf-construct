@@ -53,37 +53,39 @@ def analyse_imports(
         # Resolve imports in parallel with timeout
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = {
-                executor.submit(_check_resolvable, str(uri), timeout): uri
-                for uri in import_uris
+                executor.submit(_check_resolvable, str(uri), timeout): uri for uri in import_uris
             }
 
             for future in futures:
                 uri = futures[future]
                 try:
                     status, error = future.result(timeout=timeout + 5)
-                    imports.append(ImportInfo(
-                        uri=str(uri),
-                        status=status,
-                        error=error,
-                    ))
+                    imports.append(
+                        ImportInfo(
+                            uri=str(uri),
+                            status=status,
+                            error=error,
+                        )
+                    )
                 except FuturesTimeout:
-                    imports.append(ImportInfo(
-                        uri=str(uri),
-                        status=ImportStatus.UNRESOLVABLE,
-                        error="Resolution timed out",
-                    ))
+                    imports.append(
+                        ImportInfo(
+                            uri=str(uri),
+                            status=ImportStatus.UNRESOLVABLE,
+                            error="Resolution timed out",
+                        )
+                    )
                 except Exception as e:
-                    imports.append(ImportInfo(
-                        uri=str(uri),
-                        status=ImportStatus.UNRESOLVABLE,
-                        error=str(e),
-                    ))
+                    imports.append(
+                        ImportInfo(
+                            uri=str(uri),
+                            status=ImportStatus.UNRESOLVABLE,
+                            error=str(e),
+                        )
+                    )
     else:
         # Just list imports without resolution
-        imports = [
-            ImportInfo(uri=str(uri), status=ImportStatus.UNCHECKED)
-            for uri in import_uris
-        ]
+        imports = [ImportInfo(uri=str(uri), status=ImportStatus.UNCHECKED) for uri in import_uris]
 
     return ImportAnalysis(
         imports=imports,

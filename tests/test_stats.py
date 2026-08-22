@@ -17,7 +17,10 @@ from rdf_construct.stats import (
 from rdf_construct.stats.metrics.basic import BasicStats, collect_basic_stats, get_all_classes
 from rdf_construct.stats.metrics.hierarchy import HierarchyStats, collect_hierarchy_stats
 from rdf_construct.stats.metrics.properties import PropertyStats, collect_property_stats
-from rdf_construct.stats.metrics.documentation import DocumentationStats, collect_documentation_stats
+from rdf_construct.stats.metrics.documentation import (
+    DocumentationStats,
+    collect_documentation_stats,
+)
 from rdf_construct.stats.metrics.complexity import ComplexityStats, collect_complexity_stats
 from rdf_construct.stats.metrics.connectivity import ConnectivityStats, collect_connectivity_stats
 
@@ -28,6 +31,7 @@ SKOS = Namespace("http://www.w3.org/2004/02/skos/core#")
 
 
 # --- Fixtures ---
+
 
 @pytest.fixture
 def empty_graph() -> Graph:
@@ -118,6 +122,7 @@ def complex_graph() -> Graph:
 
 # --- Basic Stats Tests ---
 
+
 class TestBasicStats:
     """Tests for basic count metrics."""
 
@@ -143,6 +148,7 @@ class TestBasicStats:
 
 
 # --- Hierarchy Stats Tests ---
+
 
 class TestHierarchyStats:
     """Tests for hierarchy metrics."""
@@ -176,6 +182,7 @@ class TestHierarchyStats:
 
 # --- Property Stats Tests ---
 
+
 class TestPropertyStats:
     """Tests for property metrics."""
 
@@ -198,6 +205,7 @@ class TestPropertyStats:
 
 # --- Documentation Stats Tests ---
 
+
 class TestDocumentationStats:
     """Tests for documentation coverage metrics."""
 
@@ -211,10 +219,11 @@ class TestDocumentationStats:
         """Counts documented classes (with comments)."""
         stats = collect_documentation_stats(simple_graph)
         assert stats.classes_documented == 1  # Only Animal has comment
-        assert stats.classes_documented_pct == pytest.approx(1/3, rel=0.01)
+        assert stats.classes_documented_pct == pytest.approx(1 / 3, rel=0.01)
 
 
 # --- Complexity Stats Tests ---
+
 
 class TestComplexityStats:
     """Tests for complexity metrics."""
@@ -227,6 +236,7 @@ class TestComplexityStats:
 
 # --- Connectivity Stats Tests ---
 
+
 class TestConnectivityStats:
     """Tests for connectivity metrics."""
 
@@ -238,6 +248,7 @@ class TestConnectivityStats:
 
 
 # --- Collector Tests ---
+
 
 class TestCollector:
     """Tests for the main stats collector."""
@@ -279,6 +290,7 @@ class TestCollector:
 
 # --- Comparator Tests ---
 
+
 class TestComparator:
     """Tests for stats comparison."""
 
@@ -310,6 +322,7 @@ class TestComparator:
 
 
 # --- Formatter Tests ---
+
 
 class TestFormatters:
     """Tests for output formatters."""

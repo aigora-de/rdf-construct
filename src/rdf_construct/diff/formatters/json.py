@@ -106,23 +106,27 @@ def _format_modified_entities_json(
 
         # Format added triples
         for change in entity.added_triples:
-            entity_dict["changes"].append({
-                "action": "added",
-                "predicate": str(change.predicate),
-                "predicate_curie": _format_uri(change.predicate, graph),
-                "object": _format_object_json(change.object, graph),
-                "category": change.category.value,
-            })
+            entity_dict["changes"].append(
+                {
+                    "action": "added",
+                    "predicate": str(change.predicate),
+                    "predicate_curie": _format_uri(change.predicate, graph),
+                    "object": _format_object_json(change.object, graph),
+                    "category": change.category.value,
+                }
+            )
 
         # Format removed triples
         for change in entity.removed_triples:
-            entity_dict["changes"].append({
-                "action": "removed",
-                "predicate": str(change.predicate),
-                "predicate_curie": _format_uri(change.predicate, graph),
-                "object": _format_object_json(change.object, graph),
-                "category": change.category.value,
-            })
+            entity_dict["changes"].append(
+                {
+                    "action": "removed",
+                    "predicate": str(change.predicate),
+                    "predicate_curie": _format_uri(change.predicate, graph),
+                    "object": _format_object_json(change.object, graph),
+                    "category": change.category.value,
+                }
+            )
 
         result.append(entity_dict)
 

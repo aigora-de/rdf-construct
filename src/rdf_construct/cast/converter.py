@@ -154,9 +154,7 @@ class CastConverter:
 
         for fmt in formats:
             if fmt == source_format:
-                result.warnings.append(
-                    f"Skipping '{fmt}': source and target format are the same."
-                )
+                result.warnings.append(f"Skipping '{fmt}': source and target format are the same.")
                 continue
 
             if pipe_mode:
@@ -193,8 +191,7 @@ class CastConverter:
             result.success = False
         elif result.failed_formats and not result.written_files:
             result.error = (
-                f"All target format conversions failed: "
-                f"{', '.join(result.failed_formats)}"
+                f"All target format conversions failed: " f"{', '.join(result.failed_formats)}"
             )
             result.success = False
         else:

@@ -217,9 +217,7 @@ class PumlToRdfConverter:
         self._graph.add((ont_uri, RDF.type, OWL.Ontology))
 
         if model.title:
-            self._graph.add(
-                (ont_uri, RDFS.label, Literal(model.title, lang=self.config.language))
-            )
+            self._graph.add((ont_uri, RDFS.label, Literal(model.title, lang=self.config.language)))
 
     def _convert_class(self, cls: PumlClass) -> None:
         """Convert a PlantUML class to owl:Class and properties."""
@@ -240,15 +238,11 @@ class PumlToRdfConverter:
                 label = self._camel_to_label(cls.name)
             else:
                 label = cls.name
-            self._graph.add(
-                (class_uri, RDFS.label, Literal(label, lang=self.config.language))
-            )
+            self._graph.add((class_uri, RDFS.label, Literal(label, lang=self.config.language)))
 
         # Add comment from note
         if cls.note:
-            self._graph.add(
-                (class_uri, RDFS.comment, Literal(cls.note, lang=self.config.language))
-            )
+            self._graph.add((class_uri, RDFS.comment, Literal(cls.note, lang=self.config.language)))
 
         # Handle abstract classes - add deprecated or custom annotation
         if cls.is_abstract:
@@ -259,9 +253,7 @@ class PumlToRdfConverter:
         for attr in cls.attributes:
             self._convert_attribute(attr, class_uri, ns)
 
-    def _convert_attribute(
-        self, attr: PumlAttribute, domain_class: URIRef, ns: Namespace
-    ) -> None:
+    def _convert_attribute(self, attr: PumlAttribute, domain_class: URIRef, ns: Namespace) -> None:
         """Convert a class attribute to owl:DatatypeProperty."""
         prop_uri = ns[attr.name]
         self._property_uris[attr.name] = prop_uri
@@ -280,9 +272,7 @@ class PumlToRdfConverter:
         # Add label
         if self.config.generate_labels:
             label = self._camel_to_label(attr.name) if self.config.camel_to_label else attr.name
-            self._graph.add(
-                (prop_uri, RDFS.label, Literal(label, lang=self.config.language))
-            )
+            self._graph.add((prop_uri, RDFS.label, Literal(label, lang=self.config.language)))
 
     def _convert_relationship(self, rel: PumlRelationship) -> None:
         """Convert a PlantUML relationship to RDF."""
@@ -332,14 +322,14 @@ class PumlToRdfConverter:
         # Add label
         if self.config.generate_labels:
             label = rel.label or self._camel_to_label(prop_name)
-            self._graph.add(
-                (prop_uri, RDFS.label, Literal(label, lang=self.config.language))
-            )
+            self._graph.add((prop_uri, RDFS.label, Literal(label, lang=self.config.language)))
 
         # Add cardinality constraints as comments for now
         # Full OWL restrictions would be more complex
         if rel.source_cardinality or rel.target_cardinality:
-            card_note = f"Cardinality: {rel.source_cardinality or '*'} -> {rel.target_cardinality or '*'}"
+            card_note = (
+                f"Cardinality: {rel.source_cardinality or '*'} -> {rel.target_cardinality or '*'}"
+            )
             # Could add as annotation or restriction
 
     def _get_namespace_for_class(self, cls: PumlClass) -> Namespace:

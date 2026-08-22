@@ -60,10 +60,10 @@ def get_all_properties(graph: Graph) -> set:
     """
     props = set()
     for prop_type in (
-            OWL.ObjectProperty,
-            OWL.DatatypeProperty,
-            OWL.AnnotationProperty,
-            RDF.Property,
+        OWL.ObjectProperty,
+        OWL.DatatypeProperty,
+        OWL.AnnotationProperty,
+        RDF.Property,
     ):
         props |= set(graph.subjects(RDF.type, prop_type))
     return props

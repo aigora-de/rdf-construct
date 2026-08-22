@@ -45,9 +45,7 @@ class OrderingProfile:
         self.description = config.get("description", "")
         self.sections = config.get("sections", [])
         self.unclaimed = config.get("unclaimed")
-        self.predicate_order = PredicateOrderConfig.from_dict(
-            config.get("predicate_order")
-        )
+        self.predicate_order = PredicateOrderConfig.from_dict(config.get("predicate_order"))
 
     def __repr__(self) -> str:
         return f"OrderingProfile(name={self.name!r}, sections={len(self.sections)})"
@@ -82,9 +80,7 @@ class OrderingConfig:
         self.prefix_order = self.config.get("prefix_order", []) or []
 
         # Load default predicate ordering (can be overridden per profile)
-        self.predicate_order = PredicateOrderConfig.from_dict(
-            self.config.get("predicate_order")
-        )
+        self.predicate_order = PredicateOrderConfig.from_dict(self.config.get("predicate_order"))
 
         # Load profiles
         self.profiles = {}

@@ -101,7 +101,9 @@ def format_text(
             lines.append(f"              ...and {len(p.owl_constructs_found) - 5} more")
 
     if p.violating_constructs:
-        lines.append(f"  {_warn('DL Violations:', use_colour)} {', '.join(p.violating_constructs[:3])}")
+        lines.append(
+            f"  {_warn('DL Violations:', use_colour)} {', '.join(p.violating_constructs[:3])}"
+        )
 
     lines.append("")
 
@@ -116,7 +118,9 @@ def format_text(
     if ns.local_namespace:
         lines.append(f"  Local: {ns.local_namespace}")
 
-    lines.append(f"  Local: {ns.local_count}, Imported: {ns.imported_count}, External: {ns.external_count}")
+    lines.append(
+        f"  Local: {ns.local_count}, Imported: {ns.imported_count}, External: {ns.external_count}"
+    )
 
     # Show top namespaces by usage
     top_ns = sorted(ns.namespaces, key=lambda x: -x.usage_count)[:5]
@@ -191,8 +195,12 @@ def format_text(
     label_bar = _progress_bar(label_pct, use_colour)
     def_bar = _progress_bar(def_pct, use_colour)
 
-    lines.append(f"  Classes with labels:      {label_bar} {label_pct:.0f}% ({d.classes_with_label}/{d.classes_total})")
-    lines.append(f"  Classes with definitions: {def_bar} {def_pct:.0f}% ({d.classes_with_definition}/{d.classes_total})")
+    lines.append(
+        f"  Classes with labels:      {label_bar} {label_pct:.0f}% ({d.classes_with_label}/{d.classes_total})"
+    )
+    lines.append(
+        f"  Classes with definitions: {def_bar} {def_pct:.0f}% ({d.classes_with_definition}/{d.classes_total})"
+    )
 
     # Properties
     if d.properties_total > 0:
@@ -201,8 +209,12 @@ def format_text(
         prop_label_bar = _progress_bar(prop_label_pct, use_colour)
         prop_def_bar = _progress_bar(prop_def_pct, use_colour)
 
-        lines.append(f"  Properties with labels:      {prop_label_bar} {prop_label_pct:.0f}% ({d.properties_with_label}/{d.properties_total})")
-        lines.append(f"  Properties with definitions: {prop_def_bar} {prop_def_pct:.0f}% ({d.properties_with_definition}/{d.properties_total})")
+        lines.append(
+            f"  Properties with labels:      {prop_label_bar} {prop_label_pct:.0f}% ({d.properties_with_label}/{d.properties_total})"
+        )
+        lines.append(
+            f"  Properties with definitions: {prop_def_bar} {prop_def_pct:.0f}% ({d.properties_with_definition}/{d.properties_total})"
+        )
 
     lines.append("")
 

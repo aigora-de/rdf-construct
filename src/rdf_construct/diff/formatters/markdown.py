@@ -47,15 +47,9 @@ def format_markdown(diff: GraphDiff, graph: Graph | None = None) -> str:
     summary = diff.summary
     lines.append("## Summary")
     lines.append("")
-    lines.append(
-        f"- **{summary['added']}** entities added"
-    )
-    lines.append(
-        f"- **{summary['removed']}** entities removed"
-    )
-    lines.append(
-        f"- **{summary['modified']}** entities modified"
-    )
+    lines.append(f"- **{summary['added']}** entities added")
+    lines.append(f"- **{summary['removed']}** entities removed")
+    lines.append(f"- **{summary['modified']}** entities modified")
     lines.append("")
 
     # Added entities
@@ -92,9 +86,7 @@ def format_markdown(diff: GraphDiff, graph: Graph | None = None) -> str:
     return "\n".join(lines)
 
 
-def _format_entity_group(
-    entities: list[EntityChange], graph: Graph | None = None
-) -> list[str]:
+def _format_entity_group(entities: list[EntityChange], graph: Graph | None = None) -> list[str]:
     """Format a group of entities by type."""
     lines: list[str] = []
 
@@ -138,9 +130,7 @@ def _format_entity_bullet(entity: EntityChange, graph: Graph | None = None) -> s
     return bullet
 
 
-def _format_modified_entity_md(
-    entity: EntityChange, graph: Graph | None = None
-) -> list[str]:
+def _format_modified_entity_md(entity: EntityChange, graph: Graph | None = None) -> list[str]:
     """Format a modified entity with detailed changes."""
     lines: list[str] = []
 

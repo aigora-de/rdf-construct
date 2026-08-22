@@ -29,6 +29,7 @@ EX = Namespace("http://example.org/ont#")
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _parse(turtle: str) -> Graph:
     """Parse a Turtle string into a fresh graph."""
     g = Graph()
@@ -167,11 +168,9 @@ class TestInlineBnodeSerialisation:
         # The bnode must NOT appear as a standalone top-level subject block
         lines = content.splitlines()
         top_level = [
-            line for line in lines
-            if line
-            and not line.startswith(" ")
-            and not line.startswith("PREFIX ")
-            and line.strip()
+            line
+            for line in lines
+            if line and not line.startswith(" ") and not line.startswith("PREFIX ") and line.strip()
         ]
         assert not any(line.startswith("_:") for line in top_level)
 
@@ -207,10 +206,7 @@ class TestInlineBnodeSerialisation:
 
         # Both bnodes inline \u2014 no top-level _: stubs
         lines = content.splitlines()
-        assert not any(
-            line.strip().startswith("_:") and not line.startswith(" ")
-            for line in lines
-        )
+        assert not any(line.strip().startswith("_:") and not line.startswith(" ") for line in lines)
         assert content.count("[") >= 2
         assert content.count("]") >= 2
 
@@ -234,10 +230,7 @@ class TestInlineBnodeSerialisation:
         assert "ex:Address" in content
         assert "SW1A 1AA" in content
         lines = content.splitlines()
-        assert not any(
-            line.strip().startswith("_:") and not line.startswith(" ")
-            for line in lines
-        )
+        assert not any(line.strip().startswith("_:") and not line.startswith(" ") for line in lines)
 
     def test_shared_bnode_remains_top_level_stub(self, tmp_path) -> None:
         """A bnode referenced by two triples must remain a top-level stub."""
@@ -253,11 +246,11 @@ class TestInlineBnodeSerialisation:
         # The shared bnode must be emitted as a top-level subject block
         lines = content.splitlines()
         non_indented = [
-            line for line in lines
-            if line and not line.startswith(" ") and line.strip()
+            line for line in lines if line and not line.startswith(" ") and line.strip()
         ]
         top_level_bnodes = [
-            line for line in non_indented
+            line
+            for line in non_indented
             if not line.startswith("PREFIX ") and not line.startswith("ex:")
         ]
         assert len(top_level_bnodes) >= 1
@@ -303,9 +296,9 @@ class TestInlineBnodeRoundTrip:
         content = _serialise(g_orig, [EX.Thing], tmp_path)
 
         g_rt = _parse(content)
-        assert isomorphic(g_orig, g_rt), (
-            f"Round-trip produced a non-isomorphic graph.\nOutput was:\n{content}"
-        )
+        assert isomorphic(
+            g_orig, g_rt
+        ), f"Round-trip produced a non-isomorphic graph.\nOutput was:\n{content}"
 
     def test_round_trip_multiple_inline(self, tmp_path) -> None:
         """Multiple inline bnodes: round-trip preserves graph semantics."""
@@ -320,9 +313,9 @@ class TestInlineBnodeRoundTrip:
         content = _serialise(g_orig, [EX.Thing], tmp_path)
 
         g_rt = _parse(content)
-        assert isomorphic(g_orig, g_rt), (
-            f"Round-trip produced a non-isomorphic graph.\nOutput was:\n{content}"
-        )
+        assert isomorphic(
+            g_orig, g_rt
+        ), f"Round-trip produced a non-isomorphic graph.\nOutput was:\n{content}"
 
     def test_round_trip_nested_inline(self, tmp_path) -> None:
         """Nested inline bnodes: round-trip preserves graph semantics."""
@@ -340,9 +333,9 @@ class TestInlineBnodeRoundTrip:
         content = _serialise(g_orig, [EX.Thing], tmp_path)
 
         g_rt = _parse(content)
-        assert isomorphic(g_orig, g_rt), (
-            f"Round-trip produced a non-isomorphic graph.\nOutput was:\n{content}"
-        )
+        assert isomorphic(
+            g_orig, g_rt
+        ), f"Round-trip produced a non-isomorphic graph.\nOutput was:\n{content}"
 
     def test_round_trip_shared_bnode(self, tmp_path) -> None:
         """Shared bnode (multi-arc): round-trip preserves graph semantics."""
@@ -356,9 +349,9 @@ class TestInlineBnodeRoundTrip:
         content = _serialise(g_orig, [EX.Thing1, EX.Thing2, shared], tmp_path)
         g_rt = _parse(content)
 
-        assert isomorphic(g_orig, g_rt), (
-            f"Round-trip produced a non-isomorphic graph.\nOutput was:\n{content}"
-        )
+        assert isomorphic(
+            g_orig, g_rt
+        ), f"Round-trip produced a non-isomorphic graph.\nOutput was:\n{content}"
 
 
 # ---------------------------------------------------------------------------
@@ -387,6 +380,6 @@ class TestInlineBnodePredicateOrdering:
         value_pos = content.find("ex:value")
         assert type_pos != -1, "rdf:type shorthand 'a' not found in output"
         assert value_pos != -1, "ex:value not found in output"
-        assert type_pos < value_pos, (
-            "rdf:type should appear before ex:value inside the inline block"
-        )
+        assert (
+            type_pos < value_pos
+        ), "rdf:type should appear before ex:value inside the inline block"

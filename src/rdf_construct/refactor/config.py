@@ -298,7 +298,7 @@ def create_default_rename_config() -> str:
     Returns:
         YAML configuration template.
     """
-    return '''# rdf-construct refactor rename configuration
+    return """# rdf-construct refactor rename configuration
 # See REFACTOR_GUIDE.md for full documentation
 
 # Source files to process
@@ -326,7 +326,7 @@ rename:
 #   sources:
 #     - data/*.ttl
 #   output_dir: data/migrated/
-'''
+"""
 
 
 def create_default_deprecation_config() -> str:
@@ -335,7 +335,7 @@ def create_default_deprecation_config() -> str:
     Returns:
         YAML configuration template.
     """
-    return '''# rdf-construct refactor deprecation configuration
+    return """# rdf-construct refactor deprecation configuration
 # See REFACTOR_GUIDE.md for full documentation
 
 # Source files to process
@@ -359,4 +359,4 @@ deprecations:
   - entity: "http://example.org/ont#TemporaryClass"
     # No replacement - just deprecated
     message: "Experimental class removed. No replacement available."
-'''
+"""

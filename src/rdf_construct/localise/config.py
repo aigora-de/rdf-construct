@@ -259,7 +259,9 @@ class TranslationFile:
             "summary": self.summary.to_dict(),
         }
 
-        return header + yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        return header + yaml.dump(
+            data, default_flow_style=False, allow_unicode=True, sort_keys=False
+        )
 
     @classmethod
     def from_yaml(cls, path: Path) -> "TranslationFile":
@@ -285,9 +287,7 @@ class TranslationFile:
             raise ValueError(f"Invalid translation file format: {path}")
 
         metadata = TranslationFileMetadata.from_dict(data.get("metadata", {}))
-        entities = [
-            EntityTranslations.from_dict(entity) for entity in data.get("entities", [])
-        ]
+        entities = [EntityTranslations.from_dict(entity) for entity in data.get("entities", [])]
         summary = None
         if "summary" in data:
             summary = TranslationSummary.from_dict(data["summary"])
@@ -454,7 +454,7 @@ def create_default_config() -> str:
     Returns:
         YAML configuration template.
     """
-    return '''# rdf-construct localise configuration
+    return """# rdf-construct localise configuration
 # See LOCALISE_GUIDE.md for full documentation
 
 localise:
@@ -493,7 +493,7 @@ localise:
     existing: preserve  # preserve | overwrite
     # Minimum status to include in merge
     min_status: translated  # pending | translated | needs_review | approved
-'''
+"""
 
 
 def load_localise_config(path: Path) -> LocaliseConfig:

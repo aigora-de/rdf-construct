@@ -51,9 +51,7 @@ def order_ontology_programmatically():
 
         # Handle header section
         if section_name == "header":
-            ontology_subjects = [
-                s for s in graph.subjects(RDF.type, OWL.Ontology) if s not in seen
-            ]
+            ontology_subjects = [s for s in graph.subjects(RDF.type, OWL.Ontology) if s not in seen]
             ordered_subjects.extend(ontology_subjects)
             seen.update(ontology_subjects)
             continue

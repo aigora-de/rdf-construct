@@ -326,9 +326,7 @@ class ImportAnalysis:
     @property
     def unresolvable_count(self) -> int:
         """Number of unresolvable imports."""
-        return sum(
-            1 for imp in self.imports if imp.status == ImportStatus.UNRESOLVABLE
-        )
+        return sum(1 for imp in self.imports if imp.status == ImportStatus.UNRESOLVABLE)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialisation."""

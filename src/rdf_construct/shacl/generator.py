@@ -72,12 +72,12 @@ class ShapeGenerator:
         for prefix, ns in self.source_graph.namespaces():
             ns_str = str(ns)
             if not any(
-                    ns_str.startswith(std)
-                    for std in (
-                            "http://www.w3.org/",
-                            "http://purl.org/dc/",
-                            "http://xmlns.com/",
-                    )
+                ns_str.startswith(std)
+                for std in (
+                    "http://www.w3.org/",
+                    "http://purl.org/dc/",
+                    "http://xmlns.com/",
+                )
             ):
                 if ns_str.endswith("#") or ns_str.endswith("/"):
                     return ns_str[:-1] + "-shapes#"
@@ -171,16 +171,14 @@ class ShapeGenerator:
 
         # Apply each converter
         for converter in converters:
-            constraints = converter.convert_for_class(
-                cls, self.source_graph, self.config
-            )
+            constraints = converter.convert_for_class(cls, self.source_graph, self.config)
 
             for constraint in constraints:
                 if constraint.path in prop_constraints:
                     # Merge with existing constraint
-                    prop_constraints[constraint.path] = prop_constraints[
-                        constraint.path
-                    ].merge(constraint)
+                    prop_constraints[constraint.path] = prop_constraints[constraint.path].merge(
+                        constraint
+                    )
                 else:
                     prop_constraints[constraint.path] = constraint
 
@@ -214,7 +212,7 @@ class ShapeGenerator:
         return shape_uri
 
     def _get_inherited_constraints(
-            self, cls: URIRef, converters: list
+        self, cls: URIRef, converters: list
     ) -> dict[URIRef, PropertyConstraint]:
         """Get property constraints from superclasses.
 
@@ -248,9 +246,7 @@ class ShapeGenerator:
                     if constraint.path not in inherited:
                         inherited[constraint.path] = constraint
                     else:
-                        inherited[constraint.path] = inherited[constraint.path].merge(
-                            constraint
-                        )
+                        inherited[constraint.path] = inherited[constraint.path].merge(constraint)
 
             # Add parent's parents
             to_visit.extend(self.source_graph.objects(superclass, RDFS.subClassOf))
@@ -306,9 +302,9 @@ class ShapeGenerator:
 
 
 def generate_shapes(
-        source: Path | Graph,
-        config: ShaclConfig | None = None,
-        output_format: str = "turtle",
+    source: Path | Graph,
+    config: ShaclConfig | None = None,
+    output_format: str = "turtle",
 ) -> tuple[Graph, str]:
     """Generate SHACL shapes from an OWL ontology.
 
@@ -340,10 +336,10 @@ def generate_shapes(
 
 
 def generate_shapes_to_file(
-        source: Path,
-        output: Path,
-        config: ShaclConfig | None = None,
-        output_format: str = "turtle",
+    source: Path,
+    output: Path,
+    config: ShaclConfig | None = None,
+    output_format: str = "turtle",
 ) -> Graph:
     """Generate SHACL shapes and write to file.
 

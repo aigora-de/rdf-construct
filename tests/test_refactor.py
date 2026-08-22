@@ -112,9 +112,7 @@ class TestRenameConfig:
 
     def test_build_mappings_namespace(self, old_namespace_graph):
         """Test building mappings with namespace rules."""
-        config = RenameConfig(
-            namespaces={"http://old.example.org/v1#": "http://example.org/v2#"}
-        )
+        config = RenameConfig(namespaces={"http://old.example.org/v1#": "http://example.org/v2#"})
         mappings = config.build_mappings(old_namespace_graph)
         # Should have mappings for all entities in old namespace
         assert len(mappings) > 0

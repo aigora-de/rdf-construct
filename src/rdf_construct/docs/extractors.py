@@ -608,10 +608,15 @@ def extract_instance_info(graph: Graph, uri: URIRef) -> InstanceInfo:
         if pred == RDF.type:
             continue
         # Skip standard annotation predicates (already captured)
-        if pred in [p for p, _ in [
-            (RDFS.label, None), (RDFS.comment, None),
-            (SKOS.prefLabel, None), (SKOS.definition, None),
-        ]]:
+        if pred in [
+            p
+            for p, _ in [
+                (RDFS.label, None),
+                (RDFS.comment, None),
+                (SKOS.prefLabel, None),
+                (SKOS.definition, None),
+            ]
+        ]:
             continue
 
         if pred not in info.properties:
@@ -1002,7 +1007,12 @@ def extract_all_instances(graph: Graph) -> list[InstanceInfo]:
 
     # Get all property URIs to exclude
     property_uris: set[URIRef] = set()
-    for prop_type in [OWL.ObjectProperty, OWL.DatatypeProperty, OWL.AnnotationProperty, RDF.Property]:
+    for prop_type in [
+        OWL.ObjectProperty,
+        OWL.DatatypeProperty,
+        OWL.AnnotationProperty,
+        RDF.Property,
+    ]:
         for uri in graph.subjects(RDF.type, prop_type):
             if isinstance(uri, URIRef):
                 property_uris.add(uri)
@@ -1026,11 +1036,7 @@ def extract_all_instances(graph: Graph) -> list[InstanceInfo]:
     # Find all subjects with rdf:type that aren't classes, properties, or shapes
     for subj, _, obj in graph.triples((None, RDF.type, None)):
         if isinstance(subj, URIRef) and subj not in seen:
-            if (
-                subj not in class_uris
-                and subj not in property_uris
-                and subj not in shape_uris
-            ):
+            if subj not in class_uris and subj not in property_uris and subj not in shape_uris:
                 seen.add(subj)
                 instances.append(extract_instance_info(graph, subj))
 

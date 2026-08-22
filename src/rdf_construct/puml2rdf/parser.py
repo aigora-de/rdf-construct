@@ -102,38 +102,38 @@ class PlantUMLParser:
     # Package: package "Name" as ns { ... } or package Name { ... }
     PACKAGE_PATTERN = re.compile(
         r'package\s+(?:"([^"]+)"|(\S+))'  # Package name (quoted or unquoted)
-        r'(?:\s+as\s+(\S+))?'  # Optional 'as namespace'
-        r'(?:\s*<<(\w+)>>)?'  # Optional stereotype
-        r'\s*\{',  # Opening brace
+        r"(?:\s+as\s+(\S+))?"  # Optional 'as namespace'
+        r"(?:\s*<<(\w+)>>)?"  # Optional stereotype
+        r"\s*\{",  # Opening brace
         re.MULTILINE,
     )
 
     # Class declaration: class Name <<stereotype>> { ... } or class "Name" { ... }
     CLASS_PATTERN = re.compile(
-        r'(?:^|\n)\s*'
-        r'(abstract\s+)?'  # Group 1: Optional abstract keyword
-        r'class\s+'
-        r'(?:'
+        r"(?:^|\n)\s*"
+        r"(abstract\s+)?"  # Group 1: Optional abstract keyword
+        r"class\s+"
+        r"(?:"
         r'"([^"]+)"\s+as\s+([\w.]+)'  # Groups 2,3: "Display Name" as alias
-        r'|'
+        r"|"
         r'"([^"]+)"'  # Group 4: Just "Quoted Name"
-        r'|'
-        r'([\w.]+)'  # Group 5: Unquoted name (may include dots)
-        r')'
-        r'(?:\s*<<(\w+)>>)?'  # Group 6: Optional stereotype
-        r'(?:\s*#[^\s{]*)?'  # Optional styling - ignore
-        r'[ \t]*(?:\{([^}]*)\})?',  # Group 7: Optional body
+        r"|"
+        r"([\w.]+)"  # Group 5: Unquoted name (may include dots)
+        r")"
+        r"(?:\s*<<(\w+)>>)?"  # Group 6: Optional stereotype
+        r"(?:\s*#[^\s{]*)?"  # Optional styling - ignore
+        r"[ \t]*(?:\{([^}]*)\})?",  # Group 7: Optional body
         re.MULTILINE | re.DOTALL,
     )
 
     # Attribute: visibility name : type
     ATTRIBUTE_PATTERN = re.compile(
-        r'^\s*'
-        r'([+\-#~])?\s*'  # Optional visibility
-        r'(\{static\})?\s*'  # Optional static marker
-        r'(\w+)'  # Attribute name
-        r'(?:\s*:\s*(\w+))?'  # Optional : type
-        r'\s*$',
+        r"^\s*"
+        r"([+\-#~])?\s*"  # Optional visibility
+        r"(\{static\})?\s*"  # Optional static marker
+        r"(\w+)"  # Attribute name
+        r"(?:\s*:\s*(\w+))?"  # Optional : type
+        r"\s*$",
         re.MULTILINE,
     )
 
@@ -144,43 +144,39 @@ class PlantUMLParser:
     # A o-- B (aggregation)
     # A *-- B (composition)
     RELATIONSHIP_PATTERN = re.compile(
-        r'(?:^|\n)\s*'
+        r"(?:^|\n)\s*"
         r'(?:"([^"]+)"|(\w+))'  # Source class (quoted or not)
-        r'\s*'
+        r"\s*"
         r'(?:"([^"]*)")?\s*'  # Optional source cardinality
-        r'([o*])?'  # Optional aggregation/composition marker at source
-        r'(--?|\.\.)'  # Line style (-- or ..)
-        r'([|>o*])?'  # Arrow head or aggregation marker at target
-        r'\s*'
+        r"([o*])?"  # Optional aggregation/composition marker at source
+        r"(--?|\.\.)"  # Line style (-- or ..)
+        r"([|>o*])?"  # Arrow head or aggregation marker at target
+        r"\s*"
         r'(?:"([^"]*)")?\s*'  # Optional target cardinality
         r'(?:"([^"]+)"|(\w+))'  # Target class (quoted or not)
-        r'(?:\s*:\s*([^\n]+))?',  # Optional label
+        r"(?:\s*:\s*([^\n]+))?",  # Optional label
         re.MULTILINE,
     )
 
     # Note attached to element: note right of Class : text
     NOTE_ATTACHED_PATTERN = re.compile(
-        r'note\s+(right|left|top|bottom)\s+of\s+(\w+)\s*'
-        r'(?::\s*([^\n]+))?'  # Single line note
-        r'|'
-        r'note\s+(right|left|top|bottom)\s+of\s+(\w+)\s*\n'
-        r'(.*?)'  # Multi-line content
-        r'\s*end\s*note',
+        r"note\s+(right|left|top|bottom)\s+of\s+(\w+)\s*"
+        r"(?::\s*([^\n]+))?"  # Single line note
+        r"|"
+        r"note\s+(right|left|top|bottom)\s+of\s+(\w+)\s*\n"
+        r"(.*?)"  # Multi-line content
+        r"\s*end\s*note",
         re.MULTILINE | re.DOTALL,
     )
 
     # Standalone note block: note "text" as N1
-    NOTE_STANDALONE_PATTERN = re.compile(
-        r'note\s+"([^"]+)"\s+as\s+(\w+)', re.MULTILINE
-    )
+    NOTE_STANDALONE_PATTERN = re.compile(r'note\s+"([^"]+)"\s+as\s+(\w+)', re.MULTILINE)
 
     # Diagram title
-    TITLE_PATTERN = re.compile(r'title\s+(.+?)(?:\n|$)', re.MULTILINE)
+    TITLE_PATTERN = re.compile(r"title\s+(.+?)(?:\n|$)", re.MULTILINE)
 
     # Skinparam settings
-    SKINPARAM_PATTERN = re.compile(
-        r'skinparam\s+(\w+)\s+(\S+)', re.MULTILINE
-    )
+    SKINPARAM_PATTERN = re.compile(r"skinparam\s+(\w+)\s+(\S+)", re.MULTILINE)
 
     def __init__(self) -> None:
         """Initialise the parser."""
@@ -243,9 +239,9 @@ class PlantUMLParser:
     def _strip_diagram_markers(self, content: str) -> str:
         """Remove @startuml and @enduml markers."""
         # Remove @startuml (with optional name)
-        content = re.sub(r'@startuml\s*(?:\([^)]*\))?\s*\n?', '', content)
+        content = re.sub(r"@startuml\s*(?:\([^)]*\))?\s*\n?", "", content)
         # Remove @enduml
-        content = re.sub(r'@enduml\s*', '', content)
+        content = re.sub(r"@enduml\s*", "", content)
         return content
 
     def _parse_packages(self, content: str) -> list[PumlPackage]:
@@ -340,7 +336,7 @@ class PlantUMLParser:
                 )
             else:
                 # Try simpler pattern: just "name" or "name : type"
-                simple_match = re.match(r'(\w+)(?:\s*:\s*(\w+))?', line)
+                simple_match = re.match(r"(\w+)(?:\s*:\s*(\w+))?", line)
                 if simple_match:
                     attributes.append(
                         PumlAttribute(
@@ -357,14 +353,14 @@ class PlantUMLParser:
 
         # Pattern for inheritance with direction hints
         inheritance_pattern = re.compile(
-            r'(?:^|\n)\s*'
-            r'([\w.]+)'  # Source (dotted names)
-            r'\s*'
-            r'(<\|)?'  # Left arrow head
-            r'(-[udlr]?-)'  # Line with optional direction
-            r'(\|>)?'  # Right arrow head  
-            r'\s*'
-            r'([\w.]+)',  # Target (dotted names)
+            r"(?:^|\n)\s*"
+            r"([\w.]+)"  # Source (dotted names)
+            r"\s*"
+            r"(<\|)?"  # Left arrow head
+            r"(-[udlr]?-)"  # Line with optional direction
+            r"(\|>)?"  # Right arrow head
+            r"\s*"
+            r"([\w.]+)",  # Target (dotted names)
             re.MULTILINE,
         )
 
@@ -396,17 +392,17 @@ class PlantUMLParser:
 
         # Association pattern (unchanged but now with --)
         assoc_pattern = re.compile(
-            r'(?:^|\n)\s*'
-            r'([\w.]+)'
-            r'\s*'
+            r"(?:^|\n)\s*"
+            r"([\w.]+)"
+            r"\s*"
             r'(?:"([^"]*)")?\s*'
-            r'([o*])?'
-            r'--'  # Require two dashes
-            r'([o*>])?'
-            r'\s*'
+            r"([o*])?"
+            r"--"  # Require two dashes
+            r"([o*>])?"
+            r"\s*"
             r'(?:"([^"]*)")?\s*'
-            r'([\w.]+)'
-            r'(?:\s*:\s*([^\n]+))?',
+            r"([\w.]+)"
+            r"(?:\s*:\s*([^\n]+))?",
             re.MULTILINE,
         )
 
@@ -453,9 +449,7 @@ class PlantUMLParser:
 
         # Multi-line notes: note right of Class\n...\nend note
         multiline_pattern = re.compile(
-            r'note\s+(right|left|top|bottom)\s+of\s+(\w+)\s*\n'
-            r'(.*?)'
-            r'\n\s*end\s*note',
+            r"note\s+(right|left|top|bottom)\s+of\s+(\w+)\s*\n" r"(.*?)" r"\n\s*end\s*note",
             re.MULTILINE | re.DOTALL,
         )
 
@@ -474,7 +468,7 @@ class PlantUMLParser:
 
         # Single-line notes: note right of Class : text
         inline_pattern = re.compile(
-            r'note\s+(right|left|top|bottom)\s+of\s+(\w+)\s*:\s*([^\n]+)',
+            r"note\s+(right|left|top|bottom)\s+of\s+(\w+)\s*:\s*([^\n]+)",
             re.MULTILINE,
         )
 
@@ -501,9 +495,7 @@ class PlantUMLParser:
                 if cls:
                     cls.note = note.content
                 else:
-                    self._warnings.append(
-                        f"Note attached to unknown class: {note.attached_to}"
-                    )
+                    self._warnings.append(f"Note attached to unknown class: {note.attached_to}")
 
     def _parse_title(self, content: str) -> Optional[str]:
         """Extract diagram title."""
@@ -530,10 +522,7 @@ class PlantUMLParser:
 
         # Find all package blocks with their content
         pattern = re.compile(
-            r'package\s+(?:"([^"]+)"|(\S+))'
-            r'(?:\s+as\s+\S+)?'
-            r'(?:\s*<<\w+>>)?'
-            r'\s*\{',
+            r'package\s+(?:"([^"]+)"|(\S+))' r"(?:\s+as\s+\S+)?" r"(?:\s*<<\w+>>)?" r"\s*\{",
             re.MULTILINE,
         )
 

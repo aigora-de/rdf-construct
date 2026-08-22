@@ -14,9 +14,7 @@ from ..core.selector import select_subjects
 from .context import UMLContext
 
 
-def get_descendants(
-    graph: Graph, root: URIRef, max_depth: Optional[int] = None
-) -> set[URIRef]:
+def get_descendants(graph: Graph, root: URIRef, max_depth: Optional[int] = None) -> set[URIRef]:
     """Get all descendant classes of a root class.
 
     Traverses rdfs:subClassOf relationships to find all classes that
@@ -52,9 +50,7 @@ def get_descendants(
     return descendants
 
 
-def select_classes(
-    graph: Graph, context: UMLContext, selectors: dict[str, str]
-) -> set[URIRef]:
+def select_classes(graph: Graph, context: UMLContext, selectors: dict[str, str]) -> set[URIRef]:
     """Select classes for diagram based on context configuration.
 
     Supports three selection modes:
@@ -202,9 +198,7 @@ def select_properties(
     return properties
 
 
-def select_instances(
-    graph: Graph, selected_classes: set[URIRef]
-) -> set[URIRef]:
+def select_instances(graph: Graph, selected_classes: set[URIRef]) -> set[URIRef]:
     """Select instances of the selected classes.
 
     Args:
@@ -225,9 +219,7 @@ def select_instances(
     return instances
 
 
-def collect_explicit_entities(
-    graph: Graph, context: UMLContext
-) -> dict[str, set[URIRef]]:
+def collect_explicit_entities(graph: Graph, context: UMLContext) -> dict[str, set[URIRef]]:
     """Collect entities explicitly specified in context.
 
     In explicit mode, all entities are directly listed in the configuration
@@ -269,10 +261,7 @@ def collect_explicit_entities(
             raise ValueError(f"Cannot expand CURIE: {curie}")
 
         # Validate it's actually a class
-        is_class = (
-            (uri, RDF.type, OWL.Class) in graph or
-            (uri, RDF.type, RDFS.Class) in graph
-        )
+        is_class = (uri, RDF.type, OWL.Class) in graph or (uri, RDF.type, RDFS.Class) in graph
         if not is_class:
             # Warning but don't fail - might be a valid use case
             pass

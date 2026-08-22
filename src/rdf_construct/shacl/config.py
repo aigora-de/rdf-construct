@@ -144,9 +144,7 @@ class ShaclConfig:
 
         # Check exclusions
         if self.exclude_classes:
-            return not any(
-                class_str.endswith(e) or e in class_str for e in self.exclude_classes
-            )
+            return not any(class_str.endswith(e) or e in class_str for e in self.exclude_classes)
 
         return True
 

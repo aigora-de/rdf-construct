@@ -26,6 +26,7 @@ class CheckResult:
         expected: String representation of expected value
         actual: String representation of actual value
     """
+
     passed: bool
     message: str
     expected: str = ""
@@ -123,6 +124,7 @@ class CountExpectation(Expectation):
         min_count: Minimum count (inclusive)
         max_count: Maximum count (inclusive)
     """
+
     exact: int | None = None
     min_count: int | None = None
     max_count: int | None = None
@@ -179,6 +181,7 @@ class ValuesExpectation(Expectation):
 
     Checks that results match a specific set of bindings exactly.
     """
+
     expected_results: list[dict[str, Any]] = field(default_factory=list)
 
     def check(self, result: Result) -> CheckResult:
@@ -207,7 +210,7 @@ class ValuesExpectation(Expectation):
     def _normalize_row(self, row) -> dict[str, str]:
         """Normalize a result row for comparison."""
         # rdflib ResultRow has asdict() method
-        if hasattr(row, 'asdict'):
+        if hasattr(row, "asdict"):
             row_dict = row.asdict()
         else:
             row_dict = dict(row)
@@ -238,6 +241,7 @@ class ContainsExpectation(Expectation):
     Unlike ValuesExpectation, this doesn't require exact match -
     it only checks that the expected bindings are present.
     """
+
     expected_bindings: list[dict[str, Any]] = field(default_factory=list)
 
     def check(self, result: Result) -> CheckResult:
@@ -279,7 +283,7 @@ class ContainsExpectation(Expectation):
     def _normalize_row(self, row) -> dict[str, str]:
         """Normalize a result row for comparison."""
         # rdflib ResultRow has asdict() method
-        if hasattr(row, 'asdict'):
+        if hasattr(row, "asdict"):
             row_dict = row.asdict()
         else:
             row_dict = dict(row)

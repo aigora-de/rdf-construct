@@ -37,7 +37,8 @@ def core_ontology(temp_dir):
     This fixture generates the ontology dynamically for isolation.
     For the equivalent file-based fixture, see fixtures/merge/core.ttl
     """
-    content = dedent('''
+    content = dedent(
+        """
         @prefix ex: <http://example.org/> .
         @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
         @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -55,7 +56,8 @@ def core_ontology(temp_dir):
 
         ex:Place a owl:Class ;
             rdfs:label "Place" .
-    ''').strip()
+    """
+    ).strip()
 
     path = temp_dir / "core.ttl"
     path.write_text(content)
@@ -68,7 +70,8 @@ def extension_ontology(temp_dir):
 
     For the equivalent file-based fixture, see fixtures/merge/extension.ttl
     """
-    content = dedent('''
+    content = dedent(
+        """
         @prefix ex: <http://example.org/> .
         @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
         @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -83,7 +86,8 @@ def extension_ontology(temp_dir):
         ex:ResidentialBuilding a owl:Class ;
             rdfs:subClassOf ex:Building ;
             rdfs:label "Residential Building"@en .
-    ''').strip()
+    """
+    ).strip()
 
     path = temp_dir / "extension.ttl"
     path.write_text(content)
@@ -96,7 +100,8 @@ def conflicting_ontology(temp_dir):
 
     For the equivalent file-based fixture, see fixtures/merge/conflicting.ttl
     """
-    content = dedent('''
+    content = dedent(
+        """
         @prefix ex: <http://example.org/> .
         @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
         @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -107,7 +112,8 @@ def conflicting_ontology(temp_dir):
 
         ex:hasLocation a owl:ObjectProperty ;
             rdfs:range ex:Location .
-    ''').strip()
+    """
+    ).strip()
 
     path = temp_dir / "conflicting.ttl"
     path.write_text(content)
@@ -120,7 +126,8 @@ def data_file(temp_dir):
 
     For the equivalent file-based fixture, see fixtures/merge/split_instances.ttl
     """
-    content = dedent('''
+    content = dedent(
+        """
         @prefix ex: <http://example.org/> .
         @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 
@@ -134,7 +141,8 @@ def data_file(temp_dir):
 
         ex:location1 a ex:Place ;
             rdfs:label "Downtown" .
-    ''').strip()
+    """
+    ).strip()
 
     path = temp_dir / "data.ttl"
     path.write_text(content)
@@ -142,6 +150,7 @@ def data_file(temp_dir):
 
 
 # File-based fixtures for integration tests
+
 
 @pytest.fixture
 def core_ontology_file(fixtures_dir):

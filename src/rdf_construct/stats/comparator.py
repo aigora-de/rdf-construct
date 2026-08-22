@@ -173,14 +173,22 @@ def _extract_numeric_metrics(stats: OntologyStats) -> dict[tuple[str, str], floa
     metrics[("documentation", "classes_labelled")] = stats.documentation.classes_labelled
     metrics[("documentation", "classes_labelled_pct")] = stats.documentation.classes_labelled_pct
     metrics[("documentation", "classes_documented")] = stats.documentation.classes_documented
-    metrics[("documentation", "classes_documented_pct")] = stats.documentation.classes_documented_pct
+    metrics[("documentation", "classes_documented_pct")] = (
+        stats.documentation.classes_documented_pct
+    )
     metrics[("documentation", "properties_labelled")] = stats.documentation.properties_labelled
-    metrics[("documentation", "properties_labelled_pct")] = stats.documentation.properties_labelled_pct
+    metrics[("documentation", "properties_labelled_pct")] = (
+        stats.documentation.properties_labelled_pct
+    )
 
     # Complexity
     metrics[("complexity", "avg_properties_per_class")] = stats.complexity.avg_properties_per_class
-    metrics[("complexity", "avg_superclasses_per_class")] = stats.complexity.avg_superclasses_per_class
-    metrics[("complexity", "multiple_inheritance_count")] = stats.complexity.multiple_inheritance_count
+    metrics[("complexity", "avg_superclasses_per_class")] = (
+        stats.complexity.avg_superclasses_per_class
+    )
+    metrics[("complexity", "multiple_inheritance_count")] = (
+        stats.complexity.multiple_inheritance_count
+    )
     metrics[("complexity", "owl_restriction_count")] = stats.complexity.owl_restriction_count
     metrics[("complexity", "owl_equivalent_count")] = stats.complexity.owl_equivalent_count
 

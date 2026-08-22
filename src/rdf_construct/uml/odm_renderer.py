@@ -198,7 +198,7 @@ class ODMRenderer:
         Returns:
             Direction string: 'u', 'd', 'l', 'r', or ''
         """
-        if self.layout and hasattr(self.layout, 'arrow_direction'):
+        if self.layout and hasattr(self.layout, "arrow_direction"):
             direction_map = {
                 "up": "u",
                 "down": "d",
@@ -285,9 +285,13 @@ class ODMRenderer:
 
         # Filter out metaclass types
         metaclass_uris = {
-            OWL.Class, RDFS.Class, OWL.ObjectProperty,
-            OWL.DatatypeProperty, OWL.AnnotationProperty,
-            RDF.Property, OWL.NamedIndividual
+            OWL.Class,
+            RDFS.Class,
+            OWL.ObjectProperty,
+            OWL.DatatypeProperty,
+            OWL.AnnotationProperty,
+            RDF.Property,
+            OWL.NamedIndividual,
         }
 
         type_names = []
@@ -326,9 +330,9 @@ class ODMRenderer:
             return ""
 
         try:
-            if hasattr(self.style, 'get_class_style'):
+            if hasattr(self.style, "get_class_style"):
                 palette = self.style.get_class_style(self.graph, entity, is_instance=is_instance)
-                if palette and hasattr(palette, 'to_plantuml'):
+                if palette and hasattr(palette, "to_plantuml"):
                     colour_spec = palette.to_plantuml()
                     if colour_spec:
                         return f" {colour_spec}"
@@ -347,10 +351,10 @@ class ODMRenderer:
         Returns:
             PlantUML colour specification string
         """
-        if self.style and hasattr(self.style, 'get_property_style'):
+        if self.style and hasattr(self.style, "get_property_style"):
             try:
                 palette = self.style.get_property_style(self.graph, prop)
-                if palette and hasattr(palette, 'to_plantuml'):
+                if palette and hasattr(palette, "to_plantuml"):
                     colour_spec = palette.to_plantuml()
                     if colour_spec:
                         return f" {colour_spec}"
@@ -472,9 +476,7 @@ class ODMRenderer:
                 if parent in self.entities.get("classes", set()):
                     child_id = plantuml_identifier(self.graph, cls)
                     parent_id = plantuml_identifier(self.graph, parent)
-                    lines.append(
-                        f"{child_id} -{direction}-|> {parent_id}"
-                    )
+                    lines.append(f"{child_id} -{direction}-|> {parent_id}")
 
         return lines
 
@@ -488,9 +490,9 @@ class ODMRenderer:
         direction = self._get_arrow_direction()
 
         all_props = (
-            self.entities.get("object_properties", set()) |
-            self.entities.get("datatype_properties", set()) |
-            self.entities.get("annotation_properties", set())
+            self.entities.get("object_properties", set())
+            | self.entities.get("datatype_properties", set())
+            | self.entities.get("annotation_properties", set())
         )
 
         for prop in all_props:
@@ -498,9 +500,7 @@ class ODMRenderer:
                 if parent_prop in all_props:
                     child_id = plantuml_identifier(self.graph, prop)
                     parent_id = plantuml_identifier(self.graph, parent_prop)
-                    lines.append(
-                        f"{child_id} -{direction}-|> {parent_id}"
-                    )
+                    lines.append(f"{child_id} -{direction}-|> {parent_id}")
 
         return lines
 
@@ -516,13 +516,16 @@ class ODMRenderer:
         direction = self._get_arrow_direction()
 
         metaclass_uris = {
-            OWL.Class, RDFS.Class, OWL.ObjectProperty,
-            OWL.DatatypeProperty, OWL.AnnotationProperty
+            OWL.Class,
+            RDFS.Class,
+            OWL.ObjectProperty,
+            OWL.DatatypeProperty,
+            OWL.AnnotationProperty,
         }
 
         # Get arrow colour from style config
         arrow_color = "#FF0000"  # Default red
-        if self.style and hasattr(self.style, 'arrow_colors'):
+        if self.style and hasattr(self.style, "arrow_colors"):
             arrow_color = self.style.arrow_colors.get_color("type")
 
         for instance in self.entities.get("instances", set()):
@@ -550,9 +553,9 @@ class ODMRenderer:
         direction = self._get_arrow_direction()
 
         all_props = (
-            self.entities.get("object_properties", set()) |
-            self.entities.get("datatype_properties", set()) |
-            self.entities.get("annotation_properties", set())
+            self.entities.get("object_properties", set())
+            | self.entities.get("datatype_properties", set())
+            | self.entities.get("annotation_properties", set())
         )
 
         for prop in all_props:
@@ -562,17 +565,13 @@ class ODMRenderer:
             for domain in self.graph.objects(prop, RDFS.domain):
                 if domain in self.entities.get("classes", set()):
                     domain_id = plantuml_identifier(self.graph, domain)
-                    lines.append(
-                        f"{prop_id} -{direction}-> {domain_id} : <<rdfsDomain>>"
-                    )
+                    lines.append(f"{prop_id} -{direction}-> {domain_id} : <<rdfsDomain>>")
 
             # Render range relationships
             for range_cls in self.graph.objects(prop, RDFS.range):
                 if range_cls in self.entities.get("classes", set()):
                     range_id = plantuml_identifier(self.graph, range_cls)
-                    lines.append(
-                        f"{prop_id} -{direction}-> {range_id} : <<rdfsRange>>"
-                    )
+                    lines.append(f"{prop_id} -{direction}-> {range_id} : <<rdfsRange>>")
 
         return lines
 
@@ -595,9 +594,7 @@ class ODMRenderer:
                         subj_id = plantuml_identifier(self.graph, subj)
                         obj_id = plantuml_identifier(self.graph, obj)
                         prop_qn = qname(self.graph, prop)
-                        lines.append(
-                            f"{subj_id} -{direction}-> {obj_id} : {prop_qn}"
-                        )
+                        lines.append(f"{subj_id} -{direction}-> {obj_id} : {prop_qn}")
 
         return lines
 
@@ -610,12 +607,10 @@ class ODMRenderer:
         Returns:
             List of PlantUML lines for together blocks
         """
-        if not self.layout or not hasattr(self.layout, 'get_together_blocks'):
+        if not self.layout or not hasattr(self.layout, "get_together_blocks"):
             return []
 
-        return self.layout.get_together_blocks(
-            id_resolver=self._curie_to_plantuml_id
-        )
+        return self.layout.get_together_blocks(id_resolver=self._curie_to_plantuml_id)
 
     def render_layout_hints(self) -> list[str]:
         """Render hidden links from layout hints.
@@ -626,12 +621,10 @@ class ODMRenderer:
         Returns:
             List of PlantUML hidden link lines
         """
-        if not self.layout or not hasattr(self.layout, 'get_hidden_links'):
+        if not self.layout or not hasattr(self.layout, "get_hidden_links"):
             return []
 
-        return self.layout.get_hidden_links(
-            id_resolver=self._curie_to_plantuml_id
-        )
+        return self.layout.get_hidden_links(id_resolver=self._curie_to_plantuml_id)
 
     def render_datatype_property_notes(self) -> list[str]:
         """Render datatype property values as notes.
@@ -675,13 +668,13 @@ class ODMRenderer:
         lines.append("")
 
         # Add layout directives
-        if self.layout and hasattr(self.layout, 'get_plantuml_directives'):
+        if self.layout and hasattr(self.layout, "get_plantuml_directives"):
             directives = self.layout.get_plantuml_directives()
             lines.extend(directives)
             lines.append("")
 
         # Add style directives
-        if self.style and hasattr(self.style, 'get_plantuml_directives'):
+        if self.style and hasattr(self.style, "get_plantuml_directives"):
             directives = self.style.get_plantuml_directives()
             if directives:
                 lines.extend(directives)
@@ -694,10 +687,7 @@ class ODMRenderer:
             lines.extend(together_blocks)
 
         # Render classes
-        classes = sorted(
-            self.entities.get("classes", set()),
-            key=lambda x: qname(self.graph, x)
-        )
+        classes = sorted(self.entities.get("classes", set()), key=lambda x: qname(self.graph, x))
         for cls in classes:
             lines.extend(self.render_class(cls))
 
@@ -706,10 +696,10 @@ class ODMRenderer:
 
         # Render properties (as classes in this mode)
         all_props = sorted(
-            self.entities.get("object_properties", set()) |
-            self.entities.get("datatype_properties", set()) |
-            self.entities.get("annotation_properties", set()),
-            key=lambda x: qname(self.graph, x)
+            self.entities.get("object_properties", set())
+            | self.entities.get("datatype_properties", set())
+            | self.entities.get("annotation_properties", set()),
+            key=lambda x: qname(self.graph, x),
         )
         for prop in all_props:
             lines.extend(self.render_property_as_class(prop))
@@ -719,8 +709,7 @@ class ODMRenderer:
 
         # Render individuals
         instances = sorted(
-            self.entities.get("instances", set()),
-            key=lambda x: qname(self.graph, x)
+            self.entities.get("instances", set()), key=lambda x: qname(self.graph, x)
         )
         for instance in instances:
             lines.extend(self.render_individual(instance))
@@ -776,10 +765,7 @@ def render_odm_plantuml(
         PlantUML diagram text
     """
     renderer = ODMRenderer(
-        graph, entities,
-        style=style,
-        layout=layout,
-        property_style=property_style
+        graph, entities, style=style, layout=layout, property_style=property_style
     )
     diagram = renderer.render()
 

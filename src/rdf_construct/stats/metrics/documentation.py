@@ -104,19 +104,13 @@ def collect_documentation_stats(graph: Graph) -> DocumentationStats:
         return DocumentationStats()
 
     # Count classes with labels
-    classes_with_label = sum(
-        1 for c in classes if _has_any_predicate(graph, c, LABEL_PREDICATES)
-    )
+    classes_with_label = sum(1 for c in classes if _has_any_predicate(graph, c, LABEL_PREDICATES))
 
     # Count classes with documentation
-    classes_with_doc = sum(
-        1 for c in classes if _has_any_predicate(graph, c, DOC_PREDICATES)
-    )
+    classes_with_doc = sum(1 for c in classes if _has_any_predicate(graph, c, DOC_PREDICATES))
 
     # Count properties with labels
-    props_with_label = sum(
-        1 for p in properties if _has_any_predicate(graph, p, LABEL_PREDICATES)
-    )
+    props_with_label = sum(1 for p in properties if _has_any_predicate(graph, p, LABEL_PREDICATES))
 
     return DocumentationStats(
         classes_labelled=classes_with_label,

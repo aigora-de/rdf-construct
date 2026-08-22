@@ -84,9 +84,7 @@ class OntologyMerger:
             config: Merge configuration
         """
         self.config = config
-        self.detector = ConflictDetector(
-            ignore_predicates=config.conflicts.ignore_predicates
-        )
+        self.detector = ConflictDetector(ignore_predicates=config.conflicts.ignore_predicates)
 
     def merge(self) -> MergeResult:
         """Execute the merge operation.
@@ -174,9 +172,7 @@ class OntologyMerger:
             priority=src_config.priority,
         )
 
-    def _remap_namespaces(
-        self, graph: Graph, remappings: dict[str, str]
-    ) -> Graph:
+    def _remap_namespaces(self, graph: Graph, remappings: dict[str, str]) -> Graph:
         """Remap namespaces in a graph.
 
         Args:
@@ -224,9 +220,7 @@ class OntologyMerger:
                 return URIRef(uri_str.replace(old_ns, new_ns, 1))
         return uri
 
-    def _resolve_conflicts(
-        self, conflicts: list[Conflict], result: MergeResult
-    ) -> None:
+    def _resolve_conflicts(self, conflicts: list[Conflict], result: MergeResult) -> None:
         """Resolve conflicts according to configured strategy.
 
         Args:
@@ -249,9 +243,7 @@ class OntologyMerger:
             else:
                 result.unresolved_conflicts.append(conflict)
 
-    def _create_merged_graph(
-        self, sources: list[SourceGraph], result: MergeResult
-    ) -> Graph:
+    def _create_merged_graph(self, sources: list[SourceGraph], result: MergeResult) -> Graph:
         """Create the merged graph from sources.
 
         Args:
@@ -285,9 +277,7 @@ class OntologyMerger:
 
         return merged
 
-    def _handle_imports(
-        self, merged: Graph, sources: list[SourceGraph]
-    ) -> Graph:
+    def _handle_imports(self, merged: Graph, sources: list[SourceGraph]) -> Graph:
         """Handle owl:imports statements according to strategy.
 
         Args:
@@ -402,10 +392,7 @@ def merge_files(
     if priorities is None:
         priorities = list(range(1, len(sources) + 1))
 
-    source_configs = [
-        SourceConfig(path=p, priority=pri)
-        for p, pri in zip(sources, priorities)
-    ]
+    source_configs = [SourceConfig(path=p, priority=pri) for p, pri in zip(sources, priorities)]
 
     strategy = ConflictStrategy[conflict_strategy.upper()]
 

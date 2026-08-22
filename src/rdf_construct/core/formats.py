@@ -164,9 +164,7 @@ def normalise_format(alias: str) -> str:
     canonical = FORMAT_ALIASES.get(key)
     if canonical is None:
         supported = ", ".join(sorted(FORMAT_ALIASES))
-        raise ValueError(
-            f"Unknown format '{alias}'. Supported aliases: {supported}"
-        )
+        raise ValueError(f"Unknown format '{alias}'. Supported aliases: {supported}")
     return canonical
 
 
