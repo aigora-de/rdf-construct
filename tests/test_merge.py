@@ -63,7 +63,8 @@ def temp_dir(tmp_path):
 @pytest.fixture
 def core_ontology(temp_dir):
     """Create a simple core ontology file."""
-    content = dedent('''
+    content = dedent(
+        """
         @prefix ex: <http://example.org/> .
         @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
         @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -81,7 +82,8 @@ def core_ontology(temp_dir):
 
         ex:Place a owl:Class ;
             rdfs:label "Place" .
-    ''').strip()
+    """
+    ).strip()
 
     path = temp_dir / "core.ttl"
     path.write_text(content)
@@ -91,7 +93,8 @@ def core_ontology(temp_dir):
 @pytest.fixture
 def extension_ontology(temp_dir):
     """Create an extension ontology file."""
-    content = dedent('''
+    content = dedent(
+        """
         @prefix ex: <http://example.org/> .
         @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
         @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -106,7 +109,8 @@ def extension_ontology(temp_dir):
         ex:ResidentialBuilding a owl:Class ;
             rdfs:subClassOf ex:Building ;
             rdfs:label "Residential Building"@en .
-    ''').strip()
+    """
+    ).strip()
 
     path = temp_dir / "extension.ttl"
     path.write_text(content)
@@ -116,7 +120,8 @@ def extension_ontology(temp_dir):
 @pytest.fixture
 def conflicting_ontology(temp_dir):
     """Create an ontology with conflicting definitions."""
-    content = dedent('''
+    content = dedent(
+        """
         @prefix ex: <http://example.org/> .
         @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
         @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -127,7 +132,8 @@ def conflicting_ontology(temp_dir):
 
         ex:hasLocation a owl:ObjectProperty ;
             rdfs:range ex:Location .
-    ''').strip()
+    """
+    ).strip()
 
     path = temp_dir / "conflicting.ttl"
     path.write_text(content)
@@ -137,7 +143,8 @@ def conflicting_ontology(temp_dir):
 @pytest.fixture
 def data_file(temp_dir):
     """Create a data file with instances."""
-    content = dedent('''
+    content = dedent(
+        """
         @prefix ex: <http://example.org/> .
         @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 
@@ -151,7 +158,8 @@ def data_file(temp_dir):
 
         ex:location1 a ex:Place ;
             rdfs:label "Downtown" .
-    ''').strip()
+    """
+    ).strip()
 
     path = temp_dir / "data.ttl"
     path.write_text(content)
@@ -171,38 +179,47 @@ class TestMergeConfig:
 
     def test_source_config_from_dict(self):
         """Test creating SourceConfig from a dictionary."""
-        config = SourceConfig.from_dict({
-            "path": "file.ttl",
-            "priority": 5,
-            "namespace_remap": {"http://old/": "http://new/"},
-        })
+        config = SourceConfig.from_dict(
+            {
+                "path": "file.ttl",
+                "priority": 5,
+                "namespace_remap": {"http://old/": "http://new/"},
+            }
+        )
         assert config.path == Path("file.ttl")
         assert config.priority == 5
         assert "http://old/" in config.namespace_remap
 
     def test_migration_rule_rename(self):
         """Test creating a rename migration rule."""
-        rule = MigrationRule.from_dict({
-            "type": "rename",
-            "from": "http://old.org/Class",
-            "to": "http://new.org/Class",
-            "description": "Rename class",
-        })
+        rule = MigrationRule.from_dict(
+            {
+                "type": "rename",
+                "from": "http://old.org/Class",
+                "to": "http://new.org/Class",
+                "description": "Rename class",
+            }
+        )
         assert rule.type == "rename"
         assert rule.from_uri == "http://old.org/Class"
         assert rule.to_uri == "http://new.org/Class"
 
     def test_migration_rule_transform(self):
         """Test creating a transform migration rule."""
-        rule = MigrationRule.from_dict({
-            "type": "transform",
-            "description": "Split name",
-            "match": "?s ex:fullName ?name",
-            "construct": [
-                {"pattern": "?s ex:givenName ?given", "bind": "STRBEFORE(?name, ' ') AS ?given"},
-            ],
-            "delete_matched": True,
-        })
+        rule = MigrationRule.from_dict(
+            {
+                "type": "transform",
+                "description": "Split name",
+                "match": "?s ex:fullName ?name",
+                "construct": [
+                    {
+                        "pattern": "?s ex:givenName ?given",
+                        "bind": "STRBEFORE(?name, ' ') AS ?given",
+                    },
+                ],
+                "delete_matched": True,
+            }
+        )
         assert rule.type == "transform"
         assert rule.match == "?s ex:fullName ?name"
         assert len(rule.construct) == 1
@@ -238,9 +255,7 @@ class TestConflictDetector:
         # but not for non-overlapping content
         label_conflicts = [c for c in conflicts if str(c.predicate) == str(RDFS.label)]
         # Both have ex:Ontology rdfs:label with different values
-        assert any(
-            "Ontology" in str(c.subject) for c in label_conflicts
-        )
+        assert any("Ontology" in str(c.subject) for c in label_conflicts)
 
     def test_detect_label_conflict(self, core_ontology, conflicting_ontology):
         """Test detection of conflicting labels."""
@@ -280,8 +295,7 @@ class TestConflictDetector:
         # Should find conflict for ex:hasLocation rdfs:range
         property_uri = URIRef("http://example.org/hasLocation")
         range_conflicts = [
-            c for c in conflicts
-            if c.subject == property_uri and c.predicate == RDFS.range
+            c for c in conflicts if c.subject == property_uri and c.predicate == RDFS.range
         ]
         assert len(range_conflicts) == 1
         assert len(range_conflicts[0].values) == 2
@@ -621,14 +635,16 @@ class TestMergeIntegration:
     def test_merge_with_namespace_remap(self, temp_dir):
         """Test merge with namespace remapping."""
         # Create ontology with old namespace
-        old_content = dedent('''
+        old_content = dedent(
+            """
             @prefix old: <http://old.example.org/> .
             @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
             @prefix owl: <http://www.w3.org/2002/07/owl#> .
 
             old:Thing a owl:Class ;
                 rdfs:label "Thing" .
-        ''').strip()
+        """
+        ).strip()
 
         old_path = temp_dir / "old.ttl"
         old_path.write_text(old_content)

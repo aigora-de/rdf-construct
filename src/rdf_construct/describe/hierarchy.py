@@ -131,10 +131,7 @@ def _calculate_max_depth(
     depths: dict[URIRef, int] = {}
 
     # Find roots
-    roots = {
-        cls for cls in classes
-        if not (parents[cls] - TOP_CLASSES)
-    }
+    roots = {cls for cls in classes if not (parents[cls] - TOP_CLASSES)}
 
     # BFS to assign depths
     current_level = roots

@@ -14,7 +14,7 @@ from rdflib import Graph
 from rdf_construct.docs.config import DocsConfig, load_docs_config
 from rdf_construct.docs.extractors import ExtractedEntities, extract_all
 from rdf_construct.docs.search import generate_search_index, write_search_index
-    
+
 if TYPE_CHECKING:
     pass
 

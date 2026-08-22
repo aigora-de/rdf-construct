@@ -251,8 +251,13 @@ class PlantUMLRenderer:
         for t in types:
             type_qn = qname(self.graph, t)
             # Skip metaclass types
-            if type_qn not in ("owl:Class", "rdfs:Class", "owl:ObjectProperty",
-                             "owl:DatatypeProperty", "owl:AnnotationProperty"):
+            if type_qn not in (
+                "owl:Class",
+                "rdfs:Class",
+                "owl:ObjectProperty",
+                "owl:DatatypeProperty",
+                "owl:AnnotationProperty",
+            ):
                 type_qnames.append(type_qn)
 
         if type_qnames:
@@ -283,7 +288,7 @@ class PlantUMLRenderer:
         if self.style:
             # Use style system if available
             palette = self.style.get_class_style(self.graph, cls, is_instance=False)
-            if palette and hasattr(palette, 'to_plantuml'):
+            if palette and hasattr(palette, "to_plantuml"):
                 color_spec = f" {palette.to_plantuml()}"
 
         # Render as empty class with stereotype
@@ -312,7 +317,7 @@ class PlantUMLRenderer:
         color_spec = " #CCCCCC"
         if self.style:
             palette = self.style.get_property_style(self.graph, prop)
-            if palette and hasattr(palette, 'to_plantuml'):
+            if palette and hasattr(palette, "to_plantuml"):
                 color_spec = f" {palette.to_plantuml()}"
 
         lines.append(f"class {prop_name} {stereotype}{color_spec}")
@@ -338,7 +343,7 @@ class PlantUMLRenderer:
         color_spec = ""
         if self.style:
             palette = self.style.get_class_style(self.graph, instance, is_instance=True)
-            if palette and hasattr(palette, 'to_plantuml'):
+            if palette and hasattr(palette, "to_plantuml"):
                 color_spec = f" {palette.to_plantuml()}"
 
         # Render as class with stereotype and optional custom label
@@ -383,9 +388,9 @@ class PlantUMLRenderer:
 
         # Collect all properties
         all_props = (
-            self.entities.get("object_properties", set()) |
-            self.entities.get("datatype_properties", set()) |
-            self.entities.get("annotation_properties", set())
+            self.entities.get("object_properties", set())
+            | self.entities.get("datatype_properties", set())
+            | self.entities.get("annotation_properties", set())
         )
 
         for prop in all_props:
@@ -417,8 +422,13 @@ class PlantUMLRenderer:
             for cls in self.graph.objects(instance, RDF.type):
                 # Skip metaclass types
                 type_qn = qname(self.graph, cls)
-                if type_qn in ("owl:Class", "rdfs:Class", "owl:ObjectProperty",
-                               "owl:DatatypeProperty", "owl:AnnotationProperty"):
+                if type_qn in (
+                    "owl:Class",
+                    "rdfs:Class",
+                    "owl:ObjectProperty",
+                    "owl:DatatypeProperty",
+                    "owl:AnnotationProperty",
+                ):
                     continue
 
                 if cls in self.entities.get("classes", set()):
@@ -426,10 +436,12 @@ class PlantUMLRenderer:
 
                     # Get arrow color from style
                     arrow_color = "#FF0000"  # Default red
-                    if self.style and hasattr(self.style, 'arrow_colors'):
+                    if self.style and hasattr(self.style, "arrow_colors"):
                         arrow_color = self.style.arrow_colors.get_color("type")
 
-                    lines.append(f"{instance_name} -{direction}[{arrow_color}]-> {class_name} : <<rdf:type>>")
+                    lines.append(
+                        f"{instance_name} -{direction}[{arrow_color}]-> {class_name} : <<rdf:type>>"
+                    )
 
         return lines
 
@@ -446,9 +458,9 @@ class PlantUMLRenderer:
 
         # Collect all properties
         all_props = (
-            self.entities.get("object_properties", set()) |
-            self.entities.get("datatype_properties", set()) |
-            self.entities.get("annotation_properties", set())
+            self.entities.get("object_properties", set())
+            | self.entities.get("datatype_properties", set())
+            | self.entities.get("annotation_properties", set())
         )
 
         for prop in all_props:
@@ -458,18 +470,14 @@ class PlantUMLRenderer:
             for domain in self.graph.objects(prop, RDFS.domain):
                 if domain in self.entities.get("classes", set()):
                     domain_name = plantuml_identifier(self.graph, domain)
-                    lines.append(
-                        f"{prop_name} -{direction}-> {domain_name} : <<rdfs:domain>>"
-                    )
+                    lines.append(f"{prop_name} -{direction}-> {domain_name} : <<rdfs:domain>>")
 
             # Render range relationships
             for range_cls in self.graph.objects(prop, RDFS.range):
                 # Check if range is a class (for object properties)
                 if range_cls in self.entities.get("classes", set()):
                     range_name = plantuml_identifier(self.graph, range_cls)
-                    lines.append(
-                        f"{prop_name} -{direction}-> {range_name} : <<rdfs:range>>"
-                    )
+                    lines.append(f"{prop_name} -{direction}-> {range_name} : <<rdfs:range>>")
                 # For datatype properties, range might be XSD type - skip those
 
         return lines
@@ -499,9 +507,7 @@ class PlantUMLRenderer:
                         # Ensure property name is camelCase
                         prop_label = safe_label(self.graph, prop, camelcase=True)
 
-                        lines.append(
-                            f"{subj_name} -{direction}-> {obj_name} : <<{prop_qname}>>"
-                        )
+                        lines.append(f"{subj_name} -{direction}-> {obj_name} : <<{prop_qname}>>")
 
         return lines
 
@@ -537,9 +543,7 @@ class PlantUMLRenderer:
 
                         # Connect with dotted line
                         prop_qname = qname(self.graph, prop)
-                        lines.append(
-                            f"{instance_name} .{direction}. {note_id} : <<{prop_qname}>>"
-                        )
+                        lines.append(f"{instance_name} .{direction}. {note_id} : <<{prop_qname}>>")
 
         return lines
 
@@ -583,9 +587,7 @@ class PlantUMLRenderer:
                     lines.append(f'note "{prop_label}: {range_type}" as {note_id}')
 
                     prop_qname = qname(self.graph, prop)
-                    lines.append(
-                        f"{cls_name} .{direction}. {note_id} : <<{prop_qname}>>"
-                    )
+                    lines.append(f"{cls_name} .{direction}. {note_id} : <<{prop_qname}>>")
 
         return lines
 
@@ -599,13 +601,13 @@ class PlantUMLRenderer:
 
         # Add layout directives
         if self.layout:
-            directives = getattr(self.layout, 'get_plantuml_directives', lambda: [])()
+            directives = getattr(self.layout, "get_plantuml_directives", lambda: [])()
             lines.extend(directives)
             lines.append("")
 
         # Add style directives
         if self.style:
-            directives = getattr(self.style, 'get_plantuml_directives', lambda: [])()
+            directives = getattr(self.style, "get_plantuml_directives", lambda: [])()
             if directives:
                 lines.extend(directives)
                 lines.append("")
@@ -619,9 +621,9 @@ class PlantUMLRenderer:
 
         # Render all properties as classes
         all_props = (
-            self.entities.get("object_properties", set()) |
-            self.entities.get("datatype_properties", set()) |
-            self.entities.get("annotation_properties", set())
+            self.entities.get("object_properties", set())
+            | self.entities.get("datatype_properties", set())
+            | self.entities.get("annotation_properties", set())
         )
         for prop in sorted(all_props, key=lambda x: qname(self.graph, x)):
             lines.extend(self.render_property(prop))
@@ -630,7 +632,9 @@ class PlantUMLRenderer:
             lines.append("")
 
         # Render all instances as classes
-        for instance in sorted(self.entities.get("instances", set()), key=lambda x: qname(self.graph, x)):
+        for instance in sorted(
+            self.entities.get("instances", set()), key=lambda x: qname(self.graph, x)
+        ):
             lines.extend(self.render_instance(instance))
 
         if self.entities.get("instances"):

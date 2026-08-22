@@ -35,9 +35,7 @@ class BaseFormatter(ABC):
         pass
 
     @abstractmethod
-    def format_conflict_report(
-        self, conflicts: list[Conflict], graph: Graph | None = None
-    ) -> str:
+    def format_conflict_report(self, conflicts: list[Conflict], graph: Graph | None = None) -> str:
         """Format a conflict report.
 
         Args:
@@ -120,25 +118,19 @@ class TextFormatter(BaseFormatter):
             lines.append("")
             lines.append(self._colour("Conflicts:", "yellow"))
             lines.append(f"  Detected: {len(result.conflicts)}")
-            lines.append(
-                f"  Auto-resolved: {len(result.resolved_conflicts)}"
-            )
+            lines.append(f"  Auto-resolved: {len(result.resolved_conflicts)}")
             if result.unresolved_conflicts:
                 lines.append(
                     f"  {self._colour(f'Unresolved: {len(result.unresolved_conflicts)}', 'red')}"
                 )
-                lines.append(
-                    "  → Search for '=== CONFLICT ===' in output"
-                )
+                lines.append("  → Search for '=== CONFLICT ===' in output")
         else:
             lines.append("")
             lines.append(self._colour("✓ No conflicts detected", "green"))
 
         return "\n".join(lines)
 
-    def format_conflict_report(
-        self, conflicts: list[Conflict], graph: Graph | None = None
-    ) -> str:
+    def format_conflict_report(self, conflicts: list[Conflict], graph: Graph | None = None) -> str:
         """Format conflicts as plain text."""
         lines = []
 
@@ -168,9 +160,7 @@ class TextFormatter(BaseFormatter):
                 pred = self._format_term(conflict.predicate, graph)
                 lines.append(f"  {subj} {pred}")
                 if conflict.resolution:
-                    lines.append(
-                        f"    → Used: {conflict.resolution}"
-                    )
+                    lines.append(f"    → Used: {conflict.resolution}")
 
         return "\n".join(lines)
 
@@ -250,9 +240,7 @@ class MarkdownFormatter(BaseFormatter):
 
         return "\n".join(lines)
 
-    def format_conflict_report(
-        self, conflicts: list[Conflict], graph: Graph | None = None
-    ) -> str:
+    def format_conflict_report(self, conflicts: list[Conflict], graph: Graph | None = None) -> str:
         """Format conflicts as Markdown."""
         lines = []
 
@@ -293,17 +281,13 @@ class MarkdownFormatter(BaseFormatter):
                 for cv in conflict.values:
                     lines.append(f"| {cv.source_path} | {cv.priority} | {cv} |")
                 lines.append("")
-                lines.append(
-                    f"**Reason**: {self._conflict_reason(conflict)}"
-                )
+                lines.append(f"**Reason**: {self._conflict_reason(conflict)}")
                 lines.append("")
 
         if resolved:
             lines.append("## Auto-Resolved Conflicts")
             lines.append("")
-            lines.append(
-                "These were resolved automatically based on priority."
-            )
+            lines.append("These were resolved automatically based on priority.")
             lines.append("")
 
             for conflict in resolved:
@@ -328,12 +312,8 @@ class MarkdownFormatter(BaseFormatter):
         lines.append("## Recommendations")
         lines.append("")
         lines.append("1. Review unresolved conflicts in output file")
-        lines.append(
-            "2. Consider whether similar values should be merged or aliased"
-        )
-        lines.append(
-            "3. Run `rdf-construct lint` on merged output to check for issues"
-        )
+        lines.append("2. Consider whether similar values should be merged or aliased")
+        lines.append("3. Run `rdf-construct lint` on merged output to check for issues")
         lines.append("")
 
         return "\n".join(lines)
@@ -391,9 +371,7 @@ class MarkdownFormatter(BaseFormatter):
             ConflictType.HIERARCHY_DIFFERENCE: "Different hierarchy positions",
             ConflictType.SEMANTIC_CONTRADICTION: "Semantically incompatible assertions",
         }
-        return type_reasons.get(
-            conflict.conflict_type, "Values differ between sources"
-        )
+        return type_reasons.get(conflict.conflict_type, "Values differ between sources")
 
 
 # Formatter registry
@@ -420,7 +398,6 @@ def get_formatter(format_name: str, **kwargs) -> BaseFormatter:
     formatter_class = FORMATTERS.get(format_name.lower())
     if not formatter_class:
         raise ValueError(
-            f"Unknown format: {format_name}. "
-            f"Available: {', '.join(FORMATTERS.keys())}"
+            f"Unknown format: {format_name}. " f"Available: {', '.join(FORMATTERS.keys())}"
         )
     return formatter_class(**kwargs)

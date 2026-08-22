@@ -68,14 +68,14 @@ shape:BuildingShape a sh:NodeShape ;
     sh:targetClass ex:Building ;
     sh:name "Building" ;
     sh:description "A permanent structure with walls and roof" ;
-    
+
     sh:property [
         sh:path ex:hasFloor ;
         sh:class ex:Floor ;
         sh:minCount 1 ;
         sh:order 1 ;
     ] ;
-    
+
     sh:property [
         sh:path ex:hasAddress ;
         sh:datatype xsd:string ;
@@ -344,7 +344,7 @@ Example GitHub Actions workflow:
   run: |
     # Generate shapes from ontology
     rdf-construct shacl-gen ontology.ttl -o shapes.ttl --level strict
-    
+
     # Validate sample data
     pyshacl -s shapes.ttl -d sample-data.ttl
 ```

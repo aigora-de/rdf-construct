@@ -207,9 +207,7 @@ class ConflictDetector:
         if predicate == RDF.type:
             return ConflictType.TYPE_DIFFERENCE
 
-        if any(
-            x in pred_str for x in ["subClassOf", "subPropertyOf", "equivalentClass"]
-        ):
+        if any(x in pred_str for x in ["subClassOf", "subPropertyOf", "equivalentClass"]):
             return ConflictType.HIERARCHY_DIFFERENCE
 
         if "disjoint" in pred_str.lower():
@@ -250,9 +248,7 @@ def generate_conflict_marker(conflict: Conflict, graph: Graph) -> str:
         lines.append(f"# Resolution: Used {conflict.resolution} (highest priority)")
     else:
         lines.append("# Resolution: UNRESOLVED - values differ, manual review required")
-        lines.append(
-            "# To resolve: keep one value below, delete the other and this comment block"
-        )
+        lines.append("# To resolve: keep one value below, delete the other and this comment block")
 
     return "\n".join(lines)
 

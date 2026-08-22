@@ -185,7 +185,9 @@ class MarkdownFormatter:
 
                     # Group by entity type based on URI pattern
                     lines.append("<details>")
-                    lines.append(f"<summary>{len(coverage.missing_entities)} entities missing translations</summary>")
+                    lines.append(
+                        f"<summary>{len(coverage.missing_entities)} entities missing translations</summary>"
+                    )
                     lines.append("")
                     for uri in coverage.missing_entities:
                         short_uri = self._shorten_uri(uri)

@@ -230,7 +230,8 @@ class TestTranslationFile:
 
     def test_from_yaml(self, temp_dir: Path):
         """Test loading from YAML file."""
-        yaml_content = dedent('''
+        yaml_content = dedent(
+            """
             metadata:
               source_file: test.ttl
               source_language: en
@@ -252,7 +253,8 @@ class TestTranslationFile:
               by_status:
                 translated: 1
               coverage: "100%"
-        ''')
+        """
+        )
 
         path = temp_dir / "translations.yml"
         path.write_text(yaml_content)
@@ -457,8 +459,7 @@ class TestTranslationMerger:
 
         # Check original was preserved
         german_labels = [
-            l for l in result.merged_graph.objects(EX.Building, RDFS.label)
-            if l.language == "de"
+            l for l in result.merged_graph.objects(EX.Building, RDFS.label) if l.language == "de"
         ]
         assert len(german_labels) == 1
         assert str(german_labels[0]) == "Gebäude"  # Original, not new
@@ -497,8 +498,7 @@ class TestTranslationMerger:
 
         # Check translation was updated
         german_labels = [
-            l for l in result.merged_graph.objects(EX.Building, RDFS.label)
-            if l.language == "de"
+            l for l in result.merged_graph.objects(EX.Building, RDFS.label) if l.language == "de"
         ]
         assert len(german_labels) == 1
         assert str(german_labels[0]) == "Bauwerk"
@@ -701,7 +701,8 @@ class TestConfigYAML:
 
     def test_load_config(self, temp_dir: Path):
         """Test loading config from YAML."""
-        config_content = dedent('''
+        config_content = dedent(
+            """
             localise:
               properties:
                 - rdfs:label
@@ -719,7 +720,8 @@ class TestConfigYAML:
               merge:
                 existing: preserve
                 min_status: translated
-        ''')
+        """
+        )
 
         config_path = temp_dir / "localise.yml"
         config_path.write_text(config_content)
@@ -733,9 +735,7 @@ class TestConfigYAML:
 class TestMultipleLanguages:
     """Tests for handling multiple languages."""
 
-    def test_extract_multiple_languages(
-        self, simple_ontology_file: Path, temp_dir: Path
-    ):
+    def test_extract_multiple_languages(self, simple_ontology_file: Path, temp_dir: Path):
         """Test extracting for multiple languages."""
         languages = ["de", "fr", "es"]
         files: list[Path] = []

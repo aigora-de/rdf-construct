@@ -86,9 +86,8 @@ def extract_metadata(graph: Graph) -> OntologyMetadata:
         metadata.description = description
 
     # License
-    license_uri = (
-        _get_single_value(graph, ontology, DCTERMS_LICENSE)
-        or _get_single_value(graph, ontology, CC_LICENSE)
+    license_uri = _get_single_value(graph, ontology, DCTERMS_LICENSE) or _get_single_value(
+        graph, ontology, CC_LICENSE
     )
     if license_uri:
         metadata.license_uri = str(license_uri)
@@ -100,9 +99,8 @@ def extract_metadata(graph: Graph) -> OntologyMetadata:
 
     # If no structured license, check for rights statement
     if not metadata.license_uri:
-        rights = (
-            _get_single_literal(graph, ontology, DCTERMS_RIGHTS)
-            or _get_single_literal(graph, ontology, DC_RIGHTS)
+        rights = _get_single_literal(graph, ontology, DCTERMS_RIGHTS) or _get_single_literal(
+            graph, ontology, DC_RIGHTS
         )
         if rights:
             metadata.license_label = rights

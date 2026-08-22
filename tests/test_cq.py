@@ -71,6 +71,7 @@ def prefixes():
 # Expectation Tests
 # ============================================
 
+
 class TestBooleanExpectation:
     """Tests for ASK query expectations."""
 
@@ -101,9 +102,7 @@ class TestHasResultsExpectation:
 
     def test_has_results_passes(self, simple_graph):
         """Query with results should pass has_results."""
-        result = simple_graph.query(
-            "SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }"
-        )
+        result = simple_graph.query("SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }")
         exp = HasResultsExpectation()
         check = exp.check(result)
         assert check.passed
@@ -133,9 +132,7 @@ class TestNoResultsExpectation:
 
     def test_no_results_fails(self, simple_graph):
         """Query with results should fail no_results."""
-        result = simple_graph.query(
-            "SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }"
-        )
+        result = simple_graph.query("SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }")
         exp = NoResultsExpectation()
         check = exp.check(result)
         assert not check.passed
@@ -146,54 +143,42 @@ class TestCountExpectation:
 
     def test_exact_count_passes(self, simple_graph):
         """Exact count should pass when matched."""
-        result = simple_graph.query(
-            "SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }"
-        )
+        result = simple_graph.query("SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }")
         exp = CountExpectation(exact=2)
         check = exp.check(result)
         assert check.passed
 
     def test_exact_count_fails(self, simple_graph):
         """Exact count should fail when not matched."""
-        result = simple_graph.query(
-            "SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }"
-        )
+        result = simple_graph.query("SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }")
         exp = CountExpectation(exact=3)
         check = exp.check(result)
         assert not check.passed
 
     def test_min_count_passes(self, simple_graph):
         """Min count should pass when >= min."""
-        result = simple_graph.query(
-            "SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }"
-        )
+        result = simple_graph.query("SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }")
         exp = CountExpectation(min_count=1)
         check = exp.check(result)
         assert check.passed
 
     def test_min_count_fails(self, simple_graph):
         """Min count should fail when < min."""
-        result = simple_graph.query(
-            "SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }"
-        )
+        result = simple_graph.query("SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }")
         exp = CountExpectation(min_count=5)
         check = exp.check(result)
         assert not check.passed
 
     def test_max_count_passes(self, simple_graph):
         """Max count should pass when <= max."""
-        result = simple_graph.query(
-            "SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }"
-        )
+        result = simple_graph.query("SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }")
         exp = CountExpectation(max_count=5)
         check = exp.check(result)
         assert check.passed
 
     def test_range_count(self, simple_graph):
         """Range count should work with both min and max."""
-        result = simple_graph.query(
-            "SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }"
-        )
+        result = simple_graph.query("SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }")
         exp = CountExpectation(min_count=1, max_count=5)
         check = exp.check(result)
         assert check.passed
@@ -204,23 +189,15 @@ class TestContainsExpectation:
 
     def test_contains_single_binding(self, simple_graph):
         """Should find a single expected binding."""
-        result = simple_graph.query(
-            "SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }"
-        )
-        exp = ContainsExpectation(expected_bindings=[
-            {"x": "http://example.org/test#Fido"}
-        ])
+        result = simple_graph.query("SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }")
+        exp = ContainsExpectation(expected_bindings=[{"x": "http://example.org/test#Fido"}])
         check = exp.check(result)
         assert check.passed
 
     def test_contains_missing_binding(self, simple_graph):
         """Should fail when expected binding is missing."""
-        result = simple_graph.query(
-            "SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }"
-        )
-        exp = ContainsExpectation(expected_bindings=[
-            {"x": "http://example.org/test#NonExistent"}
-        ])
+        result = simple_graph.query("SELECT ?x WHERE { ?x a <http://example.org/test#Dog> }")
+        exp = ContainsExpectation(expected_bindings=[{"x": "http://example.org/test#NonExistent"}])
         check = exp.check(result)
         assert not check.passed
 
@@ -282,6 +259,7 @@ class TestParseExpectation:
 # Loader Tests
 # ============================================
 
+
 class TestBuildQueryWithPrefixes:
     """Tests for prefix injection."""
 
@@ -305,6 +283,7 @@ class TestBuildQueryWithPrefixes:
 # ============================================
 # Runner Tests
 # ============================================
+
 
 class TestCQTestRunner:
     """Tests for the test runner."""
@@ -407,6 +386,7 @@ class TestCQTestRunner:
 # Formatter Tests
 # ============================================
 
+
 class TestTextFormatter:
     """Tests for text output formatting."""
 
@@ -488,16 +468,27 @@ class TestJunitFormatter:
 # Tag Filtering Tests
 # ============================================
 
+
 class TestTagFiltering:
     """Tests for tag-based test filtering."""
 
     def test_filter_include_tags(self, prefixes):
         """Should include only tests with specified tags."""
         tests = [
-            CQTest(id="t1", name="Test 1", query="ASK {}",
-                   expectation=BooleanExpectation(True), tags=["core"]),
-            CQTest(id="t2", name="Test 2", query="ASK {}",
-                   expectation=BooleanExpectation(True), tags=["extra"]),
+            CQTest(
+                id="t1",
+                name="Test 1",
+                query="ASK {}",
+                expectation=BooleanExpectation(True),
+                tags=["core"],
+            ),
+            CQTest(
+                id="t2",
+                name="Test 2",
+                query="ASK {}",
+                expectation=BooleanExpectation(True),
+                tags=["extra"],
+            ),
         ]
         suite = CQTestSuite(prefixes=prefixes, questions=tests)
 
@@ -509,10 +500,20 @@ class TestTagFiltering:
     def test_filter_exclude_tags(self, prefixes):
         """Should exclude tests with specified tags."""
         tests = [
-            CQTest(id="t1", name="Test 1", query="ASK {}",
-                   expectation=BooleanExpectation(True), tags=["core"]),
-            CQTest(id="t2", name="Test 2", query="ASK {}",
-                   expectation=BooleanExpectation(True), tags=["slow"]),
+            CQTest(
+                id="t1",
+                name="Test 1",
+                query="ASK {}",
+                expectation=BooleanExpectation(True),
+                tags=["core"],
+            ),
+            CQTest(
+                id="t2",
+                name="Test 2",
+                query="ASK {}",
+                expectation=BooleanExpectation(True),
+                tags=["slow"],
+            ),
         ]
         suite = CQTestSuite(prefixes=prefixes, questions=tests)
 

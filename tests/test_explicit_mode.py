@@ -44,7 +44,9 @@ def test_explicit_entity_expansion():
 
     # Test data
     test_graph = Graph()
-    test_graph.parse(format="turtle", data="""
+    test_graph.parse(
+        format="turtle",
+        data="""
         @prefix ex: <http://example.org/animals#> .
         @prefix owl: <http://www.w3.org/2002/07/owl#> .
         @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -53,7 +55,8 @@ def test_explicit_entity_expansion():
         ex:Dog a owl:Class ; rdfs:subClassOf ex:Animal .
         ex:hasParent a owl:ObjectProperty .
         ex:lifespan a owl:DatatypeProperty .
-    """)
+    """,
+    )
 
     # Simulated expansion
     from rdflib import URIRef

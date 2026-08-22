@@ -16,6 +16,7 @@ from rdf_construct.cq.expectations import CheckResult
 
 class CQStatus(Enum):
     """Status of a test execution."""
+
     PASS = "pass"
     FAIL = "fail"
     ERROR = "error"
@@ -34,6 +35,7 @@ class CQTestResult:
         check_result: Detailed check result from expectation
         error: Error message if status is ERROR
     """
+
     test: CQTest
     status: CQStatus
     duration_ms: float = 0.0
@@ -68,6 +70,7 @@ class CQTestResults:
         total_duration_ms: Total execution time in milliseconds
         ontology_file: Path to the ontology file tested
     """
+
     suite: CQTestSuite
     results: list[CQTestResult] = field(default_factory=list)
     total_duration_ms: float = 0.0
@@ -133,8 +136,9 @@ class CQTestRunner:
         self.fail_fast = fail_fast
         self.verbose = verbose
 
-    def run(self, ontology: Graph, suite: CQTestSuite,
-            ontology_file: Path | None = None) -> CQTestResults:
+    def run(
+        self, ontology: Graph, suite: CQTestSuite, ontology_file: Path | None = None
+    ) -> CQTestResults:
         """Run all tests in a suite against an ontology.
 
         Args:
@@ -174,8 +178,7 @@ class CQTestRunner:
             ontology_file=ontology_file,
         )
 
-    def _run_test(self, graph: Graph, test: CQTest,
-                  prefixes: dict[str, str]) -> CQTestResult:
+    def _run_test(self, graph: Graph, test: CQTest, prefixes: dict[str, str]) -> CQTestResult:
         """Run a single test.
 
         Args:
@@ -204,7 +207,7 @@ class CQTestRunner:
 
             # Check if this is an ASK query (returns boolean) or SELECT (returns rows)
             # rdflib Result objects have a 'type' attribute
-            is_ask_query = getattr(result, 'type', None) == 'ASK'
+            is_ask_query = getattr(result, "type", None) == "ASK"
 
             if is_ask_query:
                 # ASK query - result is boolean
@@ -223,10 +226,13 @@ class CQTestRunner:
                 class ResultWrapper:
                     def __init__(self, rows):
                         self.rows = rows
+
                     def __iter__(self):
                         return iter(self.rows)
+
                     def __bool__(self):
                         return len(self.rows) > 0
+
                     def __len__(self):
                         return len(self.rows)
 
@@ -256,12 +262,15 @@ class CQTestRunner:
             )
 
 
-def run_tests(ontology_path: Path, test_suite_path: Path,
-              additional_data: list[Path] | None = None,
-              include_tags: set[str] | None = None,
-              exclude_tags: set[str] | None = None,
-              fail_fast: bool = False,
-              verbose: bool = False) -> CQTestResults:
+def run_tests(
+    ontology_path: Path,
+    test_suite_path: Path,
+    additional_data: list[Path] | None = None,
+    include_tags: set[str] | None = None,
+    exclude_tags: set[str] | None = None,
+    fail_fast: bool = False,
+    verbose: bool = False,
+) -> CQTestResults:
     """Convenience function to run tests from file paths.
 
     Args:

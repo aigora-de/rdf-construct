@@ -9,6 +9,7 @@ from rdflib.namespace import OWL, XSD
 
 # For testing, we'll import from the local files
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from rdf_construct.diff import (

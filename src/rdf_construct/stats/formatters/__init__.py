@@ -8,7 +8,10 @@ from rdf_construct.stats.collector import OntologyStats
 from rdf_construct.stats.comparator import ComparisonResult
 from rdf_construct.stats.formatters.text import format_text_stats, format_text_comparison
 from rdf_construct.stats.formatters.json import format_json_stats, format_json_comparison
-from rdf_construct.stats.formatters.markdown import format_markdown_stats, format_markdown_comparison
+from rdf_construct.stats.formatters.markdown import (
+    format_markdown_stats,
+    format_markdown_comparison,
+)
 
 
 def format_stats(

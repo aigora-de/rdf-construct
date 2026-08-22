@@ -47,7 +47,8 @@ def temp_dir(tmp_path: Path) -> Path:
 @pytest.fixture
 def monolith_ontology(temp_dir: Path) -> Path:
     """Create a monolithic ontology for splitting tests."""
-    content = dedent('''
+    content = dedent(
+        """
         @prefix ex: <http://example.org/ontology#> .
         @prefix org: <http://example.org/ontology/org#> .
         @prefix building: <http://example.org/ontology/building#> .
@@ -98,7 +99,8 @@ def monolith_ontology(temp_dir: Path) -> Path:
         building:floorNumber a owl:DatatypeProperty ;
             rdfs:label "floor number"@en ;
             rdfs:domain building:Floor .
-    ''').strip()
+    """
+    ).strip()
 
     ontology_path = temp_dir / "split_monolith.ttl"
     ontology_path.write_text(content)
@@ -108,7 +110,8 @@ def monolith_ontology(temp_dir: Path) -> Path:
 @pytest.fixture
 def instance_data(temp_dir: Path) -> Path:
     """Create instance data for data splitting tests."""
-    content = dedent('''
+    content = dedent(
+        """
         @prefix ex: <http://example.org/ontology#> .
         @prefix org: <http://example.org/ontology/org#> .
         @prefix building: <http://example.org/ontology/building#> .
@@ -130,7 +133,8 @@ def instance_data(temp_dir: Path) -> Path:
 
         data:floor1 a building:Floor ;
             building:floorNumber 1 .
-    ''').strip()
+    """
+    ).strip()
 
     data_path = temp_dir / "split_instances.ttl"
     data_path.write_text(content)
@@ -140,7 +144,8 @@ def instance_data(temp_dir: Path) -> Path:
 @pytest.fixture
 def split_config_yaml(temp_dir: Path, monolith_ontology: Path) -> Path:
     """Create a split configuration file."""
-    content = dedent(f'''
+    content = dedent(
+        f"""
         split:
           source: {monolith_ontology}
           output_dir: {temp_dir}/modules
@@ -173,7 +178,8 @@ def split_config_yaml(temp_dir: Path, monolith_ontology: Path) -> Path:
             output: common.ttl
 
           generate_manifest: true
-    ''').strip()
+    """
+    ).strip()
 
     config_path = temp_dir / "split.yml"
     config_path.write_text(content)
@@ -243,14 +249,16 @@ class TestSplitByNamespace:
     def test_namespace_module_separation(self, temp_dir: Path):
         """Test that entities are correctly separated by namespace."""
         # Create simple ontology with two namespaces
-        content = dedent('''
+        content = dedent(
+            """
             @prefix ns1: <http://example.org/ns1#> .
             @prefix ns2: <http://example.org/ns2#> .
             @prefix owl: <http://www.w3.org/2002/07/owl#> .
 
             ns1:Class1 a owl:Class .
             ns2:Class2 a owl:Class .
-        ''').strip()
+        """
+        ).strip()
 
         source = temp_dir / "two_ns.ttl"
         source.write_text(content)
@@ -326,7 +334,8 @@ class TestSplitByExplicitList:
 
     def test_split_with_descendants(self, temp_dir: Path):
         """Test including descendants in split."""
-        content = dedent('''
+        content = dedent(
+            """
             @prefix ex: <http://example.org/> .
             @prefix owl: <http://www.w3.org/2002/07/owl#> .
             @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -337,7 +346,8 @@ class TestSplitByExplicitList:
             ex:GrandChild a owl:Class ;
                 rdfs:subClassOf ex:Child .
             ex:Unrelated a owl:Class .
-        ''').strip()
+        """
+        ).strip()
 
         source = temp_dir / "hierarchy.ttl"
         source.write_text(content)
@@ -533,6 +543,7 @@ class TestManifestGeneration:
         assert manifest_path.exists()
 
         import yaml
+
         with open(manifest_path) as f:
             manifest = yaml.safe_load(f)
 
@@ -731,12 +742,14 @@ class TestEdgeCases:
 
     def test_curie_expansion(self, temp_dir: Path):
         """Test CURIE expansion in class lists."""
-        content = dedent('''
+        content = dedent(
+            """
             @prefix ex: <http://example.org/> .
             @prefix owl: <http://www.w3.org/2002/07/owl#> .
 
             ex:TestClass a owl:Class .
-        ''').strip()
+        """
+        ).strip()
 
         source = temp_dir / "curie_test.ttl"
         source.write_text(content)

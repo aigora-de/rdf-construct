@@ -14,7 +14,10 @@ from rdflib import Graph
 from rdf_construct.stats.metrics.basic import BasicStats, collect_basic_stats
 from rdf_construct.stats.metrics.hierarchy import HierarchyStats, collect_hierarchy_stats
 from rdf_construct.stats.metrics.properties import PropertyStats, collect_property_stats
-from rdf_construct.stats.metrics.documentation import DocumentationStats, collect_documentation_stats
+from rdf_construct.stats.metrics.documentation import (
+    DocumentationStats,
+    collect_documentation_stats,
+)
 from rdf_construct.stats.metrics.complexity import ComplexityStats, collect_complexity_stats
 from rdf_construct.stats.metrics.connectivity import ConnectivityStats, collect_connectivity_stats
 
@@ -104,14 +107,16 @@ class OntologyStats:
 
 
 # Category names for filtering
-METRIC_CATEGORIES = frozenset({
-    "basic",
-    "hierarchy",
-    "properties",
-    "documentation",
-    "complexity",
-    "connectivity",
-})
+METRIC_CATEGORIES = frozenset(
+    {
+        "basic",
+        "hierarchy",
+        "properties",
+        "documentation",
+        "complexity",
+        "connectivity",
+    }
+)
 
 
 def collect_stats(
@@ -157,7 +162,9 @@ def collect_stats(
     hierarchy = collect_hierarchy_stats(graph) if "hierarchy" in categories else HierarchyStats()
     properties = collect_property_stats(graph) if "properties" in categories else PropertyStats()
     documentation = (
-        collect_documentation_stats(graph) if "documentation" in categories else DocumentationStats()
+        collect_documentation_stats(graph)
+        if "documentation" in categories
+        else DocumentationStats()
     )
     complexity = (
         collect_complexity_stats(graph) if "complexity" in categories else ComplexityStats()

@@ -127,6 +127,7 @@ from rdf_construct.localise import (
 # Valid rendering modes
 RENDERING_MODES = ["default", "odm"]
 
+
 @click.group()
 @click.version_option()
 def cli():
@@ -451,9 +452,7 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path):
     # Validate requested profiles exist
     for prof_name in profiles_to_gen:
         if prof_name not in ordering_config.profiles:
-            click.secho(
-                f"Error: Profile '{prof_name}' not found in config.", fg="red", err=True
-            )
+            click.secho(f"Error: Profile '{prof_name}' not found in config.", fg="red", err=True)
             available = ", ".join(ordering_config.list_profiles())
             click.echo(f"Available profiles: {available}", err=True)
             raise click.Abort()
@@ -560,9 +559,7 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path):
         serialise_turtle(out_graph, ordered_subjects, out_file, predicate_order)
         click.secho(f"  \u2713 {out_file}", fg="green")
 
-    click.secho(
-        f"\nConstructed {len(profiles_to_gen)} profile(s) in {outdir}/", fg="cyan"
-    )
+    click.secho(f"\nConstructed {len(profiles_to_gen)} profile(s) in {outdir}/", fg="cyan")
 
 
 @cli.command()
@@ -611,28 +608,25 @@ def profiles(config: Path):
 @click.option(
     "--style-config",
     type=click.Path(exists=True, path_type=Path),
-    help="Path to style configuration YAML (e.g., examples/uml_styles.yml)"
+    help="Path to style configuration YAML (e.g., examples/uml_styles.yml)",
 )
-@click.option(
-    "--style", "-s",
-    help="Style scheme name to use (e.g., 'default', 'ies_semantic')"
-)
+@click.option("--style", "-s", help="Style scheme name to use (e.g., 'default', 'ies_semantic')")
 @click.option(
     "--layout-config",
     type=click.Path(exists=True, path_type=Path),
-    help="Path to layout configuration YAML (e.g., examples/uml_layouts.yml)"
+    help="Path to layout configuration YAML (e.g., examples/uml_layouts.yml)",
 )
+@click.option("--layout", "-l", help="Layout name to use (e.g., 'hierarchy', 'compact')")
 @click.option(
-    "--layout", "-l",
-    help="Layout name to use (e.g., 'hierarchy', 'compact')"
-)
-@click.option(
-    "--rendering-mode", "-r",
+    "--rendering-mode",
+    "-r",
     type=click.Choice(RENDERING_MODES, case_sensitive=False),
     default="default",
-    help="Rendering mode: 'default' (custom stereotypes) or 'odm' (OMG ODM RDF Profile compliant)"
+    help="Rendering mode: 'default' (custom stereotypes) or 'odm' (OMG ODM RDF Profile compliant)",
 )
-def uml(sources, config, context, outdir, style_config, style, layout_config, layout, rendering_mode):
+def uml(
+    sources, config, context, outdir, style_config, style, layout_config, layout, rendering_mode
+):
     """Generate UML class diagrams from RDF ontologies.
 
     SOURCES: One or more RDF Turtle files (.ttl). The first file is the primary
@@ -696,9 +690,7 @@ def uml(sources, config, context, outdir, style_config, style, layout_config, la
     # Validate requested contexts exist
     for ctx_name in contexts_to_gen:
         if ctx_name not in uml_config.contexts:
-            click.secho(
-                f"Error: Context '{ctx_name}' not found in config.", fg="red", err=True
-            )
+            click.secho(f"Error: Context '{ctx_name}' not found in config.", fg="red", err=True)
             available = ", ".join(uml_config.list_contexts())
             click.echo(f"Available contexts: {available}", err=True)
             raise click.Abort()
@@ -765,9 +757,7 @@ def uml(sources, config, context, outdir, style_config, style, layout_config, la
             f"Instances: {len(entities['instances'])}"
         )
 
-    click.secho(
-        f"\nGenerated {len(contexts_to_gen)} diagram(s) in {outdir}/", fg="cyan"
-    )
+    click.secho(f"\nGenerated {len(contexts_to_gen)} diagram(s) in {outdir}/", fg="cyan")
 
 
 @cli.command()
@@ -1279,8 +1269,12 @@ def docs(
         types = [t.strip().lower() for t in include.split(",")]
         doc_config.include_classes = "classes" in types
         doc_config.include_object_properties = "properties" in types or "object_properties" in types
-        doc_config.include_datatype_properties = "properties" in types or "datatype_properties" in types
-        doc_config.include_annotation_properties = "properties" in types or "annotation_properties" in types
+        doc_config.include_datatype_properties = (
+            "properties" in types or "datatype_properties" in types
+        )
+        doc_config.include_annotation_properties = (
+            "properties" in types or "annotation_properties" in types
+        )
         doc_config.include_instances = "instances" in types
         doc_config.include_shapes = "shapes" in types
 
@@ -1406,17 +1400,17 @@ def docs(
     help="Don't inherit constraints from superclasses",
 )
 def shacl_gen(
-        source: Path,
-        output: Path | None,
-        output_format: str,
-        level: str,
-        config: Path | None,
-        classes: str | None,
-        closed: bool,
-        default_severity: str,
-        no_labels: bool,
-        no_descriptions: bool,
-        no_inherit: bool,
+    source: Path,
+    output: Path | None,
+    output_format: str,
+    level: str,
+    config: Path | None,
+    classes: str | None,
+    closed: bool,
+    default_severity: str,
+    no_labels: bool,
+    no_descriptions: bool,
+    no_inherit: bool,
 ):
     """Generate SHACL validation shapes from OWL ontology.
 
@@ -1515,9 +1509,8 @@ def shacl_gen(
 
         # Count generated shapes
         from rdf_construct.shacl import SH
-        num_shapes = len(list(shapes_graph.subjects(
-            predicate=None, object=SH.NodeShape
-        )))
+
+        num_shapes = len(list(shapes_graph.subjects(predicate=None, object=SH.NodeShape)))
 
         click.secho(f"\u2713 Generated {num_shapes} shape(s) to {output}", fg="green")
 
@@ -1696,8 +1689,7 @@ def puml2rdf(
 
     model = parse_result.model
     click.echo(
-        f"  Found: {len(model.classes)} classes, "
-        f"{len(model.relationships)} relationships"
+        f"  Found: {len(model.classes)} classes, " f"{len(model.relationships)} relationships"
     )
 
     # Validate model
@@ -2433,8 +2425,7 @@ def merge(
             priorities_list.append(len(priorities_list) + 1)
 
         source_configs = [
-            SourceConfig(path=p, priority=pri)
-            for p, pri in zip(sources, priorities_list)
+            SourceConfig(path=p, priority=pri) for p, pri in zip(sources, priorities_list)
         ]
 
         conflict_strategy = ConflictStrategy[strategy.upper()]
@@ -2536,8 +2527,7 @@ def merge(
     if result.unresolved_conflicts:
         click.echo()
         click.secho(
-            f"\u26a0 {len(result.unresolved_conflicts)} unresolved conflict(s) "
-            "marked in output",
+            f"\u26a0 {len(result.unresolved_conflicts)} unresolved conflict(s) " "marked in output",
             fg="yellow",
         )
         raise SystemExit(1)
@@ -2855,16 +2845,19 @@ def refactor():
 @refactor.command("rename")
 @click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
 @click.option(
-    "-o", "--output",
+    "-o",
+    "--output",
     type=click.Path(path_type=Path),
     help="Output file (for single source) or directory (for multiple sources).",
 )
 @click.option(
-    "--from", "from_uri",
+    "--from",
+    "from_uri",
     help="Single URI to rename (use with --to).",
 )
 @click.option(
-    "--to", "to_uri",
+    "--to",
+    "to_uri",
     help="New URI for single rename (use with --from).",
 )
 @click.option(
@@ -2876,7 +2869,8 @@ def refactor():
     help="New namespace prefix for bulk rename.",
 )
 @click.option(
-    "-c", "--config",
+    "-c",
+    "--config",
     "config_file",
     type=click.Path(exists=True, path_type=Path),
     help="YAML configuration file with rename mappings.",
@@ -2898,7 +2892,8 @@ def refactor():
     help="Preview changes without writing files.",
 )
 @click.option(
-    "--no-colour", "--no-color",
+    "--no-colour",
+    "--no-color",
     is_flag=True,
     help="Disable coloured output.",
 )
@@ -3095,7 +3090,9 @@ def refactor_rename(
 
             # Write output
             if result.renamed_graph:
-                out_path = config.output or (config.output_dir / source_path.name if config.output_dir else None)
+                out_path = config.output or (
+                    config.output_dir / source_path.name if config.output_dir else None
+                )
                 if out_path:
                     out_path.parent.mkdir(parents=True, exist_ok=True)
                     result.renamed_graph.serialize(destination=out_path.as_posix(), format="turtle")
@@ -3121,7 +3118,9 @@ def refactor_rename(
                 try:
                     data_graph.parse(data_path.as_posix())
                 except Exception as e:
-                    click.secho(f"\u2717 Failed to parse data file {data_path}: {e}", fg="red", err=True)
+                    click.secho(
+                        f"\u2717 Failed to parse data file {data_path}: {e}", fg="red", err=True
+                    )
                     continue
 
                 migration_result = migrator.migrate(data_graph, uri_map=uri_map)
@@ -3139,7 +3138,9 @@ def refactor_rename(
                     migration_result.migrated_graph.serialize(
                         destination=out_path.as_posix(), format="turtle"
                     )
-                    click.echo(f"  Migrated {data_path.name}: {migration_result.stats.total_changes} changes")
+                    click.echo(
+                        f"  Migrated {data_path.name}: {migration_result.stats.total_changes} changes"
+                    )
                     click.secho(f"  \u2713 Wrote {out_path}", fg="green")
 
     raise SystemExit(0)
@@ -3148,7 +3149,8 @@ def refactor_rename(
 @refactor.command("deprecate")
 @click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
 @click.option(
-    "-o", "--output",
+    "-o",
+    "--output",
     type=click.Path(path_type=Path),
     help="Output file.",
 )
@@ -3161,7 +3163,8 @@ def refactor_rename(
     help="URI of replacement entity (adds dcterms:isReplacedBy).",
 )
 @click.option(
-    "--message", "-m",
+    "--message",
+    "-m",
     help="Deprecation message (added to rdfs:comment).",
 )
 @click.option(
@@ -3169,7 +3172,8 @@ def refactor_rename(
     help="Version when deprecated (included in message).",
 )
 @click.option(
-    "-c", "--config",
+    "-c",
+    "--config",
     "config_file",
     type=click.Path(exists=True, path_type=Path),
     help="YAML configuration file with deprecation specs.",
@@ -3180,7 +3184,8 @@ def refactor_rename(
     help="Preview changes without writing files.",
 )
 @click.option(
-    "--no-colour", "--no-color",
+    "--no-colour",
+    "--no-color",
     is_flag=True,
     help="Disable coloured output.",
 )
@@ -3484,6 +3489,7 @@ def localise_extract(
     # Load config if provided
     if config_file:
         from rdf_construct.localise import load_localise_config
+
         config = load_localise_config(config_file)
         extract_config = config.extract
         extract_config.target_language = target_language
@@ -3530,7 +3536,9 @@ def localise_extract(
 
 @localise.command("merge")
 @click.argument("source", type=click.Path(exists=True, path_type=Path))
-@click.argument("translations", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
+@click.argument(
+    "translations", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path)
+)
 @click.option(
     "--output",
     "-o",
@@ -3869,7 +3877,7 @@ def _expand_localise_property(prop: str) -> str:
 
     for prefix, namespace in prefixes.items():
         if prop.startswith(prefix):
-            return namespace + prop[len(prefix):]
+            return namespace + prop[len(prefix) :]
 
     return prop
 

@@ -1,7 +1,7 @@
 # Ontology Description
 
-**Source:** examples/describe/well_documented.ttl  
-**Generated:** 2024-11-15T10:30:00Z  
+**Source:** examples/describe/well_documented.ttl
+**Generated:** 2024-11-15T10:30:00Z
 **Profile:** OWL 2 DL (simple)
 
 ## Summary

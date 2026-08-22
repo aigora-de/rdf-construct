@@ -111,9 +111,7 @@ class StringExtractor:
 
             for entity_uri, entity_type in entities:
                 # Check for deprecation
-                if not self.config.include_deprecated and self._is_deprecated(
-                    graph, entity_uri
-                ):
+                if not self.config.include_deprecated and self._is_deprecated(graph, entity_uri):
                     skipped += 1
                     continue
 
@@ -247,18 +245,14 @@ class StringExtractor:
             prop_uri = URIRef(self._expand_property(prop_uri_str))
 
             # Find source language literals
-            source_literals = self._get_language_literals(
-                graph, entity, prop_uri, source_lang
-            )
+            source_literals = self._get_language_literals(graph, entity, prop_uri, source_lang)
 
             if not source_literals:
                 continue
 
             # Check for existing translation if missing_only mode
             if self.config.missing_only:
-                existing = self._get_language_literals(
-                    graph, entity, prop_uri, target_lang
-                )
+                existing = self._get_language_literals(graph, entity, prop_uri, target_lang)
                 if existing:
                     continue
 

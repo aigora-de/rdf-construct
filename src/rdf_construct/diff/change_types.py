@@ -135,9 +135,7 @@ class GraphDiff:
             "modified": len(self.modified),
         }
 
-    def entities_by_type(
-        self, change_type: ChangeType
-    ) -> dict[EntityType, list[EntityChange]]:
+    def entities_by_type(self, change_type: ChangeType) -> dict[EntityType, list[EntityChange]]:
         """Group entities by their type for a given change type.
 
         Args:

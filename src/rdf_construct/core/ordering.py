@@ -9,7 +9,7 @@ from .utils import expand_curie, qname_sort_key
 
 
 def build_adjacency(
-        graph: Graph, nodes: set, edge_predicate: URIRef
+    graph: Graph, nodes: set, edge_predicate: URIRef
 ) -> tuple[dict[URIRef, set[URIRef]], dict[URIRef, int]]:
     """Build adjacency list and indegree map for topological sorting.
 
@@ -84,9 +84,7 @@ def topo_sort_subset(graph: Graph, nodes: set, edge_predicate: URIRef) -> list:
     return out
 
 
-def descendants_of(
-        graph: Graph, root: URIRef, nodes: set, edge_predicate: URIRef
-) -> set:
+def descendants_of(graph: Graph, root: URIRef, nodes: set, edge_predicate: URIRef) -> set:
     """Find all descendants of a root node within a set of nodes.
 
     Traverses the graph following child edges (subClassOf/subPropertyOf)
@@ -125,9 +123,7 @@ def descendants_of(
     return reachable
 
 
-def sort_with_roots(
-        graph: Graph, subjects: set, mode: str, roots_cfg: Optional[list[str]]
-) -> list:
+def sort_with_roots(graph: Graph, subjects: set, mode: str, roots_cfg: Optional[list[str]]) -> list:
     """Sort subjects with explicit root ordering.
 
     When roots are provided, emits each root's branch contiguously
@@ -148,8 +144,7 @@ def sort_with_roots(
 
     # Determine appropriate edge predicate based on subject types
     looks_like_props = any(
-        (s, RDF.type, OWL.ObjectProperty) in graph
-        or (s, RDF.type, OWL.DatatypeProperty) in graph
+        (s, RDF.type, OWL.ObjectProperty) in graph or (s, RDF.type, OWL.DatatypeProperty) in graph
         for s in subjects
     )
     edge = RDFS.subPropertyOf if looks_like_props else RDFS.subClassOf
@@ -190,7 +185,7 @@ def sort_with_roots(
 
 
 def sort_subjects(
-        graph: Graph, subjects: set, sort_mode: str, roots_cfg: Optional[list[str]] = None
+    graph: Graph, subjects: set, sort_mode: str, roots_cfg: Optional[list[str]] = None
 ) -> list:
     """Sort subjects according to the specified mode.
 

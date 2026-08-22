@@ -162,7 +162,7 @@ rdf-construct uml ies.ttl entity_hierarchy.yml \
   --style ies_full
 ```
 
-**Result**: 
+**Result**:
 - All Entity subclasses in yellow (#FEFE54)
 - Instances with black fill and yellow text
 - Clear visual grouping of Entity family
@@ -242,7 +242,7 @@ To add styling for domain-specific IES extensions:
 schemes:
   my_ies_extension:
     description: "IES with custom domain classes"
-    
+
     classes:
       by_type:
         # Include all standard IES colours
@@ -250,13 +250,13 @@ schemes:
           border: "#968584"
           fill: "#FEFE54"
           text: "#000000"
-        
+
         # Add your custom classes
         myns:CustomEntity:
           border: "#968584"
           fill: "#FEFE54"      # Match Entity yellow
           text: "#000000"
-        
+
         myns:CustomState:
           border: "#000000"
           fill: "#F7D748"      # Match State golden
@@ -286,13 +286,13 @@ arrows:
     color: "#000000"
     thickness: 1
     style: bold
-  
+
   # Custom IES relationships
   ies_inPeriod:
     color: "#F3B169"         # Orange for temporal
     thickness: 1
     style: dashed
-  
+
   ies_isParticipantIn:
     color: "#7D30D7"         # Purple for participation
     thickness: 2
@@ -406,6 +406,6 @@ Ensure your class URIs match the YAML exactly.
 
 ---
 
-**Maintained by**: rdf-construct project  
-**Version**: 1.0  
+**Maintained by**: rdf-construct project
+**Version**: 1.0
 **Last Updated**: 2025-11-02

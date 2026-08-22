@@ -177,7 +177,7 @@ def create_default_config() -> str:
     Returns:
         YAML string with default configuration and comments
     """
-    return '''# PlantUML Import Configuration
+    return """# PlantUML Import Configuration
 # ================================
 
 # Default namespace for entities without explicit package
@@ -227,4 +227,4 @@ ontology_imports: []
 annotation_properties: []
   # - "dcterms:description"
   # - "skos:definition"
-'''
+"""

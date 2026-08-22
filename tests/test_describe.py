@@ -43,6 +43,7 @@ DCTERMS = Namespace("http://purl.org/dc/terms/")
 
 # --- Fixtures ---
 
+
 @pytest.fixture
 def temp_dir(tmp_path):
     """Create a temporary directory for test files."""
@@ -220,7 +221,8 @@ def graph_with_individuals() -> Graph:
 @pytest.fixture
 def simple_ontology_file(temp_dir) -> Path:
     """Create a simple ontology file for testing."""
-    content = dedent('''
+    content = dedent(
+        """
         @prefix ex: <http://example.org/> .
         @prefix owl: <http://www.w3.org/2002/07/owl#> .
         @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -240,7 +242,8 @@ def simple_ontology_file(temp_dir) -> Path:
         ex:hasAddress a owl:DatatypeProperty ;
             rdfs:domain ex:Building ;
             rdfs:label "has address" .
-    ''').strip()
+    """
+    ).strip()
 
     path = temp_dir / "test_ontology.ttl"
     path.write_text(content)
@@ -248,6 +251,7 @@ def simple_ontology_file(temp_dir) -> Path:
 
 
 # --- Profile Detection Tests ---
+
 
 class TestProfileDetection:
     """Tests for ontology profile detection."""
@@ -298,6 +302,7 @@ class TestProfileDetection:
 
 
 # --- Metrics Collection Tests ---
+
 
 class TestMetricsCollection:
     """Tests for metrics collection."""
@@ -353,6 +358,7 @@ class TestMetricsCollection:
 
 # --- Metadata Extraction Tests ---
 
+
 class TestMetadataExtraction:
     """Tests for ontology metadata extraction."""
 
@@ -387,6 +393,7 @@ class TestMetadataExtraction:
 
 # --- Imports Analysis Tests ---
 
+
 class TestImportsAnalysis:
     """Tests for owl:imports analysis."""
 
@@ -417,6 +424,7 @@ class TestImportsAnalysis:
 
 
 # --- Namespace Analysis Tests ---
+
 
 class TestNamespaceAnalysis:
     """Tests for namespace analysis."""
@@ -451,6 +459,7 @@ class TestNamespaceAnalysis:
 
 # --- Hierarchy Analysis Tests ---
 
+
 class TestHierarchyAnalysis:
     """Tests for class hierarchy analysis."""
 
@@ -481,6 +490,7 @@ class TestHierarchyAnalysis:
 
 # --- Documentation Analysis Tests ---
 
+
 class TestDocumentationAnalysis:
     """Tests for documentation coverage analysis."""
 
@@ -505,6 +515,7 @@ class TestDocumentationAnalysis:
 
 
 # --- High-Level API Tests ---
+
 
 class TestDescribeAPI:
     """Tests for the high-level describe API."""
@@ -546,6 +557,7 @@ class TestDescribeAPI:
 
 
 # --- Formatter Tests ---
+
 
 class TestFormatters:
     """Tests for output formatters."""
@@ -603,6 +615,7 @@ class TestFormatters:
 
 
 # --- CLI Tests ---
+
 
 class TestDescribeCLI:
     """Tests for the describe CLI command."""
@@ -710,6 +723,7 @@ class TestDescribeCLI:
 
 # --- Integration Tests ---
 
+
 class TestDescribeIntegration:
     """Integration tests for complete describe workflows."""
 
@@ -755,12 +769,14 @@ class TestDescribeIntegration:
 
 # --- Edge Cases ---
 
+
 class TestEdgeCases:
     """Tests for edge cases and error handling."""
 
     def test_graph_with_blank_nodes(self, temp_dir: Path):
         """Handles graphs with blank nodes gracefully."""
-        content = dedent('''
+        content = dedent(
+            """
             @prefix ex: <http://example.org/> .
             @prefix owl: <http://www.w3.org/2002/07/owl#> .
 
@@ -770,7 +786,8 @@ class TestEdgeCases:
                     owl:onProperty ex:hasPart ;
                     owl:someValuesFrom ex:Component
                 ] .
-        ''').strip()
+        """
+        ).strip()
 
         path = temp_dir / "blank_nodes.ttl"
         path.write_text(content)
@@ -781,7 +798,8 @@ class TestEdgeCases:
 
     def test_graph_with_unicode(self, temp_dir: Path):
         """Handles unicode in labels."""
-        content = dedent('''
+        content = dedent(
+            """
             @prefix ex: <http://example.org/> .
             @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
             @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -792,7 +810,8 @@ class TestEdgeCases:
 
             ex:Ümläut a owl:Class ;
                 rdfs:label "Ümläut"@de .
-        ''').strip()
+        """
+        ).strip()
 
         path = temp_dir / "unicode.ttl"
         path.write_text(content, encoding="utf-8")
@@ -815,7 +834,7 @@ class TestEdgeCases:
 
         # Add 500 classes
         for i in range(500):
-            lines.append(f"ex:Class{i} a owl:Class ; rdfs:label \"Class {i}\" .")
+            lines.append(f'ex:Class{i} a owl:Class ; rdfs:label "Class {i}" .')
 
         path = temp_dir / "large.ttl"
         path.write_text("\n".join(lines))
@@ -830,6 +849,7 @@ class TestEdgeCases:
 
 
 # --- Model Tests ---
+
 
 class TestModels:
     """Tests for data model classes."""

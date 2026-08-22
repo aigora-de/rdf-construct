@@ -51,12 +51,12 @@ class ColorPalette:
 
         # Background fill (note: PlantUML uses 'back:', not just fill)
         if self.fill:
-            fill_hex = self.fill.lstrip('#')
+            fill_hex = self.fill.lstrip("#")
             parts.append(f"back:{fill_hex}")
 
         # Border colour and style
         if self.border:
-            border_hex = self.border.lstrip('#')
+            border_hex = self.border.lstrip("#")
             parts.append(f"line:{border_hex}")
 
         if self.line_style:
@@ -64,7 +64,7 @@ class ColorPalette:
 
         # Text colour
         if self.text:
-            text_hex = self.text.lstrip('#')
+            text_hex = self.text.lstrip("#")
             parts.append(f"text:{text_hex}")
 
         return f"#{';'.join(parts)}" if parts else ""
@@ -218,13 +218,9 @@ class StyleScheme:
                 self.instance_style_default = None
 
         # Legacy support for inherit_class_border flag
-        self.instance_inherit_class_border = instance_config.get(
-            "inherit_class_border", False
-        )
+        self.instance_inherit_class_border = instance_config.get("inherit_class_border", False)
         # Inherit_class_text flag (for text colour matching class fill)
-        self.instance_inherit_class_text = instance_config.get(
-            "inherit_class_text", False
-        )
+        self.instance_inherit_class_text = instance_config.get("inherit_class_text", False)
 
         # Arrow styling
         arrow_config = config.get("arrows", {})
@@ -241,7 +237,7 @@ class StyleScheme:
         self.stereotype_map = config.get("stereotype_map", {})
 
     def get_class_style(
-            self, graph: Graph, cls: URIRef, is_instance: bool = False
+        self, graph: Graph, cls: URIRef, is_instance: bool = False
     ) -> Optional[ColorPalette]:
         """Get color palette for a specific class or instance.
 
@@ -286,9 +282,7 @@ class StyleScheme:
         # Priority 5: Default
         return self.class_styles.get("default")
 
-    def get_instance_style(
-            self, graph: Graph, instance: URIRef
-    ) -> Optional[ColorPalette]:
+    def get_instance_style(self, graph: Graph, instance: URIRef) -> Optional[ColorPalette]:
         """Get color palette for an instance based on its rdf:type hierarchy.
 
         Selection priority:
@@ -311,9 +305,12 @@ class StyleScheme:
 
         # Filter out metaclass types that shouldn't affect instance styling
         metaclass_types = {
-            OWL.Class, RDFS.Class,
-            OWL.ObjectProperty, OWL.DatatypeProperty,
-            OWL.AnnotationProperty, RDF.Property
+            OWL.Class,
+            RDFS.Class,
+            OWL.ObjectProperty,
+            OWL.DatatypeProperty,
+            OWL.AnnotationProperty,
+            RDF.Property,
         }
         valid_types = [t for t in instance_types if t not in metaclass_types]
 
@@ -332,9 +329,7 @@ class StyleScheme:
 
             # Apply text color inheritance if enabled
             if self.instance_inherit_class_text and palette:
-                return self._apply_class_text_inheritance(
-                    graph, primary_type, palette
-                )
+                return self._apply_class_text_inheritance(graph, primary_type, palette)
             return palette
 
         # Priority 2: Walk up the type's class hierarchy to find styled class
@@ -342,11 +337,13 @@ class StyleScheme:
         styled_class_palette = self._get_inherited_style(graph, primary_type)
         if styled_class_palette:
             # Create instance-specific palette based on class colors
-            instance_palette = ColorPalette({
-                "border": styled_class_palette.border,
-                "fill": "#000000",  # Instances have black fill
-                "text": styled_class_palette.border
-            })
+            instance_palette = ColorPalette(
+                {
+                    "border": styled_class_palette.border,
+                    "fill": "#000000",  # Instances have black fill
+                    "text": styled_class_palette.border,
+                }
+            )
             return instance_palette
 
         # Priority 3: Default instance style
@@ -361,7 +358,7 @@ class StyleScheme:
         return None
 
     def _apply_class_text_inheritance(
-            self, graph: Graph, class_uri: URIRef, base_palette: ColorPalette
+        self, graph: Graph, class_uri: URIRef, base_palette: ColorPalette
     ) -> ColorPalette:
         """Apply class text color inheritance to an instance palette.
 
@@ -380,17 +377,19 @@ class StyleScheme:
 
         if class_palette and class_palette.border:
             # Use class border color as instance text color
-            return ColorPalette({
-                "border": base_palette.border,
-                "fill": base_palette.fill,
-                "text": class_palette.border,
-                "line_style": base_palette.line_style
-            })
+            return ColorPalette(
+                {
+                    "border": base_palette.border,
+                    "fill": base_palette.fill,
+                    "text": class_palette.border,
+                    "line_style": base_palette.line_style,
+                }
+            )
 
         return base_palette
 
     def _get_inherited_style(
-            self, graph: Graph, cls: URIRef, visited: Optional[set] = None
+        self, graph: Graph, cls: URIRef, visited: Optional[set] = None
     ) -> Optional[ColorPalette]:
         """Walk up rdfs:subClassOf hierarchy to find styled superclass.
 
@@ -439,9 +438,7 @@ class StyleScheme:
         # No styled superclass found
         return None
 
-    def get_property_style(
-            self, graph: Graph, prop: URIRef
-    ) -> Optional[ColorPalette]:
+    def get_property_style(self, graph: Graph, prop: URIRef) -> Optional[ColorPalette]:
         """Get colour palette for property class.
 
         Properties render as classes with specific styling (typically gray).
@@ -477,11 +474,7 @@ class StyleScheme:
                 return self.class_styles[type_key]
 
         # Default: gray for all properties
-        return ColorPalette({
-            "fill": "#CCCCCC",
-            "border": "#666666",
-            "text": "#000000"
-        })
+        return ColorPalette({"fill": "#CCCCCC", "border": "#666666", "text": "#000000"})
 
     def get_arrow_style(self, relationship_type: str) -> Optional[ArrowStyle]:
         """Get arrow style for a relationship type.
@@ -496,7 +489,7 @@ class StyleScheme:
         return self.arrow_styles.get(relationship_type)
 
     def get_stereotype(
-            self, graph: Graph, entity: URIRef, is_instance: bool = False
+        self, graph: Graph, entity: URIRef, is_instance: bool = False
     ) -> Optional[str]:
         """Get stereotype label for entity."""
         if not self.show_stereotypes:
@@ -506,9 +499,12 @@ class StyleScheme:
         if is_instance:
             types = []
             metaclass_types = {
-                "owl:Class", "rdfs:Class",
-                "owl:ObjectProperty", "owl:DatatypeProperty",
-                "owl:AnnotationProperty", "rdf:Property"
+                "owl:Class",
+                "rdfs:Class",
+                "owl:ObjectProperty",
+                "owl:DatatypeProperty",
+                "owl:AnnotationProperty",
+                "rdf:Property",
             }
 
             for rdf_type in graph.objects(entity, RDF.type):
@@ -528,9 +524,14 @@ class StyleScheme:
             type_qname = graph.namespace_manager.normalizeUri(rdf_type)
             if type_qname in self.stereotype_map:
                 return self.stereotype_map[type_qname]
-            if type_qname in ("owl:Class", "rdfs:Class",
-                              "owl:ObjectProperty", "owl:DatatypeProperty",
-                              "owl:AnnotationProperty", "rdf:Property"):
+            if type_qname in (
+                "owl:Class",
+                "rdfs:Class",
+                "owl:ObjectProperty",
+                "owl:DatatypeProperty",
+                "owl:AnnotationProperty",
+                "rdf:Property",
+            ):
                 return f"<<{type_qname}>>"
 
         return None

@@ -47,9 +47,7 @@ class TestPropertyConstraint:
 
     def test_constraint_with_cardinality(self):
         """Test constraint with cardinality."""
-        constraint = PropertyConstraint(
-            path=EX.hasId, min_count=1, max_count=1
-        )
+        constraint = PropertyConstraint(path=EX.hasId, min_count=1, max_count=1)
         assert constraint.min_count == 1
         assert constraint.max_count == 1
 
@@ -500,12 +498,8 @@ class TestShaclConfig:
         config = ShaclConfig(target_classes=["Building"])
         g = Graph()
 
-        assert config.should_generate_for(
-            URIRef("http://example.org/Building"), g
-        )
-        assert not config.should_generate_for(
-            URIRef("http://example.org/Floor"), g
-        )
+        assert config.should_generate_for(URIRef("http://example.org/Building"), g)
+        assert not config.should_generate_for(URIRef("http://example.org/Floor"), g)
 
     def test_should_generate_for_with_excludes(self):
         """Test should_generate_for with excluded classes."""
@@ -513,9 +507,7 @@ class TestShaclConfig:
         g = Graph()
 
         assert config.should_generate_for(URIRef("http://example.org/Building"), g)
-        assert not config.should_generate_for(
-            URIRef("http://example.org/Thing"), g
-        )
+        assert not config.should_generate_for(URIRef("http://example.org/Thing"), g)
 
 
 class TestEnumerationConverter:

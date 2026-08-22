@@ -74,16 +74,16 @@ Example:
 ```python
 def example_function(graph: Graph, subjects: set[URIRef]) -> list[URIRef]:
     """Brief description of what this does.
-    
+
     More detailed explanation if needed.
-    
+
     Args:
         graph: RDF graph containing the data
         subjects: Set of subject URIRefs to process
-        
+
     Returns:
         List of processed URIRefs in desired order
-        
+
     Raises:
         ValueError: If subjects set is empty
     """

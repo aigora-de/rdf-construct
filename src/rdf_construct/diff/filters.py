@@ -66,9 +66,7 @@ def filter_diff(
 
     if show_types:
         include_change_types = {
-            CHANGE_TYPE_MAP[t.lower()]
-            for t in show_types
-            if t.lower() in CHANGE_TYPE_MAP
+            CHANGE_TYPE_MAP[t.lower()] for t in show_types if t.lower() in CHANGE_TYPE_MAP
         }
 
     if hide_types:

@@ -27,7 +27,8 @@ from rdf_construct.cast.converter import CastConverter, ConversionResult
 # Helpers
 # ---------------------------------------------------------------------------
 
-SIMPLE_TTL = dedent("""\
+SIMPLE_TTL = dedent(
+    """\
     @prefix ex: <http://example.org/> .
     @prefix owl: <http://www.w3.org/2002/07/owl#> .
     @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -38,9 +39,11 @@ SIMPLE_TTL = dedent("""\
     ex:hasPart a owl:ObjectProperty ;
         rdfs:domain ex:Thing ;
         rdfs:range ex:Thing .
-""")
+"""
+)
 
-SIMPLE_TRIG = dedent("""\
+SIMPLE_TRIG = dedent(
+    """\
     @prefix ex: <http://example.org/> .
 
     ex:graph1 {
@@ -50,7 +53,8 @@ SIMPLE_TRIG = dedent("""\
     ex:graph2 {
         ex:OtherThing a <http://www.w3.org/2002/07/owl#Class> .
     }
-""")
+"""
+)
 
 
 @pytest.fixture()
@@ -318,9 +322,7 @@ class TestCastConverterEdgeCases:
         assert result.written_files == []
         assert any("source" in w.lower() or "skip" in w.lower() for w in result.warnings)
 
-    def test_quad_source_to_single_graph_raises(
-        self, trig_file: Path, tmp_path: Path
-    ) -> None:
+    def test_quad_source_to_single_graph_raises(self, trig_file: Path, tmp_path: Path) -> None:
         out_dir = tmp_path / "out"
         converter = CastConverter()
         result = converter.convert(
@@ -337,9 +339,7 @@ class TestCastConverterEdgeCases:
             or "named graph" in result.error.lower()
         )
 
-    def test_quad_source_with_allow_flatten_succeeds(
-        self, trig_file: Path, tmp_path: Path
-    ) -> None:
+    def test_quad_source_with_allow_flatten_succeeds(self, trig_file: Path, tmp_path: Path) -> None:
         out_dir = tmp_path / "out"
         converter = CastConverter()
         result = converter.convert(
@@ -354,9 +354,7 @@ class TestCastConverterEdgeCases:
         # Flattening should produce a warning
         assert any("flatten" in w.lower() or "named graph" in w.lower() for w in result.warnings)
 
-    def test_partial_failure_reports_failed_formats(
-        self, ttl_file: Path, tmp_path: Path
-    ) -> None:
+    def test_partial_failure_reports_failed_formats(self, ttl_file: Path, tmp_path: Path) -> None:
         """When one format fails but another succeeds, result reflects partial failure."""
         out_dir = tmp_path / "out"
         converter = CastConverter()
@@ -481,8 +479,10 @@ class TestCastCLI:
             [
                 "cast",
                 str(trig_file),
-                "--format", "turtle",
-                "--output-dir", str(out_dir),
+                "--format",
+                "turtle",
+                "--output-dir",
+                str(out_dir),
                 "--allow-flatten",
             ],
         )
@@ -501,8 +501,10 @@ class TestCastCLI:
             [
                 "cast",
                 str(trig_file),
-                "--format", "turtle",
-                "--output-dir", str(out_dir),
+                "--format",
+                "turtle",
+                "--output-dir",
+                str(out_dir),
             ],
         )
         assert result.exit_code == 2

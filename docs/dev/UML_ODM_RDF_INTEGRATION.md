@@ -5,32 +5,32 @@
 ### New Files
 
 1. **`src/rdf_construct/uml/odm_renderer.py`**
-   
+
    The main ODM-compliant renderer module. Copy `odm_renderer.py` to your `src/rdf_construct/uml/` directory.
 
 2. **`docs/user_guides/ODM_MODE.md`**
-   
+
    User documentation for the ODM rendering mode. Copy `docs_ODM_MODE.md` to `docs/user_guides/`.
 
 3. **`tests/test_odm_renderer.py`**
-   
+
    Test suite for the ODM renderer. Copy `tests_test_odm_renderer.py` to `tests/`.
 
 ### Updated Files
 
 1. **`src/rdf_construct/cli.py`**
-   
+
    Replace with the new `cli.py` which adds:
    - `--rendering-mode` / `-r` option with choices `default` and `odm`
    - Import for `render_odm_plantuml`
    - Conditional rendering based on mode
 
 2. **`src/rdf_construct/uml/__init__.py`**
-   
+
    Add the ODM renderer to exports:
    ```python
    from .odm_renderer import ODMRenderer, render_odm_plantuml
-   
+
    __all__ = [
        # ... existing exports ...
        "ODMRenderer",

@@ -251,13 +251,9 @@ class TestPumlToRdfConverter:
 
     def test_convert_simple_class(self):
         """Test converting a simple class."""
-        model = PumlModel(
-            classes=[PumlClass(name="Building")]
-        )
+        model = PumlModel(classes=[PumlClass(name="Building")])
 
-        config = ConversionConfig(
-            default_namespace="http://example.org/ont#"
-        )
+        config = ConversionConfig(default_namespace="http://example.org/ont#")
         converter = PumlToRdfConverter(config)
         result = converter.convert(model)
 
@@ -269,9 +265,7 @@ class TestPumlToRdfConverter:
 
     def test_convert_class_with_label(self):
         """Test that classes get labels."""
-        model = PumlModel(
-            classes=[PumlClass(name="FloorArea")]
-        )
+        model = PumlModel(classes=[PumlClass(name="FloorArea")])
 
         config = ConversionConfig(
             default_namespace="http://example.org/ont#",
@@ -289,14 +283,7 @@ class TestPumlToRdfConverter:
 
     def test_convert_class_with_comment(self):
         """Test that notes become comments."""
-        model = PumlModel(
-            classes=[
-                PumlClass(
-                    name="Building",
-                    note="A physical structure"
-                )
-            ]
-        )
+        model = PumlModel(classes=[PumlClass(name="Building", note="A physical structure")])
 
         converter = PumlToRdfConverter()
         result = converter.convert(model)
@@ -313,16 +300,12 @@ class TestPumlToRdfConverter:
             classes=[
                 PumlClass(
                     name="Building",
-                    attributes=[
-                        PumlAttribute(name="floorArea", datatype="decimal")
-                    ]
+                    attributes=[PumlAttribute(name="floorArea", datatype="decimal")],
                 )
             ]
         )
 
-        config = ConversionConfig(
-            default_namespace="http://example.org/ont#"
-        )
+        config = ConversionConfig(default_namespace="http://example.org/ont#")
         converter = PumlToRdfConverter(config)
         result = converter.convert(model)
 
@@ -353,12 +336,10 @@ class TestPumlToRdfConverter:
                     target="Entity",
                     rel_type=RelationshipType.INHERITANCE,
                 )
-            ]
+            ],
         )
 
-        config = ConversionConfig(
-            default_namespace="http://example.org/ont#"
-        )
+        config = ConversionConfig(default_namespace="http://example.org/ont#")
         converter = PumlToRdfConverter(config)
         result = converter.convert(model)
 
@@ -379,12 +360,10 @@ class TestPumlToRdfConverter:
                     rel_type=RelationshipType.ASSOCIATION,
                     label="has floor",
                 )
-            ]
+            ],
         )
 
-        config = ConversionConfig(
-            default_namespace="http://example.org/ont#"
-        )
+        config = ConversionConfig(default_namespace="http://example.org/ont#")
         converter = PumlToRdfConverter(config)
         result = converter.convert(model)
 
@@ -400,14 +379,9 @@ class TestPumlToRdfConverter:
 
     def test_convert_generates_ontology_header(self):
         """Test that conversion creates ontology declaration."""
-        model = PumlModel(
-            title="Building Ontology",
-            classes=[PumlClass(name="Building")]
-        )
+        model = PumlModel(title="Building Ontology", classes=[PumlClass(name="Building")])
 
-        config = ConversionConfig(
-            default_namespace="http://example.org/building#"
-        )
+        config = ConversionConfig(default_namespace="http://example.org/building#")
         converter = PumlToRdfConverter(config)
         result = converter.convert(model)
 
@@ -448,7 +422,7 @@ class TestPumlValidation:
                     target="NonExistent",
                     rel_type=RelationshipType.ASSOCIATION,
                 )
-            ]
+            ],
         )
 
         result = validate_puml(model)
@@ -461,9 +435,7 @@ class TestPumlValidation:
             classes=[
                 PumlClass(
                     name="Building",
-                    attributes=[
-                        PumlAttribute(name="custom", datatype="UnknownType")
-                    ]
+                    attributes=[PumlAttribute(name="custom", datatype="UnknownType")],
                 )
             ]
         )
@@ -484,7 +456,7 @@ class TestPumlValidation:
                 PumlRelationship(source="A", target="B", rel_type=RelationshipType.INHERITANCE),
                 PumlRelationship(source="B", target="C", rel_type=RelationshipType.INHERITANCE),
                 PumlRelationship(source="C", target="A", rel_type=RelationshipType.INHERITANCE),
-            ]
+            ],
         )
 
         result = validate_puml(model)

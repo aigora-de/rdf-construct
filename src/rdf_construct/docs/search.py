@@ -63,15 +63,78 @@ def extract_keywords(text: str | None) -> list[str]:
 
     # Remove stop words and short words
     stop_words = {
-        "a", "an", "the", "is", "are", "was", "were", "be", "been",
-        "being", "have", "has", "had", "do", "does", "did", "will",
-        "would", "could", "should", "may", "might", "must", "shall",
-        "can", "need", "of", "to", "in", "for", "on", "with", "at",
-        "by", "from", "as", "or", "and", "but", "if", "this", "that",
-        "which", "who", "whom", "whose", "what", "when", "where", "why",
-        "how", "all", "each", "every", "both", "few", "more", "most",
-        "other", "some", "such", "no", "not", "only", "same", "so",
-        "than", "too", "very", "just", "also", "any",
+        "a",
+        "an",
+        "the",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "must",
+        "shall",
+        "can",
+        "need",
+        "of",
+        "to",
+        "in",
+        "for",
+        "on",
+        "with",
+        "at",
+        "by",
+        "from",
+        "as",
+        "or",
+        "and",
+        "but",
+        "if",
+        "this",
+        "that",
+        "which",
+        "who",
+        "whom",
+        "whose",
+        "what",
+        "when",
+        "where",
+        "why",
+        "how",
+        "all",
+        "each",
+        "every",
+        "both",
+        "few",
+        "more",
+        "most",
+        "other",
+        "some",
+        "such",
+        "no",
+        "not",
+        "only",
+        "same",
+        "so",
+        "than",
+        "too",
+        "very",
+        "just",
+        "also",
+        "any",
     }
 
     keywords = [w for w in words if w and len(w) > 2 and w not in stop_words]
@@ -116,6 +179,7 @@ def class_to_search_entry(
             keywords.extend(extract_keywords(str(uri).split("/")[-1]))
 
     from .config import entity_to_url
+
     return SearchEntry(
         uri=str(class_info.uri),
         qname=class_info.qname,
@@ -169,6 +233,7 @@ def property_to_search_entry(
     entity_type = f"{prop_info.property_type}_property"
 
     from .config import entity_to_url
+
     return SearchEntry(
         uri=str(prop_info.uri),
         qname=prop_info.qname,
@@ -220,6 +285,7 @@ def instance_to_search_entry(
     keywords.append("instance")
 
     from .config import entity_to_url
+
     return SearchEntry(
         uri=str(instance_info.uri),
         qname=instance_info.qname,
@@ -281,6 +347,7 @@ def shape_to_search_entry(
             keywords.extend(extract_keywords(uri_str.split("/")[-1]))
 
     from .config import entity_to_url
+
     return SearchEntry(
         uri=str(shape_info.uri),
         qname=shape_info.qname,

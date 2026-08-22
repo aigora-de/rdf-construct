@@ -51,7 +51,7 @@ rdf-construct diff [OPTIONS] OLD_FILE NEW_FILE
 ### Exit Codes
 
 - `0` — Graphs are semantically identical
-- `1` — Differences were found  
+- `1` — Differences were found
 - `2` — Error occurred (file not found, parse error, etc.)
 
 ## Output Formats
@@ -195,7 +195,7 @@ Valid entity types:
 - `classes` — OWL/RDFS classes
 - `properties` — All property types
 - `object_properties` — OWL ObjectProperty
-- `datatype_properties` — OWL DatatypeProperty  
+- `datatype_properties` — OWL DatatypeProperty
 - `annotation_properties` — OWL AnnotationProperty
 - `individuals` / `instances` — Named instances
 

@@ -156,8 +156,7 @@ class RuleEngine:
             graph: Graph to extract namespaces from
         """
         self.parser.namespaces = {
-            prefix: Namespace(str(ns))
-            for prefix, ns in graph.namespace_manager.namespaces()
+            prefix: Namespace(str(ns)) for prefix, ns in graph.namespace_manager.namespaces()
         }
 
     def apply_rule(self, graph: Graph, rule: MigrationRule) -> dict[str, int]:
@@ -188,9 +187,7 @@ class RuleEngine:
             # Construct new triples
             if rule.construct:
                 for construct_spec in rule.construct:
-                    new_triples = self._construct_triples(
-                        match, construct_spec, graph
-                    )
+                    new_triples = self._construct_triples(match, construct_spec, graph)
                     for triple in new_triples:
                         graph.add(triple)
                         stats["added"] += 1
@@ -244,9 +241,7 @@ class RuleEngine:
             elif pattern[2] != o:
                 continue
 
-            matches.append(
-                Match(bindings=bindings, matched_triples=[(s, p, o)])
-            )
+            matches.append(Match(bindings=bindings, matched_triples=[(s, p, o)]))
 
         return matches
 
@@ -289,9 +284,7 @@ class RuleEngine:
 
         return [(result_s, result_p, result_o)]
 
-    def _substitute_variable(
-        self, term: Any, bindings: dict[str, Node]
-    ) -> Node | None:
+    def _substitute_variable(self, term: Any, bindings: dict[str, Node]) -> Node | None:
         """Substitute a variable with its bound value.
 
         Args:
@@ -306,9 +299,7 @@ class RuleEngine:
             return bindings.get(var_name)
         return term
 
-    def _evaluate_bind(
-        self, expression: str, bindings: dict[str, Node]
-    ) -> Node | None:
+    def _evaluate_bind(self, expression: str, bindings: dict[str, Node]) -> Node | None:
         """Evaluate a simple bind expression.
 
         Supports:

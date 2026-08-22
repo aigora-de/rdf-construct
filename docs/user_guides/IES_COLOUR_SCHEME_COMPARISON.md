@@ -141,16 +141,16 @@ What are you creating?
 
 ### Border Inheritance
 
-**ies_full**: ✅ Full inheritance  
+**ies_full**: ✅ Full inheritance
 - ClassOfEntity gets yellow border (from Entity)
 - ClassOfState gets golden border (from State)
 - ClassOfEvent gets pink border (from Event)
 
-**ies_core**: ❌ No inheritance  
+**ies_core**: ❌ No inheritance
 - All metaclasses use namespace default
 - Simpler but less informative
 
-**ies_metaclass**: ✅ Full inheritance  
+**ies_metaclass**: ✅ Full inheritance
 - Same as ies_full
 - Combined with bold styling for emphasis
 
@@ -158,15 +158,15 @@ What are you creating?
 
 ### Stereotype Display
 
-**ies_full**: Optional (disabled by default)  
+**ies_full**: Optional (disabled by default)
 - Can enable via `show_stereotypes: true`
 - Adds «meta» labels to metaclasses
 
-**ies_core**: Disabled  
+**ies_core**: Disabled
 - Not supported in core scheme
 - Keeps diagrams cleaner
 
-**ies_metaclass**: Enabled by default  
+**ies_metaclass**: Enabled by default
 - Shows «meta» and «meta²» labels
 - Reinforces metaclass concept
 
@@ -174,17 +174,17 @@ What are you creating?
 
 ### Colour Density
 
-**ies_full**: High (18 explicit colours)  
+**ies_full**: High (18 explicit colours)
 - Every major IES class uniquely styled
 - Maximum information density
 - Can be overwhelming for newcomers
 
-**ies_core**: Low (5 explicit colours)  
+**ies_core**: Low (5 explicit colours)
 - Only main branches coloured
 - Everything else uses namespace default
 - Easier to scan quickly
 
-**ies_metaclass**: Medium (14 explicit colours)  
+**ies_metaclass**: Medium (14 explicit colours)
 - Metaclasses detailed, base classes simplified
 - Good balance for type-focused diagrams
 
@@ -325,7 +325,7 @@ No context changes needed. All core colours are subset of full.
 # Before
 --style ies_full
 
-# After  
+# After
 --style ies_metaclass
 ```
 

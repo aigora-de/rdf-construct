@@ -145,10 +145,7 @@ def _find_orphans(classes: set, parents_of: dict, children_of: dict) -> set:
     Returns:
         Set of orphan class URIRefs.
     """
-    return {
-        cls for cls in classes
-        if not parents_of.get(cls) and not children_of.get(cls)
-    }
+    return {cls for cls in classes if not parents_of.get(cls) and not children_of.get(cls)}
 
 
 def _compute_avg_branching(classes: set, children_of: dict) -> float:

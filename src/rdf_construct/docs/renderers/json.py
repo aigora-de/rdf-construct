@@ -181,8 +181,7 @@ class JSONRenderer:
             "has_value": str(ps.has_value) if ps.has_value is not None else None,
             "in_values": [str(v) for v in ps.in_values],
             "other_constraints": {
-                str(pred): [str(v) for v in vals]
-                for pred, vals in ps.other_constraints.items()
+                str(pred): [str(v) for v in vals] for pred, vals in ps.other_constraints.items()
             },
         }
 
@@ -203,17 +202,11 @@ class JSONRenderer:
             "definition": shape_info.definition,
             "target_classes": [str(uri) for uri in shape_info.target_classes],
             "target_nodes": [str(uri) for uri in shape_info.target_nodes],
-            "target_subjects_of": [
-                str(uri) for uri in shape_info.target_subjects_of
-            ],
-            "target_objects_of": [
-                str(uri) for uri in shape_info.target_objects_of
-            ],
+            "target_subjects_of": [str(uri) for uri in shape_info.target_subjects_of],
+            "target_objects_of": [str(uri) for uri in shape_info.target_objects_of],
             "closed": shape_info.closed,
             "ignored_properties": [str(uri) for uri in shape_info.ignored_properties],
-            "properties": [
-                self._property_shape_to_dict(ps) for ps in shape_info.properties
-            ],
+            "properties": [self._property_shape_to_dict(ps) for ps in shape_info.properties],
             "property_shape": (
                 self._property_shape_to_dict(shape_info.property_shape)
                 if shape_info.property_shape is not None
@@ -368,9 +361,7 @@ class JSONRenderer:
         root_classes = []
 
         for c in classes:
-            has_internal_parent = any(
-                str(parent) in internal_uris for parent in c.superclasses
-            )
+            has_internal_parent = any(str(parent) in internal_uris for parent in c.superclasses)
             if not has_internal_parent:
                 root_classes.append(c)
 
@@ -408,6 +399,7 @@ class JSONRenderer:
         data = self._class_to_dict(class_info)
 
         from ..config import entity_to_path
+
         rel_path = entity_to_path(class_info.qname, "class", self.config, extension=".json")
         return self._write_json(self.config.output_dir / rel_path, data)
 
@@ -429,6 +421,7 @@ class JSONRenderer:
 
         entity_type = f"{prop_info.property_type}_property"
         from ..config import entity_to_path
+
         rel_path = entity_to_path(prop_info.qname, entity_type, self.config, extension=".json")
         return self._write_json(self.config.output_dir / rel_path, data)
 
@@ -449,6 +442,7 @@ class JSONRenderer:
         data = self._instance_to_dict(instance_info)
 
         from ..config import entity_to_path
+
         rel_path = entity_to_path(instance_info.qname, "instance", self.config, extension=".json")
         return self._write_json(self.config.output_dir / rel_path, data)
 
@@ -474,6 +468,7 @@ class JSONRenderer:
         data = self._shape_to_dict(shape_info)
 
         from ..config import entity_to_path
+
         rel_path = entity_to_path(shape_info.qname, "shape", self.config, extension=".json")
         return self._write_json(self.config.output_dir / rel_path, data)
 
@@ -503,18 +498,14 @@ class JSONRenderer:
         data = {
             "ontology": self._ontology_to_dict(entities),
             "classes": [self._class_to_dict(c) for c in entities.classes],
-            "object_properties": [
-                self._property_to_dict(p) for p in entities.object_properties
-            ],
+            "object_properties": [self._property_to_dict(p) for p in entities.object_properties],
             "datatype_properties": [
                 self._property_to_dict(p) for p in entities.datatype_properties
             ],
             "annotation_properties": [
                 self._property_to_dict(p) for p in entities.annotation_properties
             ],
-            "instances": [
-                self._instance_to_dict(i) for i in entities.instances
-            ],
+            "instances": [self._instance_to_dict(i) for i in entities.instances],
             # Full shape representations. Breaking change from v0.4.x:
             # shapes used to be lumped into 'instances' because the
             # extractor didn't filter them out. They now have their

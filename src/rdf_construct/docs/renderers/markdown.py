@@ -115,10 +115,12 @@ class MarkdownRenderer:
         lines = []
 
         # Frontmatter
-        lines.append(self._frontmatter(
-            title=entities.ontology.title or "Ontology Documentation",
-            layout="default",
-        ))
+        lines.append(
+            self._frontmatter(
+                title=entities.ontology.title or "Ontology Documentation",
+                layout="default",
+            )
+        )
 
         # Header
         lines.append(f"# {entities.ontology.title or 'Ontology Documentation'}")
@@ -188,9 +190,7 @@ class MarkdownRenderer:
             lines.append("")
             for s in entities.shapes:
                 link = self._entity_link(s.qname, "shape", s.label or s.qname)
-                kind_tags = " ".join(
-                    f"`{k}`" for k in s.kinds if k != "shape"
-                )
+                kind_tags = " ".join(f"`{k}`" for k in s.kinds if k != "shape")
                 if kind_tags:
                     lines.append(f"- {link} {kind_tags}")
                 else:
@@ -250,9 +250,7 @@ class MarkdownRenderer:
         root_classes = []
 
         for c in classes:
-            has_internal_parent = any(
-                str(parent) in internal_uris for parent in c.superclasses
-            )
+            has_internal_parent = any(str(parent) in internal_uris for parent in c.superclasses)
             if not has_internal_parent:
                 root_classes.append(c)
 
@@ -289,10 +287,12 @@ class MarkdownRenderer:
         """
         lines = []
 
-        lines.append(self._frontmatter(
-            title=class_info.label or class_info.qname,
-            type="class",
-        ))
+        lines.append(
+            self._frontmatter(
+                title=class_info.label or class_info.qname,
+                type="class",
+            )
+        )
 
         lines.append(f"# {class_info.label or class_info.qname}")
         lines.append("")
@@ -360,6 +360,7 @@ class MarkdownRenderer:
 
         content = "\n".join(lines)
         from ..config import entity_to_path
+
         rel_path = entity_to_path(class_info.qname, "class", self.config, extension=".md")
         return self._write_file(self.config.output_dir / rel_path, content)
 
@@ -430,10 +431,12 @@ class MarkdownRenderer:
         lines = []
 
         type_label = prop_info.property_type.replace("_", " ").title()
-        lines.append(self._frontmatter(
-            title=prop_info.label or prop_info.qname,
-            type=prop_info.property_type,
-        ))
+        lines.append(
+            self._frontmatter(
+                title=prop_info.label or prop_info.qname,
+                type=prop_info.property_type,
+            )
+        )
 
         lines.append(f"# {prop_info.label or prop_info.qname}")
         lines.append("")
@@ -499,6 +502,7 @@ class MarkdownRenderer:
         content = "\n".join(lines)
         entity_type = f"{prop_info.property_type}_property"
         from ..config import entity_to_path
+
         rel_path = entity_to_path(prop_info.qname, entity_type, self.config, extension=".md")
         return self._write_file(self.config.output_dir / rel_path, content)
 
@@ -518,10 +522,12 @@ class MarkdownRenderer:
         """
         lines = []
 
-        lines.append(self._frontmatter(
-            title=instance_info.label or instance_info.qname,
-            type="instance",
-        ))
+        lines.append(
+            self._frontmatter(
+                title=instance_info.label or instance_info.qname,
+                type="instance",
+            )
+        )
 
         lines.append(f"# {instance_info.label or instance_info.qname}")
         lines.append("")
@@ -546,7 +552,9 @@ class MarkdownRenderer:
             lines.append("## Properties")
             lines.append("")
             for pred, values in instance_info.properties.items():
-                pred_name = str(pred).split("#")[-1] if "#" in str(pred) else str(pred).split("/")[-1]
+                pred_name = (
+                    str(pred).split("#")[-1] if "#" in str(pred) else str(pred).split("/")[-1]
+                )
                 for value in values:
                     if isinstance(value, str):
                         lines.append(f"- **{pred_name}:** {value}")
@@ -557,6 +565,7 @@ class MarkdownRenderer:
 
         content = "\n".join(lines)
         from ..config import entity_to_path
+
         rel_path = entity_to_path(instance_info.qname, "instance", self.config, extension=".md")
         return self._write_file(self.config.output_dir / rel_path, content)
 
@@ -654,17 +663,17 @@ class MarkdownRenderer:
             primary = "node_shape"
         elif "property_shape" in shape_info.kinds:
             primary = "property_shape"
-        lines.append(self._frontmatter(
-            title=shape_info.label or shape_info.qname,
-            type=primary,
-        ))
+        lines.append(
+            self._frontmatter(
+                title=shape_info.label or shape_info.qname,
+                type=primary,
+            )
+        )
 
         lines.append(f"# {shape_info.label or shape_info.qname}")
         lines.append("")
         # All kinds as a Markdown badge-style line, mirroring HTML output.
-        kind_labels = " ".join(
-            f"`{kind}`" for kind in shape_info.kinds if kind != "shape"
-        )
+        kind_labels = " ".join(f"`{kind}`" for kind in shape_info.kinds if kind != "shape")
         if kind_labels:
             lines.append(f"**Kinds:** {kind_labels}")
             lines.append("")
@@ -764,6 +773,7 @@ class MarkdownRenderer:
 
         content = "\n".join(lines)
         from ..config import entity_to_path
+
         rel_path = entity_to_path(shape_info.qname, "shape", self.config, extension=".md")
         return self._write_file(self.config.output_dir / rel_path, content)
 
@@ -803,9 +813,11 @@ class MarkdownRenderer:
         """
         lines = []
 
-        lines.append(self._frontmatter(
-            title=entities.ontology.title or "Ontology Documentation",
-        ))
+        lines.append(
+            self._frontmatter(
+                title=entities.ontology.title or "Ontology Documentation",
+            )
+        )
 
         # Header
         lines.append(f"# {entities.ontology.title or 'Ontology Documentation'}")
@@ -868,9 +880,7 @@ class MarkdownRenderer:
             for s in entities.shapes:
                 lines.append(f"### {s.label or s.qname}")
                 lines.append("")
-                kind_tags = " ".join(
-                    f"`{k}`" for k in s.kinds if k != "shape"
-                )
+                kind_tags = " ".join(f"`{k}`" for k in s.kinds if k != "shape")
                 if kind_tags:
                     lines.append(f"**Kinds:** {kind_tags}")
                     lines.append("")

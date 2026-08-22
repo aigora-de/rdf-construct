@@ -92,9 +92,15 @@ class PredicateOrderConfig:
         if subject_type == "class":
             return self.classes if self.classes.first or self.classes.last else self.default
         elif subject_type == "property":
-            return self.properties if self.properties.first or self.properties.last else self.default
+            return (
+                self.properties if self.properties.first or self.properties.last else self.default
+            )
         elif subject_type == "individual":
-            return self.individuals if self.individuals.first or self.individuals.last else self.default
+            return (
+                self.individuals
+                if self.individuals.first or self.individuals.last
+                else self.default
+            )
         else:
             return self.default
 

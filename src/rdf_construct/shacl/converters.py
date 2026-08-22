@@ -69,12 +69,12 @@ class PropertyConstraint:
             path=self.path,
             node_class=other.node_class or self.node_class,
             datatype=other.datatype or self.datatype,
-            min_count=max(
-                filter(None, [self.min_count, other.min_count]), default=None
+            min_count=max(filter(None, [self.min_count, other.min_count]), default=None),
+            max_count=(
+                min(filter(None, [self.max_count, other.max_count]), default=None)
+                if self.max_count is not None or other.max_count is not None
+                else None
             ),
-            max_count=min(
-                filter(None, [self.max_count, other.max_count]), default=None
-            ) if self.max_count is not None or other.max_count is not None else None,
             node_kind=other.node_kind or self.node_kind,
             name=other.name or self.name,
             description=other.description or self.description,
@@ -179,10 +179,10 @@ class Converter(ABC):
 
     @abstractmethod
     def convert_for_class(
-            self,
-            cls: URIRef,
-            source_graph: Graph,
-            config: "ShaclConfig",
+        self,
+        cls: URIRef,
+        source_graph: Graph,
+        config: "ShaclConfig",
     ) -> list[PropertyConstraint]:
         """Extract constraints for a given class.
 
@@ -207,21 +207,46 @@ class DomainRangeConverter(Converter):
 
     # Common XSD datatypes
     XSD_DATATYPES = {
-        XSD.string, XSD.integer, XSD.int, XSD.long, XSD.short, XSD.byte,
-        XSD.decimal, XSD.float, XSD.double, XSD.boolean, XSD.date,
-        XSD.dateTime, XSD.time, XSD.duration, XSD.gYear, XSD.gMonth,
-        XSD.gDay, XSD.gYearMonth, XSD.gMonthDay, XSD.anyURI, XSD.base64Binary,
-        XSD.hexBinary, XSD.normalizedString, XSD.token, XSD.language,
-        XSD.nonPositiveInteger, XSD.negativeInteger, XSD.nonNegativeInteger,
-        XSD.positiveInteger, XSD.unsignedLong, XSD.unsignedInt,
-        XSD.unsignedShort, XSD.unsignedByte,
+        XSD.string,
+        XSD.integer,
+        XSD.int,
+        XSD.long,
+        XSD.short,
+        XSD.byte,
+        XSD.decimal,
+        XSD.float,
+        XSD.double,
+        XSD.boolean,
+        XSD.date,
+        XSD.dateTime,
+        XSD.time,
+        XSD.duration,
+        XSD.gYear,
+        XSD.gMonth,
+        XSD.gDay,
+        XSD.gYearMonth,
+        XSD.gMonthDay,
+        XSD.anyURI,
+        XSD.base64Binary,
+        XSD.hexBinary,
+        XSD.normalizedString,
+        XSD.token,
+        XSD.language,
+        XSD.nonPositiveInteger,
+        XSD.negativeInteger,
+        XSD.nonNegativeInteger,
+        XSD.positiveInteger,
+        XSD.unsignedLong,
+        XSD.unsignedInt,
+        XSD.unsignedShort,
+        XSD.unsignedByte,
     }
 
     def convert_for_class(
-            self,
-            cls: URIRef,
-            source_graph: Graph,
-            config: "ShaclConfig",
+        self,
+        cls: URIRef,
+        source_graph: Graph,
+        config: "ShaclConfig",
     ) -> list[PropertyConstraint]:
         """Find properties with domain of this class and create constraints."""
         constraints: list[PropertyConstraint] = []
@@ -282,10 +307,10 @@ class CardinalityConverter(Converter):
     """
 
     def convert_for_class(
-            self,
-            cls: URIRef,
-            source_graph: Graph,
-            config: "ShaclConfig",
+        self,
+        cls: URIRef,
+        source_graph: Graph,
+        config: "ShaclConfig",
     ) -> list[PropertyConstraint]:
         """Extract cardinality restrictions from class definition."""
         constraints: list[PropertyConstraint] = []
@@ -395,10 +420,10 @@ class FunctionalPropertyConverter(Converter):
     """
 
     def convert_for_class(
-            self,
-            cls: URIRef,
-            source_graph: Graph,
-            config: "ShaclConfig",
+        self,
+        cls: URIRef,
+        source_graph: Graph,
+        config: "ShaclConfig",
     ) -> list[PropertyConstraint]:
         """Find functional properties with domain of this class."""
         constraints: list[PropertyConstraint] = []
@@ -422,10 +447,10 @@ class EnumerationConverter(Converter):
     """
 
     def convert_for_class(
-            self,
-            cls: URIRef,
-            source_graph: Graph,
-            config: "ShaclConfig",
+        self,
+        cls: URIRef,
+        source_graph: Graph,
+        config: "ShaclConfig",
     ) -> list[PropertyConstraint]:
         """Find properties with enumerated ranges."""
         constraints: list[PropertyConstraint] = []
@@ -470,10 +495,10 @@ class SymmetricPropertyConverter(Converter):
     """
 
     def convert_for_class(
-            self,
-            cls: URIRef,
-            source_graph: Graph,
-            config: "ShaclConfig",
+        self,
+        cls: URIRef,
+        source_graph: Graph,
+        config: "ShaclConfig",
     ) -> list[PropertyConstraint]:
         """Handle symmetric properties - no additional SHACL needed."""
         # Symmetric properties don't need special SHACL handling

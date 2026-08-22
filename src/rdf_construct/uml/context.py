@@ -106,9 +106,7 @@ class UMLContext:
         """Check if context has any class selection criteria."""
         if self.mode == "explicit":
             return bool(self.explicit_classes)
-        return bool(
-            self.root_classes or self.focus_classes or self.selector
-        )
+        return bool(self.root_classes or self.focus_classes or self.selector)
 
     def __repr__(self) -> str:
         if self.mode == "explicit":

@@ -79,12 +79,14 @@ def analyse_namespaces(graph: Graph) -> NamespaceAnalysis:
         # Get prefix (from bindings or well-known)
         prefix = prefix_map.get(ns_uri) or WELL_KNOWN_NAMESPACES.get(ns_uri)
 
-        namespaces.append(NamespaceInfo(
-            uri=ns_uri,
-            prefix=prefix,
-            category=category,
-            usage_count=count,
-        ))
+        namespaces.append(
+            NamespaceInfo(
+                uri=ns_uri,
+                prefix=prefix,
+                category=category,
+                usage_count=count,
+            )
+        )
 
     return NamespaceAnalysis(
         local_namespace=local_namespace,

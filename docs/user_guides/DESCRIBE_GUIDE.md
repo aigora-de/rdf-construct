@@ -246,7 +246,7 @@ For embedding in documentation or README files:
 ```markdown
 ## Ontology Description
 
-**Source:** organisation_ontology.ttl  
+**Source:** organisation_ontology.ttl
 **Profile:** OWL 2 DL (simple)
 
 ### Metadata

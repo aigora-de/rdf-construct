@@ -229,16 +229,32 @@ class PumlModelValidator:
         issues = []
 
         known_types = {
-            "string", "str", "text",
-            "integer", "int",
-            "decimal", "float", "double", "number",
-            "boolean", "bool",
-            "date", "datetime", "time",
-            "gYear", "gyear", "gYearMonth",
+            "string",
+            "str",
+            "text",
+            "integer",
+            "int",
+            "decimal",
+            "float",
+            "double",
+            "number",
+            "boolean",
+            "bool",
+            "date",
+            "datetime",
+            "time",
+            "gYear",
+            "gyear",
+            "gYearMonth",
             "duration",
-            "uri", "anyURI", "anyuri", "url",
-            "base64", "hexBinary",
-            "language", "token",
+            "uri",
+            "anyURI",
+            "anyuri",
+            "url",
+            "base64",
+            "hexBinary",
+            "language",
+            "token",
         }
 
         for cls in model.classes:
@@ -322,10 +338,7 @@ class RdfValidator:
             if not isinstance(s, URIRef):
                 continue
 
-            is_class = (
-                (s, RDF.type, OWL.Class) in graph
-                or (s, RDF.type, RDFS.Class) in graph
-            )
+            is_class = (s, RDF.type, OWL.Class) in graph or (s, RDF.type, RDFS.Class) in graph
             if not is_class:
                 issues.append(
                     ValidationIssue(

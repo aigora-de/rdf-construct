@@ -32,23 +32,23 @@ contexts:
   my_explicit_context:
     description: "Description of what this shows"
     mode: explicit  # Enable explicit mode
-    
+
     # Directly list classes
     classes:
       - prefix:ClassName1
       - prefix:ClassName2
-    
+
     # Directly list properties
     object_properties:
       - prefix:propertyName1
       - prefix:propertyName2
-    
+
     datatype_properties:
       - prefix:datatypeProp1
-    
+
     annotation_properties:
       - prefix:annotationProp1
-    
+
     # Optionally list instances
     instances:
       - prefix:individualName1
@@ -59,14 +59,14 @@ contexts:
 ```yaml
 simple_view:
   mode: explicit
-  
+
   classes:
     - ex:Animal
     - ex:Dog
-  
+
   object_properties:
     - ex:hasParent
-  
+
   datatype_properties: []  # None needed
 ```
 
@@ -76,25 +76,25 @@ simple_view:
 animal_care:
   description: "Animal care concepts across taxonomy"
   mode: explicit
-  
+
   classes:
     - ex:Animal       # Root concept
     - ex:Mammal       # From mammal branch
     - ex:Dog          # Deep in mammal hierarchy
     - ex:Eagle        # From bird branch (cross-branch!)
-  
+
   object_properties:
     - ex:hasParent
     - ex:eats
     - ex:livesIn
-  
+
   datatype_properties:
     - ex:averageWeight
     - ex:lifespan
-  
+
   annotation_properties:
     - ex:scientificName
-  
+
   instances:
     - ex:Fido
     - ex:Baldy
@@ -113,13 +113,13 @@ animal_care:
 ```yaml
 animal_care_facilities:
   mode: explicit
-  
+
   classes:
     - ex:Dog           # From animal/mammal branch
     - ex:Eagle         # From animal/bird branch
     - ex:Facility      # From location hierarchy
     - ex:Veterinarian  # From person hierarchy
-  
+
   object_properties:
     - ex:treatedBy
     - ex:housedAt
@@ -139,14 +139,14 @@ animal_care_facilities:
 ```yaml
 mammals_shallow:
   mode: explicit
-  
+
   classes:
     - ex:Mammal       # Level 0
     - ex:Dog          # Level 1
     - ex:Cat          # Level 1
     - ex:Horse        # Level 1
     # Deliberately stop here
-  
+
   object_properties:
     - ex:hasParent
 ```
@@ -164,16 +164,16 @@ mammals_shallow:
 ```yaml
 predation_only:
   mode: explicit
-  
+
   classes:
     - ex:Dog
     - ex:Cat
     - ex:Eagle
     - ex:Sparrow
-  
+
   object_properties:
     - ex:eats  # ONLY this relationship
-  
+
   datatype_properties: []  # None
 ```
 
@@ -304,7 +304,7 @@ shared:
     - ex:Mammal
     - ex:Dog
     - ex:Cat
-  
+
   common_properties: &common_properties
     - ex:hasParent
     - ex:eats
@@ -315,7 +315,7 @@ contexts:
     classes: *common_mammals
     object_properties: *common_properties
     datatype_properties: []
-  
+
   view2:
     mode: explicit
     classes:
@@ -466,7 +466,7 @@ If explicit mode becomes too verbose:
    old:
      mode: explicit
      classes: [ex:Mammal, ex:Dog, ex:Cat]
-   
+
    # Now:
    new:
      mode: default

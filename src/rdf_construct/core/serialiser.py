@@ -104,9 +104,7 @@ def collect_inline_bnodes(graph: Graph) -> set[BNode]:
     # Exclude reification stubs: any bnode that is the subject of
     # rdf:type rdf:Statement must stay as a top-level block.
     reification_subjects = {
-        s
-        for s, p, o in graph
-        if isinstance(s, BNode) and p == RDF.type and o == RDF.Statement
+        s for s, p, o in graph if isinstance(s, BNode) and p == RDF.type and o == RDF.Statement
     }
     candidates -= reification_subjects
 
@@ -308,9 +306,7 @@ def serialise_turtle(
             pred_dict[p].append(o)
 
         # Order predicates
-        sorted_preds = _order_subject_predicates(
-            graph, subject, pred_dict, predicate_order
-        )
+        sorted_preds = _order_subject_predicates(graph, subject, pred_dict, predicate_order)
 
         # Write predicate-object pairs
         for i, (pred, objects) in enumerate(sorted_preds):

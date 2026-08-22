@@ -23,14 +23,14 @@ from rdf_construct.uml.context import load_uml_config
 
 
 def generate_styled_diagram(
-        ontology_file: Path,
-        context_file: Path,
-        style_file: Path,
-        layout_file: Path,
-        context_name: str,
-        style_name: str,
-        layout_name: str,
-        output_file: Path,
+    ontology_file: Path,
+    context_file: Path,
+    style_file: Path,
+    layout_file: Path,
+    context_name: str,
+    style_name: str,
+    layout_name: str,
+    output_file: Path,
 ):
     """Generate a single styled PlantUML diagram.
 
@@ -53,9 +53,7 @@ def generate_styled_diagram(
     context = uml_config.get_context(context_name)
 
     print(f"Selecting entities for context: {context_name}")
-    entities = collect_diagram_entities(
-        graph, context, uml_config.config.get("selectors", {})
-    )
+    entities = collect_diagram_entities(graph, context, uml_config.config.get("selectors", {}))
 
     print(f"Loading style: {style_name}")
     style_config = load_style_config(style_file)

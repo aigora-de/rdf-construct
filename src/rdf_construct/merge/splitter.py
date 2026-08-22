@@ -209,10 +209,7 @@ class SplitConfig:
             output_dir = config_dir / output_dir
 
         # Parse modules
-        modules = [
-            ModuleDefinition.from_dict(m)
-            for m in split_data.get("modules", [])
-        ]
+        modules = [ModuleDefinition.from_dict(m) for m in split_data.get("modules", [])]
 
         # Parse unmatched strategy
         unmatched_data = split_data.get("unmatched", {})
@@ -888,15 +885,17 @@ class OntologySplitter:
         }
 
         for stats in result.module_stats:
-            manifest["modules"].append({
-                "name": stats.name,
-                "file": stats.file,
-                "classes": stats.classes,
-                "properties": stats.properties,
-                "triples": stats.triples,
-                "imports": stats.imports,
-                "dependencies": stats.dependencies,
-            })
+            manifest["modules"].append(
+                {
+                    "name": stats.name,
+                    "file": stats.file,
+                    "classes": stats.classes,
+                    "properties": stats.properties,
+                    "triples": stats.triples,
+                    "imports": stats.imports,
+                    "dependencies": stats.dependencies,
+                }
+            )
 
         # Generate dependency graph as ASCII art
         dep_lines = self._format_dependency_graph(result)
@@ -1000,10 +999,7 @@ def split_by_namespace(
     for prefix, ns in graph.namespace_manager.namespaces():
         ns_str = str(ns)
         # Skip common namespaces
-        if any(
-            skip in ns_str
-            for skip in ["w3.org", "purl.org", "xmlns.com"]
-        ):
+        if any(skip in ns_str for skip in ["w3.org", "purl.org", "xmlns.com"]):
             continue
         namespaces[ns_str] = prefix or "default"
 
@@ -1041,7 +1037,7 @@ def create_default_split_config() -> str:
     Returns:
         YAML configuration template.
     """
-    return '''# rdf-construct split configuration
+    return """# rdf-construct split configuration
 # See MERGE_GUIDE.md for full documentation
 
 split:
@@ -1099,4 +1095,4 @@ split:
   #     - data/split_instances.ttl
   #   output_dir: data/
   #   prefix: data_
-'''
+"""
