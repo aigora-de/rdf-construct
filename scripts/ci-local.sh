@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 #
+# The block between the help:start and help:end markers below is what `--help`
+# prints. It used to be a hard-coded line range, which drifted the moment anyone
+# added a comment and silently emitted `set -uo pipefail` as help text (#93).
+# Add or remove lines inside the markers freely; they move with the content.
+#
+# help:start
 # ci-local.sh — the pre-PR check runner for rdf-construct.
 #
 # Copyright (c) 2026 Dave Dyke / Agilit Ltd. MIT licence.
@@ -37,8 +43,16 @@
 #   scripts/ci-local.sh --tests-only # the pytest gate alone (fast)
 #   scripts/ci-local.sh --lint-only  # the non-pytest checks (black, ruff, mypy, memory guard)
 #   scripts/ci-local.sh -h|--help
+# help:end
 
 set -uo pipefail
+
+# Print the comment block between the help markers, minus the markers and the
+# leading "# ". Bounded by content rather than by line number, so adding a
+# comment above cannot silently push shell code into the help text (#93).
+show_help() {
+  awk '/^# help:start$/{f=1;next} /^# help:end$/{f=0} f' "$0" | sed 's/^# \{0,1\}//'
+}
 
 cd "$(git rev-parse --show-toplevel)" || { echo "not in a git repo" >&2; exit 2; }
 
@@ -48,7 +62,7 @@ RUN_OTHER=1
 case "${1-}" in
   --tests-only) RUN_OTHER=0 ;;
   --lint-only)  RUN_TESTS=0 ;;
-  -h|--help)    sed -n '2,39p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help)    show_help; exit 0 ;;
   "")           ;;
   *)            echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
 esac
