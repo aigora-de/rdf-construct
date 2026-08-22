@@ -1,7 +1,13 @@
 """Core RDF ordering and serialization functionality."""
 
 from .ordering import sort_subjects, topo_sort_subset, sort_with_roots
-from .profile import OrderingConfig, OrderingProfile, load_yaml
+from .profile import (
+    DEFAULT_UNCLAIMED_POLICY,
+    UNCLAIMED_POLICIES,
+    OrderingConfig,
+    OrderingProfile,
+    load_yaml,
+)
 from .selector import select_subjects
 from .vocab import (
     ALL_PROPERTY_TYPES,
@@ -12,7 +18,12 @@ from .vocab import (
     KIND_SPECIFIC_PROPERTY_TYPES,
     OBJECT_PROPERTY_TYPES,
 )
-from .serialiser import collect_used_namespaces, serialise_turtle, build_section_graph
+from .serialiser import (
+    bnode_closure,
+    collect_used_namespaces,
+    serialise_turtle,
+    build_section_graph,
+)
 from .utils import (
     expand_curie,
     extract_prefix_map,
@@ -40,6 +51,8 @@ __all__ = [
     "OrderingConfig",
     "OrderingProfile",
     "load_yaml",
+    "UNCLAIMED_POLICIES",
+    "DEFAULT_UNCLAIMED_POLICY",
     # Selector
     "select_subjects",
     # Vocabulary
@@ -51,6 +64,7 @@ __all__ = [
     "KIND_SPECIFIC_PROPERTY_TYPES",
     "OBJECT_PROPERTY_TYPES",
     # Serialiser
+    "bnode_closure",
     "collect_used_namespaces",
     "serialise_turtle",
     "build_section_graph",

@@ -7,7 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `order` profiles accept an `unclaimed` policy, in `defaults:` or on an individual
+  profile, controlling what happens to subjects no section of the profile claims:
+  `warn` (default) reports the loss on stderr and exits 0, `emit` appends them in a
+  trailing section so nothing is lost, and `ignore` is silent — for a profile such as
+  `test_profile.yml`'s `compact` that filters on purpose. The warning names the terms
+  and the `select:` key that would have claimed them (#84)
+
 ### Fixed
+- `order` no longer emits an empty `[ ]` in place of a blank node that no section
+  claimed. `build_section_graph()` copies triples by subject, so an `owl:Restriction`
+  or an `owl:unionOf` list lost its own triples while the reference to it survived —
+  producing not a partial ontology but a different one, asserting an anonymous class
+  with no axioms. Blank nodes reachable from the selected subjects are now pulled in
+  transitively, whatever the `unclaimed` policy says: a blank node carries no identity
+  a profile could select it *by*, so it belongs to the description of whatever
+  references it (#84)
+- `order` no longer silently drops subjects that no profile section claims. Copying the
+  shipped `examples/order/sample_profile.yml` was enough to hit it: its `doc_order` and
+  `props_by_domain` profiles had no `annotation_properties` section, so
+  `animals:scientificName` and its three triples were absent from the output with no
+  warning and exit code 0. Both those profiles — and the matching pair in
+  `ies_profile.yml` — now have the missing section, and the default policy reports any
+  remaining gap (#84)
 - `order` no longer drops terms declared only as `rdf:Property`. They were excluded from the
   `individuals` selector while no other selector claimed them, so their triples were silently
   absent from the ordered output — 10 triples in, 8 out, with no warning

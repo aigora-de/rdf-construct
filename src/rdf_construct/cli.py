@@ -4,11 +4,13 @@ import sys
 from pathlib import Path
 
 import click
-from rdflib import Graph, RDF, URIRef
+from rdflib import BNode, Graph, RDF, URIRef
 from rdflib.namespace import OWL
+from rdflib.term import Node
 
 from rdf_construct.core import (
     OrderingConfig,
+    bnode_closure,
     build_section_graph,
     extract_prefix_map,
     rebind_prefixes,
@@ -273,6 +275,137 @@ def cast(
         raise SystemExit(2)
 
 
+# Selector keys understood by select_subjects(), most specific first, used to tell a
+# user which section they are missing. Keys defined in the config are appended to
+# these, so a profile with custom selector names still gets a usable suggestion.
+_SELECTOR_KEYS = (
+    "classes",
+    "obj_props",
+    "data_props",
+    "ann_props",
+    "other_props",
+    "individuals",
+)
+
+# How many unclaimed subjects to name before summarising the rest.
+_UNCLAIMED_SHOWN = 3
+
+
+def _term_label(graph: Graph, term: Node) -> str:
+    """Render a term as a QName using only the bindings the graph already has.
+
+    ``namespace_manager.qname()`` invents and binds prefixes for unknown
+    namespaces, which would alter the prefixes of the file being ordered.
+    This is read-only: it falls back to the full URI in angle brackets.
+
+    Args:
+        graph: RDF graph whose namespace bindings to use
+        term: RDF term to render
+
+    Returns:
+        QName string, or the bracketed URI when no prefix matches
+    """
+    if isinstance(term, URIRef):
+        best_prefix, best_uri = "", ""
+        for prefix, uri in graph.namespace_manager.namespaces():
+            if prefix and str(term).startswith(str(uri)) and len(str(uri)) > len(best_uri):
+                best_prefix, best_uri = prefix, str(uri)
+        if best_prefix:
+            return f"{best_prefix}:{str(term)[len(best_uri):]}"
+    return f"<{term}>"
+
+
+def _selector_hints(
+    graph: Graph, unclaimed: list[Node], selectors: dict[str, str]
+) -> dict[Node, str]:
+    """Map each unclaimed subject to the selector key that would have claimed it.
+
+    Args:
+        graph: RDF graph being ordered
+        unclaimed: Subjects no section of the profile claimed
+        selectors: Selector definitions from the ordering config
+
+    Returns:
+        Dictionary of subject to selector key, omitting subjects no selector claims
+    """
+    keys = list(_SELECTOR_KEYS) + [k for k in selectors if k not in _SELECTOR_KEYS]
+    remaining = set(unclaimed)
+    hints: dict[Node, str] = {}
+
+    for key in keys:
+        if not remaining:
+            break
+        claimed = select_subjects(graph, key, selectors)
+        for subject in list(remaining):
+            if subject in claimed:
+                hints[subject] = key
+                remaining.discard(subject)
+
+    return hints
+
+
+def _warn_unclaimed(
+    graph: Graph, unclaimed: list[Node], prof_name: str, selectors: dict[str, str]
+) -> None:
+    """Report subjects that no section of a profile claimed.
+
+    Names the terms and the section that would have claimed them: a bare count
+    tells the user something is wrong but not what to do about it.
+
+    Args:
+        graph: RDF graph being ordered
+        unclaimed: Subjects no section claimed, in output order
+        prof_name: Profile the loss occurred in
+        selectors: Selector definitions from the ordering config
+    """
+    named = [s for s in unclaimed if not isinstance(s, BNode)]
+    anonymous = len(unclaimed) - len(named)
+    dropped = sum(1 for s, _, _ in graph if s in set(unclaimed))
+
+    subject_word = "subject" if len(unclaimed) == 1 else "subjects"
+    triple_word = "triple" if dropped == 1 else "triples"
+    click.secho(
+        f"  ⚠ profile '{prof_name}': {len(unclaimed)} {subject_word} claimed by no "
+        f"section — {dropped} {triple_word} dropped.",
+        fg="yellow",
+        err=True,
+    )
+
+    hints = _selector_hints(graph, named, selectors)
+    for subject in named[:_UNCLAIMED_SHOWN]:
+        types = sorted(_term_label(graph, t) for t in graph.objects(subject, RDF.type))
+        type_str = f"  ({', '.join(types)})" if types else ""
+        click.secho(f"      {_term_label(graph, subject)}{type_str}", fg="yellow", err=True)
+
+    if len(named) > _UNCLAIMED_SHOWN:
+        click.secho(f"      … and {len(named) - _UNCLAIMED_SHOWN} more", fg="yellow", err=True)
+    if anonymous:
+        node_word = "node" if anonymous == 1 else "nodes"
+        click.secho(
+            f"      + {anonymous} anonymous {node_word} reachable from nothing claimed",
+            fg="yellow",
+            err=True,
+        )
+
+    wanted = sorted(set(hints.values()))
+    if wanted:
+        selects = ", ".join(f"`select: {key}`" for key in wanted)
+        click.secho(f"    add a section with {selects},", fg="yellow", err=True)
+        click.secho(
+            "    or set `unclaimed: emit` to keep them, or `unclaimed: ignore` if this "
+            "profile filters deliberately.",
+            fg="yellow",
+            err=True,
+        )
+    else:
+        click.secho(
+            "    set `unclaimed: emit` to keep them, or `unclaimed: ignore` if this "
+            "profile filters deliberately.",
+            fg="yellow",
+            err=True,
+        )
+
+
 @cli.command()
 @click.argument("source", type=click.Path(exists=True, path_type=Path))
 @click.argument("config", type=click.Path(exists=True, path_type=Path))
@@ -325,6 +458,17 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path):
             click.echo(f"Available profiles: {available}", err=True)
             raise click.Abort()
 
+    # Resolve the unclaimed-subject policies before writing anything: a typo in one
+    # profile should not surface only after the earlier profiles have been written.
+    try:
+        unclaimed_policies = {
+            prof_name: ordering_config.get_unclaimed_policy(prof_name)
+            for prof_name in profiles_to_gen
+        }
+    except ValueError as exc:
+        click.secho(f"Error: {exc}", fg="red", err=True)
+        raise click.Abort() from exc
+
     # Create output directory
     outdir.mkdir(parents=True, exist_ok=True)
 
@@ -375,6 +519,30 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path):
                 if s not in seen:
                     ordered_subjects.append(s)
                     seen.add(s)
+
+        # Blank nodes carry no identity a section could select them by — they belong
+        # to the description of whatever references them. Pull in the ones reachable
+        # from the selected subjects whatever the policy says, so a restriction cannot
+        # collapse to an empty "[ ]" and assert something the source never did.
+        for s in bnode_closure(graph, ordered_subjects):
+            ordered_subjects.append(s)
+            seen.add(s)
+
+        # Handle the named subjects no section claimed
+        unclaimed = [s for s in {s for (s, _, _) in graph} if s not in seen]
+        if unclaimed:
+            policy = unclaimed_policies[prof_name]
+            if policy == "emit":
+                for s in sort_subjects(graph, set(unclaimed), "qname_alpha"):
+                    ordered_subjects.append(s)
+                    seen.add(s)
+            elif policy == "warn":
+                _warn_unclaimed(
+                    graph,
+                    sort_subjects(graph, set(unclaimed), "qname_alpha"),
+                    prof_name,
+                    ordering_config.selectors,
+                )
 
         # Build output graph
         out_graph = build_section_graph(graph, ordered_subjects)

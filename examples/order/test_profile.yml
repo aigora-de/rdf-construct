@@ -159,6 +159,7 @@ profiles:
   # ============================================
   compact:
     description: "Just header and classes - useful for quick inspection"
+    unclaimed: ignore              # this profile filters on purpose; do not warn
     sections:
       - header: {}
       - classes:

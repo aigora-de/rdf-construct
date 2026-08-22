@@ -4,6 +4,9 @@ defaults:
   comment_blocks: true         # allow emitting # section dividers
   preserve_prefix_order: true  # enforce a declared prefix sequence
   bnode_strategy: skolem       # or "stable"
+  unclaimed: warn              # subjects no section claims: warn | emit | ignore.
+                               # Override per profile — set "ignore" on one that
+                               # filters deliberately, "emit" to never lose a triple.
 
 prefix_order:
   - rdf
@@ -133,6 +136,9 @@ profiles:
           group_order: explicit_then_alpha
           explicit_group_sequence: *domain_priority
           sort: qname_alpha
+      - annotation_properties:
+          select: ann_props
+          sort: qname_alpha
       - individuals:
           select: individuals
           sort: qname_alpha
@@ -157,6 +163,9 @@ profiles:
           after_anchors: topological_then_alpha
       - data_properties:
           select: data_props
+          sort: alpha
+      - annotation_properties:
+          select: ann_props
           sort: alpha
       - individuals:
           select: individuals
