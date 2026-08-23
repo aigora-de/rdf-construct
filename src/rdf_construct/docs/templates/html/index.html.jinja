@@ -127,6 +127,28 @@
 </section>
 {% endif %}
 
+{% if other_properties and config.include_other_properties %}
+<section class="section">
+    <h2>Other Properties</h2>
+    <p class="definition">Properties whose kind the source does not state — declared
+    <code>rdf:Property</code>, <code>owl:FunctionalProperty</code> or
+    <code>owl:DeprecatedProperty</code> without an object/datatype/annotation declaration.</p>
+    <ul class="entity-list">
+        {% for prop in other_properties %}
+        <li>
+            <a href="{{ prop.qname | entity_url('rdf_property') }}">
+                {{ prop.label or prop.qname }}
+            </a>
+            <span class="entity-type rdf">rdf property</span>
+            {% if prop.definition %}
+            <span class="definition">— {{ prop.definition[:80] }}{% if prop.definition|length > 80 %}...{% endif %}</span>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
 {% if (concepts or concept_schemes) and config.include_skos %}
 <section class="section">
     <h2>SKOS Vocabulary</h2>

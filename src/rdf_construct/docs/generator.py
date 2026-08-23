@@ -139,6 +139,15 @@ class DocsGenerator:
                     result.files_created.append(prop_path)
                     result.properties_count += 1
 
+            # Properties whose kind is not implied by their declaration
+            # (#76). Same page template as any other property — the badge
+            # and the properties/other directory carry the distinction.
+            if self.config.include_other_properties:
+                for prop_info in entities.other_properties:
+                    prop_path = self.renderer.render_property(prop_info, entities)
+                    result.files_created.append(prop_path)
+                    result.properties_count += 1
+
             if self.config.include_instances:
                 for instance_info in entities.instances:
                     instance_path = self.renderer.render_instance(instance_info, entities)

@@ -13,7 +13,13 @@ from typing import TYPE_CHECKING
 from rdflib import BNode, RDF, RDFS, Literal, URIRef
 from rdflib.namespace import DCTERMS, OWL, SH, SKOS
 
-from rdf_construct.core.vocab import ALL_PROPERTY_TYPES, CLASS_TYPES
+from rdf_construct.core.vocab import (
+    ALL_PROPERTY_TYPES,
+    ANNOTATION_PROPERTY_TYPES,
+    CLASS_TYPES,
+    DATATYPE_PROPERTY_TYPES,
+    OBJECT_PROPERTY_TYPES,
+)
 
 if TYPE_CHECKING:
     from rdflib import Graph
@@ -652,10 +658,9 @@ def extract_class_info(graph: Graph, uri: URIRef) -> ClassInfo:
     # Instances of this class
     for inst in graph.subjects(RDF.type, uri):
         if isinstance(inst, URIRef):
-            # Skip if it's a class itself
-            if (inst, RDF.type, OWL.Class) in graph:
-                continue
-            if (inst, RDF.type, RDFS.Class) in graph:
+            # Skip if it is a class itself — any declaring type, not just the
+            # obvious two (#76).
+            if any((inst, RDF.type, class_type) in graph for class_type in CLASS_TYPES):
                 continue
             info.instances.append(inst)
 
@@ -690,14 +695,24 @@ def extract_property_info(graph: Graph, uri: URIRef) -> PropertyInfo:
         annotations=get_annotations(graph, uri),
     )
 
-    # Determine property type
-    if (uri, RDF.type, OWL.ObjectProperty) in graph:
+    # Determine property type from every declaring type, not just the obvious
+    # four (#76). A term declared solely `owl:TransitiveProperty` is an object
+    # property — that characteristic is a subclass of owl:ObjectProperty in
+    # OWL 2 — and reading only `owl:ObjectProperty` misfiles it as an
+    # individual. The sets come from core.vocab.
+    asserted = {obj for obj in graph.objects(uri, RDF.type) if isinstance(obj, URIRef)}
+    if asserted & OBJECT_PROPERTY_TYPES:
         info.property_type = "object"
-    elif (uri, RDF.type, OWL.DatatypeProperty) in graph:
+    elif asserted & DATATYPE_PROPERTY_TYPES:
         info.property_type = "datatype"
-    elif (uri, RDF.type, OWL.AnnotationProperty) in graph:
+    elif asserted & ANNOTATION_PROPERTY_TYPES:
         info.property_type = "annotation"
-    elif (uri, RDF.type, RDF.Property) in graph:
+    elif asserted & ALL_PROPERTY_TYPES:
+        # rdf:Property, or a characteristic that implies no kind at all:
+        # owl:FunctionalProperty and owl:DeprecatedProperty are subclasses of
+        # rdf:Property only, so nothing says object or datatype. Such a term
+        # is still a property and needs somewhere to go rather than being
+        # guessed at or discarded.
         info.property_type = "rdf"
 
     # Kinds: [PROPERTY, <type>_PROPERTY] — base PROPERTY plus the
@@ -1466,17 +1481,15 @@ def extract_all_classes(graph: Graph) -> list[ClassInfo]:
     classes = []
     seen: set[URIRef] = set()
 
-    # OWL classes
-    for uri in graph.subjects(RDF.type, OWL.Class):
-        if isinstance(uri, URIRef) and uri not in seen:
-            seen.add(uri)
-            classes.append(extract_class_info(graph, uri))
-
-    # RDFS classes
-    for uri in graph.subjects(RDF.type, RDFS.Class):
-        if isinstance(uri, URIRef) and uri not in seen:
-            seen.add(uri)
-            classes.append(extract_class_info(graph, uri))
+    # Every type that declares its subject a class — owl:Class and rdfs:Class,
+    # but also owl:DeprecatedClass, which is otherwise misfiled as an
+    # individual (#76). The set lives in core.vocab so it cannot be shortened
+    # here and elsewhere independently.
+    for class_type in sorted(CLASS_TYPES):
+        for uri in graph.subjects(RDF.type, class_type):
+            if isinstance(uri, URIRef) and uri not in seen:
+                seen.add(uri)
+                classes.append(extract_class_info(graph, uri))
 
     # Sort by qname for consistent ordering
     classes.sort(key=lambda c: c.qname)
@@ -1495,14 +1508,9 @@ def extract_all_properties(graph: Graph) -> list[PropertyInfo]:
     properties = []
     seen: set[URIRef] = set()
 
-    property_types = [
-        OWL.ObjectProperty,
-        OWL.DatatypeProperty,
-        OWL.AnnotationProperty,
-        RDF.Property,
-    ]
-
-    for prop_type in property_types:
+    # Every type that declares its subject a property, including the OWL
+    # characteristics (#76). Sorted for deterministic extraction order.
+    for prop_type in sorted(ALL_PROPERTY_TYPES):
         for uri in graph.subjects(RDF.type, prop_type):
             if isinstance(uri, URIRef) and uri not in seen:
                 seen.add(uri)
@@ -1528,23 +1536,19 @@ def extract_all_instances(graph: Graph) -> list[InstanceInfo]:
     instances = []
     seen: set[URIRef] = set()
 
-    # Get all class URIs to exclude
+    # Get all class URIs to exclude. Uses the core.vocab set, so a term
+    # declared only `owl:DeprecatedClass` is excluded here and documented as
+    # a class rather than landing in this bucket (#76).
     class_uris: set[URIRef] = set()
-    for uri in graph.subjects(RDF.type, OWL.Class):
-        if isinstance(uri, URIRef):
-            class_uris.add(uri)
-    for uri in graph.subjects(RDF.type, RDFS.Class):
-        if isinstance(uri, URIRef):
-            class_uris.add(uri)
+    for class_type in CLASS_TYPES:
+        for uri in graph.subjects(RDF.type, class_type):
+            if isinstance(uri, URIRef):
+                class_uris.add(uri)
 
-    # Get all property URIs to exclude
+    # Get all property URIs to exclude — every declaring type, characteristics
+    # included, for the same reason (#76).
     property_uris: set[URIRef] = set()
-    for prop_type in [
-        OWL.ObjectProperty,
-        OWL.DatatypeProperty,
-        OWL.AnnotationProperty,
-        RDF.Property,
-    ]:
+    for prop_type in ALL_PROPERTY_TYPES:
         for uri in graph.subjects(RDF.type, prop_type):
             if isinstance(uri, URIRef):
                 property_uris.add(uri)
@@ -1620,6 +1624,19 @@ class ExtractedEntities:
     def annotation_properties(self) -> list[PropertyInfo]:
         """Get only annotation properties."""
         return [p for p in self.properties if p.property_type == "annotation"]
+
+    @property
+    def other_properties(self) -> list[PropertyInfo]:
+        """Get properties whose kind is not implied by their declaration.
+
+        `rdf:Property`, and the characteristics that are subclasses of it
+        alone — `owl:FunctionalProperty`, `owl:DeprecatedProperty`. Nothing
+        says whether such a term is an object or a datatype property, so it
+        gets its own bucket rather than being guessed into one of theirs
+        (#76). Mirrors the `other_props` selector the `order` command
+        gained in v0.5.0.
+        """
+        return [p for p in self.properties if p.property_type == "rdf"]
 
     @property
     def node_shapes(self) -> list[ShapeInfo]:

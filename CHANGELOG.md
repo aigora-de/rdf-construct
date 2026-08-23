@@ -99,6 +99,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   beside so the two read as one family — 21.7 CIEDE2000 units apart in
   normal vision, 15.3 under simulated deuteranopia
 
+### Fixed
+- **`docs` no longer misfiles properties declared only by an OWL characteristic**
+  (#76). A term declared solely `owl:TransitiveProperty`, `owl:SymmetricProperty`,
+  `owl:AsymmetricProperty`, `owl:ReflexiveProperty`, `owl:IrreflexiveProperty`
+  or `owl:InverseFunctionalProperty` was extracted as a generic **instance** and
+  documented as an individual — the extractor recognised only `owl:ObjectProperty`,
+  `owl:DatatypeProperty`, `owl:AnnotationProperty` and `rdf:Property`. All six are
+  subclasses of `owl:ObjectProperty` in OWL 2, so they are now documented as object
+  properties. `owl:DeprecatedClass` had the same problem on the class side and is
+  now documented as a class
+- **Properties whose kind the source does not state now have somewhere to go.**
+  `owl:FunctionalProperty` and `owl:DeprecatedProperty` are subclasses of
+  `rdf:Property` only, so nothing says whether such a term is an object or a
+  datatype property. These, and plain `rdf:Property` declarations, are documented
+  under `properties/other/` with a neutral `rdf property` badge (`#334155`,
+  10.35:1 against white), listed in an **Other Properties** section, and carried
+  in a new top-level `other_properties` JSON array. `rdf:Property`-only terms
+  previously got **no page at all**: they were extracted, routed to an unreachable
+  `other/` directory and never rendered
+- The `docs` extractor now takes its class and property type sets from
+  `rdf_construct.core.vocab` rather than repeating shortened lists, so the sets
+  cannot drift between commands again. The `order` command moved to them in v0.5.0
+- New `include_other_properties` config key; `other_properties` accepted in
+  `--include` / `--exclude`, and `properties` covers it
+
 ### Changed
 - **Breaking (JSON output):** `skos:Concept` and `skos:ConceptScheme` subjects
   have left the `instances` array for new top-level `concepts` and

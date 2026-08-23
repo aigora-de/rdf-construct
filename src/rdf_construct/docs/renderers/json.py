@@ -368,6 +368,7 @@ class JSONRenderer:
                 "object_properties": len(entities.object_properties),
                 "datatype_properties": len(entities.datatype_properties),
                 "annotation_properties": len(entities.annotation_properties),
+                "other_properties": len(entities.other_properties),
                 "instances": len(entities.instances),
                 "shapes": len(entities.shapes),
                 "concepts": len(entities.concepts),
@@ -404,6 +405,16 @@ class JSONRenderer:
                     "label": p.label,
                 }
                 for p in entities.annotation_properties
+            ],
+            # Properties whose kind the source does not state (#76). These
+            # used to be extracted as instances, so they leave that array.
+            "other_properties": [
+                {
+                    "uri": str(p.uri),
+                    "qname": p.qname,
+                    "label": p.label,
+                }
+                for p in entities.other_properties
             ],
             "instances": [
                 {
@@ -694,6 +705,7 @@ class JSONRenderer:
             "annotation_properties": [
                 self._property_to_dict(p) for p in entities.annotation_properties
             ],
+            "other_properties": [self._property_to_dict(p) for p in entities.other_properties],
             "instances": [self._instance_to_dict(i) for i in entities.instances],
             # Full shape representations. Breaking change from v0.4.x:
             # shapes used to be lumped into 'instances' because the
