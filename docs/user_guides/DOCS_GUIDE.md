@@ -24,7 +24,7 @@ The default format produces a complete, navigable website with:
 - Index page with entity listings
 - Class hierarchy visualisation
 - Individual pages for each class, property, and instance
-- Client-side search functionality
+- Client-side search functionality (needs an HTTP server — see below)
 - Responsive CSS styling
 - Namespace reference page
 
@@ -138,6 +138,24 @@ Per-page files contain the complete entity record including all fields.
 > `concepts` and `concept_schemes` arrays; neither appears in
 > `instances` any more. See "SKOS Vocabularies" below for the per-page
 > schema.
+
+## Search
+
+HTML output ships a client-side search index (`search.json`) and a small
+overlay. It works from any page at any depth, and honours `base_url` when
+one is set.
+
+**It needs the docs to be served over HTTP.** Browsers block `fetch` on
+`file://` for security reasons regardless of the path, so search cannot
+work from a double-clicked `index.html`. The box disables itself and says
+so rather than appearing to work. Any static server will do:
+
+```bash
+poetry run rdf-construct docs ontology.ttl -o docs/
+cd docs && python3 -m http.server 8000
+```
+
+Disable the index entirely with `--no-search`.
 
 ## Properties Whose Kind the Source Does Not State
 
