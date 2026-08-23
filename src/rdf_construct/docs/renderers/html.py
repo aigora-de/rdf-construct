@@ -39,6 +39,11 @@ class HTMLRenderer:
         # that resolve correctly from the page's own location when no
         # absolute `config.base_url` is set. See issue #59.
         self._current_page: Path | None = None
+        # Cached URI -> link-pieces index; see `_reference_index`. Keyed by
+        # the identity of the entity set it was built from so a second
+        # generate() on the same renderer cannot serve a stale index.
+        self._ref_index: dict[str, dict[str, Any]] | None = None
+        self._ref_index_for: "ExtractedEntities | None" = None
 
     @property
     def env(self) -> Environment:
@@ -181,6 +186,56 @@ class HTMLRenderer:
             **extra,
         }
 
+    def _reference_index(
+        self,
+        entities: "ExtractedEntities",
+    ) -> dict[str, dict[str, Any]]:
+        """Build (once) a URI -> link-pieces index for cross-referencing.
+
+        Built once per set of extracted entities and cached on the
+        renderer, rather than scanning every bucket for every reference:
+        a vocabulary with a few thousand concepts renders several
+        references per page, and the linear form is quadratic in the size
+        of the ontology.
+
+        Later buckets do not overwrite earlier ones, which is what
+        encodes the routing order — a subject documented as a class links
+        to its class page even when it is also a concept.
+
+        Args:
+            entities: All extracted entities.
+
+        Returns:
+            Mapping of URI string to ``label`` / ``qname`` /
+            ``entity_type`` dicts.
+        """
+        if self._ref_index is not None and self._ref_index_for is entities:
+            return self._ref_index
+
+        index: dict[str, dict[str, Any]] = {}
+
+        def add(uri: Any, label: str | None, qname: str, entity_type: str) -> None:
+            key = str(uri)
+            if key not in index:
+                index[key] = {"label": label or qname, "qname": qname, "entity_type": entity_type}
+
+        for class_info in entities.classes:
+            add(class_info.uri, class_info.label, class_info.qname, "class")
+        for prop in entities.properties:
+            add(prop.uri, prop.label, prop.qname, f"{prop.property_type}_property")
+        for shape in entities.shapes:
+            add(shape.uri, shape.label, shape.qname, "shape")
+        for scheme in entities.concept_schemes:
+            add(scheme.uri, scheme.label, scheme.qname, "skos_concept_scheme")
+        for concept in entities.concepts:
+            add(concept.uri, concept.label, concept.qname, "skos_concept")
+        for instance in entities.instances:
+            add(instance.uri, instance.label, instance.qname, "instance")
+
+        self._ref_index = index
+        self._ref_index_for = entities
+        return index
+
     def _entity_reference(
         self,
         uri: "URIRef | str",
@@ -203,50 +258,9 @@ class HTMLRenderer:
             Dict with ``label``, ``qname`` and ``entity_type`` keys.
         """
         uri_str = str(uri)
-
-        for concept in entities.concepts:
-            if str(concept.uri) == uri_str:
-                return {
-                    "label": concept.label or concept.qname,
-                    "qname": concept.qname,
-                    "entity_type": "skos_concept",
-                }
-        for scheme in entities.concept_schemes:
-            if str(scheme.uri) == uri_str:
-                return {
-                    "label": scheme.label or scheme.qname,
-                    "qname": scheme.qname,
-                    "entity_type": "skos_concept_scheme",
-                }
-        for class_info in entities.classes:
-            if str(class_info.uri) == uri_str:
-                return {
-                    "label": class_info.label or class_info.qname,
-                    "qname": class_info.qname,
-                    "entity_type": "class",
-                }
-        for prop in entities.properties:
-            if str(prop.uri) == uri_str:
-                return {
-                    "label": prop.label or prop.qname,
-                    "qname": prop.qname,
-                    "entity_type": f"{prop.property_type}_property",
-                }
-        for instance in entities.instances:
-            if str(instance.uri) == uri_str:
-                return {
-                    "label": instance.label or instance.qname,
-                    "qname": instance.qname,
-                    "entity_type": "instance",
-                }
-        for shape in entities.shapes:
-            if str(shape.uri) == uri_str:
-                return {
-                    "label": shape.label or shape.qname,
-                    "qname": shape.qname,
-                    "entity_type": "shape",
-                }
-
+        resolved = self._reference_index(entities).get(uri_str)
+        if resolved is not None:
+            return resolved
         return {"label": uri_str, "qname": uri_str, "entity_type": None}
 
     def _entity_references(
