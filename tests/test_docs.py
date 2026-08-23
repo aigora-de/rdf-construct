@@ -284,6 +284,9 @@ class TestGenerator:
 
         assert (output_dir / "index.md").exists()
         assert (output_dir / "hierarchy.md").exists()
+        content = (output_dir / "classes" / "Dog.md").read_text(encoding="utf-8")
+        assert "../classes/Mammal.md" in content
+        assert "classes/classes/Mammal.md" not in content
 
     def test_generator_json_output(self, simple_ontology: Graph, output_dir: Path):
         """Test JSON documentation generation."""
