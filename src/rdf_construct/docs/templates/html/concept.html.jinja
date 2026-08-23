@@ -1,0 +1,176 @@
+{% extends "base.html.jinja" %}
+
+{% block title %}{{ concept_info.label or concept_info.qname }} - {{ ontology.title or "Documentation" }}{% endblock %}
+
+{# Render a list of resolved entity references (see HTMLRenderer._entity_reference).
+   References with no entity_type were never documented, so they render as plain
+   code rather than a link to a page that does not exist. #}
+{% macro reference_list(refs) %}
+{% for ref in refs %}
+{% if ref.entity_type %}<a href="{{ ref.qname | entity_url(ref.entity_type) }}">{{ ref.label }}</a>{% else %}<code>{{ ref.label }}</code>{% endif %}{% if not loop.last %}, {% endif %}
+{% endfor %}
+{% endmacro %}
+
+{% block content %}
+<article class="entity-card">
+    <h1>
+        {{ concept_info.label or concept_info.qname }}
+        {% for kind in concept_info.kinds %}
+        <span class="entity-type {{ kind }}">{{ kind | replace('_', ' ') }}</span>
+        {% endfor %}
+    </h1>
+    <p class="uri">{{ concept_info.uri }}</p>
+
+    {% if concept_info.definition %}
+    <p class="definition">{{ concept_info.definition }}</p>
+    {% endif %}
+
+    {# Labels grouped by language — one row per language tag. #}
+    {% if concept_info.labels %}
+    <section class="section">
+        <h3>Labels</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Language</th>
+                    <th>Preferred</th>
+                    <th>Alternative</th>
+                    <th>Hidden</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for group in concept_info.labels %}
+                <tr>
+                    <td><code>{{ group.language or "—" }}</code></td>
+                    <td>{{ group.preferred | join(", ") }}</td>
+                    <td>{{ group.alternative | join(", ") }}</td>
+                    <td>{{ group.hidden | join(", ") }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+
+    {% if concept_info.in_schemes or concept_info.top_concept_of %}
+    <section class="section">
+        <h3>Schemes</h3>
+        <table>
+            <tbody>
+                {% if scheme_refs %}
+                <tr><th>In scheme</th><td>{{ reference_list(scheme_refs) }}</td></tr>
+                {% endif %}
+                {% if top_concept_of_refs %}
+                <tr><th>Top concept of</th><td>{{ reference_list(top_concept_of_refs) }}</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+
+    {% if broader_refs or narrower_refs or related_refs %}
+    <section class="section">
+        <h3>Semantic Relations</h3>
+        <table>
+            <tbody>
+                {% if broader_refs %}
+                <tr><th>Broader</th><td>{{ reference_list(broader_refs) }}</td></tr>
+                {% endif %}
+                {% if narrower_refs %}
+                <tr><th>Narrower</th><td>{{ reference_list(narrower_refs) }}</td></tr>
+                {% endif %}
+                {% if related_refs %}
+                <tr><th>Related</th><td>{{ reference_list(related_refs) }}</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+
+    {% if concept_info.notes %}
+    <section class="section">
+        <h3>Notes</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Property</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for name, values in concept_info.notes.items() %}
+                {% for value in values %}
+                <tr>
+                    <td><code>skos:{{ name }}</code></td>
+                    <td>{{ value.text }}{% if value.language %}<span class="lang-tag">{{ value.language }}</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+
+    {% if type_refs %}
+    <section class="section">
+        <h3>Types</h3>
+        <ul class="entity-list">
+            {% for ref in type_refs %}
+            <li>{% if ref.entity_type %}<a href="{{ ref.qname | entity_url(ref.entity_type) }}">{{ ref.label }}</a>{% else %}<code>{{ ref.label }}</code>{% endif %}</li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {# Anything else asserted about the concept — mappings such as
+       skos:exactMatch land here as visible key-value rows rather than
+       being dropped. #}
+    {% if concept_info.properties %}
+    <section class="section">
+        <h3>Other Properties</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Property</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pred, values in concept_info.properties.items() %}
+                {% for value in values %}
+                <tr>
+                    <td><code>{{ pred }}</code></td>
+                    <td>{% if value is string %}{{ value }}{% else %}<code>{{ value }}</code>{% endif %}</td>
+                </tr>
+                {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+
+    {% if concept_info.annotations %}
+    <section class="section">
+        <h3>Annotations</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Property</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for name, values in concept_info.annotations.items() %}
+                {% for value in values %}
+                <tr>
+                    <td><code>{{ name }}</code></td>
+                    <td>{{ value }}</td>
+                </tr>
+                {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    {% endif %}
+</article>
+{% endblock %}

@@ -9,9 +9,13 @@ from typing import TYPE_CHECKING, Any
 from jinja2 import Environment, FileSystemLoader, PackageLoader, select_autoescape
 
 if TYPE_CHECKING:
+    from rdflib import URIRef
+
     from ..config import DocsConfig
     from ..extractors import (
         ClassInfo,
+        ConceptInfo,
+        ConceptSchemeInfo,
         ExtractedEntities,
         InstanceInfo,
         PropertyInfo,
@@ -171,9 +175,87 @@ class HTMLRenderer:
             "shapes": entities.shapes,
             "node_shapes": entities.node_shapes,
             "property_shapes": entities.property_shapes,
+            "concepts": entities.concepts,
+            "concept_schemes": entities.concept_schemes,
             "config": self.config,
             **extra,
         }
+
+    def _entity_reference(
+        self,
+        uri: "URIRef | str",
+        entities: "ExtractedEntities",
+    ) -> dict[str, Any]:
+        """Resolve a URI to the pieces a template needs to link to it.
+
+        Returns ``qname`` and ``entity_type`` rather than a finished URL:
+        the ``entity_url`` filter has to run during template rendering, when
+        the renderer knows which page the link is being written on. A URI
+        that belongs to no documented entity comes back with
+        ``entity_type=None`` so the template can fall back to plain text
+        rather than emitting a link to a page that was never generated.
+
+        Args:
+            uri: URI to resolve.
+            entities: All extracted entities.
+
+        Returns:
+            Dict with ``label``, ``qname`` and ``entity_type`` keys.
+        """
+        uri_str = str(uri)
+
+        for concept in entities.concepts:
+            if str(concept.uri) == uri_str:
+                return {
+                    "label": concept.label or concept.qname,
+                    "qname": concept.qname,
+                    "entity_type": "skos_concept",
+                }
+        for scheme in entities.concept_schemes:
+            if str(scheme.uri) == uri_str:
+                return {
+                    "label": scheme.label or scheme.qname,
+                    "qname": scheme.qname,
+                    "entity_type": "skos_concept_scheme",
+                }
+        for class_info in entities.classes:
+            if str(class_info.uri) == uri_str:
+                return {
+                    "label": class_info.label or class_info.qname,
+                    "qname": class_info.qname,
+                    "entity_type": "class",
+                }
+        for prop in entities.properties:
+            if str(prop.uri) == uri_str:
+                return {
+                    "label": prop.label or prop.qname,
+                    "qname": prop.qname,
+                    "entity_type": f"{prop.property_type}_property",
+                }
+        for instance in entities.instances:
+            if str(instance.uri) == uri_str:
+                return {
+                    "label": instance.label or instance.qname,
+                    "qname": instance.qname,
+                    "entity_type": "instance",
+                }
+        for shape in entities.shapes:
+            if str(shape.uri) == uri_str:
+                return {
+                    "label": shape.label or shape.qname,
+                    "qname": shape.qname,
+                    "entity_type": "shape",
+                }
+
+        return {"label": uri_str, "qname": uri_str, "entity_type": None}
+
+    def _entity_references(
+        self,
+        uris: "list[URIRef]",
+        entities: "ExtractedEntities",
+    ) -> list[dict[str, Any]]:
+        """Resolve a list of URIs. See :meth:`_entity_reference`."""
+        return [self._entity_reference(uri, entities) for uri in uris]
 
     def _render_page(
         self,
@@ -430,6 +512,77 @@ class HTMLRenderer:
         rel_path = entity_to_path(shape_info.qname, "shape", self.config)
         return self._render_page("shape.html.jinja", rel_path, context)
 
+    def render_concept(
+        self,
+        concept_info: "ConceptInfo",
+        entities: "ExtractedEntities",
+    ) -> Path:
+        """Render a SKOS concept documentation page.
+
+        Broader, narrower, related and scheme references are resolved to
+        cross-links here rather than in the template, so a reference to a
+        concept that was never documented degrades to plain text instead of
+        a dead link.
+
+        Args:
+            concept_info: Concept to render.
+            entities: All extracted entities (for cross-references).
+
+        Returns:
+            Path to the rendered file.
+        """
+        context = self._build_context(
+            entities,
+            concept_info=concept_info,
+            broader_refs=self._entity_references(concept_info.broader, entities),
+            narrower_refs=self._entity_references(concept_info.narrower, entities),
+            related_refs=self._entity_references(concept_info.related, entities),
+            scheme_refs=self._entity_references(concept_info.in_schemes, entities),
+            top_concept_of_refs=self._entity_references(concept_info.top_concept_of, entities),
+            type_refs=self._entity_references(concept_info.types, entities),
+        )
+
+        from ..config import entity_to_path
+
+        rel_path = entity_to_path(concept_info.qname, "skos_concept", self.config)
+        return self._render_page("concept.html.jinja", rel_path, context)
+
+    def render_concept_scheme(
+        self,
+        scheme_info: "ConceptSchemeInfo",
+        entities: "ExtractedEntities",
+    ) -> Path:
+        """Render a SKOS concept scheme documentation page.
+
+        Carries the scheme's broader/narrower tree — the natural way to
+        navigate a vocabulary — alongside a flat member list. The tree
+        walker is cycle-safe; see
+        :func:`rdf_construct.docs.extractors.build_concept_tree`.
+
+        Args:
+            scheme_info: Concept scheme to render.
+            entities: All extracted entities (for cross-references).
+
+        Returns:
+            Path to the rendered file.
+        """
+        from ..extractors import build_concept_tree
+
+        tree = build_concept_tree(entities.concepts, scheme_info.uri)
+
+        context = self._build_context(
+            entities,
+            scheme_info=scheme_info,
+            concept_tree=tree,
+            top_concept_refs=self._entity_references(scheme_info.top_concepts, entities),
+            member_refs=self._entity_references(scheme_info.concepts, entities),
+        )
+
+        from ..config import entity_to_path
+
+        rel_path = entity_to_path(scheme_info.qname, "skos_concept_scheme", self.config)
+        return self._render_page("concept_scheme.html.jinja", rel_path, context)
+
     def render_namespaces(self, entities: "ExtractedEntities") -> Path:
         """Render the namespace reference page.
 
@@ -672,6 +825,45 @@ h4 { font-size: 1.1rem; }
 .entity-type.shape { background: #dc2626; }
 .entity-type.node_shape { background: #b91c1c; }
 .entity-type.property_shape { background: #e11d48; }
+
+/* SKOS badges (#63). Blue family, with the scheme darker than the concept
+   so the container reads as the parent — the same gradient the shape
+   family uses. Contrast against the badge's white text:
+     .skos_concept        #1d4ed8   6.70:1
+     .skos_concept_scheme #1e3a8a  10.36:1
+   Both clear WCAG AA for normal text. Blue was measured against the
+   existing badges rather than assumed: the indigo family suggested in
+   #63 sits only 11.3 CIEDE2000 units from the object-property violet
+   (10.7 under simulated deuteranopia), which is too close to call apart,
+   whereas #1d4ed8 keeps 15.3 (17.7 deuteranopia, 21.3 protanopia). Its
+   one weak axis is tritanopia, where it falls to 6.0 against the instance
+   emerald — still distinguishable, and the badge's text label carries the
+   category regardless. */
+.entity-type.skos_concept { background: #1d4ed8; }
+.entity-type.skos_concept_scheme { background: #1e3a8a; }
+
+/* Language tag beside a SKOS label or note value. */
+.lang-tag {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 0.25rem;
+    padding: 0 0.25rem;
+    margin-left: 0.25rem;
+}
+
+/* Concept hierarchy tree on a scheme page — reuses the class-hierarchy
+   connectors so a vocabulary tree looks like the class tree. */
+.concept-tree {
+    list-style: none;
+    padding-left: 1.5rem;
+}
+
+.concept-tree li {
+    position: relative;
+    padding: 0.25rem 0;
+}
 
 /* PropertyShape constraint table on shape pages. Tighter than the
    default annotations table — the `th` is the constraint name, the

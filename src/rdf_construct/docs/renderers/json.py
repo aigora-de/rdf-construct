@@ -10,8 +10,13 @@ if TYPE_CHECKING:
     from ..config import DocsConfig
     from ..extractors import (
         ClassInfo,
+        ConceptInfo,
+        ConceptNode,
+        ConceptSchemeInfo,
         ExtractedEntities,
         InstanceInfo,
+        LabelGroup,
+        NoteValue,
         PropertyInfo,
         PropertyShapeInfo,
         ShapeInfo,
@@ -219,6 +224,112 @@ class JSONRenderer:
             },
         }
 
+    def _label_groups_to_list(self, labels: list["LabelGroup"]) -> list[dict[str, Any]]:
+        """Convert SKOS label groups to a serialisable list.
+
+        One entry per language tag; the untagged group carries an empty
+        ``language`` string rather than being dropped.
+        """
+        return [
+            {
+                "language": group.language,
+                "preferred": list(group.preferred),
+                "alternative": list(group.alternative),
+                "hidden": list(group.hidden),
+            }
+            for group in labels
+        ]
+
+    def _notes_to_dict(
+        self,
+        notes: dict[str, list["NoteValue"]],
+    ) -> dict[str, list[dict[str, str]]]:
+        """Convert SKOS notes to a serialisable mapping.
+
+        Each value keeps its language tag, so a consumer can tell an
+        English scope note from a French one.
+        """
+        return {
+            name: [{"text": value.text, "language": value.language} for value in values]
+            for name, values in notes.items()
+        }
+
+    def _concept_to_dict(self, concept_info: "ConceptInfo") -> dict[str, Any]:
+        """Convert a ConceptInfo to a dictionary.
+
+        ``broader`` and ``narrower`` carry both asserted and inverse-derived
+        neighbours — SKOS declares the two properties to be inverses, so a
+        consumer sees the same hierarchy whichever direction the source
+        vocabulary asserted.
+
+        Args:
+            concept_info: Concept to convert.
+
+        Returns:
+            Dictionary representation.
+        """
+        properties: dict[str, list[str]] = {}
+        for pred, values in concept_info.properties.items():
+            properties[str(pred)] = [str(v) for v in values]
+
+        return {
+            "uri": str(concept_info.uri),
+            "qname": concept_info.qname,
+            "kinds": [str(k) for k in concept_info.kinds],
+            "label": concept_info.label,
+            "definition": concept_info.definition,
+            "labels": self._label_groups_to_list(concept_info.labels),
+            "notes": self._notes_to_dict(concept_info.notes),
+            "broader": [str(uri) for uri in concept_info.broader],
+            "narrower": [str(uri) for uri in concept_info.narrower],
+            "related": [str(uri) for uri in concept_info.related],
+            "in_schemes": [str(uri) for uri in concept_info.in_schemes],
+            "top_concept_of": [str(uri) for uri in concept_info.top_concept_of],
+            "types": [str(uri) for uri in concept_info.types],
+            "properties": properties,
+            "annotations": concept_info.annotations,
+        }
+
+    def _concept_scheme_to_dict(self, scheme_info: "ConceptSchemeInfo") -> dict[str, Any]:
+        """Convert a ConceptSchemeInfo to a dictionary.
+
+        Args:
+            scheme_info: Concept scheme to convert.
+
+        Returns:
+            Dictionary representation.
+        """
+        properties: dict[str, list[str]] = {}
+        for pred, values in scheme_info.properties.items():
+            properties[str(pred)] = [str(v) for v in values]
+
+        return {
+            "uri": str(scheme_info.uri),
+            "qname": scheme_info.qname,
+            "kinds": [str(k) for k in scheme_info.kinds],
+            "label": scheme_info.label,
+            "definition": scheme_info.definition,
+            "labels": self._label_groups_to_list(scheme_info.labels),
+            "notes": self._notes_to_dict(scheme_info.notes),
+            "top_concepts": [str(uri) for uri in scheme_info.top_concepts],
+            "concepts": [str(uri) for uri in scheme_info.concepts],
+            "types": [str(uri) for uri in scheme_info.types],
+            "properties": properties,
+            "annotations": scheme_info.annotations,
+        }
+
+    def _concept_tree_to_json(self, nodes: list["ConceptNode"]) -> list[dict[str, Any]]:
+        """Convert a concept hierarchy tree to nested dictionaries."""
+        return [
+            {
+                "uri": str(node.concept.uri),
+                "qname": node.concept.qname,
+                "label": node.concept.label,
+                "children": self._concept_tree_to_json(node.children),
+            }
+            for node in nodes
+        ]
+
     def _ontology_to_dict(self, entities: "ExtractedEntities") -> dict[str, Any]:
         """Convert ontology info to a dictionary.
 
@@ -259,6 +370,8 @@ class JSONRenderer:
                 "annotation_properties": len(entities.annotation_properties),
                 "instances": len(entities.instances),
                 "shapes": len(entities.shapes),
+                "concepts": len(entities.concepts),
+                "concept_schemes": len(entities.concept_schemes),
             },
             "classes": [
                 {
@@ -314,6 +427,28 @@ class JSONRenderer:
                     "label": s.label,
                 }
                 for s in entities.shapes
+            ],
+            # Top-level concepts / concept_schemes arrays (#63). Breaking
+            # change from v0.5.x, in the same way the shapes array was in
+            # v0.5.0: SKOS entities used to appear in 'instances' and now
+            # have their own buckets.
+            "concepts": [
+                {
+                    "uri": str(c.uri),
+                    "qname": c.qname,
+                    "kinds": [str(k) for k in c.kinds],
+                    "label": c.label,
+                }
+                for c in entities.concepts
+            ],
+            "concept_schemes": [
+                {
+                    "uri": str(s.uri),
+                    "qname": s.qname,
+                    "kinds": [str(k) for k in s.kinds],
+                    "label": s.label,
+                }
+                for s in entities.concept_schemes
             ],
         }
 
@@ -472,6 +607,60 @@ class JSONRenderer:
         rel_path = entity_to_path(shape_info.qname, "shape", self.config, extension=".json")
         return self._write_json(self.config.output_dir / rel_path, data)
 
+    def render_concept(
+        self,
+        concept_info: "ConceptInfo",
+        entities: "ExtractedEntities",
+    ) -> Path:
+        """Render a SKOS concept as JSON.
+
+        Args:
+            concept_info: Concept to render.
+            entities: All extracted entities.
+
+        Returns:
+            Path to the rendered file.
+        """
+        data = self._concept_to_dict(concept_info)
+
+        from ..config import entity_to_path
+
+        rel_path = entity_to_path(
+            concept_info.qname, "skos_concept", self.config, extension=".json"
+        )
+        return self._write_json(self.config.output_dir / rel_path, data)
+
+    def render_concept_scheme(
+        self,
+        scheme_info: "ConceptSchemeInfo",
+        entities: "ExtractedEntities",
+    ) -> Path:
+        """Render a SKOS concept scheme as JSON.
+
+        The scheme's cycle-safe broader/narrower tree is included as
+        ``hierarchy`` so a consumer does not have to rebuild it.
+
+        Args:
+            scheme_info: Concept scheme to render.
+            entities: All extracted entities.
+
+        Returns:
+            Path to the rendered file.
+        """
+        from ..extractors import build_concept_tree
+
+        data = self._concept_scheme_to_dict(scheme_info)
+        data["hierarchy"] = self._concept_tree_to_json(
+            build_concept_tree(entities.concepts, scheme_info.uri)
+        )
+
+        from ..config import entity_to_path
+
+        rel_path = entity_to_path(
+            scheme_info.qname, "skos_concept_scheme", self.config, extension=".json"
+        )
+        return self._write_json(self.config.output_dir / rel_path, data)
+
     def render_namespaces(self, entities: "ExtractedEntities") -> Path:
         """Render namespaces as JSON.
 
@@ -511,6 +700,9 @@ class JSONRenderer:
             # extractor didn't filter them out. They now have their
             # own top-level array.
             "shapes": [self._shape_to_dict(s) for s in entities.shapes],
+            # SKOS entities left 'instances' for their own arrays in #63.
+            "concepts": [self._concept_to_dict(c) for c in entities.concepts],
+            "concept_schemes": [self._concept_scheme_to_dict(s) for s in entities.concept_schemes],
         }
 
         return self._write_json(self._get_output_path("ontology.json"), data)

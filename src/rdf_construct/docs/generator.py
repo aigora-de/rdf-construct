@@ -16,7 +16,16 @@ from rdf_construct.docs.extractors import ExtractedEntities, extract_all
 from rdf_construct.docs.search import generate_search_index, write_search_index
 
 if TYPE_CHECKING:
-    pass
+    # BaseRenderer's signatures reference these by name only; without the
+    # import the annotations are unresolvable to a type checker.
+    from rdf_construct.docs.extractors import (
+        ClassInfo,
+        ConceptInfo,
+        ConceptSchemeInfo,
+        InstanceInfo,
+        PropertyInfo,
+        ShapeInfo,
+    )
 
 
 class DocsGenerator:
@@ -146,6 +155,20 @@ class DocsGenerator:
                     result.files_created.append(shape_path)
                     result.shapes_count += 1
 
+            # SKOS vocabulary entities (#63). Concepts and concept schemes
+            # share the concepts/ directory and are told apart by their kind
+            # badges, exactly as NodeShapes and PropertyShapes share shapes/.
+            if self.config.include_skos:
+                for scheme_info in entities.concept_schemes:
+                    scheme_path = self.renderer.render_concept_scheme(scheme_info, entities)
+                    result.files_created.append(scheme_path)
+                    result.concept_schemes_count += 1
+
+                for concept_info in entities.concepts:
+                    concept_path = self.renderer.render_concept(concept_info, entities)
+                    result.files_created.append(concept_path)
+                    result.concepts_count += 1
+
             # Namespace page
             namespace_path = self.renderer.render_namespaces(entities)
             result.files_created.append(namespace_path)
@@ -213,6 +236,8 @@ class GenerationResult:
         self.properties_count = 0
         self.instances_count = 0
         self.shapes_count = 0
+        self.concepts_count = 0
+        self.concept_schemes_count = 0
 
     @property
     def total_pages(self) -> int:
@@ -229,6 +254,10 @@ class GenerationResult:
         ]
         if self.shapes_count > 0:
             lines.append(f"  Shapes: {self.shapes_count}")
+        if self.concepts_count > 0:
+            lines.append(f"  Concepts: {self.concepts_count}")
+        if self.concept_schemes_count > 0:
+            lines.append(f"  Concept schemes: {self.concept_schemes_count}")
         return "\n".join(lines)
 
 
@@ -331,6 +360,41 @@ class BaseRenderer:
 
         Args:
             shape_info: Shape to render.
+            entities: All extracted entities (for cross-references).
+
+        Returns:
+            Path to the rendered file.
+        """
+        raise NotImplementedError
+
+    def render_concept(
+        self,
+        concept_info: "ConceptInfo",
+        entities: ExtractedEntities,
+    ) -> Path:
+        """Render a SKOS concept documentation page.
+
+        Args:
+            concept_info: Concept to render.
+            entities: All extracted entities (for cross-references).
+
+        Returns:
+            Path to the rendered file.
+        """
+        raise NotImplementedError
+
+    def render_concept_scheme(
+        self,
+        scheme_info: "ConceptSchemeInfo",
+        entities: ExtractedEntities,
+    ) -> Path:
+        """Render a SKOS concept scheme documentation page.
+
+        The scheme page carries the vocabulary's broader/narrower tree;
+        individual concept pages carry inline neighbours. See issue #63.
+
+        Args:
+            scheme_info: Concept scheme to render.
             entities: All extracted entities (for cross-references).
 
         Returns:

@@ -1,0 +1,147 @@
+@prefix ex:    <http://example.org/vocab#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+
+#
+# Test vocabulary for the docs command's SKOS support (issue #63).
+#
+# Deliberately not shipped under examples/ — it carries a broader cycle
+# (ex:Loop... below) that exists to prove the hierarchy walker terminates.
+# Copied into a real vocabulary it would be a modelling error, so it stays
+# test material.
+#
+# Exercises: a scheme with skos:hasTopConcept and the inverse
+# skos:topConceptOf; three levels of broader/narrower; a concept in two
+# schemes; a concept in no scheme at all; pref/alt/hidden labels across
+# two languages; all seven SKOS documentation properties; a concept that
+# is also owl:NamedIndividual; a concept that is also owl:Class (punning);
+# and a two-node broader cycle.
+#
+
+ex:BuildingVocabulary a owl:Ontology ;
+    rdfs:label "Building Classification Vocabulary"@en ;
+    rdfs:comment "A small controlled vocabulary used to test SKOS rendering."@en .
+
+#
+# Concept schemes
+#
+
+ex:BuildingScheme a skos:ConceptScheme ;
+    rdfs:label "Building Classification"@en ;
+    skos:prefLabel "Building Classification"@en ;
+    skos:prefLabel "Classification des bâtiments"@fr ;
+    skos:definition "Classification of buildings by primary function."@en ;
+    skos:hasTopConcept ex:Building ;
+    skos:note "Maintained by the example working group."@en .
+
+ex:HeritageScheme a skos:ConceptScheme ;
+    skos:prefLabel "Heritage Designations"@en ;
+    skos:definition "Designations applied to buildings of historic interest."@en .
+
+#
+# Top concept and its descendants — three levels deep.
+#
+
+ex:Building a skos:Concept , owl:NamedIndividual ;
+    skos:prefLabel "Building"@en ;
+    skos:prefLabel "Bâtiment"@fr ;
+    skos:altLabel "Structure"@en ;
+    skos:altLabel "Édifice"@fr ;
+    skos:hiddenLabel "buildin"@en ;
+    skos:definition "A permanent, roofed construction intended for occupation."@en ;
+    skos:definition "Construction permanente et couverte destinée à être occupée."@fr ;
+    skos:scopeNote "Excludes temporary structures such as marquees."@en ;
+    skos:example "An office block; a terraced house."@en ;
+    skos:note "The root of the building classification."@en ;
+    skos:historyNote "Added in the 2019 revision."@en ;
+    skos:editorialNote "Check alignment with the national classification."@en ;
+    skos:changeNote "Definition tightened in 2021 to exclude marquees."@en ;
+    skos:topConceptOf ex:BuildingScheme ;
+    skos:inScheme ex:BuildingScheme ;
+    skos:narrower ex:Dwelling .
+
+ex:Dwelling a skos:Concept ;
+    skos:prefLabel "Dwelling"@en ;
+    skos:prefLabel "Logement"@fr ;
+    skos:altLabel "Residence"@en ;
+    skos:definition "A building, or part of one, used as a private residence."@en ;
+    skos:broader ex:Building ;
+    skos:narrower ex:DetachedHouse ;
+    skos:inScheme ex:BuildingScheme .
+
+ex:DetachedHouse a skos:Concept ;
+    skos:prefLabel "Detached House"@en ;
+    skos:prefLabel "Maison individuelle"@fr ;
+    skos:altLabel "Standalone House"@en ;
+    skos:hiddenLabel "detatched house"@en ;
+    skos:definition "A dwelling that shares no wall with another dwelling."@en ;
+    skos:broader ex:Dwelling ;
+    skos:related ex:ListedBuilding ;
+    skos:inScheme ex:BuildingScheme .
+
+#
+# A concept in two schemes.
+#
+
+ex:ListedBuilding a skos:Concept ;
+    skos:prefLabel "Listed Building"@en ;
+    skos:prefLabel "Bâtiment classé"@fr ;
+    skos:definition "A building on a statutory list of buildings of special interest."@en ;
+    skos:broader ex:Building ;
+    skos:inScheme ex:BuildingScheme ;
+    skos:inScheme ex:HeritageScheme ;
+    skos:topConceptOf ex:HeritageScheme ;
+    skos:exactMatch <http://example.net/heritage#Listed> .
+
+#
+# A concept with no scheme membership at all — must still be documented.
+#
+
+ex:Outbuilding a skos:Concept ;
+    skos:prefLabel "Outbuilding"@en ;
+    skos:definition "A detached building subordinate to a main building."@en .
+
+#
+# Punning: also an owl:Class. Classes keep their class page; the concept
+# routing must not produce a second page for the same subject.
+#
+
+ex:Warehouse a skos:Concept , owl:Class ;
+    rdfs:label "Warehouse"@en ;
+    skos:prefLabel "Warehouse"@en ;
+    skos:definition "A building for storing goods."@en ;
+    skos:inScheme ex:BuildingScheme .
+
+#
+# A deliberate two-node broader cycle. SKOS does not promise acyclicity;
+# the hierarchy walker must terminate rather than recurse forever.
+#
+
+ex:LoopA a skos:Concept ;
+    skos:prefLabel "Loop A"@en ;
+    skos:broader ex:LoopB ;
+    skos:inScheme ex:BuildingScheme .
+
+ex:LoopB a skos:Concept ;
+    skos:prefLabel "Loop B"@en ;
+    skos:broader ex:LoopA ;
+    skos:inScheme ex:BuildingScheme .
+
+#
+# Non-SKOS context so the vocabulary exercises cross-referencing: a class,
+# a property and a plain instance that must stay in their own buckets.
+#
+
+ex:Site a owl:Class ;
+    rdfs:label "Site"@en .
+
+ex:hasClassification a owl:ObjectProperty ;
+    rdfs:label "has classification"@en ;
+    rdfs:domain ex:Site ;
+    rdfs:range ex:Building .
+
+ex:MainSite a ex:Site ;
+    rdfs:label "Main Site"@en ;
+    ex:hasClassification ex:Dwelling .

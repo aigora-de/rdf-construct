@@ -9,8 +9,13 @@ if TYPE_CHECKING:
     from ..config import DocsConfig
     from ..extractors import (
         ClassInfo,
+        ConceptInfo,
+        ConceptNode,
+        ConceptSchemeInfo,
         ExtractedEntities,
         InstanceInfo,
+        LabelGroup,
+        NoteValue,
         PropertyInfo,
         PropertyShapeInfo,
         ShapeInfo,
@@ -139,6 +144,10 @@ class MarkdownRenderer:
         lines.append(f"- **Annotation Properties:** {len(entities.annotation_properties)}")
         if entities.shapes and self.config.include_shapes:
             lines.append(f"- **Shapes:** {len(entities.shapes)}")
+        if entities.concepts and self.config.include_skos:
+            lines.append(f"- **Concepts:** {len(entities.concepts)}")
+        if entities.concept_schemes and self.config.include_skos:
+            lines.append(f"- **Concept Schemes:** {len(entities.concept_schemes)}")
         if entities.instances:
             lines.append(f"- **Instances:** {len(entities.instances)}")
         lines.append("")
@@ -195,6 +204,23 @@ class MarkdownRenderer:
                     lines.append(f"- {link} {kind_tags}")
                 else:
                     lines.append(f"- {link}")
+            lines.append("")
+
+        # SKOS vocabulary section (#63). Schemes first — they are the
+        # containers a reader navigates into.
+        if (entities.concepts or entities.concept_schemes) and self.config.include_skos:
+            lines.append("## SKOS Vocabulary")
+            lines.append("")
+            for scheme in entities.concept_schemes:
+                link = self._entity_link(
+                    scheme.qname, "skos_concept_scheme", scheme.label or scheme.qname
+                )
+                lines.append(f"- {link} `skos_concept_scheme`")
+            for concept in entities.concepts:
+                link = self._entity_link(
+                    concept.qname, "skos_concept", concept.label or concept.qname
+                )
+                lines.append(f"- {link} `skos_concept`")
             lines.append("")
 
         content = "\n".join(lines)
@@ -407,6 +433,19 @@ class MarkdownRenderer:
             if str(s.uri) == uri_str:
                 return self._entity_link(s.qname, "shape", s.label or s.qname)
 
+        # Check if it's a known SKOS concept or concept scheme (#63)
+        for concept in entities.concepts:
+            if str(concept.uri) == uri_str:
+                return self._entity_link(
+                    concept.qname, "skos_concept", concept.label or concept.qname
+                )
+
+        for scheme in entities.concept_schemes:
+            if str(scheme.uri) == uri_str:
+                return self._entity_link(
+                    scheme.qname, "skos_concept_scheme", scheme.label or scheme.qname
+                )
+
         # Fall back to extracting local name
         if "#" in uri_str:
             return f"`{uri_str.split('#')[-1]}`"
@@ -567,6 +606,284 @@ class MarkdownRenderer:
         from ..config import entity_to_path
 
         rel_path = entity_to_path(instance_info.qname, "instance", self.config, extension=".md")
+        return self._write_file(self.config.output_dir / rel_path, content)
+
+    def _render_label_table(self, labels: list["LabelGroup"]) -> list[str]:
+        """Render SKOS labels as a language-per-row Markdown table.
+
+        Returns the table's lines, or an empty list when there are no
+        labels (the caller adds surrounding blank lines).
+        """
+        if not labels:
+            return []
+
+        lines = [
+            "| Language | Preferred | Alternative | Hidden |",
+            "| --- | --- | --- | --- |",
+        ]
+        for group in labels:
+            language = group.language or "—"
+            lines.append(
+                f"| `{language}` | {', '.join(group.preferred)} "
+                f"| {', '.join(group.alternative)} | {', '.join(group.hidden)} |"
+            )
+        return lines
+
+    def _render_notes_table(self, notes: dict[str, list["NoteValue"]]) -> list[str]:
+        """Render the SKOS documentation properties as a Markdown table.
+
+        Language tags are kept alongside the value rather than discarded —
+        a French scope note and an English one are different content.
+        """
+        if not notes:
+            return []
+
+        lines = ["| Property | Value |", "| --- | --- |"]
+        for name, values in notes.items():
+            for value in values:
+                text = value.text.replace("|", "\\|")
+                tag = f" _({value.language})_" if value.language else ""
+                lines.append(f"| `skos:{name}` | {text}{tag} |")
+        return lines
+
+    def render_concept(
+        self,
+        concept_info: "ConceptInfo",
+        entities: "ExtractedEntities",
+    ) -> Path:
+        """Render a SKOS concept documentation page.
+
+        Args:
+            concept_info: Concept to render.
+            entities: All extracted entities.
+
+        Returns:
+            Path to the rendered file.
+        """
+        lines = []
+
+        lines.append(
+            self._frontmatter(
+                title=concept_info.label or concept_info.qname,
+                type="skos_concept",
+            )
+        )
+
+        lines.append(f"# {concept_info.label or concept_info.qname}")
+        lines.append("")
+        kind_labels = " ".join(f"`{kind}`" for kind in concept_info.kinds)
+        if kind_labels:
+            lines.append(f"**Kinds:** {kind_labels}")
+            lines.append("")
+        lines.append(f"**URI:** `{concept_info.uri}`")
+        lines.append("")
+
+        if concept_info.definition:
+            lines.append(concept_info.definition)
+            lines.append("")
+
+        label_table = self._render_label_table(concept_info.labels)
+        if label_table:
+            lines.append("## Labels")
+            lines.append("")
+            lines.extend(label_table)
+            lines.append("")
+
+        if concept_info.in_schemes or concept_info.top_concept_of:
+            lines.append("## Schemes")
+            lines.append("")
+            if concept_info.in_schemes:
+                joined = ", ".join(
+                    self._uri_to_display(uri, entities, "skos_concept_scheme")
+                    for uri in concept_info.in_schemes
+                )
+                lines.append(f"- **In scheme:** {joined}")
+            if concept_info.top_concept_of:
+                joined = ", ".join(
+                    self._uri_to_display(uri, entities, "skos_concept_scheme")
+                    for uri in concept_info.top_concept_of
+                )
+                lines.append(f"- **Top concept of:** {joined}")
+            lines.append("")
+
+        relations: list[tuple[str, list]] = []
+        if concept_info.broader:
+            relations.append(("Broader", concept_info.broader))
+        if concept_info.narrower:
+            relations.append(("Narrower", concept_info.narrower))
+        if concept_info.related:
+            relations.append(("Related", concept_info.related))
+        if relations:
+            lines.append("## Semantic Relations")
+            lines.append("")
+            for label, uris in relations:
+                joined = ", ".join(
+                    self._uri_to_display(uri, entities, "skos_concept") for uri in uris
+                )
+                lines.append(f"- **{label}:** {joined}")
+            lines.append("")
+
+        notes_table = self._render_notes_table(concept_info.notes)
+        if notes_table:
+            lines.append("## Notes")
+            lines.append("")
+            lines.extend(notes_table)
+            lines.append("")
+
+        if concept_info.types:
+            lines.append("## Types")
+            lines.append("")
+            for uri in concept_info.types:
+                lines.append(f"- {self._uri_to_display(uri, entities)}")
+            lines.append("")
+
+        # Mappings (skos:exactMatch and friends) and anything else asserted
+        # about the concept — visible rather than dropped.
+        if concept_info.properties:
+            lines.append("## Other Properties")
+            lines.append("")
+            for pred, values in concept_info.properties.items():
+                pred_name = (
+                    str(pred).split("#")[-1] if "#" in str(pred) else str(pred).split("/")[-1]
+                )
+                for value in values:
+                    if isinstance(value, str):
+                        lines.append(f"- **{pred_name}:** {value}")
+                    else:
+                        lines.append(f"- **{pred_name}:** {self._uri_to_display(value, entities)}")
+            lines.append("")
+
+        if concept_info.annotations:
+            lines.append("## Annotations")
+            lines.append("")
+            for name, values in concept_info.annotations.items():
+                for value in values:
+                    lines.append(f"- **{name}:** {value}")
+            lines.append("")
+
+        content = "\n".join(lines)
+        from ..config import entity_to_path
+
+        rel_path = entity_to_path(concept_info.qname, "skos_concept", self.config, extension=".md")
+        return self._write_file(self.config.output_dir / rel_path, content)
+
+    def render_concept_scheme(
+        self,
+        scheme_info: "ConceptSchemeInfo",
+        entities: "ExtractedEntities",
+    ) -> Path:
+        """Render a SKOS concept scheme documentation page.
+
+        Args:
+            scheme_info: Concept scheme to render.
+            entities: All extracted entities.
+
+        Returns:
+            Path to the rendered file.
+        """
+        from ..extractors import build_concept_tree
+
+        lines = []
+
+        lines.append(
+            self._frontmatter(
+                title=scheme_info.label or scheme_info.qname,
+                type="skos_concept_scheme",
+            )
+        )
+
+        lines.append(f"# {scheme_info.label or scheme_info.qname}")
+        lines.append("")
+        kind_labels = " ".join(f"`{kind}`" for kind in scheme_info.kinds)
+        if kind_labels:
+            lines.append(f"**Kinds:** {kind_labels}")
+            lines.append("")
+        lines.append(f"**URI:** `{scheme_info.uri}`")
+        lines.append("")
+
+        if scheme_info.definition:
+            lines.append(scheme_info.definition)
+            lines.append("")
+
+        label_table = self._render_label_table(scheme_info.labels)
+        if label_table:
+            lines.append("## Labels")
+            lines.append("")
+            lines.extend(label_table)
+            lines.append("")
+
+        if scheme_info.top_concepts:
+            lines.append("## Top Concepts")
+            lines.append("")
+            for uri in scheme_info.top_concepts:
+                lines.append(f"- {self._uri_to_display(uri, entities, 'skos_concept')}")
+            lines.append("")
+
+        tree = build_concept_tree(entities.concepts, scheme_info.uri)
+        if tree:
+            lines.append("## Concept Hierarchy")
+            lines.append("")
+
+            def render_tree(nodes: list["ConceptNode"], indent: int = 0) -> None:
+                prefix = "  " * indent
+                for node in nodes:
+                    link = self._entity_link(
+                        node.concept.qname,
+                        "skos_concept",
+                        node.concept.label or node.concept.qname,
+                    )
+                    lines.append(f"{prefix}- {link}")
+                    if node.children:
+                        render_tree(node.children, indent + 1)
+
+            render_tree(tree)
+            lines.append("")
+
+        if scheme_info.concepts:
+            lines.append("## Concepts in this Scheme")
+            lines.append("")
+            for uri in scheme_info.concepts:
+                lines.append(f"- {self._uri_to_display(uri, entities, 'skos_concept')}")
+            lines.append("")
+
+        notes_table = self._render_notes_table(scheme_info.notes)
+        if notes_table:
+            lines.append("## Notes")
+            lines.append("")
+            lines.extend(notes_table)
+            lines.append("")
+
+        if scheme_info.properties:
+            lines.append("## Other Properties")
+            lines.append("")
+            for pred, values in scheme_info.properties.items():
+                pred_name = (
+                    str(pred).split("#")[-1] if "#" in str(pred) else str(pred).split("/")[-1]
+                )
+                for value in values:
+                    if isinstance(value, str):
+                        lines.append(f"- **{pred_name}:** {value}")
+                    else:
+                        lines.append(f"- **{pred_name}:** {self._uri_to_display(value, entities)}")
+            lines.append("")
+
+        if scheme_info.annotations:
+            lines.append("## Annotations")
+            lines.append("")
+            for name, values in scheme_info.annotations.items():
+                for value in values:
+                    lines.append(f"- **{name}:** {value}")
+            lines.append("")
+
+        content = "\n".join(lines)
+        from ..config import entity_to_path
+
+        rel_path = entity_to_path(
+            scheme_info.qname,
+            "skos_concept_scheme",
+            self.config,
+            extension=".md",
+        )
         return self._write_file(self.config.output_dir / rel_path, content)
 
     def _render_property_shape_table(
@@ -835,6 +1152,8 @@ class MarkdownRenderer:
         lines.append("- [Datatype Properties](#datatype-properties)")
         if entities.shapes and self.config.include_shapes:
             lines.append("- [Shapes](#shapes)")
+        if (entities.concepts or entities.concept_schemes) and self.config.include_skos:
+            lines.append("- [SKOS Vocabulary](#skos-vocabulary)")
         lines.append("- [Namespaces](#namespaces)")
         lines.append("")
 
@@ -895,6 +1214,56 @@ class MarkdownRenderer:
                     lines.append("")
                 if "node_shape" in s.kinds and s.properties:
                     lines.append(f"**Property constraints:** {len(s.properties)}")
+                    lines.append("")
+
+        # SKOS vocabulary (#63)
+        if (entities.concepts or entities.concept_schemes) and self.config.include_skos:
+            lines.append("## SKOS Vocabulary")
+            lines.append("")
+            for scheme in entities.concept_schemes:
+                lines.append(f"### {scheme.label or scheme.qname}")
+                lines.append("")
+                lines.append("**Kinds:** `skos_concept_scheme`")
+                lines.append("")
+                lines.append(f"**URI:** `{scheme.uri}`")
+                lines.append("")
+                if scheme.definition:
+                    lines.append(scheme.definition)
+                    lines.append("")
+                if scheme.concepts:
+                    lines.append(f"**Concepts:** {len(scheme.concepts)}")
+                    lines.append("")
+            for concept in entities.concepts:
+                lines.append(f"### {concept.label or concept.qname}")
+                lines.append("")
+                kind_tags = " ".join(f"`{kind}`" for kind in concept.kinds)
+                lines.append(f"**Kinds:** {kind_tags}")
+                lines.append("")
+                lines.append(f"**URI:** `{concept.uri}`")
+                lines.append("")
+                if concept.definition:
+                    lines.append(concept.definition)
+                    lines.append("")
+                if concept.broader:
+                    joined = ", ".join(
+                        self._uri_to_display(uri, entities, "skos_concept")
+                        for uri in concept.broader
+                    )
+                    lines.append(f"**Broader:** {joined}")
+                    lines.append("")
+                if concept.narrower:
+                    joined = ", ".join(
+                        self._uri_to_display(uri, entities, "skos_concept")
+                        for uri in concept.narrower
+                    )
+                    lines.append(f"**Narrower:** {joined}")
+                    lines.append("")
+                if concept.in_schemes:
+                    joined = ", ".join(
+                        self._uri_to_display(uri, entities, "skos_concept_scheme")
+                        for uri in concept.in_schemes
+                    )
+                    lines.append(f"**In scheme:** {joined}")
                     lines.append("")
 
         # Namespaces

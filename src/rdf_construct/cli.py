@@ -1193,14 +1193,25 @@ def diff(
     help="Exclude SHACL shapes from documentation",
 )
 @click.option(
+    "--no-skos",
+    is_flag=True,
+    help="Exclude SKOS concepts and concept schemes from documentation",
+)
+@click.option(
     "--include",
     type=str,
-    help="Include only these entity types (comma-separated: classes,properties,instances,shapes)",
+    help=(
+        "Include only these entity types "
+        "(comma-separated: classes,properties,instances,shapes,concepts)"
+    ),
 )
 @click.option(
     "--exclude",
     type=str,
-    help="Exclude these entity types (comma-separated: classes,properties,instances,shapes)",
+    help=(
+        "Exclude these entity types "
+        "(comma-separated: classes,properties,instances,shapes,concepts)"
+    ),
 )
 def docs(
     sources: tuple[Path, ...],
@@ -1213,6 +1224,7 @@ def docs(
     no_search: bool,
     no_instances: bool,
     no_shapes: bool,
+    no_skos: bool,
     include: str | None,
     exclude: str | None,
 ):
@@ -1263,6 +1275,7 @@ def docs(
     doc_config.include_search = not no_search
     doc_config.include_instances = not no_instances
     doc_config.include_shapes = not no_shapes
+    doc_config.include_skos = not no_skos
 
     if template:
         doc_config.template_dir = template
@@ -1282,6 +1295,9 @@ def docs(
         )
         doc_config.include_instances = "instances" in types
         doc_config.include_shapes = "shapes" in types
+        # One toggle covers both SKOS kinds; "concepts", "concept_schemes"
+        # and "skos" are accepted spellings of it.
+        doc_config.include_skos = any(t in types for t in ("concepts", "concept_schemes", "skos"))
 
     if exclude:
         types = [t.strip().lower() for t in exclude.split(",")]
@@ -1295,6 +1311,8 @@ def docs(
             doc_config.include_instances = False
         if "shapes" in types:
             doc_config.include_shapes = False
+        if any(t in types for t in ("concepts", "concept_schemes", "skos")):
+            doc_config.include_skos = False
 
     # Load RDF sources
     click.echo(f"Loading {len(sources)} source file(s)...")
@@ -1336,6 +1354,11 @@ def docs(
     click.echo(f"  Classes: {result.classes_count}")
     click.echo(f"  Properties: {result.properties_count}")
     click.echo(f"  Instances: {result.instances_count}")
+    if result.shapes_count:
+        click.echo(f"  Shapes: {result.shapes_count}")
+    if result.concepts_count or result.concept_schemes_count:
+        click.echo(f"  Concepts: {result.concepts_count}")
+        click.echo(f"  Concept schemes: {result.concept_schemes_count}")
 
     # Show entry point
     if doc_config.format == "html":

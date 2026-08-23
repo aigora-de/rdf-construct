@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **First-class SKOS support in the `docs` command** (#63). `skos:Concept` and
+  `skos:ConceptScheme` are now rendered as a distinct entity type alongside
+  Classes, Properties, Instances and Shapes, in HTML, Markdown and JSON output:
+  - Concepts and schemes get their own pages under `concepts/`, sharing the
+    directory and distinguished by kind badges (`skos concept`,
+    `skos concept scheme`) — the arrangement NodeShapes and PropertyShapes
+    already have in `shapes/`
+  - Labels are grouped **by language**: one row per language tag carrying
+    `skos:prefLabel`, `skos:altLabel` and `skos:hiddenLabel` together, rather
+    than rendering as duplicate triples
+  - All **seven** SKOS documentation properties render with their language
+    tags — `skos:definition`, `skos:scopeNote`, `skos:example`, `skos:note`,
+    `skos:historyNote`, `skos:editorialNote` and `skos:changeNote` (the
+    seventh is beyond the six the issue listed, but the SKOS spec defines it
+    alongside them and it was already being collected)
+  - `skos:broader` / `skos:narrower` render as a tree on the scheme page and
+    as inline cross-links on each concept page. **`skos:broader` is not
+    treated as `rdfs:subClassOf`** — nothing is inherited along it; the tree
+    is a navigation aid
+  - `skos:broader`/`skos:narrower` are materialised **in both directions**,
+    since SKOS declares them inverses, so a vocabulary that asserts only one
+    direction documents the same hierarchy. `skos:related` is treated as
+    symmetric and `skos:topConceptOf` as implying `skos:inScheme`, which it is
+    a sub-property of
+  - **Cyclic `skos:broader` is tolerated.** SKOS does not promise acyclicity:
+    the tree walker never expands a concept twice on one path, and any concept
+    a cycle leaves unreachable from a root is promoted to a root rather than
+    silently dropped
+  - `skos:inScheme` membership renders on both sides — the concept links to
+    its scheme, the scheme lists its members. A concept in **no** scheme is
+    still documented
+  - Mappings (`skos:exactMatch` and friends) and any other predicate get a
+    visible key-value fallback rather than being dropped
+  - Search index entries cover concepts and schemes, indexing alternative and
+    hidden labels across all languages — hidden labels exist to catch
+    misspellings, which is exactly what a search index is for
+  - New `--no-skos` flag; `concepts` accepted in `--include` / `--exclude`;
+    new `include_skos` config key. One toggle covers both SKOS kinds
+  - `skos:Collection`, `skos:OrderedCollection` and SKOS-XL are deferred —
+    no real-world material in the test set exercises them
+- New `EntityKind` members `SKOS_CONCEPT` and `SKOS_CONCEPT_SCHEME`, and new
+  `ConceptInfo`, `ConceptSchemeInfo`, `ConceptNode`, `LabelGroup` and
+  `NoteValue` dataclasses, all exported from `rdf_construct.docs` along with
+  `build_concept_tree()`
+- New tracked SKOS test fixture (`tests/fixtures/docs/skos_vocabulary.ttl`).
+  The repository previously contained no `skos:Concept`, `skos:ConceptScheme`,
+  `skos:broader`, `skos:narrower` or `skos:inScheme` at all, so there was
+  nothing to demonstrate the feature against. It deliberately includes a
+  `skos:broader` cycle, which is why it is a fixture rather than a shipped
+  example
+- SKOS badge colours, chosen against measured figures rather than by eye:
+  `skos_concept` `#1d4ed8` (6.70:1 against white) and `skos_concept_scheme`
+  `#1e3a8a` (10.36:1), both clearing WCAG AA for normal text. The indigo
+  family originally proposed was rejected on measurement — it sits 11.3
+  CIEDE2000 units from the existing object-property violet (10.7 under
+  simulated deuteranopia); blue keeps 15.3 / 17.7 / 21.3 (normal /
+  deuteranopia / protanopia). Its weakest axis is tritanopia at 6.0 against
+  the instance emerald, where the badge's text label carries the category
+
+### Changed
+- **Breaking (JSON output):** `skos:Concept` and `skos:ConceptScheme` subjects
+  have left the `instances` array for new top-level `concepts` and
+  `concept_schemes` arrays, mirroring what v0.5.0 did for shapes. The
+  `statistics` block gains `concepts` and `concept_schemes` counts. Consumers
+  reading `instances` for SKOS entities must read the new arrays
+- A subject typed both `skos:Concept` and `owl:Class` (or a property, or a
+  SHACL shape) keeps its existing page and does not gain a second one: classes,
+  properties and shapes outrank SKOS in routing. It remains listed as a member
+  of its scheme, cross-linked to the page it does have
+
 ## [0.5.0] - 2026-08-22
 
 ### Added

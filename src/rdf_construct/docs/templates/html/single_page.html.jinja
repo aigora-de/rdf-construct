@@ -15,6 +15,9 @@
         {% if shapes and config.include_shapes %}
         <li><a href="#shapes">Shapes</a></li>
         {% endif %}
+        {% if (concepts or concept_schemes) and config.include_skos %}
+        <li><a href="#skos">SKOS Vocabulary</a></li>
+        {% endif %}
         {% if instances and config.include_instances %}
         <li><a href="#instances">Instances</a></li>
         {% endif %}
@@ -35,6 +38,12 @@
     <div class="stat-card">
         <div class="number">{{ shapes | length }}</div>
         <div class="label">Shapes</div>
+    </div>
+    {% endif %}
+    {% if concepts and config.include_skos %}
+    <div class="stat-card">
+        <div class="number">{{ concepts | length }}</div>
+        <div class="label">Concepts</div>
     </div>
     {% endif %}
     {% if instances %}
@@ -158,6 +167,56 @@
         {% endif %}
         {% if 'node_shape' in shape.kinds and shape.properties %}
         <p><strong>Property constraints:</strong> {{ shape.properties | length }}</p>
+        {% endif %}
+    </article>
+    {% endfor %}
+</section>
+{% endif %}
+
+{% if (concepts or concept_schemes) and config.include_skos %}
+<section id="skos">
+    <h2>SKOS Vocabulary</h2>
+    {% for scheme in concept_schemes %}
+    <article class="entity-card" id="scheme-{{ scheme.qname | qname_local }}">
+        <h3>
+            {{ scheme.label or scheme.qname }}
+            <span class="entity-type skos_concept_scheme">skos concept scheme</span>
+        </h3>
+        <p class="uri">{{ scheme.uri }}</p>
+        {% if scheme.definition %}
+        <p class="definition">{{ scheme.definition }}</p>
+        {% endif %}
+        {% if scheme.concepts %}
+        <p><strong>Concepts:</strong> {{ scheme.concepts | length }}</p>
+        {% endif %}
+    </article>
+    {% endfor %}
+    {% for concept in concepts %}
+    <article class="entity-card" id="concept-{{ concept.qname | qname_local }}">
+        <h3>
+            {{ concept.label or concept.qname }}
+            {% for kind in concept.kinds %}
+            <span class="entity-type {{ kind }}">{{ kind | replace('_', ' ') }}</span>
+            {% endfor %}
+        </h3>
+        <p class="uri">{{ concept.uri }}</p>
+        {% if concept.definition %}
+        <p class="definition">{{ concept.definition }}</p>
+        {% endif %}
+        {% if concept.broader %}
+        <p><strong>Broader:</strong>
+        {% for uri in concept.broader %}<code>{{ uri }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+        </p>
+        {% endif %}
+        {% if concept.narrower %}
+        <p><strong>Narrower:</strong>
+        {% for uri in concept.narrower %}<code>{{ uri }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+        </p>
+        {% endif %}
+        {% if concept.in_schemes %}
+        <p><strong>In scheme:</strong>
+        {% for uri in concept.in_schemes %}<code>{{ uri }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+        </p>
         {% endif %}
     </article>
     {% endfor %}
