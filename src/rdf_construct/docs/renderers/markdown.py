@@ -570,6 +570,12 @@ class MarkdownRenderer:
 
         lines.append(f"# {instance_info.label or instance_info.qname}")
         lines.append("")
+        # All kinds, mirroring the HTML badges — an explicit
+        # owl:NamedIndividual declaration is visible here too (#64).
+        kind_labels = " ".join(f"`{kind}`" for kind in instance_info.kinds)
+        if kind_labels:
+            lines.append(f"**Kinds:** {kind_labels}")
+            lines.append("")
         lines.append(f"**URI:** `{instance_info.uri}`")
         lines.append("")
 

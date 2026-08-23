@@ -29,8 +29,9 @@ from rdf_construct.docs.config import (
 from rdf_construct.docs.search import extract_keywords, generate_search_index
 
 
-# Test namespace
+# Test namespaces
 EX = Namespace("http://example.org/")
+EX_NI = Namespace("http://example.org/ni#")
 
 
 @pytest.fixture
@@ -1722,7 +1723,8 @@ class TestSKOSRendering:
         DocsGenerator(config).generate(skos_vocabulary)
 
         data = json.loads((output_dir / "concepts" / "Building.json").read_text())
-        assert data["kinds"] == ["skos_concept"]
+        # ex:Building is also owl:NamedIndividual, so it carries both kinds (#64)
+        assert data["kinds"] == ["skos_concept", "named_individual"]
         assert {"labels", "notes", "broader", "narrower", "in_schemes"} <= set(data)
 
         french = next(group for group in data["labels"] if group["language"] == "fr")
@@ -1809,7 +1811,7 @@ class TestSKOSSearchIndex:
         entries = generate_search_index(entities, DocsConfig())
 
         entry = next(e for e in entries if e.qname == "ex:Building")
-        assert entry.kinds == ["skos_concept"]
+        assert entry.kinds == ["skos_concept", "named_individual"]
         assert entry.url == "concepts/Building.html"
 
     def test_alt_and_hidden_labels_indexed(self, skos_vocabulary: Graph):
@@ -1877,3 +1879,236 @@ class TestSKOSRouting:
         assert entity_to_path("ex:Building", EntityKind.SKOS_CONCEPT, config) == Path(
             "concepts/Building.html"
         )
+
+
+# ---------------------------------------------------------------------------
+# owl:NamedIndividual badging — issue #64 / milestone v0.6.0 stage 3
+# ---------------------------------------------------------------------------
+
+
+NAMED_INDIVIDUAL_FIXTURE = Path(__file__).parent / "fixtures" / "docs" / "named_individuals.ttl"
+
+
+@pytest.fixture
+def named_individual_ontology() -> Graph:
+    """Load the tracked owl:NamedIndividual test ontology.
+
+    No RDF file in the repository contained ``owl:NamedIndividual`` at all
+    before #64. The fixture carries the three cases the badge turns on:
+    class-typed *and* declared (``ex:Alice``), class-typed only
+    (``ex:Bob``, the false-positive guard) and declared with no class
+    typing at all (``ex:Carol``).
+    """
+    g = Graph()
+    g.parse(NAMED_INDIVIDUAL_FIXTURE, format="turtle")
+    return g
+
+
+def _instance(entities: ExtractedEntities, local_name: str):
+    """Find an instance by the local part of its qname."""
+    return next(i for i in entities.instances if i.qname.split(":")[-1] == local_name)
+
+
+class TestNamedIndividualExtraction:
+    """Tests for the NAMED_INDIVIDUAL kind."""
+
+    def test_explicit_declaration_carries_the_kind(self, named_individual_ontology: Graph):
+        """An entity typed both by its class and owl:NamedIndividual gets both kinds."""
+        entities = extract_all(named_individual_ontology)
+        alice = _instance(entities, "Alice")
+        assert alice.kinds == [EntityKind.INSTANCE, EntityKind.NAMED_INDIVIDUAL]
+
+    def test_redundant_declaration_still_shows(self, named_individual_ontology: Graph):
+        """The kind records what the source asserts, not what is inferable.
+
+        ``ex:Alice`` is already an individual by virtue of her ``ex:Person``
+        typing, so the ``owl:NamedIndividual`` triple is redundant in OWL DL
+        terms. It is surfaced anyway: the redundancy tells a reader the
+        author was explicit, which is the same policy ``kinds`` follows
+        everywhere else.
+        """
+        entities = extract_all(named_individual_ontology)
+        alice = _instance(entities, "Alice")
+        assert EntityKind.NAMED_INDIVIDUAL in alice.kinds
+        assert str(EX_NI.Person) in [str(t) for t in alice.types]
+
+    def test_class_typed_only_does_not_get_the_kind(self, named_individual_ontology: Graph):
+        """The false-positive guard: no declaration, no badge."""
+        entities = extract_all(named_individual_ontology)
+        bob = _instance(entities, "Bob")
+        assert bob.kinds == [EntityKind.INSTANCE]
+        assert EntityKind.NAMED_INDIVIDUAL not in bob.kinds
+
+    def test_declaration_alone_is_documented(self, named_individual_ontology: Graph):
+        """An entity typed *only* owl:NamedIndividual is still an instance.
+
+        With no class typing, the declaration is the only thing saying this
+        is an individual — so it must neither be dropped nor land in some
+        other bucket.
+        """
+        entities = extract_all(named_individual_ontology)
+        carol = _instance(entities, "Carol")
+        assert carol.kinds == [EntityKind.INSTANCE, EntityKind.NAMED_INDIVIDUAL]
+        assert [str(t) for t in carol.types] == [str(OWL.NamedIndividual)]
+
+    def test_classes_and_properties_do_not_get_the_kind(self, named_individual_ontology: Graph):
+        """Classes and properties are not individuals; nothing badges them."""
+        entities = extract_all(named_individual_ontology)
+        for class_info in entities.classes:
+            assert EntityKind.NAMED_INDIVIDUAL not in class_info.kinds
+        for prop in entities.properties:
+            assert EntityKind.NAMED_INDIVIDUAL not in prop.kinds
+
+    def test_shape_that_is_also_a_named_individual(self):
+        """Stage 1 routed such a shape to shapes/; it now records the declaration.
+
+        The routing is unchanged — the shape is documented once, under
+        Shapes, and does not appear in Instances.
+        """
+        g = Graph()
+        g.bind("ex", EX)
+        g.add((EX.MyShape, RDF.type, SH.NodeShape))
+        g.add((EX.MyShape, RDF.type, OWL.NamedIndividual))
+
+        entities = extract_all(g)
+        shape = next(s for s in entities.shapes if s.qname == "ex:MyShape")
+        assert shape.kinds == [
+            EntityKind.SHAPE,
+            EntityKind.NODE_SHAPE,
+            EntityKind.NAMED_INDIVIDUAL,
+        ]
+        assert "ex:MyShape" not in {i.qname for i in entities.instances}
+
+    def test_concept_that_is_also_a_named_individual(self, skos_vocabulary: Graph):
+        """The SKOS multi-kind case: badge added, routing unchanged."""
+        entities = extract_all(skos_vocabulary)
+        building = _concept(entities, "Building")
+        assert building.kinds == [EntityKind.SKOS_CONCEPT, EntityKind.NAMED_INDIVIDUAL]
+        assert "ex:Building" not in {i.qname for i in entities.instances}
+
+    def test_concept_without_the_declaration_is_unaffected(self, skos_vocabulary: Graph):
+        entities = extract_all(skos_vocabulary)
+        dwelling = _concept(entities, "Dwelling")
+        assert dwelling.kinds == [EntityKind.SKOS_CONCEPT]
+
+
+class TestNamedIndividualRendering:
+    """Tests for the badge in HTML, Markdown and JSON output."""
+
+    def test_html_instance_badge(self, named_individual_ontology: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(named_individual_ontology)
+
+        alice = (output_dir / "instances" / "Alice.html").read_text()
+        assert 'class="entity-type named_individual"' in alice
+        assert "named individual" in alice
+
+    def test_html_no_badge_without_declaration(
+        self, named_individual_ontology: Graph, output_dir: Path
+    ):
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(named_individual_ontology)
+
+        bob = (output_dir / "instances" / "Bob.html").read_text()
+        assert 'class="entity-type named_individual"' not in bob
+        assert 'class="entity-type instance"' in bob
+
+    def test_html_badge_css_present(self, named_individual_ontology: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(named_individual_ontology)
+
+        css = (output_dir / "assets" / "style.css").read_text()
+        assert ".entity-type.named_individual { background: #047857; }" in css
+
+    def test_html_index_shows_the_badge(self, named_individual_ontology: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(named_individual_ontology)
+
+        html = (output_dir / "index.html").read_text()
+        assert 'class="entity-type named_individual"' in html
+
+    def test_html_single_page_shows_the_badge(
+        self, named_individual_ontology: Graph, output_dir: Path
+    ):
+        config = DocsConfig(output_dir=output_dir, format="html", single_page=True)
+        DocsGenerator(config).generate(named_individual_ontology)
+
+        html = (output_dir / "index.html").read_text()
+        assert 'class="entity-type named_individual"' in html
+
+    def test_markdown_kinds_line(self, named_individual_ontology: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="markdown")
+        DocsGenerator(config).generate(named_individual_ontology)
+
+        alice = (output_dir / "instances" / "Alice.md").read_text()
+        assert "**Kinds:** `instance` `named_individual`" in alice
+
+        bob = (output_dir / "instances" / "Bob.md").read_text()
+        assert "**Kinds:** `instance`" in bob
+        assert "named_individual" not in bob
+
+    def test_json_kinds_array(self, named_individual_ontology: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="json")
+        DocsGenerator(config).generate(named_individual_ontology)
+
+        alice = json.loads((output_dir / "instances" / "Alice.json").read_text())
+        assert alice["kinds"] == ["instance", "named_individual"]
+
+        bob = json.loads((output_dir / "instances" / "Bob.json").read_text())
+        assert bob["kinds"] == ["instance"]
+
+    def test_json_no_new_top_level_array(self, named_individual_ontology: Graph, output_dir: Path):
+        """Named individuals stay in `instances` — this stage is not breaking."""
+        config = DocsConfig(output_dir=output_dir, format="json")
+        DocsGenerator(config).generate(named_individual_ontology)
+
+        data = json.loads((output_dir / "index.json").read_text())
+        assert "named_individuals" not in data
+        assert {"ex:Alice", "ex:Bob", "ex:Carol"} <= {i["qname"] for i in data["instances"]}
+
+    def test_markdown_concept_shows_both_kinds(self, skos_vocabulary: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="markdown")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        md = (output_dir / "concepts" / "Building.md").read_text()
+        assert "**Kinds:** `skos_concept` `named_individual`" in md
+
+
+class TestNamedIndividualSearchIndex:
+    """Tests for the search index treatment."""
+
+    def test_kinds_field_populated(self, named_individual_ontology: Graph):
+        entities = extract_all(named_individual_ontology)
+        entries = generate_search_index(entities, DocsConfig())
+
+        alice = next(e for e in entries if e.qname == "ex:Alice")
+        assert alice.kinds == ["instance", "named_individual"]
+        assert alice.entity_type == "instance"
+
+    def test_kind_is_searchable(self, named_individual_ontology: Graph):
+        entities = extract_all(named_individual_ontology)
+        entries = generate_search_index(entities, DocsConfig())
+
+        alice = next(e for e in entries if e.qname == "ex:Alice")
+        assert "named_individual" in alice.keywords
+
+        bob = next(e for e in entries if e.qname == "ex:Bob")
+        assert "named_individual" not in bob.keywords
+
+    def test_no_new_entity_type(self, named_individual_ontology: Graph):
+        """Named individuals are not a separate search bucket."""
+        entities = extract_all(named_individual_ontology)
+        entries = generate_search_index(entities, DocsConfig())
+
+        assert not [e for e in entries if e.entity_type == "named_individual"]
+
+
+class TestNamedIndividualEnum:
+    """The new enum member follows the same str-mixin contract."""
+
+    def test_value_and_str(self):
+        assert EntityKind.NAMED_INDIVIDUAL == "named_individual"
+        assert str(EntityKind.NAMED_INDIVIDUAL) == "named_individual"
+
+    def test_json_serialises_as_plain_string(self):
+        assert json.dumps(EntityKind.NAMED_INDIVIDUAL) == '"named_individual"'

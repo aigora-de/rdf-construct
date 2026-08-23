@@ -1,0 +1,46 @@
+@prefix ex:   <http://example.org/ni#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+#
+# Test material for owl:NamedIndividual badging (issue #64).
+#
+# No RDF file in this repository contained owl:NamedIndividual at all
+# before this, so these are the three cases the badge turns on:
+#
+#   ex:Alice   — class-typed *and* explicitly owl:NamedIndividual. The
+#                common Protégé-generated shape, and the case where the
+#                declaration is redundant in OWL DL terms.
+#   ex:Bob     — class-typed only. The false-positive guard: no badge.
+#   ex:Carol   — owl:NamedIndividual and nothing else. No class typing at
+#                all, so the declaration is the only thing saying this is
+#                an individual. Must still be documented.
+#
+# ex:Person and ex:knows are here so the individuals have somewhere to
+# point and so the extractor has classes and properties to keep separate.
+#
+
+ex:NamedIndividualDemo a owl:Ontology ;
+    rdfs:label "Named Individual Demo"@en ;
+    rdfs:comment "Exercises explicit owl:NamedIndividual declarations."@en .
+
+ex:Person a owl:Class ;
+    rdfs:label "Person"@en .
+
+ex:knows a owl:ObjectProperty ;
+    rdfs:label "knows"@en ;
+    rdfs:domain ex:Person ;
+    rdfs:range ex:Person .
+
+ex:Alice a ex:Person , owl:NamedIndividual ;
+    rdfs:label "Alice"@en ;
+    rdfs:comment "Typed both by her class and as a named individual."@en ;
+    ex:knows ex:Bob .
+
+ex:Bob a ex:Person ;
+    rdfs:label "Bob"@en ;
+    rdfs:comment "Typed only by his class — carries no named-individual kind."@en .
+
+ex:Carol a owl:NamedIndividual ;
+    rdfs:label "Carol"@en ;
+    rdfs:comment "Declared only as a named individual, with no class typing."@en .
