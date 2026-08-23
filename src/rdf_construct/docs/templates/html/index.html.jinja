@@ -166,7 +166,9 @@
             <a href="{{ inst.qname | entity_url('instance') }}">
                 {{ inst.label or inst.qname }}
             </a>
-            <span class="entity-type instance">Instance</span>
+            {% for kind in inst.kinds %}
+            <span class="entity-type {{ kind }}">{{ kind | replace('_', ' ') }}</span>
+            {% endfor %}
         </li>
         {% endfor %}
     </ul>

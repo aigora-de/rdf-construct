@@ -66,6 +66,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   simulated deuteranopia); blue keeps 15.3 / 17.7 / 21.3 (normal /
   deuteranopia / protanopia). Its weakest axis is tritanopia at 6.0 against
   the instance emerald, where the badge's text label carries the category
+- **`owl:NamedIndividual` surfaced as a distinct kind** (#64). An entity
+  explicitly typed `owl:NamedIndividual` now carries a `named individual`
+  badge in HTML and Markdown, and `"named_individual"` in its `kinds` array
+  in JSON:
+  - This is a refinement on an entity's existing kinds, **not** a new
+    bucket. Named individuals stay where they were routed — an individual
+    under `instances/`, a SKOS concept under `concepts/`, a NodeShape under
+    `shapes/`. No new directory, no new top-level JSON array, no CLI flag,
+    and nothing breaking
+  - The badge shows whenever the declaration is **asserted**, including when
+    it is redundant in OWL DL terms (an entity that already has a class
+    typing). `kinds` records what the source says rather than what a
+    reasoner could infer, consistently with every other kind — and the
+    redundancy is itself information: it says the author was explicit
+  - An entity typed *only* `owl:NamedIndividual`, with no class typing at
+    all, is documented as an instance carrying the kind — that declaration
+    is the only thing marking it as an individual
+  - No false positives: an entity typed only by its class carries just
+    `["instance"]`. Classes and properties never gain the kind
+  - Searchable — the kind joins the entity's search keywords, so a literal
+    search for `named_individual` finds them. The search `entity_type` is
+    unchanged, so named individuals are not a separate search bucket
+  - `rdfs:Datatype` and `owl:DeprecatedClass` / `owl:DeprecatedProperty`
+    remain out of scope. Deprecation is orthogonal to entity kind and needs
+    its own design
+- New `EntityKind` member `NAMED_INDIVIDUAL`, and a new tracked fixture
+  (`tests/fixtures/docs/named_individuals.ttl`) — the repository previously
+  contained no `owl:NamedIndividual` in any RDF file
+- Named-individual badge colour `#047857`, 5.48:1 against white (clears
+  WCAG AA), a deeper emerald than the `#10b981` instance badge it sits
+  beside so the two read as one family — 21.7 CIEDE2000 units apart in
+  normal vision, 15.3 under simulated deuteranopia
 
 ### Changed
 - **Breaking (JSON output):** `skos:Concept` and `skos:ConceptScheme` subjects

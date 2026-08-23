@@ -4,7 +4,14 @@
 
 {% block content %}
 <article class="entity-card">
-    <h1>{{ instance_info.label or instance_info.qname }} <span class="entity-type instance">Instance</span></h1>
+    <h1>
+        {{ instance_info.label or instance_info.qname }}
+        {# Every kind, not just "instance": an explicit owl:NamedIndividual
+           declaration shows as its own badge (#64). #}
+        {% for kind in instance_info.kinds %}
+        <span class="entity-type {{ kind }}">{{ kind | replace('_', ' ') }}</span>
+        {% endfor %}
+    </h1>
     <p class="uri">{{ instance_info.uri }}</p>
 
     {% if instance_info.definition %}

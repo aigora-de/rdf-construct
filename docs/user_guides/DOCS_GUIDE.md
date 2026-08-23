@@ -143,10 +143,11 @@ their own pages; blank-node PropertyShapes attached to a NodeShape via
 `sh:property` are rendered inline on the parent shape's page.
 
 A NodeShape that is also typed as `owl:NamedIndividual` is treated as a
-shape (it appears in the Shapes section, not in Instances). The
-`kinds` field on each shape entry carries the full multi-kind list so
-JSON consumers can distinguish, for example, an
-`owl:NamedIndividual`-flagged NodeShape from a plain one.
+shape (it appears in the Shapes section, not in Instances) and carries
+the `named individual` badge as well. The `kinds` field on each shape
+entry carries the full multi-kind list so JSON consumers can
+distinguish, for example, an `owl:NamedIndividual`-flagged NodeShape
+from a plain one.
 
 Twenty-one SHACL constraints get explicit per-format rendering:
 
@@ -350,6 +351,42 @@ Schema notes:
 Not covered: `skos:Collection` / `skos:OrderedCollection` and SKOS-XL
 (`skosxl:Label`). Both fall through to their existing treatment; file an
 issue if a real vocabulary needs them.
+
+## Named Individuals
+
+An entity explicitly typed `owl:NamedIndividual` carries a
+`named individual` badge alongside whatever else it is, and its `kinds`
+list gains `"named_individual"`.
+
+This is a *refinement*, not a bucket: named individuals stay exactly
+where they were routed. An individual stays under `instances/`, a
+concept under `concepts/`, a shape under `shapes/`. There is no
+`named_individuals/` directory, no new top-level JSON array and no CLI
+flag — nothing about this stage is a breaking change.
+
+What the badge tells you is that the **source says so**. Three cases:
+
+| Source | Kinds | Why |
+|---|---|---|
+| `:alice a :Person, owl:NamedIndividual` | `["instance", "named_individual"]` | Declared, though the class typing already implies it |
+| `:bob a :Person` | `["instance"]` | Nothing declared — no badge |
+| `:carol a owl:NamedIndividual` | `["instance", "named_individual"]` | The declaration is the only thing saying Carol is an individual |
+
+The badge shows on `:alice` even though the declaration is **redundant**
+in OWL DL terms — `:Person` already makes her an individual, and a
+reasoner would infer the `owl:NamedIndividual` typing anyway. It is
+surfaced because `kinds` records what the source asserts rather than
+what could be inferred, which is the same policy every other kind
+follows. In practice the distinction tells you something real: tools
+like Protégé emit these declarations consistently, hand-written
+ontologies often omit them, and seeing which you have is useful when
+merging the two.
+
+Not covered: `rdfs:Datatype`, and the deprecation markers
+`owl:DeprecatedClass` / `owl:DeprecatedProperty`. Deprecation is
+orthogonal to entity kind — a deprecated class and a deprecated property
+want different visual treatment — so it needs its own design rather than
+another kind.
 
 ## Command Options
 

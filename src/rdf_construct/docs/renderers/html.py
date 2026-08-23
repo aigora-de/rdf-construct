@@ -856,6 +856,16 @@ h4 { font-size: 1.1rem; }
 .entity-type.skos_concept { background: #1d4ed8; }
 .entity-type.skos_concept_scheme { background: #1e3a8a; }
 
+/* Named-individual badge (#64). A darker, deeper emerald than the plain
+   instance badge it sits beside, so the two read as one family the way
+   NodeShape and PropertyShape share red-rose:
+     .instance         #10b981  (existing)
+     .named_individual #047857  5.48:1 — clears WCAG AA against white
+   It stays 21.7 CIEDE2000 units from the instance emerald in normal
+   vision and 15.3 under simulated deuteranopia — related, not confusable
+   — and is further still from every other badge in the palette. */
+.entity-type.named_individual { background: #047857; }
+
 /* Language tag beside a SKOS label or note value. */
 .lang-tag {
     font-family: 'SF Mono', Consolas, monospace;

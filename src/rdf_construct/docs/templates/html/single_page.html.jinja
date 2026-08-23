@@ -228,7 +228,12 @@
     <h2>Instances</h2>
     {% for inst in instances %}
     <article class="entity-card" id="inst-{{ inst.qname | qname_local }}">
-        <h3>{{ inst.label or inst.qname }} <span class="entity-type instance">Instance</span></h3>
+        <h3>
+            {{ inst.label or inst.qname }}
+            {% for kind in inst.kinds %}
+            <span class="entity-type {{ kind }}">{{ kind | replace('_', ' ') }}</span>
+            {% endfor %}
+        </h3>
         <p class="uri">{{ inst.uri }}</p>
         {% if inst.definition %}
         <p class="definition">{{ inst.definition }}</p>

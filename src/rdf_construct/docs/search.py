@@ -283,8 +283,11 @@ def instance_to_search_entry(
         elif "/" in str(uri):
             keywords.extend(extract_keywords(str(uri).split("/")[-1]))
 
-    # Add "instance" as a keyword
+    # Add "instance" as a keyword, plus any further kinds the entity
+    # carries so a literal search for "named_individual" works (#64).
     keywords.append("instance")
+    for kind in instance_info.kinds:
+        keywords.append(str(kind))
 
     from .config import entity_to_url
 

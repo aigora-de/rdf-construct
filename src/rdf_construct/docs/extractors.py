@@ -58,6 +58,11 @@ class EntityKind(str, Enum):
     SKOS_CONCEPT = "skos_concept"
     SKOS_CONCEPT_SCHEME = "skos_concept_scheme"
 
+    # Explicit owl:NamedIndividual declaration (#64). A refinement on an
+    # entity's other kinds rather than a bucket of its own — named
+    # individuals stay wherever they were routed.
+    NAMED_INDIVIDUAL = "named_individual"
+
     def __str__(self) -> str:
         # Return the string value so f-strings and Jinja render
         # "shape" rather than "EntityKind.SHAPE". See class docstring.
@@ -583,6 +588,26 @@ def extract_ontology_info(graph: Graph) -> OntologyInfo:
     return info
 
 
+def _is_named_individual(graph: Graph, uri: URIRef) -> bool:
+    """Report whether ``owl:NamedIndividual`` is asserted on a subject.
+
+    The ``kinds`` list records what the source asserts rather than what a
+    reasoner could infer, so the answer is a plain lookup: no attempt is
+    made to decide whether the declaration is redundant. On an entity that
+    already has a class typing it *is* redundant in OWL DL terms — and
+    that redundancy is itself information, because it tells a reader the
+    author was explicit. See issue #64.
+
+    Args:
+        graph: RDF graph to query.
+        uri: Entity URI.
+
+    Returns:
+        True when the entity is explicitly typed ``owl:NamedIndividual``.
+    """
+    return (uri, RDF.type, OWL.NamedIndividual) in graph
+
+
 def extract_class_info(graph: Graph, uri: URIRef) -> ClassInfo:
     """Extract comprehensive information about a class.
 
@@ -743,6 +768,9 @@ def extract_instance_info(graph: Graph, uri: URIRef) -> InstanceInfo:
         definition=get_definition(graph, uri),
         annotations=get_annotations(graph, uri),
     )
+
+    if _is_named_individual(graph, uri):
+        info.kinds.append(EntityKind.NAMED_INDIVIDUAL)
 
     # Types
     for obj in graph.objects(uri, RDF.type):
@@ -957,6 +985,10 @@ def extract_shape_info(graph: Graph, uri: URIRef) -> ShapeInfo:
         info.kinds.append(EntityKind.NODE_SHAPE)
     if is_property_shape:
         info.kinds.append(EntityKind.PROPERTY_SHAPE)
+    # A shape can be declared an individual too — stage 1 routed such a
+    # shape to shapes/ but recorded nothing about the declaration (#64).
+    if _is_named_individual(graph, uri):
+        info.kinds.append(EntityKind.NAMED_INDIVIDUAL)
     # If neither (shouldn't happen since the caller only passes shape URIs)
     # we still mark it as a shape so renderers don't crash on missing kind.
 
@@ -1216,6 +1248,9 @@ def extract_concept_info(graph: Graph, uri: URIRef) -> ConceptInfo:
         annotations=get_annotations(graph, uri),
     )
 
+    if _is_named_individual(graph, uri):
+        info.kinds.append(EntityKind.NAMED_INDIVIDUAL)
+
     # The SKOS notes are rendered from `notes`, with their language tags.
     # Drop the copies get_annotations() collected so they render once.
     for _, name in SKOS_NOTE_PREDICATES:
@@ -1264,6 +1299,9 @@ def extract_concept_scheme_info(graph: Graph, uri: URIRef) -> ConceptSchemeInfo:
         notes=_skos_notes(graph, uri),
         annotations=get_annotations(graph, uri),
     )
+
+    if _is_named_individual(graph, uri):
+        info.kinds.append(EntityKind.NAMED_INDIVIDUAL)
 
     for _, name in SKOS_NOTE_PREDICATES:
         info.annotations.pop(name, None)
