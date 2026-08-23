@@ -25,6 +25,10 @@ class DocsConfig:
             named PropertyShapes) as a first-class entity type. Default
             True. When False, shapes are excluded entirely from output
             and from the search index.
+        include_skos: Whether to include SKOS concepts and concept schemes
+            as a first-class entity type. Default True. When False, both
+            are excluded entirely from output and from the search index —
+            they do not fall back to the Instances section.
         include_imports: List of namespaces to treat as "internal".
         exclude_namespaces: List of namespaces to exclude from output.
         language: Preferred language for labels/definitions.
@@ -44,6 +48,7 @@ class DocsConfig:
     single_page: bool = False
     include_instances: bool = True
     include_shapes: bool = True
+    include_skos: bool = True
     include_imports: list[str] = field(default_factory=list)
     exclude_namespaces: list[str] = field(default_factory=list)
     language: str = "en"
@@ -88,6 +93,8 @@ class DocsConfig:
             config.include_instances = data["include_instances"]
         if "include_shapes" in data:
             config.include_shapes = data["include_shapes"]
+        if "include_skos" in data:
+            config.include_skos = data["include_skos"]
         if "include_imports" in data:
             config.include_imports = data["include_imports"]
         if "exclude_namespaces" in data:
@@ -196,7 +203,8 @@ def entity_to_path(
         qname: Entity qualified name.
         entity_type: Type of entity. Accepts ``"class"``,
             ``"object_property"``, ``"datatype_property"``,
-            ``"annotation_property"``, ``"instance"``, or ``"shape"``.
+            ``"annotation_property"``, ``"instance"``, ``"shape"``,
+            ``"skos_concept"`` or ``"skos_concept_scheme"``.
             ``EntityKind`` members are also accepted directly (they
             compare equal to their string values).
         config: Documentation configuration.
@@ -216,7 +224,10 @@ def entity_to_path(
 
     # Organise by entity type. NodeShapes and named PropertyShapes share
     # the shapes/ directory — the kind badge on the page distinguishes
-    # them. See issue #60.
+    # them. See issue #60. SKOS concepts and concept schemes share
+    # concepts/ on the same principle (#63): a scheme is the container for
+    # a vocabulary, but readers reach it from the index rather than by
+    # browsing a directory of its own.
     type_dirs = {
         "class": "classes",
         "object_property": "properties/object",
@@ -224,6 +235,8 @@ def entity_to_path(
         "annotation_property": "properties/annotation",
         "instance": "instances",
         "shape": "shapes",
+        "skos_concept": "concepts",
+        "skos_concept_scheme": "concepts",
     }
 
     subdir = type_dirs.get(entity_type, "other")

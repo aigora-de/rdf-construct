@@ -97,7 +97,9 @@ The top-level shape of `index.json` is:
     "datatype_properties": 5,
     "annotation_properties": 2,
     "instances": 3,
-    "shapes": 4
+    "shapes": 4,
+    "concepts": 7,
+    "concept_schemes": 2
   },
   "classes":               [{ "uri": "...", "qname": "...", "label": "..." }, ...],
   "object_properties":     [{ "uri": "...", "qname": "...", "label": "..." }, ...],
@@ -105,14 +107,18 @@ The top-level shape of `index.json` is:
   "annotation_properties": [{ "uri": "...", "qname": "...", "label": "..." }, ...],
   "instances":             [{ "uri": "...", "qname": "...", "label": "..." }, ...],
   "shapes":                [{ "uri": "...", "qname": "...", "label": "...",
-                              "kinds": ["shape", "node_shape"] }, ...]
+                              "kinds": ["shape", "node_shape"] }, ...],
+  "concepts":              [{ "uri": "...", "qname": "...", "label": "...",
+                              "kinds": ["skos_concept"] }, ...],
+  "concept_schemes":       [{ "uri": "...", "qname": "...", "label": "...",
+                              "kinds": ["skos_concept_scheme"] }, ...]
 }
 ```
 
 Each entity also gets a full per-page JSON file under its type directory
 (`classes/`, `properties/object/`, `properties/datatype/`,
-`properties/annotation/`, `instances/`, or `shapes/`). Per-page files
-contain the complete entity record including all fields.
+`properties/annotation/`, `instances/`, `shapes/`, or `concepts/`).
+Per-page files contain the complete entity record including all fields.
 
 > **Breaking change in v0.5.0.** SHACL shapes
 > (`sh:NodeShape` / `sh:PropertyShape` instances) used to appear in the
@@ -120,6 +126,13 @@ contain the complete entity record including all fields.
 > v0.5.0 introduces a top-level `shapes` array; shapes no longer appear
 > in `instances`. JSON consumers updating from v0.4.x must read both
 > arrays. See "SHACL Shapes" below for the per-page schema.
+
+> **Breaking change in v0.6.0.** SKOS concepts and concept schemes
+> (`skos:Concept` / `skos:ConceptScheme`) used to appear in the
+> `instances` array for the same reason. v0.6.0 introduces top-level
+> `concepts` and `concept_schemes` arrays; neither appears in
+> `instances` any more. See "SKOS Vocabularies" below for the per-page
+> schema.
 
 ## SHACL Shapes
 
@@ -219,6 +232,125 @@ Schema notes:
   SHACL predicate not in the first-class set. Order is the order in
   which the predicates were encountered.
 
+## SKOS Vocabularies
+
+`rdf-construct docs` recognises `skos:Concept` and `skos:ConceptScheme`
+as a first-class entity type, so a controlled vocabulary documents as a
+vocabulary rather than as a heap of generic instances. Concepts and
+schemes share the `concepts/` directory and are told apart by their kind
+badges (`skos concept`, `skos concept scheme`) — the same arrangement
+NodeShapes and PropertyShapes have in `shapes/`.
+
+Each concept page carries:
+
+- **Labels grouped by language.** One row per language tag, with
+  `skos:prefLabel`, `skos:altLabel` and `skos:hiddenLabel` side by side,
+  so "what does this look like in French" is one line rather than a
+  scatter of duplicate triples.
+- **Semantic relations.** `skos:broader`, `skos:narrower` and
+  `skos:related`, rendered as cross-links.
+- **Scheme membership.** `skos:inScheme` and `skos:topConceptOf`, linking
+  to the scheme page; the scheme page lists its members in return.
+- **All seven SKOS documentation properties** — `skos:definition`,
+  `skos:scopeNote`, `skos:example`, `skos:note`, `skos:historyNote`,
+  `skos:editorialNote` and `skos:changeNote` — each keeping its language
+  tag.
+- **Anything else asserted about the concept**, including mappings such
+  as `skos:exactMatch`, in a visible key-value fallback rather than being
+  dropped.
+
+The scheme page additionally carries the vocabulary's
+`skos:broader`/`skos:narrower` tree.
+
+### What the renderer infers, and what it does not
+
+- **`skos:broader` and `skos:narrower` are treated as inverses**, because
+  SKOS declares them to be. A vocabulary that only ever asserts one
+  direction still documents both, and the hierarchy is the same either
+  way. `skos:related` is likewise treated as symmetric, and
+  `skos:topConceptOf` as implying `skos:inScheme` (it is a sub-property
+  of it).
+- **`skos:broader` is not `rdfs:subClassOf`.** It renders as a tree
+  because that is how vocabularies are navigated, not because a concept
+  hierarchy is a class hierarchy; nothing is inherited along it.
+- **Cycles are tolerated.** SKOS does not promise an acyclic hierarchy.
+  The tree walker will not expand a concept twice on one path, and any
+  concept a cycle leaves unreachable is promoted to a root of its own
+  rather than disappearing.
+- **A concept in no scheme is still documented.** It appears in the index
+  and gets its own page; only the per-scheme tree needs a scheme.
+
+### Punning: a subject that is a concept *and* something else
+
+Classes, properties and SHACL shapes outrank SKOS in routing, so a
+subject typed both `owl:Class` and `skos:Concept` keeps its class page
+and does not get a second page under `concepts/`. It stays visible in
+its scheme's member list, which links to the class page. A concept that
+is also `owl:NamedIndividual` routes to `concepts/`.
+
+### Concept JSON schema
+
+```json
+{
+  "uri": "http://example.org/vocab#Building",
+  "qname": "ex:Building",
+  "kinds": ["skos_concept"],
+  "label": "Building",
+  "definition": "A permanent, roofed construction intended for occupation.",
+  "labels": [
+    { "language": "en", "preferred": ["Building"],
+      "alternative": ["Structure"], "hidden": ["buildin"] },
+    { "language": "fr", "preferred": ["Bâtiment"],
+      "alternative": ["Édifice"], "hidden": [] }
+  ],
+  "notes": {
+    "definition": [
+      { "text": "A permanent, roofed construction...", "language": "en" },
+      { "text": "Construction permanente et couverte...", "language": "fr" }
+    ],
+    "scopeNote": [{ "text": "Excludes temporary structures.", "language": "en" }]
+  },
+  "broader":        [],
+  "narrower":       ["http://example.org/vocab#Dwelling"],
+  "related":        [],
+  "in_schemes":     ["http://example.org/vocab#BuildingScheme"],
+  "top_concept_of": ["http://example.org/vocab#BuildingScheme"],
+  "types":          ["http://www.w3.org/2004/02/skos/core#Concept"],
+  "properties":     {},
+  "annotations":    {}
+}
+```
+
+A concept scheme entry carries `labels`, `notes`, `top_concepts`,
+`concepts` (its members) and — in the per-page file only — `hierarchy`,
+the nested broader/narrower tree, so a consumer does not have to rebuild
+it:
+
+```json
+{
+  "qname": "ex:BuildingScheme",
+  "kinds": ["skos_concept_scheme"],
+  "top_concepts": ["http://example.org/vocab#Building"],
+  "concepts": ["http://example.org/vocab#Building", "..."],
+  "hierarchy": [
+    { "uri": "...", "qname": "ex:Building", "label": "Building",
+      "children": [{ "qname": "ex:Dwelling", "children": [] }] }
+  ]
+}
+```
+
+Schema notes:
+
+- An untagged literal appears under `"language": ""` rather than being
+  dropped.
+- `broader` and `narrower` include inverse-derived neighbours, as
+  described above.
+- `notes` keys are the SKOS property local names.
+
+Not covered: `skos:Collection` / `skos:OrderedCollection` and SKOS-XL
+(`skosxl:Label`). Both fall through to their existing treatment; file an
+issue if a real vocabulary needs them.
+
 ## Command Options
 
 ```bash
@@ -237,6 +369,7 @@ rdf-construct docs [OPTIONS] SOURCES...
 | `--no-search` | Disable search index (HTML only) |
 | `--no-instances` | Exclude instances from output |
 | `--no-shapes` | Exclude SHACL shapes from output |
+| `--no-skos` | Exclude SKOS concepts and concept schemes from output |
 | `--include TYPES` | Include only these types (comma-separated) |
 | `--exclude TYPES` | Exclude these types (comma-separated) |
 
@@ -253,9 +386,15 @@ poetry run rdf-construct docs ontology.ttl --include classes
 
 # Classes and shapes only
 poetry run rdf-construct docs ontology.ttl --include classes,shapes
+
+# A vocabulary's SKOS entities only
+poetry run rdf-construct docs vocabulary.ttl --include concepts
 ```
 
-Valid type names: `classes`, `properties`, `object_properties`, `datatype_properties`, `annotation_properties`, `instances`, `shapes`
+Valid type names: `classes`, `properties`, `object_properties`, `datatype_properties`, `annotation_properties`, `instances`, `shapes`, `concepts`
+
+`concepts` covers both SKOS kinds — concepts and concept schemes are one
+toggle. `concept_schemes` and `skos` are accepted as spellings of it.
 
 ## Configuration File
 
@@ -274,6 +413,7 @@ include_datatype_properties: true
 include_annotation_properties: false
 include_instances: true
 include_shapes: true
+include_skos: true
 
 include_search: true
 include_hierarchy: true

@@ -12,6 +12,8 @@ if TYPE_CHECKING:
     from rdf_construct.docs.config import DocsConfig
     from rdf_construct.docs.extractors import (
         ClassInfo,
+        ConceptInfo,
+        ConceptSchemeInfo,
         ExtractedEntities,
         InstanceInfo,
         PropertyInfo,
@@ -36,7 +38,7 @@ class SearchEntry:
 
     uri: str
     qname: str
-    entity_type: str  # class, object_property, datatype_property, instance, shape
+    entity_type: str  # class, object_property, instance, shape, skos_concept, ...
     label: str
     keywords: list[str]
     url: str
@@ -359,6 +361,105 @@ def shape_to_search_entry(
     )
 
 
+def concept_to_search_entry(
+    concept_info: "ConceptInfo",
+    config: "DocsConfig",
+) -> SearchEntry:
+    """Convert a ConceptInfo to a SearchEntry.
+
+    Indexes every SKOS label — alternative and hidden labels included,
+    across all languages. Hidden labels exist precisely to catch
+    misspellings in search, so leaving them out would waste the one place
+    they earn their keep.
+
+    Args:
+        concept_info: Concept information.
+        config: Documentation configuration.
+
+    Returns:
+        SearchEntry for the concept.
+    """
+    keywords = []
+
+    if ":" in concept_info.qname:
+        prefix, local = concept_info.qname.split(":", 1)
+        keywords.extend(extract_keywords(local))
+        keywords.append(prefix.lower())
+
+    if concept_info.label:
+        keywords.extend(extract_keywords(concept_info.label))
+    if concept_info.definition:
+        keywords.extend(extract_keywords(concept_info.definition))
+
+    for group in concept_info.labels:
+        for value in group.preferred + group.alternative + group.hidden:
+            keywords.extend(extract_keywords(value))
+        if group.language:
+            keywords.append(group.language.lower())
+
+    keywords.append("concept")
+    keywords.append("skos")
+
+    from .config import entity_to_url
+
+    return SearchEntry(
+        uri=str(concept_info.uri),
+        qname=concept_info.qname,
+        entity_type="skos_concept",
+        label=concept_info.label or concept_info.qname,
+        keywords=list(set(keywords)),
+        url=entity_to_url(concept_info.qname, "skos_concept", config),
+        kinds=[str(k) for k in concept_info.kinds],
+    )
+
+
+def concept_scheme_to_search_entry(
+    scheme_info: "ConceptSchemeInfo",
+    config: "DocsConfig",
+) -> SearchEntry:
+    """Convert a ConceptSchemeInfo to a SearchEntry.
+
+    Args:
+        scheme_info: Concept scheme information.
+        config: Documentation configuration.
+
+    Returns:
+        SearchEntry for the concept scheme.
+    """
+    keywords = []
+
+    if ":" in scheme_info.qname:
+        prefix, local = scheme_info.qname.split(":", 1)
+        keywords.extend(extract_keywords(local))
+        keywords.append(prefix.lower())
+
+    if scheme_info.label:
+        keywords.extend(extract_keywords(scheme_info.label))
+    if scheme_info.definition:
+        keywords.extend(extract_keywords(scheme_info.definition))
+
+    for group in scheme_info.labels:
+        for value in group.preferred + group.alternative + group.hidden:
+            keywords.extend(extract_keywords(value))
+        if group.language:
+            keywords.append(group.language.lower())
+
+    keywords.append("scheme")
+    keywords.append("skos")
+
+    from .config import entity_to_url
+
+    return SearchEntry(
+        uri=str(scheme_info.uri),
+        qname=scheme_info.qname,
+        entity_type="skos_concept_scheme",
+        label=scheme_info.label or scheme_info.qname,
+        keywords=list(set(keywords)),
+        url=entity_to_url(scheme_info.qname, "skos_concept_scheme", config),
+        kinds=[str(k) for k in scheme_info.kinds],
+    )
+
+
 def generate_search_index(
     entities: "ExtractedEntities",
     config: "DocsConfig",
@@ -401,6 +502,13 @@ def generate_search_index(
     if config.include_shapes:
         for shape_info in entities.shapes:
             entries.append(shape_to_search_entry(shape_info, config))
+
+    # SKOS concepts and concept schemes (#63)
+    if config.include_skos:
+        for scheme_info in entities.concept_schemes:
+            entries.append(concept_scheme_to_search_entry(scheme_info, config))
+        for concept_info in entities.concepts:
+            entries.append(concept_to_search_entry(concept_info, config))
 
     return entries
 

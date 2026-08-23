@@ -18,6 +18,12 @@
         <div class="label">Shapes</div>
     </div>
     {% endif %}
+    {% if concepts and config.include_skos %}
+    <div class="stat-card">
+        <div class="number">{{ concepts | length }}</div>
+        <div class="label">Concepts</div>
+    </div>
+    {% endif %}
     {% if instances %}
     <div class="stat-card">
         <div class="number">{{ total_instances }}</div>
@@ -114,6 +120,36 @@
             {% endfor %}
             {% if shape.definition %}
             <span class="definition">— {{ shape.definition[:80] }}{% if shape.definition|length > 80 %}...{% endif %}</span>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+{% if (concepts or concept_schemes) and config.include_skos %}
+<section class="section">
+    <h2>SKOS Vocabulary</h2>
+    <ul class="entity-list">
+        {% for scheme in concept_schemes %}
+        <li>
+            <a href="{{ scheme.qname | entity_url('skos_concept_scheme') }}">
+                {{ scheme.label or scheme.qname }}
+            </a>
+            <span class="entity-type skos_concept_scheme">skos concept scheme</span>
+            {% if scheme.definition %}
+            <span class="definition">— {{ scheme.definition[:80] }}{% if scheme.definition|length > 80 %}...{% endif %}</span>
+            {% endif %}
+        </li>
+        {% endfor %}
+        {% for concept in concepts %}
+        <li>
+            <a href="{{ concept.qname | entity_url('skos_concept') }}">
+                {{ concept.label or concept.qname }}
+            </a>
+            <span class="entity-type skos_concept">skos concept</span>
+            {% if concept.definition %}
+            <span class="definition">— {{ concept.definition[:80] }}{% if concept.definition|length > 80 %}...{% endif %}</span>
             {% endif %}
         </li>
         {% endfor %}

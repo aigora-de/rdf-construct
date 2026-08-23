@@ -29,13 +29,19 @@ For more control, use the DocsGenerator class directly:
 from rdf_construct.docs.config import DocsConfig, load_docs_config
 from rdf_construct.docs.extractors import (
     ClassInfo,
+    ConceptInfo,
+    ConceptNode,
+    ConceptSchemeInfo,
     EntityKind,
     ExtractedEntities,
     InstanceInfo,
+    LabelGroup,
+    NoteValue,
     OntologyInfo,
     PropertyInfo,
     PropertyShapeInfo,
     ShapeInfo,
+    build_concept_tree,
     extract_all,
 )
 from rdf_construct.docs.generator import DocsGenerator, GenerationResult, generate_docs
@@ -57,9 +63,15 @@ __all__ = [
     "ExtractedEntities",
     "ShapeInfo",
     "PropertyShapeInfo",
+    "ConceptInfo",
+    "ConceptSchemeInfo",
+    "ConceptNode",
+    "LabelGroup",
+    "NoteValue",
     "EntityKind",
     # Extraction
     "extract_all",
+    "build_concept_tree",
     # Search
     "SearchEntry",
     "generate_search_index",

@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING
 from rdflib import BNode, RDF, RDFS, Literal, URIRef
 from rdflib.namespace import DCTERMS, OWL, SH, SKOS
 
+from rdf_construct.core.vocab import ALL_PROPERTY_TYPES, CLASS_TYPES
+
 if TYPE_CHECKING:
     from rdflib import Graph
 
@@ -52,6 +54,10 @@ class EntityKind(str, Enum):
     NODE_SHAPE = "node_shape"
     PROPERTY_SHAPE = "property_shape"
 
+    # SKOS vocabulary entities (#63)
+    SKOS_CONCEPT = "skos_concept"
+    SKOS_CONCEPT_SCHEME = "skos_concept_scheme"
+
     def __str__(self) -> str:
         # Return the string value so f-strings and Jinja render
         # "shape" rather than "EntityKind.SHAPE". See class docstring.
@@ -70,6 +76,64 @@ DEFINITION_PREDICATES = [
     SKOS.definition,
     DCTERMS.description,
 ]
+
+# Standard annotation predicates extracted for every entity, paired with the
+# name they are grouped under. Module-level so consumers that need to know
+# which predicates are already captured (see ``_other_properties``) can ask
+# rather than reproduce the list.
+ANNOTATION_PREDICATES = [
+    (RDFS.seeAlso, "seeAlso"),
+    (RDFS.isDefinedBy, "isDefinedBy"),
+    (OWL.versionInfo, "versionInfo"),
+    (OWL.deprecated, "deprecated"),
+    (SKOS.example, "example"),
+    (SKOS.note, "note"),
+    (SKOS.historyNote, "historyNote"),
+    (SKOS.editorialNote, "editorialNote"),
+    (SKOS.changeNote, "changeNote"),
+    (SKOS.scopeNote, "scopeNote"),
+    (DCTERMS.creator, "creator"),
+    (DCTERMS.created, "created"),
+    (DCTERMS.modified, "modified"),
+    (DCTERMS.source, "source"),
+]
+
+# SKOS documentation properties, in the order they render on a concept or
+# scheme page (#63). The SKOS spec defines seven; issue #63 lists six,
+# omitting ``skos:changeNote`` — which is rendered here too, since dropping
+# it would lose a value that ``get_annotations`` was already surfacing.
+SKOS_NOTE_PREDICATES: list[tuple[URIRef, str]] = [
+    (SKOS.definition, "definition"),
+    (SKOS.scopeNote, "scopeNote"),
+    (SKOS.example, "example"),
+    (SKOS.note, "note"),
+    (SKOS.historyNote, "historyNote"),
+    (SKOS.editorialNote, "editorialNote"),
+    (SKOS.changeNote, "changeNote"),
+]
+
+# SKOS labelling properties. Values are grouped by language tag rather than
+# by property, so a reader can see one language at a time.
+SKOS_LABEL_PREDICATES: list[tuple[URIRef, str]] = [
+    (SKOS.prefLabel, "preferred"),
+    (SKOS.altLabel, "alternative"),
+    (SKOS.hiddenLabel, "hidden"),
+]
+
+# SKOS predicates rendered structurally on a concept or scheme page. They are
+# excluded from the generic key-value fallback so nothing renders twice.
+SKOS_STRUCTURAL_PREDICATES: frozenset[URIRef] = frozenset(
+    {
+        SKOS.broader,
+        SKOS.narrower,
+        SKOS.related,
+        SKOS.inScheme,
+        SKOS.topConceptOf,
+        SKOS.hasTopConcept,
+    }
+    | {pred for pred, _ in SKOS_NOTE_PREDICATES}
+    | {pred for pred, _ in SKOS_LABEL_PREDICATES}
+)
 
 
 @dataclass
@@ -250,6 +314,106 @@ class ShapeInfo:
     other_constraints: dict[URIRef, list[URIRef | str]] = field(default_factory=dict)
 
 
+@dataclass
+class NoteValue:
+    """A single SKOS documentation-property value and its language tag.
+
+    ``language`` is the empty string for a plain (untagged) literal or for
+    a value that was a resource rather than a literal.
+    """
+
+    text: str
+    language: str = ""
+
+
+@dataclass
+class LabelGroup:
+    """SKOS labels for one language.
+
+    Groups ``skos:prefLabel``, ``skos:altLabel`` and ``skos:hiddenLabel``
+    by language tag rather than by property, so a reader can ask "what does
+    this concept look like in French" and get one row. ``language`` is the
+    empty string for untagged literals.
+    """
+
+    language: str
+    preferred: list[str] = field(default_factory=list)
+    alternative: list[str] = field(default_factory=list)
+    hidden: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ConceptInfo:
+    """Information about a ``skos:Concept`` for documentation.
+
+    ``broader`` and ``narrower`` carry both directions: SKOS declares
+    ``skos:narrower`` to be the inverse of ``skos:broader``, so a
+    vocabulary that asserts only one direction still documents both. See
+    :func:`_related_concepts`.
+
+    ``in_schemes`` likewise includes schemes reached via
+    ``skos:topConceptOf`` (a sub-property of ``skos:inScheme``) and via a
+    scheme's own ``skos:hasTopConcept``.
+    """
+
+    uri: URIRef
+    qname: str
+    kinds: list[EntityKind] = field(default_factory=list)
+    label: str | None = None
+    definition: str | None = None
+
+    # Labels grouped by language, and the seven SKOS note properties.
+    labels: list[LabelGroup] = field(default_factory=list)
+    notes: dict[str, list[NoteValue]] = field(default_factory=dict)
+
+    # Semantic relations and scheme membership
+    broader: list[URIRef] = field(default_factory=list)
+    narrower: list[URIRef] = field(default_factory=list)
+    related: list[URIRef] = field(default_factory=list)
+    in_schemes: list[URIRef] = field(default_factory=list)
+    top_concept_of: list[URIRef] = field(default_factory=list)
+
+    # Everything else asserted about the concept
+    types: list[URIRef] = field(default_factory=list)
+    properties: dict[URIRef, list[str | URIRef]] = field(default_factory=dict)
+    annotations: dict[str, list[str]] = field(default_factory=dict)
+
+
+@dataclass
+class ConceptSchemeInfo:
+    """Information about a ``skos:ConceptScheme`` for documentation.
+
+    ``top_concepts`` merges the scheme's ``skos:hasTopConcept`` arcs with
+    concepts asserting ``skos:topConceptOf`` back at it; ``concepts`` is
+    every member reachable through ``skos:inScheme`` or through being a top
+    concept.
+    """
+
+    uri: URIRef
+    qname: str
+    kinds: list[EntityKind] = field(default_factory=list)
+    label: str | None = None
+    definition: str | None = None
+
+    labels: list[LabelGroup] = field(default_factory=list)
+    notes: dict[str, list[NoteValue]] = field(default_factory=dict)
+
+    top_concepts: list[URIRef] = field(default_factory=list)
+    concepts: list[URIRef] = field(default_factory=list)
+
+    types: list[URIRef] = field(default_factory=list)
+    properties: dict[URIRef, list[str | URIRef]] = field(default_factory=dict)
+    annotations: dict[str, list[str]] = field(default_factory=dict)
+
+
+@dataclass
+class ConceptNode:
+    """One node of a ``skos:broader`` / ``skos:narrower`` hierarchy tree."""
+
+    concept: ConceptInfo
+    children: list["ConceptNode"] = field(default_factory=list)
+
+
 def get_qname(graph: Graph, uri: URIRef) -> str:
     """Get a qualified name (CURIE) for a URI.
 
@@ -329,25 +493,7 @@ def get_annotations(graph: Graph, uri: URIRef) -> dict[str, list[str]]:
     """
     annotations: dict[str, list[str]] = {}
 
-    # Standard annotation predicates to extract
-    annotation_preds = [
-        (RDFS.seeAlso, "seeAlso"),
-        (RDFS.isDefinedBy, "isDefinedBy"),
-        (OWL.versionInfo, "versionInfo"),
-        (OWL.deprecated, "deprecated"),
-        (SKOS.example, "example"),
-        (SKOS.note, "note"),
-        (SKOS.historyNote, "historyNote"),
-        (SKOS.editorialNote, "editorialNote"),
-        (SKOS.changeNote, "changeNote"),
-        (SKOS.scopeNote, "scopeNote"),
-        (DCTERMS.creator, "creator"),
-        (DCTERMS.created, "created"),
-        (DCTERMS.modified, "modified"),
-        (DCTERMS.source, "source"),
-    ]
-
-    for pred, name in annotation_preds:
+    for pred, name in ANNOTATION_PREDICATES:
         values = []
         for obj in graph.objects(uri, pred):
             if isinstance(obj, Literal):
@@ -922,6 +1068,354 @@ def extract_all_shapes(graph: Graph) -> list[ShapeInfo]:
     return shapes
 
 
+def _skos_label_groups(graph: Graph, uri: URIRef) -> list[LabelGroup]:
+    """Group an entity's SKOS labels by language tag.
+
+    Args:
+        graph: RDF graph to query.
+        uri: Concept or scheme URI.
+
+    Returns:
+        One :class:`LabelGroup` per language tag, ordered by tag with
+        untagged literals last.
+    """
+    collected: dict[str, dict[str, list[str]]] = {}
+
+    for pred, slot in SKOS_LABEL_PREDICATES:
+        for obj in graph.objects(uri, pred):
+            if not isinstance(obj, Literal):
+                continue
+            language = obj.language or ""
+            by_slot = collected.setdefault(language, {})
+            by_slot.setdefault(slot, []).append(str(obj))
+
+    # Untagged literals sort last; everything else alphabetically by tag.
+    languages = sorted(collected, key=lambda lang: (lang == "", lang))
+    return [
+        LabelGroup(
+            language=language,
+            preferred=sorted(collected[language].get("preferred", [])),
+            alternative=sorted(collected[language].get("alternative", [])),
+            hidden=sorted(collected[language].get("hidden", [])),
+        )
+        for language in languages
+    ]
+
+
+def _skos_notes(graph: Graph, uri: URIRef) -> dict[str, list[NoteValue]]:
+    """Extract the SKOS documentation properties for an entity.
+
+    Args:
+        graph: RDF graph to query.
+        uri: Concept or scheme URI.
+
+    Returns:
+        Note values keyed by the property's local name, in the order
+        given by ``SKOS_NOTE_PREDICATES``. Resource-valued notes are kept
+        as their URI string rather than dropped.
+    """
+    notes: dict[str, list[NoteValue]] = {}
+
+    for pred, name in SKOS_NOTE_PREDICATES:
+        values: list[NoteValue] = []
+        for obj in graph.objects(uri, pred):
+            if isinstance(obj, Literal):
+                values.append(NoteValue(text=str(obj), language=obj.language or ""))
+            elif isinstance(obj, URIRef):
+                values.append(NoteValue(text=str(obj)))
+        if values:
+            notes[name] = sorted(values, key=lambda value: (value.language, value.text))
+
+    return notes
+
+
+def _other_properties(
+    graph: Graph,
+    uri: URIRef,
+    handled: frozenset[URIRef],
+) -> dict[URIRef, list[str | URIRef]]:
+    """Collect predicates not already rendered by a first-class field.
+
+    Anything a concept or scheme asserts that is neither structural SKOS,
+    nor a label, nor one of the standard annotations lands here so it stays
+    visible rather than being silently dropped — the same posture the SHACL
+    renderer takes with long-tail constraints.
+
+    Args:
+        graph: RDF graph to query.
+        uri: Entity URI.
+        handled: Predicates already rendered elsewhere on the page.
+
+    Returns:
+        Raw object terms keyed by predicate URI.
+    """
+    captured = (
+        handled
+        | {pred for pred, _ in ANNOTATION_PREDICATES}
+        | {RDF.type, RDFS.label, RDFS.comment, DCTERMS.title, DCTERMS.description}
+    )
+
+    properties: dict[URIRef, list[str | URIRef]] = {}
+    for pred, obj in graph.predicate_objects(uri):
+        if not isinstance(pred, URIRef) or pred in captured:
+            continue
+        if isinstance(obj, Literal):
+            properties.setdefault(pred, []).append(str(obj))
+        elif isinstance(obj, URIRef):
+            properties.setdefault(pred, []).append(obj)
+
+    return properties
+
+
+def _related_concepts(
+    graph: Graph,
+    uri: URIRef,
+    forward: URIRef,
+    inverse: URIRef,
+) -> list[URIRef]:
+    """Collect concepts related to ``uri``, in both assertion directions.
+
+    SKOS declares ``skos:broader`` and ``skos:narrower`` to be inverses of
+    one another, so a vocabulary that only ever writes ``skos:narrower``
+    still has to produce a broader link on the child's page. Materialising
+    the inverse here means the hierarchy is complete whichever direction
+    the author chose.
+
+    Args:
+        graph: RDF graph to query.
+        uri: Concept URI.
+        forward: Predicate asserted on this concept.
+        inverse: Predicate asserted on the other concept, pointing back.
+
+    Returns:
+        Sorted, de-duplicated concept URIs.
+    """
+    found: set[URIRef] = {obj for obj in graph.objects(uri, forward) if isinstance(obj, URIRef)}
+    found |= {subj for subj in graph.subjects(inverse, uri) if isinstance(subj, URIRef)}
+    return sorted(found)
+
+
+def extract_concept_info(graph: Graph, uri: URIRef) -> ConceptInfo:
+    """Extract comprehensive information about a SKOS concept.
+
+    Args:
+        graph: RDF graph to query.
+        uri: Concept URI to extract info for.
+
+    Returns:
+        ConceptInfo with all available metadata.
+    """
+    info = ConceptInfo(
+        uri=uri,
+        qname=get_qname(graph, uri),
+        kinds=[EntityKind.SKOS_CONCEPT],
+        label=get_label(graph, uri),
+        definition=get_definition(graph, uri),
+        labels=_skos_label_groups(graph, uri),
+        notes=_skos_notes(graph, uri),
+        annotations=get_annotations(graph, uri),
+    )
+
+    # The SKOS notes are rendered from `notes`, with their language tags.
+    # Drop the copies get_annotations() collected so they render once.
+    for _, name in SKOS_NOTE_PREDICATES:
+        info.annotations.pop(name, None)
+
+    info.broader = _related_concepts(graph, uri, SKOS.broader, SKOS.narrower)
+    info.narrower = _related_concepts(graph, uri, SKOS.narrower, SKOS.broader)
+    # skos:related is symmetric, so both directions count.
+    info.related = _related_concepts(graph, uri, SKOS.related, SKOS.related)
+    info.top_concept_of = _related_concepts(graph, uri, SKOS.topConceptOf, SKOS.hasTopConcept)
+
+    # skos:topConceptOf is a sub-property of skos:inScheme, so a top concept
+    # belongs to its scheme even without an explicit inScheme triple.
+    schemes: set[URIRef] = {
+        obj for obj in graph.objects(uri, SKOS.inScheme) if isinstance(obj, URIRef)
+    }
+    schemes |= set(info.top_concept_of)
+    info.in_schemes = sorted(schemes)
+
+    for obj in graph.objects(uri, RDF.type):
+        if isinstance(obj, URIRef):
+            info.types.append(obj)
+
+    info.properties = _other_properties(graph, uri, SKOS_STRUCTURAL_PREDICATES)
+
+    return info
+
+
+def extract_concept_scheme_info(graph: Graph, uri: URIRef) -> ConceptSchemeInfo:
+    """Extract comprehensive information about a SKOS concept scheme.
+
+    Args:
+        graph: RDF graph to query.
+        uri: Concept scheme URI to extract info for.
+
+    Returns:
+        ConceptSchemeInfo with all available metadata.
+    """
+    info = ConceptSchemeInfo(
+        uri=uri,
+        qname=get_qname(graph, uri),
+        kinds=[EntityKind.SKOS_CONCEPT_SCHEME],
+        label=get_label(graph, uri),
+        definition=get_definition(graph, uri),
+        labels=_skos_label_groups(graph, uri),
+        notes=_skos_notes(graph, uri),
+        annotations=get_annotations(graph, uri),
+    )
+
+    for _, name in SKOS_NOTE_PREDICATES:
+        info.annotations.pop(name, None)
+
+    info.top_concepts = _related_concepts(graph, uri, SKOS.hasTopConcept, SKOS.topConceptOf)
+
+    members: set[URIRef] = {
+        subj for subj in graph.subjects(SKOS.inScheme, uri) if isinstance(subj, URIRef)
+    }
+    members |= set(info.top_concepts)
+    info.concepts = sorted(members)
+
+    for obj in graph.objects(uri, RDF.type):
+        if isinstance(obj, URIRef):
+            info.types.append(obj)
+
+    info.properties = _other_properties(graph, uri, SKOS_STRUCTURAL_PREDICATES)
+
+    return info
+
+
+def _claimed_by_other_buckets(graph: Graph) -> set[URIRef]:
+    """Collect subjects that classes, properties or shapes already document.
+
+    SKOS entities sit between shapes and plain instances in the routing
+    order, so a subject that is also a class, a property or a SHACL shape
+    keeps the page it already had rather than gaining a second one. The
+    type sets come from :mod:`rdf_construct.core.vocab` — a term declared
+    only by an OWL characteristic is still a property.
+
+    Args:
+        graph: RDF graph to query.
+
+    Returns:
+        Set of URIs owned by a higher-priority bucket.
+    """
+    claimed: set[URIRef] = set()
+    higher_priority_types = (
+        set(CLASS_TYPES) | set(ALL_PROPERTY_TYPES) | {SH.NodeShape, SH.PropertyShape}
+    )
+    for type_uri in higher_priority_types:
+        for subj in graph.subjects(RDF.type, type_uri):
+            if isinstance(subj, URIRef):
+                claimed.add(subj)
+    return claimed
+
+
+def extract_all_concepts(graph: Graph) -> list[ConceptInfo]:
+    """Extract information for all SKOS concepts in the graph.
+
+    Subjects already documented as a class, property or SHACL shape are
+    skipped — SKOS/OWL punning is legal, and documenting the same subject
+    twice serves nobody. See :func:`_claimed_by_other_buckets`.
+
+    Args:
+        graph: RDF graph to query.
+
+    Returns:
+        List of ConceptInfo objects, sorted by qname.
+    """
+    claimed = _claimed_by_other_buckets(graph)
+
+    concepts = []
+    seen: set[URIRef] = set()
+    for uri in graph.subjects(RDF.type, SKOS.Concept):
+        if isinstance(uri, URIRef) and uri not in seen and uri not in claimed:
+            seen.add(uri)
+            concepts.append(extract_concept_info(graph, uri))
+
+    concepts.sort(key=lambda c: c.qname)
+    return concepts
+
+
+def extract_all_concept_schemes(graph: Graph) -> list[ConceptSchemeInfo]:
+    """Extract information for all SKOS concept schemes in the graph.
+
+    Args:
+        graph: RDF graph to query.
+
+    Returns:
+        List of ConceptSchemeInfo objects, sorted by qname.
+    """
+    claimed = _claimed_by_other_buckets(graph)
+
+    schemes = []
+    seen: set[URIRef] = set()
+    for uri in graph.subjects(RDF.type, SKOS.ConceptScheme):
+        if isinstance(uri, URIRef) and uri not in seen and uri not in claimed:
+            seen.add(uri)
+            schemes.append(extract_concept_scheme_info(graph, uri))
+
+    schemes.sort(key=lambda s: s.qname)
+    return schemes
+
+
+def build_concept_tree(
+    concepts: list[ConceptInfo],
+    scheme: URIRef | None = None,
+) -> list[ConceptNode]:
+    """Build a ``skos:broader`` / ``skos:narrower`` tree.
+
+    SKOS does not promise an acyclic hierarchy, and a cycle would leave no
+    concept without an internal parent — so the walker (a) refuses to
+    revisit a concept already on the current path, and (b) promotes any
+    concept the roots could not reach to a root of its own. A cyclic
+    vocabulary therefore renders in full rather than either looping
+    forever or silently losing concepts.
+
+    Args:
+        concepts: Concepts to build the tree from.
+        scheme: Restrict to members of this scheme. ``None`` uses every
+            concept given.
+
+    Returns:
+        Root nodes, sorted by qname.
+    """
+    if scheme is not None:
+        members = [c for c in concepts if scheme in c.in_schemes]
+    else:
+        members = list(concepts)
+
+    by_uri = {str(c.uri): c for c in members}
+    visited: set[str] = set()
+
+    def build(concept: ConceptInfo, ancestors: frozenset[str]) -> ConceptNode:
+        visited.add(str(concept.uri))
+        path = ancestors | {str(concept.uri)}
+        children = [
+            build(by_uri[key], path)
+            for key in (str(uri) for uri in concept.narrower)
+            if key in by_uri and key not in path
+        ]
+        children.sort(key=lambda node: node.concept.qname)
+        return ConceptNode(concept=concept, children=children)
+
+    # Declared top concepts anchor the tree; without any, everything with no
+    # parent inside the scheme becomes a root.
+    roots = [c for c in members if scheme is not None and scheme in c.top_concept_of]
+    if not roots:
+        roots = [c for c in members if not any(str(uri) in by_uri for uri in c.broader)]
+
+    nodes = [build(c, frozenset()) for c in sorted(roots, key=lambda c: c.qname)]
+
+    # Anything unreachable from a root — a cycle, or a concept whose only
+    # parents sit in another scheme — still gets rendered.
+    for concept in sorted(members, key=lambda c: c.qname):
+        if str(concept.uri) not in visited:
+            nodes.append(build(concept, frozenset()))
+
+    return nodes
+
+
 def extract_all_classes(graph: Graph) -> list[ClassInfo]:
     """Extract information for all classes in the graph.
 
@@ -1033,10 +1527,27 @@ def extract_all_instances(graph: Graph) -> list[InstanceInfo]:
             if isinstance(uri, URIRef):
                 shape_uris.add(uri)
 
-    # Find all subjects with rdf:type that aren't classes, properties, or shapes
+    # Exclude SKOS concepts and concept schemes (#63) — they have their own
+    # buckets via extract_all_concepts() / extract_all_concept_schemes().
+    # A concept that is also a class, property or shape is not excluded here
+    # because it was never routed to SKOS in the first place: those buckets
+    # outrank SKOS, and the class/property/shape filters above already claim it.
+    skos_uris: set[URIRef] = set()
+    for skos_type in [SKOS.Concept, SKOS.ConceptScheme]:
+        for uri in graph.subjects(RDF.type, skos_type):
+            if isinstance(uri, URIRef):
+                skos_uris.add(uri)
+
+    # Find all subjects with rdf:type that aren't classes, properties, shapes
+    # or SKOS entities
     for subj, _, obj in graph.triples((None, RDF.type, None)):
         if isinstance(subj, URIRef) and subj not in seen:
-            if subj not in class_uris and subj not in property_uris and subj not in shape_uris:
+            if (
+                subj not in class_uris
+                and subj not in property_uris
+                and subj not in shape_uris
+                and subj not in skos_uris
+            ):
                 seen.add(subj)
                 instances.append(extract_instance_info(graph, subj))
 
@@ -1054,6 +1565,8 @@ class ExtractedEntities:
     properties: list[PropertyInfo]
     instances: list[InstanceInfo]
     shapes: list[ShapeInfo] = field(default_factory=list)
+    concepts: list[ConceptInfo] = field(default_factory=list)
+    concept_schemes: list[ConceptSchemeInfo] = field(default_factory=list)
 
     @property
     def object_properties(self) -> list[PropertyInfo]:
@@ -1093,7 +1606,7 @@ def extract_all(graph: Graph) -> ExtractedEntities:
 
     Returns:
         ExtractedEntities containing all classes, properties, instances,
-        and SHACL shapes.
+        SHACL shapes, SKOS concepts and SKOS concept schemes.
     """
     return ExtractedEntities(
         ontology=extract_ontology_info(graph),
@@ -1101,4 +1614,6 @@ def extract_all(graph: Graph) -> ExtractedEntities:
         properties=extract_all_properties(graph),
         instances=extract_all_instances(graph),
         shapes=extract_all_shapes(graph),
+        concepts=extract_all_concepts(graph),
+        concept_schemes=extract_all_concept_schemes(graph),
     )

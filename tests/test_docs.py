@@ -9,12 +9,14 @@ from rdflib.namespace import OWL, SH, XSD
 
 from rdf_construct.docs import (
     ClassInfo,
+    ConceptInfo,
     DocsConfig,
     DocsGenerator,
     EntityKind,
     ExtractedEntities,
     PropertyInfo,
     ShapeInfo,
+    build_concept_tree,
     extract_all,
     generate_docs,
 )
@@ -646,7 +648,13 @@ class TestPathResolution:
             assert 'href="./assets/style.css"' not in html
             assert 'href="../assets/style.css"' not in html
 
-    def test_all_links_resolve_for_every_entity_kind(self, shape_ontology: Graph, output_dir: Path):
+    @pytest.mark.parametrize("fixture_name", ["shape_ontology", "skos_vocabulary"])
+    def test_all_links_resolve_for_every_entity_kind(
+        self,
+        fixture_name: str,
+        request: pytest.FixtureRequest,
+        output_dir: Path,
+    ):
         """Every page of every entity kind must have resolvable links.
 
         The sibling tests above run against ``simple_ontology``, which has
@@ -658,16 +666,19 @@ class TestPathResolution:
         This runs the same walk over an ontology carrying a class, an
         instance, a property and both shape kinds, so a new entity type
         added without going through ``_render_page()`` fails here rather
-        than shipping.
+        than shipping. It runs again over the SKOS vocabulary (#63) for
+        the same reason: a guard is only as general as its fixture.
         """
         import re
 
+        graph = request.getfixturevalue(fixture_name)
         config = DocsConfig(output_dir=output_dir, format="html")
-        DocsGenerator(config).generate(shape_ontology)
+        DocsGenerator(config).generate(graph)
 
         # The point of the test is lost if the fixture stops producing
         # pages at depth — assert the tree actually has them.
-        assert list(output_dir.glob("shapes/*.html")), "fixture generated no shape pages"
+        subdir = "shapes" if fixture_name == "shape_ontology" else "concepts"
+        assert list(output_dir.glob(f"{subdir}/*.html")), "fixture generated no pages at depth"
 
         broken: list[tuple[Path, str, Path]] = []
         ref_pat = re.compile(r'(?:href|src)="([^"#?]+)"')
@@ -1283,3 +1294,586 @@ class TestEntityKindEnum:
         assert "shape" in kinds
         assert EntityKind.SHAPE in kinds
         assert "instance" not in kinds
+
+
+# ---------------------------------------------------------------------------
+# SKOS support — issue #63 / milestone v0.6.0 stage 2
+# ---------------------------------------------------------------------------
+
+
+SKOS_FIXTURE = Path(__file__).parent / "fixtures" / "docs" / "skos_vocabulary.ttl"
+
+
+@pytest.fixture
+def skos_vocabulary() -> Graph:
+    """Load the tracked SKOS test vocabulary.
+
+    The repository had no SKOS structure at all before #63 — no
+    ``skos:Concept``, ``skos:ConceptScheme``, ``broader``, ``narrower`` or
+    ``inScheme`` anywhere — so this fixture is the material the acceptance
+    criteria are demonstrated against. See the file's own header for what
+    it exercises, including the deliberate ``skos:broader`` cycle.
+    """
+    g = Graph()
+    g.parse(SKOS_FIXTURE, format="turtle")
+    return g
+
+
+def _concept(entities: ExtractedEntities, local_name: str) -> ConceptInfo:
+    """Find a concept by the local part of its qname."""
+    return next(c for c in entities.concepts if c.qname.split(":")[-1] == local_name)
+
+
+class TestSKOSExtraction:
+    """Tests for ConceptInfo / ConceptSchemeInfo extraction."""
+
+    def test_concepts_extracted(self, skos_vocabulary: Graph):
+        """skos:Concept subjects land in the concepts bucket with the right kind."""
+        entities = extract_all(skos_vocabulary)
+        qnames = {c.qname for c in entities.concepts}
+        assert "ex:Building" in qnames
+        assert "ex:Dwelling" in qnames
+        for concept in entities.concepts:
+            assert EntityKind.SKOS_CONCEPT in concept.kinds
+
+    def test_concept_schemes_extracted(self, skos_vocabulary: Graph):
+        """skos:ConceptScheme subjects get their own bucket and kind."""
+        entities = extract_all(skos_vocabulary)
+        qnames = {s.qname for s in entities.concept_schemes}
+        assert qnames == {"ex:BuildingScheme", "ex:HeritageScheme"}
+        for scheme in entities.concept_schemes:
+            assert EntityKind.SKOS_CONCEPT_SCHEME in scheme.kinds
+
+    def test_concepts_excluded_from_instances(self, skos_vocabulary: Graph):
+        """The central #63 change: SKOS entities leave the Instances bucket."""
+        entities = extract_all(skos_vocabulary)
+        instance_qnames = {i.qname for i in entities.instances}
+        # The plain instance is still there
+        assert "ex:MainSite" in instance_qnames
+        # Concepts and schemes are not
+        assert "ex:Building" not in instance_qnames
+        assert "ex:BuildingScheme" not in instance_qnames
+        assert "ex:Outbuilding" not in instance_qnames
+
+    def test_concept_also_named_individual_routes_to_concepts(self, skos_vocabulary: Graph):
+        """A concept that is also owl:NamedIndividual is documented once, as a concept."""
+        entities = extract_all(skos_vocabulary)
+        building = _concept(entities, "Building")
+        assert str(OWL.NamedIndividual) in [str(t) for t in building.types]
+        assert "ex:Building" not in {i.qname for i in entities.instances}
+
+    def test_punned_class_keeps_its_class_page(self, skos_vocabulary: Graph):
+        """A subject typed both owl:Class and skos:Concept stays a class.
+
+        Classes outrank SKOS in the routing order, so ``ex:Warehouse`` gets
+        one page rather than two. It remains visible as a member of its
+        scheme, which cross-links to the class page.
+        """
+        entities = extract_all(skos_vocabulary)
+        assert "ex:Warehouse" in {c.qname for c in entities.classes}
+        assert "ex:Warehouse" not in {c.qname for c in entities.concepts}
+        scheme = next(s for s in entities.concept_schemes if s.qname == "ex:BuildingScheme")
+        assert any("Warehouse" in str(uri) for uri in scheme.concepts)
+
+    def test_labels_grouped_by_language(self, skos_vocabulary: Graph):
+        """pref/alt/hidden labels group into one row per language tag."""
+        entities = extract_all(skos_vocabulary)
+        building = _concept(entities, "Building")
+        by_lang = {group.language: group for group in building.labels}
+        assert set(by_lang) == {"en", "fr"}
+        assert by_lang["en"].preferred == ["Building"]
+        assert by_lang["en"].alternative == ["Structure"]
+        assert by_lang["en"].hidden == ["buildin"]
+        assert by_lang["fr"].preferred == ["Bâtiment"]
+        assert by_lang["fr"].alternative == ["Édifice"]
+        assert by_lang["fr"].hidden == []
+
+    def test_all_seven_note_types_extracted(self, skos_vocabulary: Graph):
+        """All seven SKOS documentation properties are captured, with languages."""
+        entities = extract_all(skos_vocabulary)
+        building = _concept(entities, "Building")
+        assert set(building.notes) == {
+            "definition",
+            "scopeNote",
+            "example",
+            "note",
+            "historyNote",
+            "editorialNote",
+            "changeNote",
+        }
+        languages = {value.language for value in building.notes["definition"]}
+        assert languages == {"en", "fr"}
+
+    def test_notes_not_duplicated_in_annotations(self, skos_vocabulary: Graph):
+        """SKOS notes render from `notes`, so get_annotations' copies are dropped."""
+        entities = extract_all(skos_vocabulary)
+        building = _concept(entities, "Building")
+        for name in ("note", "example", "scopeNote", "historyNote", "editorialNote"):
+            assert name not in building.annotations
+
+    def test_broader_materialises_the_inverse_of_narrower(self, skos_vocabulary: Graph):
+        """SKOS declares broader/narrower inverse, so one assertion gives both.
+
+        ``ex:ListedBuilding`` asserts ``skos:broader ex:Building`` and
+        nothing asserts the narrower direction — the concept still has to
+        appear under Building.
+        """
+        entities = extract_all(skos_vocabulary)
+        building = _concept(entities, "Building")
+        listed = _concept(entities, "ListedBuilding")
+        assert any("ListedBuilding" in str(uri) for uri in building.narrower)
+        assert any("Building" in str(uri) for uri in listed.broader)
+
+    def test_broader_and_narrower_deduplicated(self, skos_vocabulary: Graph):
+        """A relation asserted in both directions is not listed twice."""
+        entities = extract_all(skos_vocabulary)
+        dwelling = _concept(entities, "Dwelling")
+        assert len(dwelling.broader) == len(set(dwelling.broader))
+        assert sum("Building" in str(uri) for uri in dwelling.broader) == 1
+
+    def test_related_is_symmetric(self, skos_vocabulary: Graph):
+        """skos:related is symmetric, so both ends carry the relation."""
+        entities = extract_all(skos_vocabulary)
+        detached = _concept(entities, "DetachedHouse")
+        listed = _concept(entities, "ListedBuilding")
+        assert any("ListedBuilding" in str(uri) for uri in detached.related)
+        assert any("DetachedHouse" in str(uri) for uri in listed.related)
+
+    def test_concept_in_two_schemes(self, skos_vocabulary: Graph):
+        """Multiple skos:inScheme memberships are all kept."""
+        entities = extract_all(skos_vocabulary)
+        listed = _concept(entities, "ListedBuilding")
+        assert len(listed.in_schemes) == 2
+
+    def test_top_concept_of_implies_in_scheme(self, skos_vocabulary: Graph):
+        """skos:topConceptOf is a sub-property of skos:inScheme."""
+        entities = extract_all(skos_vocabulary)
+        listed = _concept(entities, "ListedBuilding")
+        heritage = next(s for s in entities.concept_schemes if s.qname == "ex:HeritageScheme")
+        # ListedBuilding declares topConceptOf HeritageScheme but no inScheme for it
+        assert heritage.uri in listed.in_schemes
+        assert heritage.uri in listed.top_concept_of
+
+    def test_scheme_members_and_top_concepts(self, skos_vocabulary: Graph):
+        """A scheme lists its members and its declared top concepts."""
+        entities = extract_all(skos_vocabulary)
+        scheme = next(s for s in entities.concept_schemes if s.qname == "ex:BuildingScheme")
+        member_names = {str(uri).split("#")[-1] for uri in scheme.concepts}
+        assert {"Building", "Dwelling", "DetachedHouse", "ListedBuilding"} <= member_names
+        assert [str(uri).split("#")[-1] for uri in scheme.top_concepts] == ["Building"]
+
+    def test_scheme_top_concept_from_inverse(self, skos_vocabulary: Graph):
+        """hasTopConcept and topConceptOf are inverses; either assertion counts."""
+        entities = extract_all(skos_vocabulary)
+        heritage = next(s for s in entities.concept_schemes if s.qname == "ex:HeritageScheme")
+        # Only ex:ListedBuilding skos:topConceptOf ex:HeritageScheme is asserted
+        assert [str(uri).split("#")[-1] for uri in heritage.top_concepts] == ["ListedBuilding"]
+
+    def test_concept_with_no_scheme_still_extracted(self, skos_vocabulary: Graph):
+        """An orphan concept is documented rather than lost."""
+        entities = extract_all(skos_vocabulary)
+        outbuilding = _concept(entities, "Outbuilding")
+        assert outbuilding.in_schemes == []
+
+    def test_mappings_land_in_other_properties(self, skos_vocabulary: Graph):
+        """skos:exactMatch gets no special treatment but stays visible."""
+        entities = extract_all(skos_vocabulary)
+        listed = _concept(entities, "ListedBuilding")
+        preds = {str(pred) for pred in listed.properties}
+        assert "http://www.w3.org/2004/02/skos/core#exactMatch" in preds
+
+    def test_structural_predicates_not_repeated_in_properties(self, skos_vocabulary: Graph):
+        """broader/narrower/inScheme render structurally, not as key-value rows."""
+        entities = extract_all(skos_vocabulary)
+        dwelling = _concept(entities, "Dwelling")
+        preds = {str(pred) for pred in dwelling.properties}
+        assert "http://www.w3.org/2004/02/skos/core#broader" not in preds
+        assert "http://www.w3.org/2004/02/skos/core#inScheme" not in preds
+        assert "http://www.w3.org/2004/02/skos/core#prefLabel" not in preds
+
+
+class TestSKOSHierarchy:
+    """Tests for build_concept_tree, including the cyclic case."""
+
+    def test_tree_nests_three_levels(self, skos_vocabulary: Graph):
+        """The broader/narrower tree nests to the depth the vocabulary declares."""
+        entities = extract_all(skos_vocabulary)
+        scheme = next(s for s in entities.concept_schemes if s.qname == "ex:BuildingScheme")
+        tree = build_concept_tree(entities.concepts, scheme.uri)
+
+        building = next(node for node in tree if node.concept.qname == "ex:Building")
+        dwelling = next(node for node in building.children if node.concept.qname == "ex:Dwelling")
+        assert [child.concept.qname for child in dwelling.children] == ["ex:DetachedHouse"]
+
+    def test_tree_is_rooted_at_declared_top_concepts(self, skos_vocabulary: Graph):
+        """Declared top concepts anchor the tree."""
+        entities = extract_all(skos_vocabulary)
+        scheme = next(s for s in entities.concept_schemes if s.qname == "ex:BuildingScheme")
+        tree = build_concept_tree(entities.concepts, scheme.uri)
+        assert tree[0].concept.qname == "ex:Building"
+
+    def test_cyclic_broader_terminates(self, skos_vocabulary: Graph):
+        """A broader cycle must not send the walker into infinite recursion.
+
+        SKOS does not promise acyclicity. ``ex:LoopA`` and ``ex:LoopB`` are
+        each other's broader concept; the walker has to stop and still
+        render both.
+        """
+        entities = extract_all(skos_vocabulary)
+        scheme = next(s for s in entities.concept_schemes if s.qname == "ex:BuildingScheme")
+        tree = build_concept_tree(entities.concepts, scheme.uri)
+
+        def walk(nodes, depth=0):
+            assert depth < 20, "concept tree recursed further than the vocabulary is deep"
+            names = []
+            for node in nodes:
+                names.append(node.concept.qname)
+                names.extend(walk(node.children, depth + 1))
+            return names
+
+        rendered = walk(tree)
+        assert "ex:LoopA" in rendered
+        assert "ex:LoopB" in rendered
+
+    def test_cycle_members_are_not_dropped(self, skos_vocabulary: Graph):
+        """Every member of the scheme appears in the tree, cycle or not."""
+        entities = extract_all(skos_vocabulary)
+        scheme = next(s for s in entities.concept_schemes if s.qname == "ex:BuildingScheme")
+        tree = build_concept_tree(entities.concepts, scheme.uri)
+
+        def collect(nodes):
+            found = set()
+            for node in nodes:
+                found.add(node.concept.qname)
+                found |= collect(node.children)
+            return found
+
+        member_concepts = {c.qname for c in entities.concepts if scheme.uri in c.in_schemes}
+        assert member_concepts <= collect(tree)
+
+    def test_tree_without_scheme_covers_every_concept(self, skos_vocabulary: Graph):
+        """Called with no scheme, the tree spans all concepts including orphans."""
+        entities = extract_all(skos_vocabulary)
+        tree = build_concept_tree(entities.concepts)
+
+        def collect(nodes):
+            found = set()
+            for node in nodes:
+                found.add(node.concept.qname)
+                found |= collect(node.children)
+            return found
+
+        assert {c.qname for c in entities.concepts} <= collect(tree)
+
+
+class TestSKOSRendering:
+    """Tests for concept and scheme pages in all three formats."""
+
+    def test_html_renders_concept_pages(self, skos_vocabulary: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        assert (output_dir / "concepts" / "Building.html").exists()
+        assert (output_dir / "concepts" / "BuildingScheme.html").exists()
+
+    def test_markdown_renders_concept_pages(self, skos_vocabulary: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="markdown")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        assert (output_dir / "concepts" / "Building.md").exists()
+        assert (output_dir / "concepts" / "BuildingScheme.md").exists()
+
+    def test_json_renders_concept_pages(self, skos_vocabulary: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="json")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        assert (output_dir / "concepts" / "Building.json").exists()
+        assert (output_dir / "concepts" / "BuildingScheme.json").exists()
+
+    def test_html_kind_badges(self, skos_vocabulary: Graph, output_dir: Path):
+        """Concept and scheme pages carry their kind badges."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        concept_html = (output_dir / "concepts" / "Building.html").read_text()
+        assert 'class="entity-type skos_concept"' in concept_html
+
+        scheme_html = (output_dir / "concepts" / "BuildingScheme.html").read_text()
+        assert 'class="entity-type skos_concept_scheme"' in scheme_html
+
+    def test_html_badge_css_present(self, skos_vocabulary: Graph, output_dir: Path):
+        """The SKOS badge colours ship in the default stylesheet."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        css = (output_dir / "assets" / "style.css").read_text()
+        assert ".entity-type.skos_concept { background: #1d4ed8; }" in css
+        assert ".entity-type.skos_concept_scheme { background: #1e3a8a; }" in css
+
+    def test_html_multilingual_label_table(self, skos_vocabulary: Graph, output_dir: Path):
+        """Labels render one row per language, not as duplicate triples."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        html = (output_dir / "concepts" / "Building.html").read_text()
+        assert "<th>Preferred</th>" in html
+        assert "Bâtiment" in html
+        assert "Édifice" in html
+        assert "buildin" in html  # hidden label
+
+    def test_html_notes_carry_language_tags(self, skos_vocabulary: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        html = (output_dir / "concepts" / "Building.html").read_text()
+        assert "skos:scopeNote" in html
+        assert "skos:changeNote" in html
+        assert '<span class="lang-tag">fr</span>' in html
+
+    def test_html_scheme_page_has_hierarchy(self, skos_vocabulary: Graph, output_dir: Path):
+        """The scheme page carries the vocabulary tree."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        html = (output_dir / "concepts" / "BuildingScheme.html").read_text()
+        assert "Concept Hierarchy" in html
+        assert 'class="concept-tree"' in html
+        assert "DetachedHouse.html" in html
+
+    def test_html_concept_cross_references(self, skos_vocabulary: Graph, output_dir: Path):
+        """inScheme and broader/narrower render as links, both ways."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        html = (output_dir / "concepts" / "Dwelling.html").read_text()
+        assert "BuildingScheme.html" in html  # scheme link
+        assert "Building.html" in html  # broader link
+        assert "DetachedHouse.html" in html  # narrower link
+
+    def test_html_punned_class_member_links_to_class_page(
+        self, skos_vocabulary: Graph, output_dir: Path
+    ):
+        """A member that is documented as a class links to its class page."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        html = (output_dir / "concepts" / "BuildingScheme.html").read_text()
+        assert "classes/Warehouse.html" in html
+        assert not (output_dir / "concepts" / "Warehouse.html").exists()
+
+    def test_markdown_kind_in_frontmatter(self, skos_vocabulary: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="markdown")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        concept_md = (output_dir / "concepts" / "Building.md").read_text()
+        assert "type: skos_concept" in concept_md
+
+        scheme_md = (output_dir / "concepts" / "BuildingScheme.md").read_text()
+        assert "type: skos_concept_scheme" in scheme_md
+
+    def test_markdown_label_and_note_tables(self, skos_vocabulary: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="markdown")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        md = (output_dir / "concepts" / "Building.md").read_text()
+        assert "| Language | Preferred | Alternative | Hidden |" in md
+        assert "| `fr` | Bâtiment | Édifice |  |" in md
+        assert "`skos:historyNote`" in md
+        assert "_(fr)_" in md
+
+    def test_markdown_scheme_hierarchy(self, skos_vocabulary: Graph, output_dir: Path):
+        """The Markdown scheme page renders the tree as an indented list."""
+        config = DocsConfig(output_dir=output_dir, format="markdown")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        md = (output_dir / "concepts" / "BuildingScheme.md").read_text()
+        assert "## Concept Hierarchy" in md
+        assert "  - [Dwelling]" in md
+        assert "    - [Detached House]" in md
+
+    def test_json_breaking_change_concepts_not_in_instances(
+        self, skos_vocabulary: Graph, output_dir: Path
+    ):
+        """JSON instances array no longer carries concepts or schemes."""
+        config = DocsConfig(output_dir=output_dir, format="json")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        data = json.loads((output_dir / "index.json").read_text())
+        instance_qnames = {i["qname"] for i in data["instances"]}
+        assert "ex:Building" not in instance_qnames
+        assert "ex:BuildingScheme" not in instance_qnames
+
+    def test_json_top_level_skos_arrays(self, skos_vocabulary: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="json")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        data = json.loads((output_dir / "index.json").read_text())
+        assert {c["qname"] for c in data["concepts"]} >= {"ex:Building", "ex:Dwelling"}
+        assert {s["qname"] for s in data["concept_schemes"]} == {
+            "ex:BuildingScheme",
+            "ex:HeritageScheme",
+        }
+        assert data["statistics"]["concepts"] == 7
+        assert data["statistics"]["concept_schemes"] == 2
+
+    def test_json_concept_schema(self, skos_vocabulary: Graph, output_dir: Path):
+        """The per-concept JSON keeps labels, notes and relations structured."""
+        config = DocsConfig(output_dir=output_dir, format="json")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        data = json.loads((output_dir / "concepts" / "Building.json").read_text())
+        assert data["kinds"] == ["skos_concept"]
+        assert {"labels", "notes", "broader", "narrower", "in_schemes"} <= set(data)
+
+        french = next(group for group in data["labels"] if group["language"] == "fr")
+        assert french["preferred"] == ["Bâtiment"]
+
+        definitions = data["notes"]["definition"]
+        assert {d["language"] for d in definitions} == {"en", "fr"}
+
+    def test_json_scheme_carries_hierarchy(self, skos_vocabulary: Graph, output_dir: Path):
+        """The scheme JSON ships the tree so consumers need not rebuild it."""
+        config = DocsConfig(output_dir=output_dir, format="json")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        data = json.loads((output_dir / "concepts" / "BuildingScheme.json").read_text())
+        roots = {node["qname"] for node in data["hierarchy"]}
+        assert "ex:Building" in roots
+        building = next(n for n in data["hierarchy"] if n["qname"] == "ex:Building")
+        assert {child["qname"] for child in building["children"]} == {
+            "ex:Dwelling",
+            "ex:ListedBuilding",
+        }
+
+    def test_json_single_page_has_skos_arrays(self, skos_vocabulary: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="json", single_page=True)
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        data = json.loads((output_dir / "ontology.json").read_text())
+        assert len(data["concepts"]) == 7
+        assert len(data["concept_schemes"]) == 2
+
+
+class TestSKOSIndexAndSinglePage:
+    """Tests for the SKOS section on index and single-page output."""
+
+    def test_html_index_has_skos_section(self, skos_vocabulary: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        html = (output_dir / "index.html").read_text()
+        assert "SKOS Vocabulary" in html
+        assert "concepts/Building.html" in html
+        assert "concepts/BuildingScheme.html" in html
+
+    def test_markdown_index_has_skos_section(self, skos_vocabulary: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="markdown")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        md = (output_dir / "index.md").read_text()
+        assert "## SKOS Vocabulary" in md
+        assert "`skos_concept`" in md
+        assert "`skos_concept_scheme`" in md
+
+    def test_html_single_page_has_skos(self, skos_vocabulary: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="html", single_page=True)
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        html = (output_dir / "index.html").read_text()
+        assert 'id="skos"' in html
+        assert "Loop A" in html
+
+    def test_markdown_single_page_has_skos(self, skos_vocabulary: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="markdown", single_page=True)
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        md = (output_dir / "index.md").read_text()
+        assert "## SKOS Vocabulary" in md
+        assert "- [SKOS Vocabulary](#skos-vocabulary)" in md
+
+
+class TestSKOSSearchIndex:
+    """Tests for SKOS entries in the search index."""
+
+    def test_concepts_appear_in_search_index(self, skos_vocabulary: Graph):
+        entities = extract_all(skos_vocabulary)
+        config = DocsConfig()
+        entries = generate_search_index(entities, config)
+
+        by_type = {e.entity_type for e in entries}
+        assert "skos_concept" in by_type
+        assert "skos_concept_scheme" in by_type
+
+    def test_search_entry_kinds_and_url(self, skos_vocabulary: Graph):
+        entities = extract_all(skos_vocabulary)
+        entries = generate_search_index(entities, DocsConfig())
+
+        entry = next(e for e in entries if e.qname == "ex:Building")
+        assert entry.kinds == ["skos_concept"]
+        assert entry.url == "concepts/Building.html"
+
+    def test_alt_and_hidden_labels_indexed(self, skos_vocabulary: Graph):
+        """Hidden labels exist to catch misspellings — they must be searchable."""
+        entities = extract_all(skos_vocabulary)
+        entries = generate_search_index(entities, DocsConfig())
+
+        detached = next(e for e in entries if e.qname == "ex:DetachedHouse")
+        assert "detatched" in detached.keywords  # skos:hiddenLabel
+        assert "standalone" in detached.keywords  # skos:altLabel
+
+
+class TestIncludeSkosFlag:
+    """Tests for the include_skos configuration flag."""
+
+    def test_default_include_skos_true(self):
+        assert DocsConfig().include_skos is True
+
+    def test_include_skos_from_dict(self):
+        config = DocsConfig.from_dict({"include_skos": False})
+        assert config.include_skos is False
+
+    def test_include_skos_false_excludes_pages(self, skos_vocabulary: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="html", include_skos=False)
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        assert not (output_dir / "concepts").exists()
+        html = (output_dir / "index.html").read_text()
+        assert "SKOS Vocabulary" not in html
+
+    def test_include_skos_false_excludes_from_search(self, skos_vocabulary: Graph):
+        entities = extract_all(skos_vocabulary)
+        entries = generate_search_index(entities, DocsConfig(include_skos=False))
+
+        assert not [e for e in entries if e.entity_type.startswith("skos_")]
+
+    def test_include_skos_false_does_not_leak_into_instances(
+        self, skos_vocabulary: Graph, output_dir: Path
+    ):
+        """Excluded means excluded — concepts do not fall back to Instances."""
+        config = DocsConfig(output_dir=output_dir, format="json", include_skos=False)
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        data = json.loads((output_dir / "index.json").read_text())
+        assert "ex:Building" not in {i["qname"] for i in data["instances"]}
+
+
+class TestSKOSRouting:
+    """Tests for SKOS URL/path generation."""
+
+    def test_concept_path_under_concepts_directory(self):
+        config = DocsConfig(format="html")
+        assert entity_to_path("ex:Building", "skos_concept", config) == Path(
+            "concepts/Building.html"
+        )
+
+    def test_scheme_shares_the_concepts_directory(self):
+        config = DocsConfig(format="html")
+        assert entity_to_path("ex:BuildingScheme", "skos_concept_scheme", config) == Path(
+            "concepts/BuildingScheme.html"
+        )
+
+    def test_concept_path_with_entity_kind_enum(self):
+        config = DocsConfig(format="html")
+        assert entity_to_path("ex:Building", EntityKind.SKOS_CONCEPT, config) == Path(
+            "concepts/Building.html"
+        )
