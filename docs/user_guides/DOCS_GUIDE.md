@@ -45,8 +45,10 @@ docs/
 ├── properties/
 │   ├── object/
 │   │   └── hasRoom.html
-│   └── datatype/
-│       └── hasName.html
+│   ├── datatype/
+│   │   └── hasName.html
+│   └── other/
+│       └── hasParent.html
 ├── instances/
 │   └── HeadOffice.html
 └── assets/
@@ -96,6 +98,7 @@ The top-level shape of `index.json` is:
     "object_properties": 8,
     "datatype_properties": 5,
     "annotation_properties": 2,
+    "other_properties": 1,
     "instances": 3,
     "shapes": 4,
     "concepts": 7,
@@ -105,6 +108,7 @@ The top-level shape of `index.json` is:
   "object_properties":     [{ "uri": "...", "qname": "...", "label": "..." }, ...],
   "datatype_properties":   [{ "uri": "...", "qname": "...", "label": "..." }, ...],
   "annotation_properties": [{ "uri": "...", "qname": "...", "label": "..." }, ...],
+  "other_properties":      [{ "uri": "...", "qname": "...", "label": "..." }, ...],
   "instances":             [{ "uri": "...", "qname": "...", "label": "..." }, ...],
   "shapes":                [{ "uri": "...", "qname": "...", "label": "...",
                               "kinds": ["shape", "node_shape"] }, ...],
@@ -117,7 +121,8 @@ The top-level shape of `index.json` is:
 
 Each entity also gets a full per-page JSON file under its type directory
 (`classes/`, `properties/object/`, `properties/datatype/`,
-`properties/annotation/`, `instances/`, `shapes/`, or `concepts/`).
+`properties/annotation/`, `properties/other/`, `instances/`, `shapes/`, or
+`concepts/`).
 Per-page files contain the complete entity record including all fields.
 
 > **Breaking change in v0.5.0.** SHACL shapes
@@ -133,6 +138,43 @@ Per-page files contain the complete entity record including all fields.
 > `concepts` and `concept_schemes` arrays; neither appears in
 > `instances` any more. See "SKOS Vocabularies" below for the per-page
 > schema.
+
+## Properties Whose Kind the Source Does Not State
+
+Ontologies declare properties in more ways than the obvious four types, and
+`docs` recognises all of them.
+
+**Where the kind is inferable, it is used.** `owl:TransitiveProperty`,
+`owl:SymmetricProperty`, `owl:AsymmetricProperty`, `owl:ReflexiveProperty`,
+`owl:IrreflexiveProperty` and `owl:InverseFunctionalProperty` are all
+subclasses of `owl:ObjectProperty` in OWL 2, so a term declared *solely*
+with one of them is documented as an object property:
+
+```turtle
+ex:hasPart a owl:TransitiveProperty .   # an object property
+```
+
+**Where it is not inferable, the term is not guessed at.**
+`owl:FunctionalProperty` and `owl:DeprecatedProperty` are subclasses of
+`rdf:Property` only — nothing in the source says whether such a term is an
+object property or a datatype property:
+
+```turtle
+ex:hasParent a owl:FunctionalProperty .  # kind unstated
+```
+
+These, along with plain `rdf:Property` declarations, are documented under
+`properties/other/` with a neutral `rdf property` badge, listed in an
+**Other Properties** section, and given their own `other_properties` array
+in JSON output. The badge says the source did not state a kind; it does not
+claim a fourth kind exists.
+
+`owl:DeprecatedClass` gets the same treatment on the class side — a term
+declared only with it is documented as a class.
+
+Before this, every one of these was extracted as a generic **instance** and
+documented as an individual, and `rdf:Property`-only terms got no page at
+all.
 
 ## SHACL Shapes
 
@@ -428,7 +470,9 @@ poetry run rdf-construct docs ontology.ttl --include classes,shapes
 poetry run rdf-construct docs vocabulary.ttl --include concepts
 ```
 
-Valid type names: `classes`, `properties`, `object_properties`, `datatype_properties`, `annotation_properties`, `instances`, `shapes`, `concepts`
+Valid type names: `classes`, `properties`, `object_properties`, `datatype_properties`, `annotation_properties`, `other_properties`, `instances`, `shapes`, `concepts`
+
+`properties` covers all four property groups, `other_properties` included.
 
 `concepts` covers both SKOS kinds — concepts and concept schemes are one
 toggle. `concept_schemes` and `skos` are accepted as spellings of it.
@@ -448,6 +492,7 @@ include_classes: true
 include_object_properties: true
 include_datatype_properties: true
 include_annotation_properties: false
+include_other_properties: true
 include_instances: true
 include_shapes: true
 include_skos: true

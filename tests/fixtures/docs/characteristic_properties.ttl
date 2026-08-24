@@ -1,0 +1,97 @@
+@prefix ex:   <http://example.org/char#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+#
+# Terms declared solely by an OWL characteristic (issue #76).
+#
+# Every property below is legal RDF and common in older ontologies, and
+# every one of them was extracted as an *instance* before #76: the
+# extractor recognised only owl:ObjectProperty, owl:DatatypeProperty,
+# owl:AnnotationProperty and rdf:Property.
+#
+# Two groups, and the distinction is the point:
+#
+#   Kind IS inferable — the six characteristics below are subclasses of
+#   owl:ObjectProperty in OWL 2, so a term declared only with one of them
+#   is an object property.
+#
+#   Kind is NOT inferable — owl:FunctionalProperty and
+#   owl:DeprecatedProperty are subclasses of rdf:Property only. Nothing
+#   says object or datatype, so these must go somewhere rather than being
+#   guessed into a bucket or dropped.
+#
+
+ex:Ont a owl:Ontology ;
+    rdfs:label "Characteristic-only declarations"@en .
+
+ex:Thing a owl:Class ;
+    rdfs:label "Thing"@en .
+
+#
+# Kind inferable: object properties, declared only by a characteristic.
+#
+
+ex:hasPart a owl:TransitiveProperty ;
+    rdfs:label "has part"@en ;
+    rdfs:comment "Declared only as transitive."@en ;
+    rdfs:domain ex:Thing ;
+    rdfs:range ex:Thing .
+
+ex:adjacentTo a owl:SymmetricProperty ;
+    rdfs:label "adjacent to"@en .
+
+ex:precedes a owl:AsymmetricProperty ;
+    rdfs:label "precedes"@en .
+
+ex:sameAgeAs a owl:ReflexiveProperty ;
+    rdfs:label "same age as"@en .
+
+ex:differentFrom a owl:IrreflexiveProperty ;
+    rdfs:label "different from"@en .
+
+ex:hasIdentifier a owl:InverseFunctionalProperty ;
+    rdfs:label "has identifier"@en .
+
+#
+# Kind NOT inferable: nothing declares these object or datatype.
+#
+
+ex:hasParent a owl:FunctionalProperty ;
+    rdfs:label "has parent"@en ;
+    rdfs:comment "Functional, but nothing says object or datatype."@en .
+
+ex:oldProperty a owl:DeprecatedProperty ;
+    rdfs:label "old property"@en .
+
+ex:plainProperty a rdf:Property ;
+    rdfs:label "plain property"@en .
+
+#
+# A characteristic alongside an explicit kind: the kind wins.
+#
+
+ex:knows a owl:ObjectProperty , owl:SymmetricProperty ;
+    rdfs:label "knows"@en .
+
+ex:retiredName a owl:DatatypeProperty , owl:DeprecatedProperty ;
+    rdfs:label "retired name"@en ;
+    rdfs:range xsd:string .
+
+#
+# owl:DeprecatedClass has the same problem on the class side. This one is
+# also typed ex:Thing, so it doubles as a check that a class is not listed
+# among its own metaclass's instances.
+#
+
+ex:OldClass a owl:DeprecatedClass , ex:Thing ;
+    rdfs:label "Old Class"@en .
+
+#
+# A genuine individual, which must stay one.
+#
+
+ex:alice a ex:Thing ;
+    rdfs:label "Alice"@en .

@@ -64,6 +64,7 @@ class DocsConfig:
     include_object_properties: bool = True
     include_datatype_properties: bool = True
     include_annotation_properties: bool = True
+    include_other_properties: bool = True
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> DocsConfig:
@@ -123,6 +124,8 @@ class DocsConfig:
             config.include_datatype_properties = data["include_datatype_properties"]
         if "include_annotation_properties" in data:
             config.include_annotation_properties = data["include_annotation_properties"]
+        if "include_other_properties" in data:
+            config.include_other_properties = data["include_other_properties"]
 
         return config
 
@@ -203,8 +206,8 @@ def entity_to_path(
         qname: Entity qualified name.
         entity_type: Type of entity. Accepts ``"class"``,
             ``"object_property"``, ``"datatype_property"``,
-            ``"annotation_property"``, ``"instance"``, ``"shape"``,
-            ``"skos_concept"`` or ``"skos_concept_scheme"``.
+            ``"annotation_property"``, ``"rdf_property"``, ``"instance"``,
+            ``"shape"``, ``"skos_concept"`` or ``"skos_concept_scheme"``.
             ``EntityKind`` members are also accepted directly (they
             compare equal to their string values).
         config: Documentation configuration.
@@ -237,6 +240,13 @@ def entity_to_path(
         "shape": "shapes",
         "skos_concept": "concepts",
         "skos_concept_scheme": "concepts",
+        # Properties whose kind is not implied by their declaration (#76):
+        # rdf:Property, owl:FunctionalProperty, owl:DeprecatedProperty. The
+        # bare "property" key catches a term reachable only through
+        # rdfs:domain / rdfs:range that carries no rdf:type at all, so it
+        # lands with its siblings rather than in a junk directory.
+        "rdf_property": "properties/other",
+        "property": "properties/other",
     }
 
     subdir = type_dirs.get(entity_type, "other")

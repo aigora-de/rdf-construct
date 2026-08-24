@@ -1,0 +1,3226 @@
+PREFIX building: <http://informationexchangestandard.org/ont/ies/building/>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+PREFIX ies: <http://informationexchangestandard.org/ont/ies/common/>
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
+PREFIX qudt: <http://qudt.org/schema/qudt/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX vann: <http://purl.org/vocab/vann/>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+<http://informationexchangestandard.org/ont/ies/building/>
+    a owl:Ontology ;
+    dcterms:modified "2026-01-09"^^xsd:date ;
+    dcterms:title "IES Domain Ontology - Building Ontology part of Built Environment"@en-gb ;
+    owl:versionIRI <http://informationexchangestandard.org/ont/building/1.0.0-rc2> ;
+    owl:versionInfo "1.0.0-rc2" ;
+    vann:preferredNamespacePrefix "building" ;
+    vann:preferredNamespaceUri "http://informationexchangestandard.org/ont/ies/building/" .
+
+building:AboveSurfaceLevel
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Location` that is situated above the natural surface level, such as an elevated walkway, footbridge, or raised platform access point."@en-gb ;
+    rdfs:label "Access Above Surface Level"@en-gb ;
+    rdfs:subClassOf ies:Location .
+
+building:AccessPoint
+    a rdfs:Class ;
+    ies:powertype building:ClassOfAccessPoint ;
+    rdfs:comment "An `ies:Location` that allows pedestrian or vehicular access to or from a site, consistent with Ordnance Survey's 'Site Access Location' concept."@en-gb ;
+    rdfs:label "Access Point"@en-gb ;
+    rdfs:subClassOf ies:Location .
+
+building:AccreditedEnergyAssessor
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ResponsibleActorState` of a professional who has been trained and certified to evaluate the energy performance of  buildings and to produce an authorised result setting out the findings. In the UK, they must be a member of a government-approved accreditation scheme, which ensures that they meet specific competency standards and adhere to a code of conduct. Accreditation schemes also provide quality assurance for the work undertaken by their members, and they ensure that energy assessors maintain their skills and knowledge up to date through continuing professional development."@en-gb ;
+    rdfs:label "Accredited Energy Assessor"@en-gb ;
+    rdfs:subClassOf ies:PersonState .
+
+building:AirSourceHeatPump
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatPump` that operates by absorbing heat from external air"@en-gb ;
+    rdfs:label "Air Source Heat Pump"@en-gb ;
+    rdfs:subClassOf building:HeatPump .
+
+building:AirTightnessTestValue
+    a rdfs:Class ;
+    rdfs:comment "An `ies:QuantityValue` that is the result of an air tightness test of a `building:Envelope`."@en-gb ;
+    rdfs:label "Air Tightness Test Value"@en-gb ;
+    rdfs:subClassOf ies:QuantityValue .
+
+building:AirTrafficControlTower
+    a rdfs:Class ;
+    rdfs:comment "A `building:Tower` from which aircraft movements are monitored and directed."@en-gb ;
+    rdfs:label "Air Traffic Control Tower"@en-gb ;
+    rdfs:subClassOf building:Tower .
+
+building:AnimalTreatmentSite
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a facility providing veterinary medical treatment and care for animals."@en-gb ;
+    rdfs:label "Animal Treatment Site"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature ;
+    skos:altLabel "Veterinary Hospital"@en-gb .
+
+building:AnthraciteFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:CoalFlow` that consists of anthracite, that is, a type of coal that has at least 87 percent of fixed carbon"@en-gb ;
+    rdfs:label "Anthracite Flow"@en-gb ;
+    rdfs:subClassOf building:CoalFlow .
+
+building:AppraisalOfHeritage
+    a rdfs:Class ;
+    rdfs:comment "A `building:TrustMarkAssessment` asserting the appraisal of the dwelling's heritage, architectural features, structure, construction and condition and the installed building services (ventilation, heating, hot water and lighting) in sufficient detail to establish the suitability of the dwelling for improvement"@en-gb ;
+    rdfs:label "Appraisal of Heritage"@en-gb ;
+    rdfs:subClassOf building:TrustMarkAssessment .
+
+building:Arch
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a curved structural element spanning an opening and bearing load from above."@en-gb ;
+    rdfs:label "Arch"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Archway
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a roofed passage opening formed within a Structure allowing vehicular passage."@en-gb ;
+    rdfs:label "Archway"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:AssemblyConstituencyRegion
+    a rdfs:Class ;
+    rdfs:comment "A `building:ConstituencyRegion` that is instituted for electing one member of the Northern Ireland Assembly in each Northern Ireland Assembly election"@en-gb ;
+    rdfs:label "Assembly Constituency Region"@en-gb ;
+    rdfs:subClassOf building:DevolvedParliamentConstituencyRegion .
+
+building:AssessConstructionMethod
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceAssessment` that assesses the method of construction of the `built:Entities` that are part of a `building:BuildingUnit`"@en-gb ;
+    rdfs:label "AssessConstructionMethod"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceAssessment .
+
+building:AssessFloorConstruction
+    a rdfs:Class ;
+    rdfs:comment "A `building:AssessConstructionMethod` that assesses the method of construction of the `building:Floor` of a `building:BuildingUnit`"@en-gb ;
+    rdfs:label "Assess Floor Construction"@en-gb ;
+    rdfs:subClassOf building:AssessConstructionMethod .
+
+building:AssessFloorInsulation
+    a rdfs:Class ;
+    rdfs:comment "A `building:AssessPerformanceOfInsulation` that assesses the nature of floor insulation of a `building:BuildingUnit"@en-gb ;
+    rdfs:label "Assess Floor Insulation"@en-gb ;
+    rdfs:subClassOf building:AssessPerformanceOfInsulation .
+
+building:AssessHeatingSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceAssessment` which assesses the energy performance of the heating system."@en-gb ;
+    rdfs:label "AssessHeatingSystems"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceAssessment .
+
+building:AssessPerformanceOfInsulation
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceAssessment` that assesses the relative performance of the insulation of a `building:BuildingUnit`"@en-gb ;
+    rdfs:label "Assess Performance Of Insulation"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceAssessment .
+
+building:AssessRoofConstruction
+    a rdfs:Class ;
+    rdfs:comment "A `building:AssessConstructionMethod` that assesses the method of construction of the `building:Roof` of a `building:StructureOrBuildingUnit`"@en-gb ;
+    rdfs:label "Assess Roof Construction"@en-gb ;
+    rdfs:subClassOf building:AssessConstructionMethod .
+
+building:AssessRoofInsulationThickness
+    a rdfs:Class ;
+    rdfs:comment "A `building:AssessPerformanceOfInsulation` that assesses the the thickness of roof insulation of a `building:StructureOrBuildingUnit"@en-gb ;
+    rdfs:label "Assess Roof Insulation Thickness"@en-gb ;
+    rdfs:subClassOf building:AssessPerformanceOfInsulation .
+
+building:AssessWallConstruction
+    a rdfs:Class ;
+    rdfs:comment "A `building:AssessConstructionMethod` that assesses the method of construction of the `building:Wall` of a `building:BuildingUnit`"@en-gb ;
+    rdfs:label "Assess Wall Construction"@en-gb ;
+    rdfs:subClassOf building:AssessConstructionMethod .
+
+building:AssessWallInsulation
+    a rdfs:Class ;
+    rdfs:comment "A `building:AssessPerformanceOfInsulation` that assesses the nature of wall insulation of a `building:BuildingUnit"@en-gb ;
+    rdfs:label "Assess Wall Insulation"@en-gb ;
+    rdfs:subClassOf building:AssessPerformanceOfInsulation .
+
+building:AssessWindowInsulation
+    a rdfs:Class ;
+    rdfs:comment "A `building:AssessPerformanceOfInsulation` that assesses the glazing of a `building:BuildingUnit"@en-gb ;
+    rdfs:label "Assess Window Insulation"@en-gb ;
+    rdfs:subClassOf building:AssessPerformanceOfInsulation .
+
+building:AtSurfaceLevel
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Location` that is situated at the natural surface level, such as a standard building entrance or ground-level doorway."@en-gb ;
+    rdfs:label "Access at Surface Level"@en-gb ;
+    rdfs:subClassOf ies:Location .
+
+building:B30KFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:EnergyCarrierFlow` that consists of a mixture of 30% FAME and 70% kerosene by volume."@en-gb ;
+    rdfs:label "B30K Flow"@en-gb ;
+    rdfs:subClassOf building:PartlyRenewableEnergyCarrierFlow .
+
+building:B30K_Boiler
+    a rdfs:Class ;
+    rdfs:comment "A `building:BoilerHeatProductionSystem` that is compatible with B30K fuel, a blend of kerosene and FAME biofuel."@en-gb ;
+    rdfs:label "B30K Boiler"@en-gb ;
+    rdfs:subClassOf building:BoilerHeatProductionSystem .
+
+building:Barrier
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that obstructs, directs, or controls movement of people, vehicles, or animals."@en-gb ;
+    rdfs:label "Barrier"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Basement
+    a rdfs:Class ;
+    rdfs:comment "A `building:Storey` that is wholly or partly below the ground level of a `building:Building`, typically used for storage, parking, or mechanical equipment."@en ;
+    rdfs:label "Basement"@en ;
+    rdfs:subClassOf building:Storey .
+
+building:Bedroom
+    a rdfs:Class ;
+    rdfs:comment "A `building:Room` that is used primarily for sleeping."@en-gb ;
+    rdfs:label "Bedroom"@en-gb ;
+    rdfs:subClassOf building:Room .
+
+building:BellTower
+    a rdfs:Class ;
+    rdfs:comment "A `building:Tower` that is a free-standing tower designed primarily to house and sound suspended bells."@en-gb ;
+    rdfs:label "Bell Tower"@en-gb ;
+    rdfs:subClassOf building:Tower .
+
+building:BelowSurfaceLevel
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Location` that is situated below the natural surface level, such as a basement entrance, underground tunnel, or subway station access point."@en-gb ;
+    rdfs:label "Access Below Surface Level"@en-gb ;
+    rdfs:subClassOf ies:Location .
+
+building:BiodieselFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:LiquidBiofuelFlow` that derives from oily plants and algae or waste cooking oil"@en-gb ;
+    rdfs:label "Biodiesel Flow"@en-gb ;
+    rdfs:subClassOf building:LiquidBiofuelFlow .
+
+building:BiofuelFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:RenewableEnergyCarrierFlow` that consists of matter deriving from organic elements, such as wood, crops, or organic waste"@en-gb ;
+    rdfs:label "Biofuel Flow"@en-gb ;
+    rdfs:subClassOf building:RenewableEnergyCarrierFlow .
+
+building:BiogasFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:BiofuelFlow` that comes in a gaseous aggregation state"@en-gb ;
+    rdfs:label "Biogas Flow"@en-gb ;
+    rdfs:subClassOf building:BiofuelFlow .
+
+building:BiomassFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:BiofuelFlow` that comes in a solid aggregation state"@en-gb ;
+    rdfs:label "Biomass Flow"@en-gb ;
+    rdfs:subClassOf building:BiofuelFlow .
+
+building:BiomassPowerFacility
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains facilities for generating electricity from biomass materials such as wood, agricultural residues, or organic waste."@en-gb ;
+    rdfs:label "Biomass Power Facility"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature ;
+    skos:altLabel "Biomass Power Station"@en-gb .
+
+building:BituminousCoalFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:CoalFlow` that consists of a relatively soft coal containing a tar-like substance like bitumen or asphalt"@en-gb ;
+    rdfs:label "Bituminous Coal Flow"@en-gb ;
+    rdfs:subClassOf building:CoalFlow .
+
+building:BoatHouse
+    a rdfs:Class ;
+    rdfs:comment "A `building:Building` that is positioned by water and designed for the shelter and storage of boats, often with direct water access."@en-gb ;
+    rdfs:label "Boat House"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+building:BoilerHeatProductionSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatProductionSystem`that operates by boiling an amount of water"@en-gb ;
+    rdfs:label "Boiler Heat Production System"@en-gb ;
+    rdfs:subClassOf building:HeatProductionSystem .
+
+building:BoreHole
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that encloses a drilled hole used to extract substances such as water, oil, or gas."@en-gb ;
+    rdfs:label "Bore Hole"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Bridge
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is built to span a physical obstacle, such as a river, valley, or road, providing a passage for pedestrians, vehicles, or utilities."@en-gb ;
+    rdfs:label "Bridge"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:BritishOverseasTerritory
+    a rdfs:Class ;
+    rdfs:comment "A `building:GeopoliticalDependency` that (i) is a dependency of the United Kingdom, (ii) is located outside of the British Isles, and (iii) is under the rule of the United Kingdom's government; most British overseas territories are former colonies of the British Empire, but some are not: for example, the British Antarctic Territory and South Georgia and the South Sandwich Islands, both of which are mainly used for research purposes"@en-gb ;
+    rdfs:label "British Overseas Territory"@en-gb ;
+    rdfs:subClassOf building:GeopoliticalDependency .
+
+building:Building
+    a rdfs:Class ;
+    ies:powertype building:ClassOfBuilding ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a permanent or semi-permanent construction with walls and a roof, intended for human occupation, use, or shelter. A Building is a coherent physical structure that exists independently, typically identified by a discrete footprint and address. A Building may contain one or more BuildingUnits (such as flats, offices, or retail units) and is bounded by an Envelope that separates its internal Spaces from the external environment. A Building persists through changes to its parts (renovation, extension, partial demolition) as long as continuity of identity is maintained. Examples include: a detached residential house; a Victorian terrace building containing multiple flats; a mixed-use building with retail and residential units."@en-gb ;
+    rdfs:label "Building"@en-gb ;
+    rdfs:seeAlso <https://search.bsdd.buildingsmart.org/uri/buildingsmart/ifc/4.3/class/IfcBuilding> ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:BuildingInternalDivision
+    a rdfs:Class ;
+    dcterms:source <https://docs.os.uk/osngd/code-lists/code-lists-overview/buildinglinedescriptionvalue> ;
+    rdfs:comment "An `ies:Location` that denotes the alignment of a division internal to a building complex—either between two buildings with the same occupier, between individual garages within a block, or between buildings that have an overhanging outline or a shared occupation."@en ;
+    rdfs:label "Building Internal Division"@en ;
+    rdfs:subClassOf ies:Crossing .
+
+building:BuildingOccupierDivision
+    a rdfs:Class ;
+    dcterms:source <https://docs.os.uk/osngd/code-lists/code-lists-overview/buildinglinedescriptionvalue> ;
+    rdfs:comment "An `ies:Location` that denotes the alignment of the division between two buildings that have different occupiers."@en ;
+    rdfs:label "Building Occupier Division"@en ;
+    rdfs:subClassOf ies:Crossing .
+
+building:BuildingUnit
+    a rdfs:Class ;
+    ies:powertype building:ClassOfBuildingUnit ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a discrete, functionally independent subdivision of a Building capable of separate occupation or use. A BuildingUnit represents a distinct tenancy, ownership, or functional area within a larger Building structure. Each BuildingUnit has its own Envelope that defines its physical boundaries, which may intersect with the Building's Envelope and with the Envelopes of adjacent BuildingUnits. Common examples include residential flats, individual offices within an office building, retail units within a shopping centre, and hotel rooms. A BuildingUnit is distinguished from a Space by its functional independence - it typically has its own access, services, and can be separately let, sold, or occupied. Examples include: a first-floor flat with self-contained facilities; a ground-floor retail unit with separate street entrance; an office suite leased to a single tenant."@en-gb ;
+    rdfs:label "Building Unit"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:BusStation
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains facilities for bus services including bays, waiting areas, and passenger amenities."@en-gb ;
+    rdfs:label "Bus Station"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:CO2Emission
+    a rdfs:Class ;
+    rdfs:comment "A `building:CarbonEmission` that consists of carbon dioxide (CO2)"@en-gb ;
+    rdfs:label "CO2 Emission"@en-gb ;
+    rdfs:subClassOf
+        building:CarbonEmission ,
+        building:GreenhouseGasEmission .
+
+building:CableBridge
+    a rdfs:Class ;
+    rdfs:comment "A `building:Bridge` that is built to carry cables over an obstacle such as a river or road."@en-gb ;
+    rdfs:label "Cable Bridge"@en-gb ;
+    rdfs:subClassOf building:Bridge .
+
+building:CarbonEmission
+    a rdfs:Class ;
+    rdfs:comment "A `building:Emission` that consists of carbon-based gases; carbon emissions are among the main causes of the greenhouse effect and of anthropogenic climate change more generally, although not all carbon-based gases contribute to that; among carbon emissions, the most impactful on atmosphere are carbon dioxide emissions and methane emissions"@en-gb ;
+    rdfs:label "Carbon Emission"@en-gb ;
+    rdfs:subClassOf building:Emission .
+
+building:Castle
+    a rdfs:Class ;
+    rdfs:comment "A `building:Building` that is a medieval or early-modern fortification or a pseudo-fortified stately house."@en-gb ;
+    rdfs:label "Castle"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+building:CastleWalling
+    a rdfs:Class ;
+    rdfs:comment "A `building:Walling` that forms part of a castle or fortified complex."@en-gb ;
+    rdfs:label "Castle Wall"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+building:CentralHeatingSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatingSystem`that is designed for producing heat and distributing it across a structure unit or a group of structure units in order to heat them up; it has as sub-systems a heat production system and a heat distribution system"@en-gb ;
+    rdfs:label "Central Heating System"@en-gb ;
+    rdfs:subClassOf building:HeatingSystem .
+
+building:CentralisedMechanicalExtractVentilation
+    a rdfs:Class ;
+    rdfs:comment "A `building:VentilationSystem` that has centralised the mechanical systems required to extract air."@en-gb ;
+    rdfs:label "Centralised Mechanical Extract Ventilation"@en-gb ;
+    rdfs:subClassOf building:VentilationSystem ;
+    skos:altLabel "Centralised MEV"@en-gb .
+
+building:CeremonialCounty
+    a rdfs:Class ;
+    rdfs:comment "An `ies:RegionOfCountry` of a the UK that is instituted for appointing a Lord Lieutenant and possibly one or two High Sheriffs, who serve respectively as personal and judicial representative of the regnant king or queen; many ceremonial counties approximately correspond or are even identical to administrative regions of the UK"@en-gb ;
+    rdfs:label "Ceremonial County"@en-gb ;
+    rdfs:subClassOf ies:RegionOfCountry .
+
+building:ChildrensNursery
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a nursery or early years educational facility for children below primary school age."@en-gb ;
+    rdfs:label "Children's Nursery"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature ;
+    skos:altLabel "Pre-School"@en-gb .
+
+building:CivilParish
+    a rdfs:Class ;
+    rdfs:comment "A `building:LowerTierLocalAdministrativeRegion` that is a direct administrative division of either a unitary authority or an English district; civil parishes are the lowest-level administrative divisions of England, since they have no smaller administrative divisions; civil parishes are typically - but not exclusively - found in rural areas"@en-gb ;
+    rdfs:label "Civil Parish"@en-gb ;
+    rdfs:subClassOf building:CivilParishOrCommunityArea .
+
+building:CivilParishOrCommunityArea
+    a rdfs:Class ;
+    rdfs:comment "A `building:LowerTierLocalAdministrativeRegion` that is either an English civil parish or a Welsh community area"@en-gb ;
+    rdfs:label "Civil Parish Or Community Area"@en-gb ;
+    rdfs:subClassOf building:LowerTierLocalAdministrativeRegion .
+
+building:CivilPartner
+    a rdfs:Class ;
+    rdfs:comment "A couple partner who is member of a civil partnership"@en-gb ;
+    rdfs:label "Civil Partner"@en-gb ;
+    rdfs:subClassOf building:CouplePartner .
+
+building:CivilPartnership
+    a rdfs:Class ;
+    rdfs:comment "A couple whose members are legally registered together as civil partners"@en-gb ;
+    rdfs:label "Civil Partnership"@en-gb ;
+    rdfs:subClassOf building:Couple .
+
+building:ClassOfAccessPoint
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:AccessPoint`, e.g., pedestrian-only access, vehicular access, or mixed-use access points."@en-gb ;
+    rdfs:label "Class of Access Point Location"@en-gb ;
+    rdfs:subClassOf ies:ClassOfLocation .
+
+building:ClassOfAccessPointByAccessMode
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:AccessPoint` by the mode(s) permitted at the access point (pedestrian, vehicular, or both), aligned to OS NGD `accessmodevalue`."@en-gb ;
+    rdfs:label "Class of Access Point by Access Mode"@en-gb ;
+    rdfs:subClassOf building:ClassOfAccessPoint .
+
+building:ClassOfAccessPointByAccessPurpose
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:AccessPoint` by the principal function of the access location (Emergency, Primary Public, Private, or Public), aligned to OS NGD `accesspurposevalue`."@en-gb ;
+    rdfs:label "Access Point by Access Purpose"@en-gb ;
+    rdfs:subClassOf building:ClassOfAccessPoint .
+
+building:ClassOfAccessPointByObstruction
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:AccessPoint` by obstruction."@en-gb ;
+    rdfs:label "Access Point by Obstruction"@en-gb ;
+    rdfs:subClassOf building:ClassOfAccessPoint .
+
+building:ClassOfBuilding
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Building`."@en-gb ;
+    rdfs:label "Class Of Building"@en-gb ;
+    rdfs:subClassOf ies:ClassOfArtificialFeature .
+
+building:ClassOfBuildingByBuiltStatus
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Building` by its built status."@en-gb ;
+    rdfs:label "Class Of Building By Built Status"@en-gb ;
+    rdfs:subClassOf building:ClassOfBuilding .
+
+building:ClassOfBuildingByCompletionStatus
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Building` by its stage of construction or completion."@en-gb ;
+    rdfs:label "Class Of Building By Completion Status"@en-gb ;
+    rdfs:subClassOf building:ClassOfBuilding .
+
+building:ClassOfBuildingByConnectivity
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Building` by its connectivity to neighbouring buildings."@en-gb ;
+    rdfs:label "Class Of Building By Connectivity"@en-gb ;
+    rdfs:subClassOf building:ClassOfBuilding .
+
+building:ClassOfBuildingByFunction
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Building` by its primary function or use."@en-gb ;
+    rdfs:label "Class Of Building By Function"@en-gb ;
+    rdfs:subClassOf building:ClassOfBuilding .
+
+building:ClassOfBuildingByMaterial
+    a rdfs:Class ;
+    rdfs:comment "The powertype of  `building:Walling` by the primary material."@en-gb ;
+    rdfs:label "Class Of Building By Material"@en-gb ;
+    rdfs:subClassOf building:ClassOfWalling .
+
+building:ClassOfBuildingByRiskGrade
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Building` by its assessed risk grade, reflecting factors such as high rise, conventional, protected, or system-built construction."@en-gb ;
+    rdfs:label "Class Of Building By Risk Grade"@en-gb ;
+    rdfs:subClassOf building:ClassOfBuilding .
+
+building:ClassOfBuildingByTopLevelFeature
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Building` by its most prominent physical or structural feature observable via satellite imaging."@en-gb ;
+    rdfs:label "Class Of Building By Top Level Feature"@en-gb ;
+    rdfs:subClassOf building:ClassOfBuilding .
+
+building:ClassOfBuildingUnit
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:BuildingUnit`."@en-gb ;
+    rdfs:label "Class Of Building Unit"@en-gb ;
+    rdfs:subClassOf ies:ClassOfArtificialFeature .
+
+building:ClassOfBuildingUnitByBuiltForm
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:BuildingUnit` that is a classifier of `building:BuildingUnit` that defines the built form of a Building Unit."@en-gb ;
+    rdfs:label "Built Form"@en-gb ;
+    rdfs:subClassOf building:ClassOfBuildingUnit ;
+    skos:example
+        "Detached" ,
+        "End of Terrace" ,
+        "Semi-Detached" .
+
+building:ClassOfBuildingUnitByDwellingType
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:BuildingUnit` that defines the dwelling type of a Building Unit."@en-gb ;
+    rdfs:label
+        "Accommodation Type"@en-gb ,
+        "Dwelling Type"@en-gb ;
+    rdfs:subClassOf building:ClassOfBuildingUnit ;
+    skos:example
+        "Flat" ,
+        "House" ,
+        "Maisonette" .
+
+building:ClassOfBuildingUnitByFunctionalPurpose
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:BuildingUnit` by its primary functional purpose or use."@en-gb ;
+    rdfs:label "Class Of Building Unit By Functional Purpose"@en-gb ;
+    rdfs:subClassOf building:ClassOfBuildingUnit .
+
+building:ClassOfBuildingUnitByPresenceOfHeating
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:BuildingUnit` by the presence or absence of heating systems."@en-gb ;
+    rdfs:label "Class Of Building Unit By Presence Of Heating"@en-gb ;
+    rdfs:subClassOf building:ClassOfBuildingUnit .
+
+building:ClassOfBuildingUnitByTenure
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:BuildingUnit` by its tenure or ownership status."@en-gb ;
+    rdfs:label "Class Of Building Unit By Tenure"@en-gb ;
+    rdfs:subClassOf building:ClassOfBuildingUnit .
+
+building:ClassOfCouple
+    a rdfs:Class ;
+    rdfs:comment "A class of couples - that is, a subclass of building:Couple"@en-gb ;
+    rdfs:label "Class Of Couple"@en-gb ;
+    rdfs:subClassOf ies:ClassOfOrganisation .
+
+building:ClassOfDoorWork
+    a rdfs:Class ;
+    rdfs:comment "\n    The powertype of `building:DoorWork`. Instances of this class provide orthogonal categorisations of door work extents,\n    such as by function (external, internal, fire), material, security rating, or glazing properties.\n    "@en-gb ;
+    rdfs:label "Class Of Door Work"@en-gb ;
+    rdfs:subClassOf ies:ClassOfArtificialFeature .
+
+building:ClassOfEnergyCarrierFlow
+    a
+        ies:ClassOfClassOfElement ,
+        rdfs:Class ;
+    rdfs:comment "The powertype of `building:EnergyCarrierFlow`"@en-gb ;
+    rdfs:label "Class Of Energy Carrier Flow"@en-gb ;
+    rdfs:subClassOf ies:ClassOfElement .
+
+building:ClassOfEnvelope
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Envelope`."@en-gb ;
+    rdfs:label "Class Of Envelope"@en-gb ;
+    rdfs:subClassOf ies:ClassOfArtificialFeature .
+
+building:ClassOfFlooring
+    a rdfs:Class ;
+    rdfs:comment "\n    The powertype of `building:Flooring`. Instances of this class provide orthogonal categorisations of flooring extents,\n    such as by construction method, insulation status, or situation.\n    "@en-gb ;
+    rdfs:label "Class Of Flooring"@en-gb ;
+    rdfs:subClassOf ies:ClassOfArtificialFeature .
+
+building:ClassOfFlooring-CeilingWork
+    a rdfs:Class ;
+    rdfs:comment "\n    The powertype of `building:Roofing-CeilingWork`. Instances of this class provide orthogonal categorisations of\n    flooring-ceiling work extents, such as by construction method, acoustic rating, or fire resistance.\n    "@en-gb ;
+    rdfs:label "Class Of Flooring-Ceiling Work"@en-gb ;
+    rdfs:subClassOf ies:ClassOfArtificialFeature .
+
+building:ClassOfFlooring-CeilingWorkByVerticalAdjacency
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Roofing-CeilingWork` that sets out the type of entity that occupies the space above or below the subject"@en-gb ;
+    rdfs:label "Class Of Flooring-Ceiling Work By Vertical Adjacency"@en-gb ;
+    rdfs:subClassOf building:ClassOfFlooring-CeilingWork .
+
+building:ClassOfFlooringByConstruction
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Roofing` By Construction."@en-gb ;
+    rdfs:label "Class Of Flooring By Construction"@en-gb ;
+    rdfs:subClassOf building:ClassOfFlooring .
+
+building:ClassOfFlooringByInsulation
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Roofing` By Insulation."@en-gb ;
+    rdfs:label "Class Of Flooring By Insulation"@en-gb ;
+    rdfs:subClassOf building:ClassOfFlooring .
+
+building:ClassOfGlazing
+    a rdfs:Class ;
+    rdfs:comment "\n    The powertype of `building:Glazing`. Instances of this class provide orthogonal categorisations of glazing extents,\n    such as by pane count (single, double, triple), frame material, or thermal performance.\n    "@en-gb ;
+    rdfs:label "Class Of Glazing"@en-gb ;
+    rdfs:subClassOf ies:ClassOfArtificialFeature .
+
+building:ClassOfGlazingByPaneCount
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Glazing` based on the number of panes of glass."@en-gb ;
+    rdfs:label "ClassOfGlazingByPaneCount"@en-gb ;
+    rdfs:subClassOf building:ClassOfGlazing .
+
+building:ClassOfHeatingControlSystem
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:HeatingControlSystems"@en-gb ;
+    rdfs:label "Class Of Heating Control System"@en-gb ;
+    rdfs:subClassOf building:ClassOfTechnicalSystem .
+
+building:ClassOfHousehold
+    a rdfs:Class ;
+    rdfs:comment "A class of households - that is, a subclass of building:Household"@en-gb ;
+    rdfs:label "Class Of Household"@en-gb ;
+    rdfs:subClassOf ies:ClassOfElement .
+
+building:ClassOfRenovationProject
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:RenovationProject`."@en-gb ;
+    rdfs:label "Class Of Renovation Project"@en-gb ;
+    rdfs:subClassOf ies:ClassOfEvent .
+
+building:ClassOfRoofing
+    a rdfs:Class ;
+    rdfs:comment "\n    The powertype of `building:Roofing`. Instances of this class provide orthogonal categorisations of roofing extents,\n    such as by construction method, material, pitch, or insulation status.\n    "@en-gb ;
+    rdfs:label "Class Of Roofing"@en-gb ;
+    rdfs:subClassOf ies:ClassOfArtificialFeature .
+
+building:ClassOfRoofingByCompassOrientation
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Roofing` by the orientation towards a particular compass direction."@en-gb ;
+    rdfs:label "Class Of Roofing By Compass Orientation"@en-gb ;
+    rdfs:subClassOf building:ClassOfRoofing .
+
+building:ClassOfRoofingByConstruction
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Roofing` By Construction"@en-gb ;
+    rdfs:label "Class Of Roofing By Construction"@en-gb ;
+    rdfs:subClassOf building:ClassOfRoofing .
+
+building:ClassOfRoofingByInsulationLocation
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Roofing` By Insulation Location"@en-gb ;
+    rdfs:label "Class Of Roofing By Insulation Location"@en-gb ;
+    rdfs:subClassOf building:ClassOfRoofing .
+
+building:ClassOfRoofingByInsulationThickness
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Roofing` By Insulation Thickness"@en-gb ;
+    rdfs:label "Class Of Roofing By Insulation Thickness"@en-gb ;
+    rdfs:subClassOf building:ClassOfRoofing .
+
+building:ClassOfRoofingByMaterial
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Roofing` by the primary constituent material."@en-gb ;
+    rdfs:label "ClassOfRoofingByMaterial"@en-gb ;
+    rdfs:subClassOf building:ClassOfRoofing .
+
+building:ClassOfRoofingByShape
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:Roofing` by the shape of the roof."@en-gb ;
+    rdfs:label "ClassOfRoofingByMaterial"@en-gb ;
+    rdfs:subClassOf building:ClassOfRoofing .
+
+building:ClassOfStructureByPhysicalState
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `ies:Structure` by its physical state."@en-gb ;
+    rdfs:label "Class Of Structure By Physical State"@en-gb ;
+    rdfs:subClassOf ies:ClassOfStructure .
+
+building:ClassOfStructureByUse
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `ies:Structure` by its primary functional use."@en-gb ;
+    rdfs:label "Class Of Structure By Use"@en-gb ;
+    rdfs:subClassOf ies:ClassOfStructure .
+
+building:ClassOfTechnicalSystem
+    a rdfs:Class ;
+    rdfs:comment "The powertype of `building:TechnicalSystem`."@en-gb ;
+    rdfs:label "Class Of Technical System"@en-gb ;
+    rdfs:subClassOf ies:ClassOfEntity .
+
+building:ClassOfWalling
+    a rdfs:Class ;
+    rdfs:comment "\n    The powertype of  `building:Walling`. Instances of this class provide orthogonal categorisations of walling extents,\n    such as by construction method, insulation status, structural function, or orientation.\n    "@en-gb ;
+    rdfs:label "Class Of Walling"@en-gb ;
+    rdfs:subClassOf ies:ClassOfArtificialFeature .
+
+building:ClassOfWallingByInsulation
+    a rdfs:Class ;
+    rdfs:comment "The powertype of  `building:Walling` By Insulation."@en-gb ;
+    rdfs:label "Class Of Walling By Insulation"@en-gb ;
+    rdfs:subClassOf building:ClassOfWalling .
+
+building:ClassOfWallingByMaterial
+    a rdfs:Class ;
+    rdfs:comment "The powertype of  `building:Walling` By the primary material."@en-gb ;
+    rdfs:label "Class Of Walling By Material"@en-gb ;
+    rdfs:subClassOf building:ClassOfWalling .
+
+building:ClockTower
+    a rdfs:Class ;
+    rdfs:comment "A `building:Tower` that is a tall tower incorporating one or more clock faces positioned near its summit."@en-gb ;
+    rdfs:label "Clock Tower"@en-gb ;
+    rdfs:subClassOf building:Tower .
+
+building:CoalFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:MineralFuelFlow` that consists of coal, that is, a solid material that has more than 50 percent by mass or 70 percent by volume of carbonaceous matter produced by the compaction and hardening of altered plant remains"@en-gb ;
+    rdfs:label "Coal Flow"@en-gb ;
+    rdfs:subClassOf building:MineralFuelFlow .
+
+building:CohabitingCouple
+    a rdfs:Class ;
+    rdfs:comment "A couple whose members are neither married nor in a civil partnership, yet cohabit for an indefinite, prolonged period of time"@en-gb ;
+    rdfs:label "Cohabiting Couple"@en-gb ;
+    rdfs:subClassOf building:Couple .
+
+building:CohabitingPartner
+    a rdfs:Class ;
+    rdfs:comment "A couple partner who is member of a cohabiting couple"@en-gb ;
+    rdfs:label "Cohabiting Partner"@en-gb ;
+    rdfs:subClassOf building:CouplePartner .
+
+building:Columbarium
+    a rdfs:Class ;
+    rdfs:comment "A `building:Building` that houses niches for urns containing human remains and provides access to those niches."@en-gb ;
+    rdfs:label "Columbarium"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+building:CombustionVentilationAcceptable
+    a rdfs:Class ;
+    rdfs:comment "A `building:AssessHeatingSystem` establishing if the ventilation for combustion processes is acceptable or not."@en-gb ;
+    rdfs:label "Combustion Ventilation Acceptable"@en-gb ;
+    rdfs:subClassOf building:AssessHeatingSystem .
+
+building:CommunityCentralHeatingSystem
+    a rdfs:Class ;
+    rdfs:comment "A central heating system that is designed for heating a group of structure units"@en-gb ;
+    rdfs:label "Community Central Heating System"@en-gb ;
+    rdfs:subClassOf building:CentralHeatingSystem .
+
+building:CommunityCentre
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains facilities for community gatherings, meetings, and activities."@en-gb ;
+    rdfs:label "Community Centre"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:CommunityHeatPump
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatPump` that is designed for heating a group of structure units"@en-gb ;
+    rdfs:label "Community Heat Pump"@en-gb ;
+    rdfs:subClassOf building:HeatPump .
+
+building:ConnectToOrUpgradeDistrictHeatingIncluding
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to connect a building to a district heating system or to upgrade an existing connection, including the installation or upgrade of a heat interface unit (HIU)."@en-gb ;
+    rdfs:label "Connect to or upgrade district heating (incl. HIU)"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: District Heating; RdSAP: Community/district heating options."@en-gb .
+
+building:ConstituencyRegion
+    a rdfs:Class ;
+    rdfs:comment "An `ies:RegionOfCountry` of An `ies:Country` that is instituted for enabling the residing voters to elect their representatives in either the central government of the country or in some local administration"@en-gb ;
+    rdfs:label "Constituency Region"@en-gb ;
+    rdfs:subClassOf ies:RegionOfCountry .
+
+building:ConstituentCountry
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Country` that is An `ies:RegionOfCountry` of another country; constituent countries have typically been devolved a high degree of autonomy because of its distinctive historical and cultural identity; England, Scotland, Wales, and Northern Ireland are the four constituent countries of the United Kingdom of Great Britain and Northern Ireland; other examples of constituent countries include Denmark, Greenland, and the Faroe Islands, which are the three constituent countries of the Kingdom of Denmark"@en-gb ;
+    rdfs:label "Constituent Country"@en-gb ;
+    rdfs:subClassOf
+        ies:Country ,
+        ies:RegionOfCountry .
+
+building:ConstructionProject
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Event`that is the creation, maintenance, or destruction of a `building:Structure` or `building:StructureUnit`."@en-gb ;
+    rdfs:label "Construction Project"@en-gb ;
+    rdfs:subClassOf ies:Event .
+
+building:ContinuousMechanicalExtractVentilation
+    a rdfs:Class ;
+    rdfs:comment "A `building:VentilationSystem` where the mechanical systems that extract air operate continuously."@en-gb ;
+    rdfs:label "Continuous Mechanical Extract Ventilation"@en-gb ;
+    rdfs:subClassOf building:VentilationSystem ;
+    skos:altLabel "CMEV"@en-gb .
+
+building:CostEstimate
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceAssessment` that estimates a cost."@en-gb ;
+    rdfs:label "Cost Estimate"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceAssessment .
+
+building:CountNumberOfOpenFireplaces
+    a rdfs:Class ;
+    rdfs:comment "A `building:AssessHeatingSystem` that counts the number of open fireplaces."@en-gb ;
+    rdfs:label "Count Number Of Open Fireplaces"@en-gb ;
+    rdfs:subClassOf building:AssessHeatingSystem .
+
+building:CountryPark
+    a rdfs:Class ;
+    rdfs:comment "An `ies:GeographicFeature` that is a designated area of countryside for recreational use, typically featuring natural landscapes, walking trails, and visitor facilities."@en-gb ;
+    rdfs:label "Country Park"@en-gb ;
+    rdfs:subClassOf ies:GeographicFeature .
+
+building:Couple
+    a rdfs:Class ;
+    ies:powertype building:ClassOfCouple ;
+    rdfs:comment "An organisation whose members are two person states who have a legal or informal commitment in the form of marriage, civil partnership, or cohabitation"@en-gb ;
+    rdfs:label "Couple"@en-gb ;
+    rdfs:subClassOf ies:Organisation .
+
+building:CouplePartner
+    a rdfs:Class ;
+    rdfs:comment "A person state who is member of a couple"@en-gb ;
+    rdfs:label "Couple Partner"@en-gb ;
+    rdfs:subClassOf
+        ies:Member ,
+        ies:PersonState .
+
+building:Crematorium
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains facilities for the cremation of human remains and associated memorial services."@en-gb ;
+    rdfs:label "Crematorium"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:CrownDependency
+    a rdfs:Class ;
+    rdfs:comment "A `building:GeopoliticalDependency` that (i) is a dependency of the United Kingdom, (ii) is part of the British Isles, and (iii) is under the sovereignty of the British Crown; there are three Crown dependencies: the Isle of Man, the Bailiwick of Jersey, and the Bailiwick of Guernsey"@en-gb ;
+    rdfs:label "Crown Dependency"@en-gb ;
+    rdfs:subClassOf building:GeopoliticalDependency .
+
+building:Crypt
+    a rdfs:Class ;
+    rdfs:comment "A `building:Sepulchre` that is an underground or partly underground chamber used to inter the dead."@en-gb ;
+    rdfs:label "Crypt"@en-gb ;
+    rdfs:subClassOf building:Sepulchre .
+
+building:Demolition
+    a rdfs:Class ;
+    rdfs:comment "A `building:ConstructionProject` that covers the destruction of existing `building:structure`s."@en-gb ;
+    rdfs:label "Demolition"@en-gb ;
+    rdfs:subClassOf building:ConstructionProject .
+
+building:DescribeHeatingSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceAssessment` that describes the installed heating system."@en-gb ;
+    rdfs:label "Describe Heating System"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceAssessment .
+
+building:DestructiveTestsConducted
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Assessment` using destructive methods to investigate the state of a building."@en-gb ;
+    rdfs:label "Destructive Tests Conducted"@en-gb ;
+    rdfs:subClassOf ies:Assessment .
+
+building:DetermineBuildingUnitType
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceAssessment` to establish the type of the `building:BuildingUnit`."@en-gb ;
+    rdfs:label "Determine Structure Unit Type"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceAssessment .
+
+building:DetermineBuiltForm
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceAssessment` to establish the built form of the `building:BuildingUnit`."@en-gb ;
+    rdfs:label "Determine Built Form"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceAssessment .
+
+building:DetermineConstructionAgeBand
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceAssessment` to establish the approximate age of the `building:StructureOrBuildingUnit`"@en-gb ;
+    rdfs:label "Determine Construction Age Band"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceAssessment .
+
+building:DetermineMainPurposeOfUse
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceAssessment` in which the primary purpose of use of the `building:BuildingUnit`."@en-gb ;
+    rdfs:label "Determine Main Purpose Of Use"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceAssessment .
+
+building:DetermineRoofInsulationLocation
+    a rdfs:Class ;
+    rdfs:comment "A `building:AssessPerformanceOfInsulation` that assesses the the location of roof insulation of a `building:StructureOrBuildingUnit"@en-gb ;
+    rdfs:label "Determine Roof Insulation Location"@en-gb ;
+    rdfs:subClassOf building:AssessPerformanceOfInsulation .
+
+building:DetermineTotalFloorArea
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceAssessment` which measures or estimates the area of flooring of a `building:BuildingUnit`"@en-gb ;
+    rdfs:label "Determine Total Floor Area"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceAssessment .
+
+building:DetermineTypeOfVentilation
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceAssessment` to establish the type of ventilation of the `building:BuildingUnit`."@en-gb ;
+    rdfs:label "Determine Type Of Ventilation"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceAssessment .
+
+building:DevolvedParliamentConstituencyRegion
+    a rdfs:Class ;
+    rdfs:comment "A `building:ConstituencyRegion` that is instituted for electing members of one of the three devolved parliaments of the United Kingdom; the devolved parliaments of the United Kingdom are the Scottish Parliament, the Welsh Parliament (aka Senedd Cymru), and the Northern Ireland Assembly"@en-gb ;
+    rdfs:label "Devolved Parliament Constituency Region"@en-gb ;
+    rdfs:subClassOf building:ConstituencyRegion .
+
+building:DomesticEnergyRelatedCosts
+    a rdfs:Class ;
+    rdfs:comment "A `building:CostEstimate` that is an estimate of the energy-related costs for a domestic `building:BuildingUnit`."@en-gb ;
+    rdfs:label "Domestic Energy Related Costs"@en-gb ;
+    rdfs:subClassOf building:CostEstimate .
+
+building:DomesticHeatingCostEstimate
+    a rdfs:Class ;
+    rdfs:comment "A `building:DomesticEnergyRelatedCosts` that is an estimate of the cost of heating a domestic `building:BuildingUnit`."@en-gb ;
+    rdfs:label "Domestic Heating Cost Estimate"@en-gb ;
+    rdfs:subClassOf building:DomesticEnergyRelatedCosts .
+
+building:DomesticLightingCostEstimate
+    a rdfs:Class ;
+    rdfs:comment "A `building:DomesticEnergyRelatedCosts` that is an estimate of the cost of lighting a domestic `building:BuildingUnit`."@en-gb ;
+    rdfs:label "Domestic Lighting Cost Estimate"@en-gb ;
+    rdfs:subClassOf building:DomesticEnergyRelatedCosts .
+
+building:DomesticWaterHeatingCostEstimate
+    a rdfs:Class ;
+    rdfs:comment "A `building:DomesticEnergyRelatedCosts` that is an estimate of the cost of heating the water supply of a domestic `building:BuildingUnit`."@en-gb ;
+    rdfs:label "Domestic Water Heating Cost Estimate"@en-gb ;
+    rdfs:subClassOf building:DomesticEnergyRelatedCosts .
+
+building:DoorWork
+    a rdfs:Class ;
+    ies:powertype building:ClassOfDoorWork ;
+    rdfs:comment "\n    An `ies:ArtificialFeature` that is an arrangement of building materials, usually discontinuous, whose primary function is to\n    provide controlled access (ingress and egress) to and from enclosed Spaces. DoorWork includes door leaves, frames,\n    and associated hardware that allow the access point to be opened and closed. This includes external doors\n    (providing access from outside), internal doors (between spaces), and fire doors (providing compartmentalisation).\n\n    Glazed doors are classified as DoorWork (not Glazing) because their primary function is access control rather than\n    light transmission, though they may also be classified by glazing properties using the ClassOfDoorWork hierarchy.\n\n    Examples include: the external doors of a dwelling (front, back, side entrances); fire doors on a commercial floor\n    plate providing compartmentalisation; internal doors throughout a residential unit separating rooms.\n    "@en-gb ;
+    rdfs:label "Door Work"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:ECOSupplier
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergySupplier` that has an obligation under the Energy Company Obligation (ECO) scheme."@en-gb ;
+    rdfs:label "ECO Supplier"@en-gb ;
+    rdfs:seeAlso building:ECOSupplierReference ;
+    rdfs:subClassOf building:EnergySupplier .
+
+building:ECOSupplierReference
+    a rdfs:Class ;
+    rdfs:comment "The `ies:Identifier` of a business supplying energy to a `building:Structure` under the Energy Company Obligation (ECO) scheme."@en-gb ;
+    rdfs:label "ECO Supplier Reference"@en-gb ;
+    rdfs:subClassOf ies:Identifier ;
+    skos:example
+        "Avro Energy" ,
+        "British Gas" ,
+        "Bulb" ,
+        "E" ,
+        "E.ON Energy" ,
+        "EDF Energy" ,
+        "Green Network" ,
+        "Green Star" ,
+        "OVO" ,
+        "Octopus Energy" ,
+        "SSE" ,
+        "ScottishPower" ,
+        "Shell Energy (formerly First Utility)" ,
+        "The Co-operative Energy" ,
+        "The Utility Warehouse" ,
+        "Utilita" ,
+        "npower" .
+
+building:EPCAssessment
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceAssessment` that assesses the various states of a building in the UK at the time of the assessment. "@en-gb ;
+    rdfs:label "UK Energy Performance Certificate (EPC) Assessment"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceAssessment .
+
+building:EPC_Lodgement_Identifier
+    a rdfs:Class ;
+    rdfs:comment "A system-assigned unique identifier for an Energy Performance Certificate lodgement in the England and Wales EPC register, used to identify a specific lodged EPC record in official datasets and APIs."@en-gb ;
+    rdfs:label "EPC Lodgement Identifier"@en-gb ;
+    rdfs:subClassOf ies:Identifier .
+
+building:ElectricCeilingHeater
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatingSystem` that is mounted on the ceiling and uses electricity to generate heat, typically through resistance coils or infrared radiation."@en-gb ;
+    rdfs:label "Electric Ceiling Heater"@en-gb ;
+    rdfs:subClassOf building:HeatingSystem .
+
+building:ElectricHeatProductionSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatProductionSystem`that operates by turning electricity into heat"@en-gb ;
+    rdfs:label "Electric Heat Production System"@en-gb ;
+    rdfs:subClassOf building:HeatProductionSystem .
+
+building:ElectricRadiantHeatingSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:RadiantHeatingSystem` that produces heat by means of electric heating coils or wires"@en-gb ;
+    rdfs:label "Electric Radiant Heating System"@en-gb ;
+    rdfs:subClassOf building:RadiantHeatingSystem .
+
+building:ElectricityDistributionSite
+    a rdfs:Class ;
+    rdfs:comment "A `building:ElectricitySubStation` containing electrical distribution infrastructure, typically operating at lower voltage levels than main substations."@en-gb ;
+    rdfs:label "Electricity Distribution Site"@en-gb ;
+    rdfs:subClassOf building:ElectricitySubStation .
+
+building:ElectricityFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:EnergyCarrierFlow` that consists of electricity, that is, electrons that move across a conductor; electricity per se is neither renewable nor non-renewable, but it can be renewable or non-renewable depending on the primary energy source that is used for its generation"@en-gb ;
+    rdfs:label "Electricity Flow"@en-gb ;
+    rdfs:subClassOf building:EnergyCarrierFlow .
+
+building:ElectricityGenerationSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:TechnicalSystem` that is designed to generate electricity."@en-gb ;
+    rdfs:label "Electricity Generation System"@en-gb ;
+    rdfs:subClassOf building:TechnicalSystem .
+
+building:ElectricitySubStation
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains electrical infrastructure for transforming and distributing electrical power."@en-gb ;
+    rdfs:label "Electricity Sub Station"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:ElectricitySupplySystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:TechnicalSystem` for the supply of electricity to a building."@en-gb ;
+    rdfs:label "Electricity Supply System"@en-gb ;
+    rdfs:subClassOf building:TechnicalSystem .
+
+building:ElectricitySupportPole
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a pole used to support overhead electricity distribution lines, typically at lower voltages than pylons. Corresponds to OS NGD 'Electricity Support Pole' and 'Electricity Support Poles' classifications in the str-fts-structurepoint-1 collection."@en-gb ;
+    rdfs:label "Electricity Support Pole"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature ;
+    skos:altLabel "Electricity Pole"@en-gb .
+
+building:ElectricityTransmissionLine
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` comprising conductors and supporting infrastructure used for the bulk transmission of electrical power at high voltages over long distances. Corresponds to OS NGD 'Electricity Transmission Lines' classification in the str-fts-structureline-1 collection."@en-gb ;
+    rdfs:label "Electricity Transmission Line"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Elevator
+    a rdfs:Class ;
+    rdfs:comment "A `building:TechnicalSystem` that vertically transports people or goods between different levels within a structure."@en-gb ;
+    rdfs:label "Elevator"@en-gb ;
+    rdfs:subClassOf building:TechnicalSystem .
+
+building:Emission
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Flow` that consists of matter released into the atmosphere as a by-product of some event - in our domain of interest, primarily of technical system operations"@en-gb ;
+    rdfs:label "Emission"@en-gb ;
+    rdfs:subClassOf ies:Flow .
+
+building:EnclosedFireplace
+    a rdfs:Class ;
+    rdfs:comment "A `building:Fireplace` where the combustible material is enclosed in some sort of chamber or container."@en-gb ;
+    rdfs:label "Enclosed Fireplaces"@en-gb ;
+    rdfs:subClassOf building:Fireplace .
+
+building:EnclosedSpace
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Space` that is completely bounded by physical elements (for example walls, floors, ceilings, roofs, doors, or windows) such that it is environmentally separated from surrounding spaces or the exterior."@en-gb ;
+    rdfs:label "Enclosed Space"@en-gb ;
+    rdfs:subClassOf ies:Space .
+
+building:EnergyCarrierFlow
+    a rdfs:Class ;
+    ies:powertype building:ClassOfEnergyCarrierFlow ;
+    rdfs:comment "An `ies:Flow` that consists of some energy carrier participating in an event"@en-gb ;
+    rdfs:label "Energy Carrier Flow"@en-gb ;
+    rdfs:subClassOf ies:Flow .
+
+building:EnergyPerformanceAssessment
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Assessment` that is the assessment of the energy performance of a `building:StructureState` or `building:BuildingUnitState`"@en-gb ;
+    rdfs:label "Energy Performance Assessment"@en-gb ;
+    rdfs:subClassOf ies:Assessment .
+
+building:EnergyPerformanceAssessmentResult
+    a rdfs:Class ;
+    rdfs:comment "An `ies:EventParticipant` that is the result of an `building:EnergyPerformanceAssessment`." ;
+    rdfs:label "Energy Performance Assessment Result"@en-gb ;
+    rdfs:subClassOf ies:EventParticipant .
+
+building:EnergyPerformanceBand
+    a rdfs:Class ;
+    rdfs:comment "An `ies:QuantityRange` that is the assessed energy performance band of a `building:BuildingUnit` "@en-gb ;
+    rdfs:label "Energy Performance Band"@en-gb ;
+    rdfs:subClassOf ies:QuantityRange .
+
+building:EnergyPerformanceCertificate
+    a rdfs:Class ;
+    rdfs:comment "A `ies:IndividualDocument` that is a certificate issued in the UK to provide evidence of a `building:EPCAssessment`."@en-gb ;
+    rdfs:label "Energy Performance Certificate"@en-gb ;
+    rdfs:subClassOf ies:IndividualDocument .
+
+building:EnergyReportReferenceNumber
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Identifier` that is the report reference number (RRN) for Energy Performance Certificates & Recommendations reports, Action Plans, Display Energy Certificates & Advisory Reports held on the Scottish Energy Performance Certificate Register."@en-gb ;
+    rdfs:label "Energy Report Reference Number"@en-gb ;
+    rdfs:seeAlso <https://www.scottishepcregister.org.uk/> ;
+    rdfs:subClassOf ies:Identifier .
+
+building:EnergySupplier
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Supplier` that is a business supplying energy to a `building:Structure`. "@en-gb ;
+    rdfs:label "Energy Supplier"@en-gb ;
+    rdfs:subClassOf ies:Supplier .
+
+building:EnergySupply
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Event` that is the supply of a portion usable energy. "@en-gb ;
+    rdfs:label "Energy Supply"@en-gb ;
+    rdfs:subClassOf ies:Event .
+
+building:EnglishAdministrativeCounty
+    a rdfs:Class ;
+    rdfs:comment "A `building:UpperTierLocalAdministrativeRegion` that (i) is a direct administrative division of England, and (ii) is further divided into districts; county councils are responsible for strategic, higher cost services like education, social services, and transport, whereas more localized services are responsibility of district councils"@en-gb ;
+    rdfs:label "English Administrative County"@en-gb ;
+    rdfs:subClassOf building:UpperTierLocalAdministrativeRegion .
+
+building:EnglishCeremonialCounty
+    a rdfs:Class ;
+    rdfs:comment "A `building:CeremonialCounty` that is part of England; each English ceremonial county has one Lord Lieutenant and one or two High Sheriffs"@en-gb ;
+    rdfs:label "English Ceremonial County"@en-gb ;
+    rdfs:subClassOf building:CeremonialCounty .
+
+building:EnglishDistrict
+    a rdfs:Class ;
+    rdfs:comment "A `building:LowerTierLocalAdministrativeRegion` that is a direct administrative division of A `building:EnglishAdministrativeCounty` county"@en-gb ;
+    rdfs:label "English District"@en-gb ;
+    rdfs:subClassOf building:LowerTierLocalAdministrativeRegion .
+
+building:EnhanceAirtightness
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to improve the airtightness of a building by sealing gaps and cracks in the building fabric."@en-gb ;
+    rdfs:label "Enhance airtightness (fabric sealing)"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: TM-primary (RdSAP input). PAS/TM: Fabric QA; RdSAP 10: Accepts measured air test, but not typically a standalone recommendation."@en-gb .
+
+building:Envelope
+    a rdfs:Class ;
+    ies:powertype building:ClassOfEnvelope ;
+    rdfs:comment "An `ies:ArtificialFeature` that is the physical boundary separating the internal Spaces of a Building or BuildingUnit from the external environment or from adjacent spaces. An Envelope is composed of various built elements including Walling, Roofing, Flooring, Flooring-CeilingWork, Glazing, and DoorWork, which are related to the Envelope using `ies:isPartOf`. An Envelope defines the thermal, acoustic, and weather boundary of the enclosed space. Every Building has an Envelope; every BuildingUnit within a Building also has its own Envelope. These Envelopes may intersect (represented using ies:Crossing), particularly where BuildingUnits share party walls or where exterior walls of a BuildingUnit are also part of the Building's Envelope"@en-gb ;
+    rdfs:label "Envelope"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:EnvironmentalImpactRatingCalculation
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceAssessment` that is the calculation of the environmental impact based on information provided during a `building:EPCAssessment`."@en-gb ;
+    rdfs:label "Environmental Impact Rating Calculation"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceAssessment .
+
+building:EnvironmentalImpactRatingValue
+    a rdfs:Class ;
+    rdfs:comment "An `ies:QuantityValue` that is the rating of the environmental impact assessed by the UK EPC assessment process."@en-gb ;
+    rdfs:label "Environmental Impact Rating"@en-gb ;
+    rdfs:subClassOf ies:QuantityValue .
+
+building:EstimateCO2Emission
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceAssessment` that estimates the release of carbon dioxide (CO2)."@en-gb ;
+    rdfs:label "Estimate CO2 Emission"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceAssessment .
+
+building:ExhaustAirHeatPump
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatPump` that operates by absorbing heat from the exhaust air from a source."@en-gb ;
+    rdfs:label "Exhaust Air Heat Pump"@en-gb ;
+    rdfs:subClassOf building:HeatPump .
+
+building:ExposureZoneLocation
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Location` classified by its characteristic exposure to wind-driven rain, used to judge suitability and detailing requirements for fabric interventions (e.g., cavity wall insulation) per UK practice informed by BS 8104."@en-gb ;
+    rdfs:label "Exposure zone location"@en-gb ;
+    rdfs:subClassOf ies:Location .
+
+building:FAMEFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:LiquidBiofuelFlow` that consists of FAME - namely, fatty acid methyl esters made by reacting vegetable oil or animal fat with methanol in a transesterification process."@en-gb ;
+    rdfs:label "FAME Flow"@en-gb ;
+    rdfs:subClassOf building:LiquidBiofuelFlow .
+
+building:FamilyHousehold
+    a rdfs:Class ;
+    rdfs:comment "A household that is also a family unit"@en-gb ;
+    rdfs:label "Family Household"@en-gb ;
+    rdfs:subClassOf
+        building:FamilyUnit ,
+        building:Household .
+
+building:FamilyUnit
+    a rdfs:Class ;
+    rdfs:comment "An organisation whose members belong to the same family and reside at the same building unit; a family unit can be an entire family or only part of a family"@en-gb ;
+    rdfs:label "Family Unit"@en-gb ;
+    rdfs:subClassOf ies:Organisation .
+
+building:FamilyUnitMember
+    a rdfs:Class ;
+    rdfs:comment "A person state who is member of a family unit"@en-gb ;
+    rdfs:label "Family Unit Member"@en-gb ;
+    rdfs:subClassOf
+        ies:Member ,
+        ies:PersonState .
+
+building:FanCoilUnit
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatDistributionSystem` that uses a coil and a fan to heat or cool air and distribute it within a space. Fan coil units are typically part of HVAC systems and can be used for both heating and cooling by circulating air over a coil containing hot or cold water."@en-gb ;
+    rdfs:label "Fan Coil Unit"@en-gb ;
+    rdfs:subClassOf building:HeatDistributionSystem .
+
+building:Farmyard
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is the central working area of a farm, typically containing agricultural buildings, storage facilities, and livestock enclosures."@en-gb ;
+    rdfs:label "Farmyard"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:FillingStation
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains facilities for dispensing motor vehicle fuels such as petrol or diesel."@en-gb ;
+    rdfs:label "Filling Station"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature ;
+    skos:altLabel "Petrol Station"@en-gb .
+
+building:FireStation
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains fire and rescue service facilities including vehicle storage, equipment, and crew accommodation."@en-gb ;
+    rdfs:label "Fire Station"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Fireplace
+    a rdfs:Class ;
+    rdfs:comment "A `building:RadiantHeatingSystem` that radiates the heat from a fire."@en-gb ;
+    rdfs:label "Fireplace"@en-gb ;
+    rdfs:subClassOf building:RadiantHeatingSystem .
+
+building:Fishery
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains facilities for fish farming, aquaculture, or commercial fishing operations."@en-gb ;
+    rdfs:label "Fishery"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:FloatingArtificialFeature
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is situated upon the surface of water."@en-gb ;
+    rdfs:label "Floating Structure"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Flooring
+    a rdfs:Class ;
+    ies:powertype building:ClassOfFlooring ;
+    rdfs:comment "\n    An `ies:ArtificialFeature` that is an arrangement of building materials, possibly discontinuous, that forms the lowermost\n    physical boundary of an Envelope, providing a surface to support loads and walk upon. Flooring separates and\n    protects the Spaces above from the ground, external air, or unoccupied voids below. Flooring is distinguished from\n    Flooring-CeilingWork in that there is no other occupied Building or BuildingUnit below it.\n\n    Examples include: solid concrete flooring laid directly on the ground; suspended timber flooring over a ventilated\n    crawl space; insulated flooring above an unheated garage or cellar.\n    "@en-gb ;
+    rdfs:label "Flooring"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Flooring-CeilingWork
+    a rdfs:Class ;
+    ies:powertype building:ClassOfFlooring-CeilingWork ;
+    rdfs:comment "\n    An `ies:ArtificialFeature` that is an arrangement of building materials, possibly discontinuous, forming a shared physical\n    boundary between vertically adjacent Spaces. It provides both a floor surface (for the Space above) and a ceiling\n    surface (for the Space below). Unlike Flooring or Roofing, which bound an Envelope against the external\n    environment, Flooring-CeilingWork is simultaneously part of two or more Envelopes - those of the Building or\n    BuildingUnit above and those below.\n\n    Examples include: the reinforced concrete slab between a ground-floor shop and first-floor flat; timber joist\n    floor/ceiling between stacked flats in a converted house; acoustic-rated flooring-ceiling assembly separating\n    vertically adjacent apartments.\n    "@en-gb ;
+    rdfs:label "Flooring-Ceiling Work"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:FogHorn
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains apparatus to emit loud warning sounds in conditions of reduced visibility near navigable waters."@en-gb ;
+    rdfs:label "Fog Horn"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:FossilElectricityFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:ElectricityFlow` that is generated through the combustion of fossil fuel, such as coal, oil, or natural gas"@en-gb ;
+    rdfs:label "Fossil Electricity Flow"@en-gb ;
+    rdfs:subClassOf
+        building:ElectricityFlow ,
+        building:NonRenewableEnergyCarrierFlow .
+
+building:FossilFuelPowerFacility
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains facilities for generating electricity from fossil fuels such as coal, oil, or natural gas."@en-gb ;
+    rdfs:label "Fossil Fuel Power Facility"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature ;
+    skos:altLabel
+        "Coal Power Station"@en-gb ,
+        "Oil Fired Power Generation Complex"@en-gb .
+
+building:FurnaceHeatProductionSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatProductionSystem`that operates by boiling an amount of water"@en-gb ;
+    rdfs:label "Furnace Heat Production System"@en-gb ;
+    rdfs:subClassOf building:HeatProductionSystem .
+
+building:FurtherEducationCollege
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a facility for post-16 education and vocational training."@en-gb ;
+    rdfs:label "Further Education College"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Gantry
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is an elevated framework supported on legs designed to carry loads or equipment such as signals, pipes or tackle."@en-gb ;
+    rdfs:label "Gantry"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:GasDistributionFacility
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains infrastructure for the distribution of natural gas to consumers, including pressure reduction stations and metering equipment."@en-gb ;
+    rdfs:label "Gas Distribution Facility"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature ;
+    skos:altLabel "Gas Distribution Complex"@en-gb .
+
+building:GasPortableHeater
+    a rdfs:Class ;
+    rdfs:comment "A `building:PortableHeater` that operates by burning gas"@en-gb ;
+    rdfs:label "Gas portable Heater"@en-gb ;
+    rdfs:subClassOf building:PortableHeater .
+
+building:GasSupplySystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:TechnicalSystem` for the supply of gas to a building."@en-gb ;
+    rdfs:label "Gas Supply System"@en-gb ;
+    rdfs:subClassOf building:TechnicalSystem ;
+    skos:altLabel "Gas Services"@en-gb .
+
+building:Gate
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that provides a hinged, sliding, or otherwise movable closure to control passage through an opening in a fence, wall, or similar boundary."@en-gb ;
+    rdfs:label "Gate"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:GeopoliticalDependency
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Location` that (i) is not part of a sovereign country, and (ii) is in some respects under the jurisdiction of the institutions of a sovereign country; examples include Puerto Rico (which is a dependency of the USA), the Cook Islands (which are a dependency of New Zealand), and the British Overseas Territories - and the Falklands - which are dependencies of the United Kingdom"@en-gb ;
+    rdfs:label "Geopolitical Dependency"@en-gb ;
+    rdfs:subClassOf ies:Location .
+
+building:GeothermalElectricityFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:ElectricityFlow` that is generated using the energy that is stored as heat under the surface of the solid Earth"@en-gb ;
+    rdfs:label "Geothermal Electricity Flow"@en-gb ;
+    rdfs:subClassOf
+        building:ElectricityFlow ,
+        building:RenewableEnergyCarrierFlow .
+
+building:Glazing
+    a rdfs:Class ;
+    ies:powertype building:ClassOfGlazing ;
+    rdfs:comment "\n    An `ies:ArtificialFeature` that is an arrangement of building materials, usually discontinuous, where transparency or\n    translucency is the primary functional characteristic. Glazing admits natural light into enclosed Spaces while\n    providing protection from the external environment. This includes windows, glazed doors, skylights, and glazed\n    curtain walls.\n\n    The distinction between Glazing and Walling is determined by primary function: where the dominant purpose is light\n    transmission, the extent is Glazing; where the dominant purpose is enclosure with incidental glazed openings, the\n    extent is Walling. Glazed doors are classified as DoorWork (not Glazing) because their primary function is access\n    control.\n\n    Examples include: double-glazed windows throughout a residential dwelling; a glazed curtain wall façade on an\n    office building; roof lights and skylights in a warehouse.\n    "@en-gb ;
+    rdfs:label "Glazing"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:GreenhouseGasEmission
+    a rdfs:Class ;
+    rdfs:comment "A `building:Emission` that consists of gases that have the tendency to trap heat in the Earth's atmosphere, hence rising its temperature"@en-gb ;
+    rdfs:label "Greenhouse Gas Emission"@en-gb ;
+    rdfs:subClassOf building:Emission .
+
+building:GroundSourceHeatPump
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatPump` that operates by absorbing heat from the ground"@en-gb ;
+    rdfs:label "Ground Source Heat Pump"@en-gb ;
+    rdfs:subClassOf building:HeatPump .
+
+building:HeatDistributionSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:TechnicalSystem` that is designed to be the sub-system of a central heating system that distributes the produced heat across a structure unit or a group of structure units in order to heat them up; it operates by circulating a warm fluid as a medium for delivering heat"@en-gb ;
+    rdfs:label "Heat Distribution System"@en-gb ;
+    rdfs:subClassOf building:TechnicalSystem .
+
+building:HeatProductionSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:TechnicalSystem` that is designed to be the sub-system of a central heating system that produces the heat to heat up a structure unit or a group of structure units"@en-gb ;
+    rdfs:label "Heat Production System"@en-gb ;
+    rdfs:subClassOf building:TechnicalSystem .
+
+building:HeatPump
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatProductionSystem`that operates by absorbing heat from the external environment"@en-gb ;
+    rdfs:label "Heat Pump"@en-gb ;
+    rdfs:subClassOf building:HeatProductionSystem .
+
+building:HeatStorageSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatingSystem`that stores thermal energy for later use."@en-gb ;
+    rdfs:label "Heat Storage System"@en-gb ;
+    rdfs:subClassOf building:HeatingSystem .
+
+building:HeatingControlSystem
+    a rdfs:Class ;
+    ies:powertype building:ClassOfHeatingControlSystem ;
+    rdfs:comment "A `building:TechnicalSystem` that is designed to be the sub-system of a heating system that regulates the operations of the whole heating system in order to maintain a desired temperature in the serviced area"@en-gb ;
+    rdfs:label "Heating Control System"@en-gb ;
+    rdfs:subClassOf building:TechnicalSystem ;
+    skos:altLabel
+        "Building Services Heating Controls"@en-gb ,
+        "Heating Control Services"@en-gb .
+
+building:HeatingOilFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:MineralFuelFlow` that consists of some petroleum-based oil that is typically used for fuelling heating systems"@en-gb ;
+    rdfs:label "Heating Oil Flow"@en-gb ;
+    rdfs:subClassOf building:MineralFuelFlow .
+
+building:HeatingSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:TechnicalSystem` that is designed for heating one structure unit, a group of structure units, or a space"@en-gb ;
+    rdfs:label "Heating System"@en-gb ;
+    rdfs:subClassOf building:TechnicalSystem ;
+    skos:altLabel
+        "Building Services Heating"@en-gb ,
+        "Heating Services"@en-gb .
+
+building:HeatingSystemOperation
+    a rdfs:Class ;
+    rdfs:comment "A `building:TechnicalSystem` operation that consists in a heating system or a state of a heating system functioning; the core participants of a heating system operation are the heating system (or a state of it) itself and the energy carrier flow powering it"@en-gb ;
+    rdfs:label "Heating System Operation"@en-gb ;
+    rdfs:subClassOf building:TechnicalSystemOperation .
+
+building:Hide
+    a rdfs:Class ;
+    rdfs:comment "A `building:Shelter` that is a camouflaged shelter permitting observation of wildlife without disturbance."@en-gb ;
+    rdfs:label "Hide"@en-gb ;
+    rdfs:subClassOf building:Shelter .
+
+building:HighWindDrivenRainLocation
+    a rdfs:Class ;
+    rdfs:comment "A `buildingExposureZoneLocation` that is characterised by HIGH wind-driven rain exposure, often near windward coasts, elevated/open sites, or large unobstructed façades; contrasted with Zones 1–2 by sustained higher façade wetting and with Zone 4 by less extreme conditions. Retrofit implication: CWI only with specifically suitable systems and enhanced detailing/QA (e.g., appropriate beads/binders, closers/vents, verified cavity condition) and robust aftercare."@en-gb ;
+    rdfs:label "Exposure Zone 3 (high)"@en-gb ;
+    rdfs:subClassOf building:ExposureZoneLocation .
+
+building:Hill
+    a rdfs:Class ;
+    rdfs:comment "An `ies:GeographicFeature` that is a naturally raised area of land, smaller than a mountain but elevated above the surrounding terrain."@en-gb ;
+    rdfs:label "Hill"@en-gb ;
+    rdfs:subClassOf ies:GeographicFeature .
+
+building:HistoricCounty
+    a rdfs:Class ;
+    rdfs:comment "An `ies:RegionOfCountry` of the UK that was initially instituted as a feudal or administrative division in a time span that goes from the Early Middle Ages to the Tudor period; historic counties are linked to cultural and local identities, and are still referred to for certain purposes, like sport initiatives or even judicial purposes"@en-gb ;
+    rdfs:label "Historic County"@en-gb ;
+    rdfs:subClassOf ies:RegionOfCountry .
+
+building:Hospital
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a healthcare facility providing medical treatment, emergency care, surgical procedures, and related health services."@en-gb ;
+    rdfs:label "Hospital"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:HotWaterSupplySystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:TechnicalSystem` for the supply of hot water to a building."@en-gb ;
+    rdfs:label "Hot Water Supply System"@en-gb ;
+    rdfs:subClassOf building:TechnicalSystem .
+
+building:Hotel
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a commercial accommodation facility providing lodging and related hospitality services."@en-gb ;
+    rdfs:label "Hotel"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Household
+    a rdfs:Class ;
+    ies:powertype building:ClassOfHousehold ;
+    rdfs:comment "A responsible actor that consists of all and only the person states - possibly one - who resides at the same building unit and share the common areas and kitchen facilities; a household that consists of only one person state is identical to that person state, whereas a household that consists of two or more person states is an organisation"@en-gb ;
+    rdfs:label "Household"@en-gb ;
+    rdfs:subClassOf ies:ResponsibleActor .
+
+building:HydroElectricityFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:ElectricityFlow` that is generated using the energy derived from the movement of water"@en-gb ;
+    rdfs:label "Hydro-Electricity Flow"@en-gb ;
+    rdfs:subClassOf
+        building:ElectricityFlow ,
+        building:RenewableEnergyCarrierFlow .
+
+building:HydronicHeatDistributionSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatDistributionSystem`that operates by circulating hot liquid water through a network of pipes"@en-gb ;
+    rdfs:label "Hydronic Heat Distribution System"@en-gb ;
+    rdfs:subClassOf building:HeatDistributionSystem .
+
+building:ImproveCavityWallInsulation
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to enhance the thermal insulation of cavity walls in a building."@en-gb ;
+    rdfs:label "Improve cavity wall insulation"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: Cavity Wall Insulation; RdSAP: Cavity wall insulation."@en-gb .
+
+building:ImproveFloorInsulation
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to enhance the thermal insulation of floors in a building."@en-gb ;
+    rdfs:label "Improve floor insulation"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: Floor insulation; RdSAP: Floor insulation."@en-gb .
+
+building:ImproveLoftInsulation
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to enhance the thermal insulation of lofts/roof spaces in a building."@en-gb ;
+    rdfs:label "Improve loft insulation"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: Roof/Loft insulation; RdSAP: Loft insulation."@en-gb .
+
+building:ImproveParkHomeInsulation
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to enhance the thermal insulation of park homes."@en-gb ;
+    rdfs:label "Improve park home insulation"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: TM-primary (RdSAP special). PAS/TM: Park Home Insulation; RdSAP: Modelled per conventions, limited/conditional."@en-gb .
+
+building:ImproveRoomInRoofInsulation
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to enhance the thermal insulation of rooms located within the roof space of a building."@en-gb ;
+    rdfs:label "Improve room-in-roof insulation"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: Room-in-roof; RdSAP: Room-in-roof insulation."@en-gb .
+
+building:ImproveSolidWallInsulationExternal
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to enhance the thermal insulation of solid walls in a building by adding insulation to the external surface."@en-gb ;
+    rdfs:label "Improve solid wall insulation – external (EWI)"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: Solid Wall Insulation (external); RdSAP: Solid wall insulation (external)."@en-gb .
+
+building:ImproveSolidWallInsulationInternal
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to enhance the thermal insulation of solid walls in a building by adding insulation to the internal surface."@en-gb ;
+    rdfs:label "Improve solid wall insulation – internal (IWI)"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: Solid Wall Insulation (internal); RdSAP: Solid wall insulation (internal)."@en-gb .
+
+building:IndustrialPark
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a designated area containing industrial and manufacturing facilities, typically with shared infrastructure and services."@en-gb ;
+    rdfs:label "Industrial Park"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature ;
+    skos:altLabel "Industrial Estate"@en-gb .
+
+building:InstallAirSourceHeatPump
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to install an air source heat pump (ASHP) in a building."@en-gb ;
+    rdfs:label "Install air source heat pump (ASHP)"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: Other Heating/Microgeneration; RdSAP 10: Heat pumps supported."@en-gb .
+
+building:InstallBatteryStorage
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to install battery storage systems in a building."@en-gb ;
+    rdfs:label "Install battery storage"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: TM-only. PAS/TM: Storage referenced; RdSAP: Generally not directly modelled."@en-gb .
+
+building:InstallGroundSourceHeatPump
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to install a ground source heat pump (GSHP) in a building."@en-gb ;
+    rdfs:label "Install ground source heat pump (GSHP)"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: Other Heating/Microgeneration; RdSAP 10: Heat pumps supported."@en-gb .
+
+building:InstallMechanicalExtractVentilation
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to install mechanical extract ventilation (MEV) systems in a building."@en-gb ;
+    rdfs:label "Install mechanical extract ventilation (MEV)"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: TM-primary (RdSAP partial). PAS/TM: Ventilation systems; RdSAP 10: Expanded inputs; improvement recommendation may be indirect."@en-gb .
+
+building:InstallMechanicalVentilationWithHeatRecovery
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to install mechanical ventilation with heat recovery (MVHR) systems in a building."@en-gb ;
+    rdfs:label "Install mechanical ventilation with heat recovery (MVHR)"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: TM-primary (RdSAP partial). PAS/TM: Heat recovery/MVHR; RdSAP 10: Partial/indirect handling."@en-gb .
+
+building:InstallOrUpgradeElectricStorageHeating
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to install or upgrade electric storage heating systems in a building, including high heat retention models."@en-gb ;
+    rdfs:label "Install or upgrade electric storage heating (incl. high heat retention)"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: Electric Storage Heating; RdSAP: Electric storage heating options."@en-gb .
+
+building:InstallSolarPhotovoltaics
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to install solar photovoltaic (PV) panels in a building."@en-gb ;
+    rdfs:label "Install solar photovoltaics (PV)"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: Micro-Generation; RdSAP: Solar PV improvement."@en-gb .
+
+building:InstallSolarThermalHotWater
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to install solar thermal panels for hot water generation in a building."@en-gb ;
+    rdfs:label "Install solar thermal hot water"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: Micro-Generation; RdSAP: Solar hot water improvement."@en-gb .
+
+building:Installer
+    a rdfs:Class ;
+    rdfs:comment "An `ies:EventParticipant` where a `ies:ResponsibleActor` has a role in a `building:ConstructionProject`."@en-gb ;
+    rdfs:label "Installer"@en-gb ;
+    rdfs:subClassOf ies:EventParticipant .
+
+building:InsulateHotWaterCylinder
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to improve the thermal insulation of hot water cylinders in a building."@en-gb ;
+    rdfs:label "Insulate hot water cylinder"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: Hot water; RdSAP: Cylinder insulation improvement."@en-gb .
+
+building:IntermittentExtractVentilation
+    a rdfs:Class ;
+    rdfs:comment "A `building:VentilationSystem` where the mechanical systems that extract air operate intermittently."@en-gb ;
+    rdfs:label "Intermittent Extract Ventilation"@en-gb ;
+    rdfs:subClassOf building:VentilationSystem ;
+    skos:altLabel "IEV"@en-gb .
+
+building:KeroseneFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:HeatingOilFlow` that consists of kerosene, which is a flammable hydrocarbon liquid distilled from crude oil and consisting mainly of saturated straight-chain and branched-chain paraffins"@en-gb ;
+    rdfs:label "Kerosene Flow"@en-gb ;
+    rdfs:subClassOf building:HeatingOilFlow .
+
+building:Kiln
+    a rdfs:Class ;
+    rdfs:comment "A `building:Building` that contains a furnace or oven for burning, baking, or drying materials."@en-gb ;
+    rdfs:label "Kiln"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+building:LPGFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:MineralFuelFlow` that consists of liquid petroleum gas (LPG), which is a mixture of the hydrocarbons propene, propane, butene, and butane; typical commercial mixtures can also contain ethane and ethylene, as well as the odorant mercaptan"@en-gb ;
+    rdfs:label "LPG Flow"@en-gb ;
+    rdfs:subClassOf building:MineralFuelFlow .
+
+building:Lake
+    a rdfs:Class ;
+    rdfs:comment "An `ies:GeographicFeature` that is a body of fresh or salt water of considerable size, surrounded by land. A Lake is a type of waterbody distinguished by its enclosed nature."@en-gb ;
+    rdfs:label "Lake"@en-gb ;
+    rdfs:subClassOf
+        building:Waterbody ,
+        ies:GeographicFeature .
+
+building:LevelInStructure
+    a rdfs:Class ;
+    rdfs:comment "An `ies:GeoIdentity` used to identify the level of a `building:Storey` in a `building:Structure`."@en-gb ;
+    rdfs:label "Level In Structure"@en-gb ;
+    rdfs:subClassOf ies:GeoIdentity .
+
+building:LifeboatStation
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains facilities for launching and maintaining lifeboats for maritime rescue operations."@en-gb ;
+    rdfs:label "Lifeboat Station"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Lighthouse
+    a rdfs:Class ;
+    rdfs:comment "A `building:Building` that is a tower containing a navigational light to aid maritime or aerial traffic."@en-gb ;
+    rdfs:label "Lighthouse"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+building:LiquidBiofuelFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:BiofuelFlow` that comes in a liquid aggregation state"@en-gb ;
+    rdfs:label "Liquid Biofuel Flow"@en-gb ;
+    rdfs:subClassOf building:BiofuelFlow .
+
+building:Lodger
+    a rdfs:Class ;
+    rdfs:comment "A member of a household who (i) does not own the building or building unit, and (ii) resides at the building or building unit sharing the common areas and the kitchen facilities with one or more of the owners\n\nNote: in the United Kingdom, lodging is regulated by lodger agreements, which are different from tenancy agreements; lodgers typically enjoy less legal protection compared to tenants"@en-gb ;
+    rdfs:label "Lodger"@en-gb ;
+    rdfs:subClassOf
+        ies:Member ,
+        ies:PersonState .
+
+building:LowWindDrivenRainLocation
+    a rdfs:Class ;
+    rdfs:comment "A `buildingExposureZoneLocation` that is characterised by LOW wind-driven rain exposure, typically inland, sheltered by surrounding terrain/urban form, and away from prevailing-wind coasts; contrasted with Zone 2–4 by materially lower façade wetting risk. Retrofit implication: fabric measures (including CWI) generally suitable where substrate and detailing comply with specification."@en-gb ;
+    rdfs:label "Exposure Zone 1 (sheltered/low)"@en-gb ;
+    rdfs:subClassOf building:ExposureZoneLocation .
+
+building:LowerTierLocalAdministrativeRegion
+    a rdfs:Class ;
+    rdfs:comment "A `building:UKLocalAdministrativeRegion` that is not a direct administrative division of one of the constituent countries of the United Kingdom; the councils of lower-tier local administrative regions are only responsible for localized services like housing, waste collection, and leisure"@en-gb ;
+    rdfs:label "Lower-Tier Local Administrative Region"@en-gb ;
+    rdfs:subClassOf building:UKLocalAdministrativeRegion .
+
+building:LychGate
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a roofed gateway typically at the entrance to a churchyard."@en-gb ;
+    rdfs:label "Lych Gate"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:MainsGasSupply
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergySupply` which is the direct supply of `building:FuelGas` to a `building:StructureUnitOrSpace`."@en-gb ;
+    rdfs:label "Mains Gas Supply"@en-gb ;
+    rdfs:subClassOf building:EnergySupply .
+
+building:MarriedCouple
+    a rdfs:Class ;
+    rdfs:comment "A couple whose members are legally married to each other"@en-gb ;
+    rdfs:label "Married Couple"@en-gb ;
+    rdfs:subClassOf building:Couple .
+
+building:MartelloTower
+    a rdfs:Class ;
+    rdfs:comment "A `building:Tower` that is a low, round coastal defence tower historically designed to carry artillery."@en-gb ;
+    rdfs:label "Martello Tower"@en-gb ;
+    rdfs:subClassOf building:Tower .
+
+building:MechanicalExtractOnly
+    a rdfs:Class ;
+    rdfs:comment "A `building:VentilationSystem` that uses mechanical systems to extract air."@en-gb ;
+    rdfs:label "Mechanical Extract Only"@en-gb ;
+    rdfs:subClassOf building:VentilationSystem ;
+    skos:altLabel "MEV"@en-gb .
+
+building:MechanicalSupplyAndExtract
+    a rdfs:Class ;
+    rdfs:comment "A `building:VentilationSystem` that both supplies and extracts air through mechanical systems"@en-gb ;
+    rdfs:label "Mechanical Supply And Extract"@en-gb ;
+    rdfs:subClassOf building:VentilationSystem .
+
+building:MechanicalVentilationHeatRecovery
+    a rdfs:Class ;
+    rdfs:comment "A `building:VentilationSystem` that recovers heat from the extracted air."@en-gb ;
+    rdfs:label "Mechanical Ventilation Heat Recovery"@en-gb ;
+    rdfs:subClassOf building:VentilationSystem ;
+    skos:altLabel "MVHR"@en-gb .
+
+building:MethaneEmission
+    a rdfs:Class ;
+    rdfs:comment "A `building:CarbonEmission` that consists of methane (CH4)"@en-gb ;
+    rdfs:label "Methane Emission"@en-gb ;
+    rdfs:subClassOf
+        building:CarbonEmission ,
+        building:GreenhouseGasEmission .
+
+building:MetropolitanCounty
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnglishAdministrativeCounty` county that approximately corresponds to one large town or city"@en-gb ;
+    rdfs:label "Metropolitan County"@en-gb ;
+    rdfs:subClassOf building:EnglishAdministrativeCounty .
+
+building:MineralFuelFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:EnergyCarrierFlow`n that consists of naturally occurring, energy-rich matter coming from the Earth's crust"@en-gb ;
+    rdfs:label "Mineral Fuel Flow"@en-gb ;
+    rdfs:subClassOf building:NonRenewableEnergyCarrierFlow .
+
+building:MinorSubstation
+    a rdfs:Class ;
+    rdfs:comment "A `building:ElectricitySubStation` that is a small electrical substation for local power distribution, often pole-mounted or in a small enclosure."@en-gb ;
+    rdfs:label "Minor Substation"@en-gb ;
+    rdfs:subClassOf building:ElectricitySubStation .
+
+building:MobileHome
+    a rdfs:Class ;
+    rdfs:comment "\nAn `ies:ArtificialFeature` that, in UK law, is a prefabricated structure that is capable of being\nmoved and is used as a residence. To be legally classed as a mobile home, it must meet specific\nrequirements under the Caravan Sites and Control of Development Act 1960 and the Mobile Homes Act 1983.\n"@en-gb ;
+    rdfs:label "Mobile Home"@en-gb ;
+    rdfs:seeAlso <https://www.legislation.gov.uk/ukpga/1983/34/contents> ;
+    rdfs:subClassOf ies:ArtificialFeature ;
+    skos:altLabel
+        "Park Home"@en-gb ,
+        "Static Caravan"@en-gb .
+
+building:ModerateWindDrivenRainLocation
+    a rdfs:Class ;
+    rdfs:comment "A `buildingExposureZoneLocation` that is characterised by MODERATE wind-driven rain exposure, commonly in reasonably open inland contexts without pronounced coastal or ridge exposure; contrasted with Zone 1 by greater façade wetting and with Zone 3–4 by absence of persistent severe exposure. Retrofit implication: CWI typically suitable subject to sound walls, verified cavities/ties, and compliant detailing/QA."@en-gb ;
+    rdfs:label "Exposure Zone 2 (moderate)"@en-gb ;
+    rdfs:subClassOf building:ExposureZoneLocation .
+
+building:Mortuary
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains facilities for the temporary storage and preparation of deceased persons prior to burial or cremation."@en-gb ;
+    rdfs:label "Mortuary"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:MultistoreyCarPark
+    a rdfs:Class ;
+    rdfs:comment "A `building:Building` that comprises multiple levels dedicated to the parking or storage of vehicles."@en-gb ;
+    rdfs:label "Multistorey Car Park"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+building:NaturalGasFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:MineralFuelFlow` that consists of natural gas, that is, a naturally occurring mixture of hydrocarbons, predominantly methane (CH4)"@en-gb ;
+    rdfs:label "Natural Gas Flow"@en-gb ;
+    rdfs:subClassOf building:MineralFuelFlow .
+
+building:NaturalVentilation
+    a rdfs:Class ;
+    rdfs:comment "A `building:VentilationSystem` that allows for the natural movement of air."@en-gb ;
+    rdfs:label "Natural Ventilation"@en-gb ;
+    rdfs:subClassOf building:VentilationSystem .
+
+building:NatureReserve
+    a rdfs:Class ;
+    rdfs:comment "An `ies:GeographicFeature` that is an area of land managed primarily for the conservation of wildlife, habitats, and natural features."@en-gb ;
+    rdfs:label "Nature Reserve"@en-gb ;
+    rdfs:subClassOf ies:GeographicFeature .
+
+building:NewBuild
+    a rdfs:Class ;
+    rdfs:comment "A `building:ConstructionProject` that covers the construction of a new `building:structure`s."@en-gb ;
+    rdfs:label "New Build"@en-gb ;
+    rdfs:subClassOf building:ConstructionProject .
+
+building:NonFamilyHousehold
+    a rdfs:Class ;
+    rdfs:comment "A household that is not a family unit\n\nNote: despite not being identical to a family unit, a non-family household can have one or more family units as parts; for example, a non-family household can either consist of multiple unrelated members, or of multiple family units, or of one or more family units and some unrelated member; for example, a family unit and a lodger residing at the same building or building unit constitute one non-family household"@en-gb ;
+    rdfs:label "Non-Family Household"@en-gb ;
+    rdfs:subClassOf building:Household .
+
+building:NonMetropolitanCounty
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnglishAdministrativeCounty` county that does not correspond to one large town or city, and typically encompasses various settlements and rural areas"@en-gb ;
+    rdfs:label "Non-Metropolitan County"@en-gb ;
+    rdfs:subClassOf building:EnglishAdministrativeCounty .
+
+building:NonRenewableEnergyCarrierFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:EnergyCarrierFlow` consisting of a source that cannot be replenished at a faster rate than it is consumed"@en-gb ;
+    rdfs:label "Non-Renewable Energy Carrier Flow"@en-gb ;
+    rdfs:subClassOf building:EnergyCarrierFlow .
+
+building:NonTidalWaterbody
+    a rdfs:Class ;
+    rdfs:comment "A `building:Waterbody` that is not affected by tides"@en-gb ;
+    rdfs:label "Non-Tidal Water Body"@en-gb ;
+    rdfs:subClassOf building:Waterbody .
+
+building:NormalCalendarYear
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Duration` that is 365 days long"@en-gb ;
+    rdfs:label "Normal Calendar Year"@en-gb ;
+    rdfs:subClassOf ies:Duration .
+
+building:NorthernIrelandDistrict
+    a rdfs:Class ;
+    rdfs:comment "A `building:UpperTierLocalAdministrativeRegion` that is a direct administrative division of Northern Ireland; all Northern Ireland Districts are unitary authority regions"@en-gb ;
+    rdfs:label "Northern Ireland District"@en-gb ;
+    rdfs:subClassOf building:UnitaryAuthorityRegion .
+
+building:NorthernIrelandLieutenancyArea
+    a rdfs:Class ;
+    rdfs:comment "A `building:CeremonialCounty` that is part of Northern Ireland; each Northern Ireland Lieutenancy Area has one Lord Lieutenant, but no High Sheriff"@en-gb ;
+    rdfs:label "Northern Ireland Lieutenancy Area"@en-gb ;
+    rdfs:subClassOf building:CeremonialCounty .
+
+building:NuclearElectricityFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:ElectricityFlow` that is generated using the energy released by atomic nuclei via fission or fusion"@en-gb ;
+    rdfs:label "Nuclear Electricity Flow"@en-gb ;
+    rdfs:subClassOf
+        building:ElectricityFlow ,
+        building:NonRenewableEnergyCarrierFlow .
+
+building:NumberOfOccupants
+    a rdfs:Class ;
+    rdfs:comment "An `ies:QuantityValue` that is the number of occupants in a `building:BuildingUnit`."@en-gb ;
+    rdfs:label "Number of Occupants"@en-gb ;
+    rdfs:subClassOf ies:QuantityValue .
+
+building:NursingHome
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a residential care facility providing accommodation and nursing care for elderly or infirm persons."@en-gb ;
+    rdfs:label "Nursing Home"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:OSID
+    a rdfs:Class ;
+    rdfs:comment "An `ies:GeoIdentity` that is the persistent unique identifier assigned by Ordnance Survey UK to a real-world geographic feature within its authoritative datasets, such as the OS MasterMap Topography Layer. An OSID enables the consistent referencing of a feature over time, even if its geometry or attributes change. It is assigned when the feature is first captured in the dataset and remains in place until the feature is removed."@en-gb ;
+    rdfs:label "OSID"@en-gb ;
+    rdfs:subClassOf ies:GeoIdentity ;
+    skos:note "OSIDs are used internally within Ordnance Survey products and APIs to ensure consistency across dataset updates.\n    While some OSIDs appear in open datasets (such as certain linked data resources), many originate from licensed datasets like OS MasterMap and are not directly searchable in public web maps."@en-gb ;
+    skos:seeAlso <https://www.ordnancesurvey.co.uk/products/mastermap-topography> .
+
+building:Obstruction
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Event` during which some entity's normal access/function is impeded by another, potentially affecting further entities."@en-gb ;
+    rdfs:label "Access Obstruction"@en-gb ;
+    rdfs:subClassOf ies:Event .
+
+building:OpenFireplace
+    a rdfs:Class ;
+    rdfs:comment "A `building:Fireplace` where the combustible material is exposed to the space being heated by it."@en-gb ;
+    rdfs:label "Open Fireplaces"@en-gb ;
+    rdfs:subClassOf building:Fireplace .
+
+building:OpenGrassland
+    a rdfs:Class ;
+    rdfs:comment "An `ies:GeographicFeature` that is an area of land covered predominantly with grasses and herbaceous plants, with few or no trees. Includes meadows, pastures, and natural grassland areas."@en-gb ;
+    rdfs:label "Open Grassland"@en-gb ;
+    rdfs:subClassOf ies:GeographicFeature .
+
+building:OpenSpace
+    a rdfs:Class ;
+    rdfs:comment "A `ies:Space` that is openly exposed to the environment (for example courtyards, external terraces, or open decks)."@en-gb ;
+    rdfs:label "Open Space"@en-gb ;
+    rdfs:subClassOf ies:Space .
+
+building:OverhangingBuildingEdge
+    a rdfs:Class ;
+    dcterms:source <https://docs.os.uk/osngd/code-lists/code-lists-overview/buildinglinedescriptionvalue> ;
+    rdfs:comment "An `ies:Location` that denotes the edge delimiting the limit of a building element that overhangs and allows passage underneath."@en ;
+    rdfs:label "Overhanging Building Edge"@en ;
+    rdfs:subClassOf ies:Crossing .
+
+building:Pagoda
+    a rdfs:Class ;
+    rdfs:comment "A `building:Building` that is a multi‑storey structure with ornamental roofs at each level, stylistically derived from from East and South East Asia temple forms."@en-gb ;
+    rdfs:label "Pagoda"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+building:PartiallyEnclosedSpace
+    a rdfs:Class ;
+    rdfs:comment "A `ies:Space` that is bounded or enclosed on some sides by physical elements but remains open on at least one significant side (for example verandas, carports, or arcades)."@en-gb ;
+    rdfs:label "Partially Enclosed Space"@en-gb ;
+    rdfs:subClassOf ies:Space .
+
+building:PartlyRenewableEnergyCarrierFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:EnergyCarrierFlow` consisting of a mixture of different sources, of which some are renewable and some non-renewable"@en-gb ;
+    rdfs:label "Partly Renewable Energy Carrier Flow"@en-gb ;
+    rdfs:subClassOf building:EnergyCarrierFlow .
+
+building:PassiveStackVentilation
+    a rdfs:Class ;
+    rdfs:comment "A `building:VentilationSystem` that ses differences in air temperature and pressure to move stale air out of a building and draw in fresh air—without the need for mechanical fans."@en-gb ;
+    rdfs:label "Passive Stack Ventilation"@en-gb ;
+    rdfs:subClassOf building:VentilationSystem ;
+    skos:altLabel "PSV"@en-gb .
+
+building:Pergola
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a colonnaded passage supporting a trellised roof intended for planting."@en-gb ;
+    rdfs:label "Pergola"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Pier
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a raised platform structure extending from the shore over water, used for mooring boats, fishing, or as a promenade. Corresponds to OS NGD 'Pier' classification in the str-fts-compoundstructure-2 collection."@en-gb ;
+    rdfs:label "Pier"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:PoliceCallBox
+    a rdfs:Class ;
+    rdfs:comment "A `building:Building` that is a small kiosk designed to house a telephone for contacting the police."@en-gb ;
+    rdfs:label "Police Call Box"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+building:PortableHeater
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatingSystem`that is designed to be easily moved and is typically used for heating a space of a structure unit"@en-gb ;
+    rdfs:label "Portable Heater"@en-gb ;
+    rdfs:subClassOf building:HeatingSystem .
+
+building:PositiveInputVentilation
+    a rdfs:Class ;
+    rdfs:comment "A `building:VentilationSystem` that uses a small, low-energy fan to push filtered fresh air into a building."@en-gb ;
+    rdfs:label "Positive Input Ventilation"@en-gb ;
+    rdfs:subClassOf building:VentilationSystem ;
+    skos:altLabel "PIV"@en-gb .
+
+building:PreRetrofitBlowerDoorAirTightnessTestRatingValue
+    a rdfs:Class ;
+    rdfs:comment "A `building:AirTightnessTestValue` that is the rating obtained from blower door tests conducted before a retrofit project to assess the air tightness of a building."@en-gb ;
+    rdfs:label "Pre-Retrofit Blower Door Air Tightness Test Rating Value"@en-gb ;
+    rdfs:subClassOf building:AirTightnessTestValue .
+
+building:PreRetrofitPulseAirTightnessTestRatingValue
+    a rdfs:Class ;
+    rdfs:comment "A `building:AirTightnessTestValue` that is the rating obtained from tests conducted before a retrofit project to assess the air tightness of a building."@en-gb ;
+    rdfs:label "Pre-Retrofit Pulse Air Tightness Test Rating Value"@en-gb ;
+    rdfs:subClassOf building:AirTightnessTestValue .
+
+building:PrimarySchool
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is an educational facility for primary education, typically for children aged 4-11 years."@en-gb ;
+    rdfs:label "Primary School"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:PublicCarPark
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that provides parking facilities for vehicles available to the public."@en-gb ;
+    rdfs:label "Public Car Park"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature ;
+    skos:altLabel "Car Park"@en-gb .
+
+building:PublicParkOrGarden
+    a rdfs:Class ;
+    rdfs:comment "An `ies:GeographicFeature` that is an area of land set aside for public recreational use, including landscaped gardens, playgrounds, and open green spaces."@en-gb ;
+    rdfs:label "Public Park Or Garden"@en-gb ;
+    rdfs:subClassOf ies:GeographicFeature .
+
+building:Pylon
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a tall lattice tower used to support overhead electricity transmission lines. Part of the electricity transmission network infrastructure. Corresponds to OS NGD 'Electricity Pylon' classification in the str-fts-structure-3 collection."@en-gb ;
+    rdfs:label "Pylon"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Quay
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a solid wharf or platform along a waterfront for loading and unloading vessels."@en-gb ;
+    rdfs:label "Quay"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:RadiantHeatingSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatingSystem`that radiates heat directly into one or more spaces of a structure unit to heat them up, without employing a dedicated heat distribution sub-system for circulating a warm fluid"@en-gb ;
+    rdfs:label "Radiant Heating System"@en-gb ;
+    rdfs:subClassOf building:HeatingSystem .
+
+building:RadiatorHydronicHeatDistributionSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:HydronicHeatDistributionSystem` that operates by circulating hot liquid water through a network of pipes and radiators"@en-gb ;
+    rdfs:label "Radiator Hydronic Heat Distribution System"@en-gb ;
+    rdfs:subClassOf building:HydronicHeatDistributionSystem .
+
+building:RadiatorSteamHeatDistributionSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:SteamHeatDistributionSystem` that operates by circulating hot water steam through a network of pipes and radiators"@en-gb ;
+    rdfs:label "Radiator Steam Heat Distribution System"@en-gb ;
+    rdfs:subClassOf building:SteamHeatDistributionSystem .
+
+building:RailWeighbridge
+    a rdfs:Class ;
+    rdfs:comment "A `building:Weighbridge` for weighing rail vehicles."@en-gb ;
+    rdfs:label "Rail Weighbridge"@en-gb ;
+    rdfs:subClassOf building:Weighbridge .
+
+building:RailwayStation
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains facilities for passenger rail services including platforms, ticket offices, and waiting areas."@en-gb ;
+    rdfs:label "Railway Station"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Ramp
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that provides an inclined surface for pedestrian or vehicular movement between different elevations, facilitating accessibility or transport."@en-gb ;
+    rdfs:label "Ramp"@en-gb ;
+    rdfs:seeAlso <https://search.bsdd.buildingsmart.org/uri/buildingsmart/ifc/4.3/class/IfcRamp> ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:RdSAP
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceAssessment` that uses the Reduced Data Standard Assessment Procedure (RdSAP) - a simplified version of the SAP - used for residential properties."@en-gb ;
+    rdfs:label "Reduced Data Standard Assessment Procedure"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceAssessment ;
+    skos:note "Often abbreviated rdSAP" .
+
+building:RdSAPWorkType
+    a rdfs:Class ;
+    rdfs:comment "A `building:ClassOfRenovationProject` that meet the conditions for RdSAP."@en-gb ;
+    rdfs:label "RdSAP Work Type"@en-gb ;
+    rdfs:subClassOf building:ClassOfRenovationProject .
+
+building:RenewableEnergyCarrierFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:EnergyCarrierFlow` consisting of a source that can be replenished at a faster rate than it is consumed"@en-gb ;
+    rdfs:label "Renewable Energy Carrier Flow"@en-gb ;
+    rdfs:subClassOf building:EnergyCarrierFlow .
+
+building:RenovationProject
+    a rdfs:Class ;
+    ies:powertype building:ClassOfRenovationProject ;
+    rdfs:comment "A `building:ConstructionProject` covering the modification of existing `building:structure`s."@en-gb ;
+    rdfs:label "Renovation Project"@en-gb ;
+    rdfs:subClassOf building:ConstructionProject .
+
+building:RenovationProjectTarget
+    a rdfs:Class ;
+    rdfs:comment "An `ies:EventParticipant` that is the expected target `ies:Entity` at which the `building:RenovationTarget` is aimed. "@en-gb ;
+    rdfs:label "Renovation Project Intervention Target"@en-gb ;
+    rdfs:subClassOf ies:EventParticipant .
+
+building:ReplaceBoiler
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to replace an existing boiler in a building with a more efficient model."@en-gb ;
+    rdfs:label "Replace boiler"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: Boiler; RdSAP: Boiler replacement improvement."@en-gb .
+
+building:ReplaceOrServiceAppliancesEfficientModels
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to replace or service appliances in a building with more efficient models."@en-gb ;
+    rdfs:label "Replace or service appliances (efficient models)"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: TM-only. PAS/TM: Appliance intervention area; RdSAP: Appliances not modelled."@en-gb .
+
+building:RoadVehicleWeighbridge
+    a rdfs:Class ;
+    rdfs:comment "A `building:Weighbridge` for weighing road vehicles."@en-gb ;
+    rdfs:label "Road Vehicle Weighbridge"@en-gb ;
+    rdfs:subClassOf building:Weighbridge .
+
+building:RoofedBandstand
+    a rdfs:Class ;
+    rdfs:comment "A `building:Building` that is a roofed performance platform, typically open at the sides, for public musical events."@en-gb ;
+    rdfs:label "Roofed Bandstand"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+building:RoofedChimney
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a flue or chimney provided with a protective roof or capping."@en-gb ;
+    rdfs:label "Roofed Chimney"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:RoofedClockTower
+    a rdfs:Class ;
+    rdfs:comment "A `building:Tower` that is a tower incorporating a clock and covered by a roofed superstructure."@en-gb ;
+    rdfs:label "Roofed Clock Tower"@en-gb ;
+    rdfs:subClassOf building:Tower .
+
+building:RoofedLeat
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a watercourse enclosed by a conventional roof, conveying water for processes."@en-gb ;
+    rdfs:label "Roofed Leat"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:RoofedOutfall
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a roofed channel or structure used to discharge liquids to a receiving water body."@en-gb ;
+    rdfs:label "Roofed Outfall"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:RoofedShaft
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that encloses the vertical or near‑vertical entrance to a mine."@en-gb ;
+    rdfs:label "Roofed Shaft"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:RoofedStorageTank
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a tank with a roof or cover used for storing liquids or other materials. Corresponds to OS NGD 'Roofed Storage Tank' classification in the str-fts-structure-3 collection."@en-gb ;
+    rdfs:label "Roofed Storage Tank"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:RoofedTower
+    a rdfs:Class ;
+    rdfs:comment "A `building:Tower` that is a tall, isolated tower covered by a roof and lacking an explicit functional specification."@en-gb ;
+    rdfs:label "Roofed Tower"@en-gb ;
+    rdfs:subClassOf building:Tower .
+
+building:RoofedWell
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a water‑extraction well provided with a protective roof."@en-gb ;
+    rdfs:label "Roofed Well"@en-gb ;
+    rdfs:subClassOf building:Well .
+
+building:Roofing
+    a rdfs:Class ;
+    ies:powertype building:ClassOfRoofing ;
+    rdfs:comment "\n    An `ies:ArtificialFeature` that is an arrangement of building materials, possibly discontinuous, that forms the uppermost\n    physical boundary of an Envelope, covering the Spaces below and protecting them from the external environment\n    (atmospheric agents, precipitation, solar radiation, etc.). Roofing is distinguished from Flooring-CeilingWork in\n    that it is directly exposed to the external environment above, rather than forming a shared boundary with another\n    Building or BuildingUnit.\n\n    Examples include: the pitched, tiled roofing of a detached house; flat roofing with waterproof membrane on a\n    commercial building; thatched roofing of a traditional cottage.\n    "@en-gb ;
+    rdfs:label "Roofing"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Room
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnclosedSpace` that is typically designated for a specific function such as sleeping, cooking, or working."@en-gb ;
+    rdfs:label "Room"@en-gb ;
+    rdfs:subClassOf building:EnclosedSpace .
+
+building:SAPRatingCalculation
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceAssessment` that is the calculation of the SAP Rating based on details provide during the `building:EPCAssessment`."@en-gb ;
+    rdfs:label "SAP Rating Calculation"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceAssessment .
+
+building:SAPRatingValue
+    a rdfs:Class ;
+    rdfs:comment "A `ies:QuantityValue` that is the result of the SAP Rating Calculation"@en-gb ;
+    rdfs:label "SAP Rating Value"@en-gb ;
+    rdfs:subClassOf ies:QuantityValue ;
+    skos:altLabel "Current SAP Score"@en-gb .
+
+building:ScottishCouncilArea
+    a rdfs:Class ;
+    rdfs:comment "A `building:UpperTierLocalAdministrativeRegion` that is a direct administrative division of Scotland; all Scottish council areas are unitary authority regions"@en-gb ;
+    rdfs:label "Scottish Council Area"@en-gb ;
+    rdfs:subClassOf building:UnitaryAuthorityRegion .
+
+building:ScottishLieutenancyArea
+    a rdfs:Class ;
+    rdfs:comment "A `building:CeremonialCounty` that is part of Scotland; each Scottish Lieutenancy Area has one Lord Lieutenant, but no High Sheriff"@en-gb ;
+    rdfs:label "Scottish Lieutenancy Area"@en-gb ;
+    rdfs:subClassOf building:CeremonialCounty .
+
+building:ScottishParliamentConstituencyRegion
+    a rdfs:Class ;
+    rdfs:comment "A `building:ConstituencyRegion` that is instituting for electing one member of the Scottish Parliament in each Scottish Parliament election"@en-gb ;
+    rdfs:label "Scottish Parliament Constituency Region"@en-gb ;
+    rdfs:subClassOf building:DevolvedParliamentConstituencyRegion .
+
+building:SecondarySchool
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is an educational facility for secondary education, typically for students aged 11-18 years."@en-gb ;
+    rdfs:label "Secondary School"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:SeneddConstituencyRegion
+    a rdfs:Class ;
+    rdfs:comment "A `building:ConstituencyRegion` that is instituted for electing one member of the Welsh Parliament (aka Senedd Cymru) in each Senedd election"@en-gb ;
+    rdfs:label "Senedd Constituency Region"@en-gb ;
+    rdfs:subClassOf building:DevolvedParliamentConstituencyRegion .
+
+building:Sepulchre
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is built to receive and enclose the body of the dead, serving as a place of burial and remembrance."@en-gb ;
+    rdfs:label "Sepulchre"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:SevereWindDrivenRainLocation
+    a rdfs:Class ;
+    rdfs:comment "A `buildingExposureZoneLocation` that is characterised by SEVERE wind-driven rain exposure, typically highly exposed coastal frontages, headlands, ridges, or fully open sites to prevailing winds; contrasted with Zones 1-3 by consistently extreme façade wetting. Retrofit implication: CWI may be unsuitable or restricted to specific certified systems with stringent moisture-risk design and maintenance; consider alternatives such as EWI/IWI subject to hygrothermal assessment."@en-gb ;
+    rdfs:label "Exposure Zone 4 (severe/very high)"@en-gb ;
+    rdfs:subClassOf building:ExposureZoneLocation .
+
+building:Shelter
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that provides cover for people against weather or adverse conditions."@en-gb ;
+    rdfs:label "Shelter"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:ShelteredSpace
+    a rdfs:Class ;
+    rdfs:comment "A `ies:Space` that is primarily defined by overhead cover providing protection from environmental agents (for example a canopy, undercroft, or covered entrance) while potentially remaining open at the sides."@en-gb ;
+    rdfs:label "Sheltered Space"@en-gb ;
+    rdfs:subClassOf ies:Space .
+
+building:SignalBox
+    a rdfs:Class ;
+    rdfs:comment "A `building:Building` that is a distinctive railway‑side structure historically housing the mechanisms for points and signals."@en-gb ;
+    rdfs:label "Signal Box"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+building:SingleUnitCentralHeatingSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:CentralHeatingSystem` that is designed for heating one structure unit"@en-gb ;
+    rdfs:label "Single Unit Central Heating System"@en-gb ;
+    rdfs:subClassOf building:CentralHeatingSystem .
+
+building:Slipway
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a sloping surface leading down to water, used for launching and retrieving boats or ships. Corresponds to OS NGD 'Slipway' classification in the lnd-fts-land-3 collection."@en-gb ;
+    rdfs:label "Slipway"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:SmokelessCoalFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:CoalFlow` that consists of coal that tends to emit little or no smoke during combustion"@en-gb ;
+    rdfs:label "Smokeless Coal Flow"@en-gb ;
+    rdfs:subClassOf building:CoalFlow .
+
+building:SolarElectricityFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:ElectricityFlow` that is generated using the energy derived from sun's radiations"@en-gb ;
+    rdfs:label "Solar Electricity Flow"@en-gb ;
+    rdfs:subClassOf
+        building:ElectricityFlow ,
+        building:RenewableEnergyCarrierFlow .
+
+building:SolarPhotovoltaicSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:ElectricityGenerationSystem` that converts sunlight into electricity using photovoltaic panels."@en-gb ;
+    rdfs:label "Solar Photovoltaic System"@en-gb ;
+    rdfs:subClassOf building:ElectricityGenerationSystem .
+
+building:SolarPowerFacility
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains photovoltaic arrays or solar thermal equipment for electricity generation."@en-gb ;
+    rdfs:label "Solar Power Facility"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:SovereignCountry
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Country` that is the whole region ruled by a sovereign state, and is not An `ies:RegionOfCountry` of another country; a few examples include the United Kingdom, Italy, Japan, Kenya, and the USA; England, Scotland, Wales, and Northern Ireland are not sovereign countries, but rather constituent countries"@en-gb ;
+    rdfs:label "Sovereign Country"@en-gb ;
+    rdfs:subClassOf ies:Country .
+
+building:SpectatorAccommodation
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that provides seating and/or standing space for spectators at events."@en-gb ;
+    rdfs:label "Spectator Accommodation"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:SportsGround
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains facilities for outdoor sports activities including playing fields, pitches, and associated amenities."@en-gb ;
+    rdfs:label "Sports Ground"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Spouse
+    a rdfs:Class ;
+    rdfs:comment "A couple partner who is member of a married couple"@en-gb ;
+    rdfs:label "Spouse"@en-gb ;
+    rdfs:subClassOf building:CouplePartner .
+
+building:Stadium
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a large sports venue with tiered seating for spectators."@en-gb ;
+    rdfs:label "Stadium"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:StairCase
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` consisting of a flight or series of flights of steps, with or without landings, designed to allow passage between different elevations within or between structures."@en-gb ;
+    rdfs:label "Staircase"@en-gb ;
+    rdfs:seeAlso <https://search.bsdd.buildingsmart.org/uri/buildingsmart/ifc/4.3/class/IfcStair> ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Stand
+    a rdfs:Class ;
+    rdfs:comment "A `building:SpectatorAccommodation` that provides tiered seating and/or standing accommodation for spectators, with at least one open side."@en-gb ;
+    rdfs:label "Stand"@en-gb ;
+    rdfs:subClassOf building:SpectatorAccommodation .
+
+building:StandardAssessmentProcedure
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceAssessment` that uses the Standard Assessment Procedure (SAP) which is the UK Government's recommended method for measuring the energy rating of residential properties."@en-gb ;
+    rdfs:label "Standard Assessment Procedure"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceAssessment .
+
+building:SteamHeatDistributionSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatDistributionSystem`that operates by circulating hot water steam through a network of pipes"@en-gb ;
+    rdfs:label "Steam Heat Distribution System"@en-gb ;
+    rdfs:subClassOf building:HeatDistributionSystem .
+
+building:Step
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that forms part of a stair or other structure, intended for ascending or descending between different elevations."@en-gb ;
+    rdfs:label "Step"@en-gb ;
+    rdfs:seeAlso <https://search.bsdd.buildingsmart.org/uri/buildingsmart/ifc/4.3/class/IfcStairFlight> ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Storey
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a (primarily) horizontal slice of a `building:Building` vertically delimited by structural boundaries such as floors and ceilings."@en ;
+    rdfs:label "Storey"@en ;
+    rdfs:seeAlso <https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3/class/IfcBuildingStorey> ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:SupportedRoofedConveyor
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is an elevated, roofed conveyor installation for transporting materials."@en-gb ;
+    rdfs:label "Supported Roofed Conveyor"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:TechnicalSystem
+    a rdfs:Class ;
+    ies:powertype building:ClassOfTechnicalSystem ;
+    rdfs:comment "An `ies:Entity` that is a human-made system (consisting of parts interacting with each other according to some rule or pattern) that is intended to serve a certain function."@en-gb ;
+    rdfs:label "Technical System"@en-gb ;
+    rdfs:subClassOf
+        building:TechnicalSystemState ,
+        ies:Entity .
+
+building:TechnicalSystemOperableWithMultipleEnergySources
+    a rdfs:Class ;
+    rdfs:comment "A `building:TechnicalSystem` that can operate on two or more energy sources - for example, a hybrid car, or a heating system that can operate on both electricity and gas"@en-gb ;
+    rdfs:label "Technical System Operable With Multiple Energy Sources"@en-gb ;
+    rdfs:subClassOf building:TechnicalSystem .
+
+building:TechnicalSystemOperableWithOneEnergySource
+    a rdfs:Class ;
+    rdfs:comment "A `building:TechnicalSystem` that can operate on only one energy source - for example, a conventional petrol car, or a furnace heating system that operates on gas only"@en-gb ;
+    rdfs:label "Technical System Operable With One Energy Source"@en-gb ;
+    rdfs:subClassOf building:TechnicalSystem .
+
+building:TechnicalSystemOperation
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Event` that consists in a technical system state functioning; one of the core participants of a technical system operation is the technical system itself or a state of it"@en-gb ;
+    rdfs:label "Technical System Operation"@en-gb ;
+    rdfs:subClassOf ies:Event .
+
+building:TechnicalSystemState
+    a rdfs:Class ;
+    rdfs:comment "An `ies:State` that is a temporal state of `building:TechnicalSystem`."@en-gb ;
+    rdfs:label "Technical System State"@en-gb ;
+    rdfs:subClassOf ies:State .
+
+building:TelecommunicationsFacility
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains telecommunications infrastructure and equipment."@en-gb ;
+    rdfs:label "Telecommunications Facility"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:TelecommunicationsMast
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a tall mast supporting equipment for transmitting or receiving electronic signals."@en-gb ;
+    rdfs:label "Telecommunications Mast"@en-gb ;
+    rdfs:subClassOf building:Tower .
+
+building:TelephoneExchange
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains telecommunications switching and routing equipment."@en-gb ;
+    rdfs:label "Telephone Exchange"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Tenant
+    a rdfs:Class ;
+    rdfs:comment "A person state who resides at a dwelling that they don't own by paying a rent, while none of the owners resides at the dwelling in question\n\nNote: in the United Kingdom, tenancy is regulated by a contract between the tenant and the owner(s) of the dwelling, known as tenancy agreement"@en-gb ;
+    rdfs:label "Tenant"@en-gb ;
+    rdfs:subClassOf ies:PersonState .
+
+building:Terraces
+    a rdfs:Class ;
+    rdfs:comment "A `building:SpectatorAccommodation` that comprises banked, wide steps forming spectator accommodation with at least one open side.  In the UK this historically implied standing accommodation, but standing is now regulated as 'licensed standing'"@en-gb ;
+    rdfs:label "Terraces"@en-gb ;
+    rdfs:subClassOf building:SpectatorAccommodation .
+
+building:TertiaryCollege
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a facility for higher education and university-level programmes."@en-gb ;
+    rdfs:label "Tertiary College"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:TidalWaterbody
+    a rdfs:Class ;
+    rdfs:comment "A `building:Waterbody` that is affected by tides - that is, cyclical changes in the water level due to the gravitational pull of the Moon and the Sun; besides seas, oceans, and their parts, other types of water body can also be tidal, including rivers and lakes that are connected to the sea"@en-gb ;
+    rdfs:label "Tidal Water Body"@en-gb ;
+    rdfs:subClassOf building:Waterbody .
+
+building:Tomb
+    a rdfs:Class ;
+    rdfs:comment "A `building:Sepulchre` a roofed edifice used for the interment of human remains."@en-gb ;
+    rdfs:label "Tomb"@en-gb ;
+    rdfs:subClassOf building:Sepulchre .
+
+building:Tower
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is tall and vertically oriented, typically rising significantly above its surroundings, often serving purposes such as observation, defence, habitation, or communication."@en-gb ;
+    rdfs:label "Tower"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:TravellingCrane
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that moves horizontally while lifting and lowering loads. Instead of being fixed in one spot, it travels along a defined path—typically rails, beams, or a runway—so it can serve a wide working area."@en-gb ;
+    rdfs:label "Travelling Crane"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:TrustMarkAssessment
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Assessment` that assesses the state of a building in the UK using the TrustMark quality scheme for home improvements."@en-gb ;
+    rdfs:label "TrustMark Assessment"@en-gb ;
+    rdfs:subClassOf ies:Assessment .
+
+building:TrustMarkAssessmentIdentifier
+    a rdfs:Class ;
+    rdfs:comment "A `ies:Identifier` that is used to identify a `building:TrustMarkAssessment`."@en-gb ;
+    rdfs:label "TrustMark Assessment Identifier"@en-gb ;
+    rdfs:subClassOf ies:Identifier .
+
+building:TrustMarkInstaller
+    a rdfs:Class ;
+    rdfs:comment "A `building:Installer` that has been certified under the TrustMark quality scheme."@en-gb ;
+    rdfs:label "TrustMark Installer"@en-gb ;
+    rdfs:subClassOf building:Installer .
+
+building:TrustMarkLicence
+    a rdfs:Class ;
+    rdfs:comment "A `ies:IndividualDocument` certifying the competency and quality workmanship of a TrustMark Registered Business."@en-gb ;
+    rdfs:label "TrustMark Licence"@en-gb ;
+    rdfs:subClassOf ies:IndividualDocument .
+
+building:TrustMarkLicenceNumber
+    a rdfs:Class ;
+    rdfs:comment "An`ies:Identifier` that is the licence number a business obtains upon completing the TrustMark certification."@en-gb ;
+    rdfs:label "TrustMark Licence Number"@en-gb ;
+    rdfs:subClassOf ies:Identifier .
+
+building:Tunnel
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is an underground or underwater passage excavated or constructed through ground or rock, used for transportation or utility conduits. Corresponds to OS NGD roadstructure value 'In Tunnel' and railway structure types."@en-gb ;
+    rdfs:label "Tunnel"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Turnstile
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that permits controlled, usually one-way, passage of individuals, typically for access control or fare collection."@en-gb ;
+    rdfs:label "Turnstile"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:UDPRN
+    a rdfs:Class ;
+    rdfs:comment "An `ies:GeoIdentity` that is the UK Royal Mail’s Unique Delivery Point Reference Number (UDPRN)."@en-gb ;
+    rdfs:label "UDPRN"@en-gb ;
+    rdfs:subClassOf ies:GeoIdentity .
+
+building:UKDomesticEPC
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ClassOfIndividualDocument` that is the Energy Performance Certificate (EPC) for a domestic building in the United Kingdom, which provides information about the energy efficiency of the building and recommendations for improvement."@en-gb ;
+    rdfs:label "UK Domestic Energy Performance Certificate (EPC)"@en-gb ;
+    rdfs:subClassOf building:UKEnergyPerformanceCertificate .
+
+building:UKEnergyPerformanceCertificate
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceCertificate` that is a document in the UK that provides information about a property's energy use and typical energy costs. It also offers recommendations on how to reduce energy and save money. Properties are rated on a scale from A (most efficient) to G (least efficient), and the certificate is required when selling or renting a property.  Since the same methodologies (SAP and RdSAP) are used, the EPC ratings and values assigned are comparable across all home nations. This means an EPC rating of 'A' in England represents the same level of energy efficiency as an 'A' rating in Scotland, Wales, or Northern Ireland."@en-gb ;
+    rdfs:label "UK Energy Performance Certificate (EPC)"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceCertificate ;
+    skos:note "The same methodologies (SAP and RdSAP) are used across the UK, the EPC ratings and values assigned are comparable." .
+
+building:UKLocalAdministrativeRegion
+    a rdfs:Class ;
+    rdfs:comment "An `ies:RegionOfCountry` of the UK that is an administrative division of one of its four constituent countries; local administrative regions have different names depending on the constituent countries in which they are located"@en-gb ;
+    rdfs:label "UK Local Administrative Region"@en-gb ;
+    rdfs:subClassOf ies:RegionOfCountry .
+
+building:UKNonDomesticEPC
+    a rdfs:Class ;
+    rdfs:comment "A `building:UK_EPC` that is for commercial properties, such as offices, shops, or industrial buildings. If a commercial property is being sold, rented, or built, a Non-Domestic EPC is usually required."@en-gb ;
+    rdfs:label "UK Non-Domestic EPC"@en-gb ;
+    rdfs:subClassOf building:UKEnergyPerformanceCertificate .
+
+building:UKParliamentConstituencyRegion
+    a rdfs:Class ;
+    rdfs:comment "A `building:ConstituencyRegion` that is instituted for electing one member of the House of Commons in each UK general election"@en-gb ;
+    rdfs:label "UK Parliamentary Constituency Region"@en-gb ;
+    rdfs:subClassOf building:ConstituencyRegion .
+
+building:UK_EPC_Identifier
+    a rdfs:Class ;
+    rdfs:comment "An `ies:Identifier` that is used to identify a `building:UKEnergyPerformanceCertificate`"@en-gb ;
+    rdfs:label "UK EPC Identifier"@en-gb ;
+    rdfs:subClassOf ies:Identifier .
+
+building:UPRN
+    a rdfs:Class ;
+    rdfs:comment "An `ies: GeoIdentity` that is a unique numeric identifier for every addressable location in Great Britain. The UPRN is the persistent identifier providing consistency across the AddressBase product range. Each address record has a UPRN, assigned by Local Authorities in England, Wales and Scotland or Ordnance Survey depending on the type of address. This is the primary key of the AddressBase product. Throughout its lifecycle, information on the address of a property can change. This may be due to a change of name, change of use, or the eventual demolition of the property. Independent of any changes being made the UPRN associated to an address is never changed, meaning the unique identifier remains persistent and reliable"@en-gb ;
+    rdfs:label "UPRN"@en-gb ;
+    rdfs:subClassOf ies:GeoIdentity ;
+    skos:note "UPRN can regarded an identifier of a whole-life Entity.\n    'UPRNs provide every property or object with a unique identifier\n    throughout its lifecycle, from planning through to demolition.'"@en-gb ;
+    skos:seeAlso <https://www.geoplace.co.uk/blog/2020/so-what-are-these-uprns-and-usrns-that-everyone-is-talking-about> .
+
+building:UkDomesticEnergyPerformanceBand
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyPerformanceBand` according to UK Domestic SAP.  Note that values tested are rounded before being tested against the band."@en-gb ;
+    rdfs:label "A `building:EnergyPerformanceBand"@en-gb ;
+    rdfs:subClassOf building:EnergyPerformanceBand .
+
+building:UnderfloorElectricRadiantSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:ElectricRadiantHeatingSystem` that is installed beneath a floor and radiates heat through the floor surface"@en-gb ;
+    rdfs:label "Underfloor Electric Radiant System"@en-gb ;
+    rdfs:subClassOf building:ElectricRadiantHeatingSystem .
+
+building:UnderfloorHydronicHeatDistributionSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:HydronicHeatDistributionSystem` that operates by circulating hot liquid water through a network of pipes that are positioned beneath the floor"@en-gb ;
+    rdfs:label "Underfloor Hydronic Heat Distribution System"@en-gb ;
+    rdfs:subClassOf building:HydronicHeatDistributionSystem .
+
+building:UnderfloorSteamHeatDistributionSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:SteamHeatDistributionSystem` that operates by circulating hot water steam through a network of pipes that are positioned beneath the floor"@en-gb ;
+    rdfs:label "Underfloor Steam Heat Distribution System"@en-gb ;
+    rdfs:subClassOf building:SteamHeatDistributionSystem .
+
+building:Underpass
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that provides a passage underneath a road, railway, or other obstacle. Corresponds to OS NGD 'Underpass' classification in the str-fts-compoundstructure-2 collection."@en-gb ;
+    rdfs:label "Underpass"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:UnitaryAuthorityRegion
+    a rdfs:Class ;
+    rdfs:comment "A `building:UpperTierLocalAdministrativeRegion` whose administration is responsible for all government functions and services in a given area; informally, a unitary authority can be said to combine the functions of a county council and those of a district council"@en-gb ;
+    rdfs:label "Unitary Authority Region"@en-gb ;
+    rdfs:subClassOf building:UpperTierLocalAdministrativeRegion .
+
+building:UpgradeExternalDoors
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to improve the thermal performance of external doors in a building."@en-gb ;
+    rdfs:label "Upgrade external doors"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both (limited in RdSAP). PAS/TM: Doors; RdSAP: Door improvements variably represented via U-values/assumptions."@en-gb .
+
+building:UpgradeHeatingControls
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to improve the heating controls in a building, such as by installing a programmer, room thermostat, thermostatic radiator valves (TRVs), zoning controls, or weather compensation controls."@en-gb ;
+    rdfs:label "Upgrade heating controls (programmer/room stat/TRVs/zoning/compensation)"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: Controls under building services; RdSAP: Heating control improvements."@en-gb .
+
+building:UpgradeHotWaterSystemOrControls
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to upgrade the hot water system or its controls in a building."@en-gb ;
+    rdfs:label "Upgrade hot water system / controls"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: Hot water; RdSAP: Efficient water heating / controls where supported."@en-gb .
+
+building:UpgradeLightingLowEnergy
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to upgrade the lighting in a building by installing low-energy lamps and fixtures."@en-gb ;
+    rdfs:label "Upgrade lighting (low-energy lamps/fixtures)"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: Lighting; RdSAP: Low energy lighting improvement."@en-gb .
+
+building:UpgradeSecondaryHeating
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to upgrade secondary heating systems in a building, such as room heaters, gas or electric fires, or wood stoves."@en-gb ;
+    rdfs:label "Upgrade secondary heating (e.g. room heater, gas/electric fire, wood stove)"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: RdSAP-primary (TM other heating). PAS/TM: Other Heating; RdSAP: Secondary heating recognised, limited improvement recommendations."@en-gb .
+
+building:UpgradeWindowsDoubleOrTripleGlazing
+    a rdfs:Class ;
+    rdfs:comment "A `building:EnergyEfficiencyProject` to improve the thermal performance of windows in a building by installing double or triple glazing."@en-gb ;
+    rdfs:label "Upgrade windows (double/triple glazing)"@en-gb ;
+    rdfs:subClassOf building:EnergyEfficiencyProject ;
+    skos:note "Coverage: Both. PAS/TM: Windows; RdSAP: Glazing improvements."@en-gb .
+
+building:UpperTierLocalAdministrativeRegion
+    a rdfs:Class ;
+    rdfs:comment "A `building:UKLocalAdministrativeRegion` that is a direct administrative division of one of the constituent countries of the United Kingdom; the councils of upper-tier local administrative regions are responsible for strategic, high cost services in the related region; some - which are called 'unitary authorities' -  are also responsible for more localized services, hence serving all government functions in the region"@en-gb ;
+    rdfs:label "Upper-Tier Local Administrative Region"@en-gb ;
+    rdfs:subClassOf building:UKLocalAdministrativeRegion .
+
+building:VehicleChargingSite
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains facilities for charging electric vehicles."@en-gb ;
+    rdfs:label "Vehicle Charging Site"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature ;
+    skos:altLabel "EV Charging Station"@en-gb .
+
+building:VehicleDip
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains a sunken basin used for immersing vehicles in disinfectant solution."@en-gb ;
+    rdfs:label "Vehicle Dip"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:VentilationShaft
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a vertical passage constructed to allow air flow to or from tunnels or underground spaces."@en-gb ;
+    rdfs:label "Ventilation Shaft"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:VentilationSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:TechnicalSystem` that exchanges stale air for fresh air in a `building:Structure` or `building:StructureUnit`."@en-gb ;
+    rdfs:label "Ventilation System"@en-gb ;
+    rdfs:subClassOf building:TechnicalSystem .
+
+building:Walling
+    a rdfs:Class ;
+    ies:powertype building:ClassOfWalling ;
+    rdfs:comment "\n    An `ies:ArtificialFeature` that is a vertical or near-vertical arrangement of building materials, possibly discontinuous,\n    that forms the lateral boundaries of enclosed Spaces. Walling serves to enclose, divide, or protect internal spaces\n    from the external environment or from adjacent spaces. Unlike Glazing, walling is primarily opaque, though it may\n    incorporate openings or glazed sections.\n\n    Examples include: the exterior brick walling of a Victorian terrace; party walling shared between semi-detached\n    houses; internal partition walling dividing office spaces.\n    "@en-gb ;
+    rdfs:label "Walling"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Ward
+    a rdfs:Class ;
+    rdfs:comment "A `building:ConstituencyRegion` that is instituted for electing one or more representatives in local elections"@en-gb ;
+    rdfs:label "Ward"@en-gb ;
+    rdfs:subClassOf building:ConstituencyRegion .
+
+building:WarmAirHeatDistributionSystem
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatDistributionSystem`that operates by circulating warm air through a network of ducts"@en-gb ;
+    rdfs:label "Warm Air Heat Distribution System"@en-gb ;
+    rdfs:subClassOf building:HeatDistributionSystem .
+
+building:WasteDisposal
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains facilities for the disposal or processing of waste materials."@en-gb ;
+    rdfs:label "Waste Disposal"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature ;
+    skos:altLabel "Waste Disposal Site"@en-gb .
+
+building:WasteWaterTreatmentWorks
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains facilities for the treatment of wastewater and sewage."@en-gb ;
+    rdfs:label "Waste Water Treatment Works"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature ;
+    skos:altLabel "Wastewater Treatment Site"@en-gb .
+
+building:WaterDistribution
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains infrastructure for the distribution of potable water."@en-gb ;
+    rdfs:label "Water Distribution"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature ;
+    skos:altLabel "Water Distribution Site"@en-gb .
+
+building:WaterPumpingChamber
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains a void or chamber from which fresh water is pumped to regulate supply."@en-gb ;
+    rdfs:label "Water Pumping Chamber"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:WaterSourceHeatPump
+    a rdfs:Class ;
+    rdfs:comment "A `building:HeatPump` that operates by absorbing heat from an external body of water"@en-gb ;
+    rdfs:label "Water Source Heat Pump"@en-gb ;
+    rdfs:subClassOf building:HeatPump .
+
+building:WaterTower
+    a rdfs:Class ;
+    rdfs:comment "A `building:Tower` that is a tall tower supporting a water tank to provide pressure and regulate supply."@en-gb ;
+    rdfs:label "Water Tower"@en-gb ;
+    rdfs:subClassOf building:Tower .
+
+building:WaterTreatment
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that contains facilities for the extraction and treatment of water for potable supply."@en-gb ;
+    rdfs:label "Water Treatment"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature ;
+    skos:altLabel "Water Treatment Site"@en-gb .
+
+building:Waterbody
+    a rdfs:Class ;
+    rdfs:comment "An `ies:GeographicFeature` geographic feature that is a large water mass; for example, a sea or a stream - conceived as a mass of water, rather than the channel conveying it"@en-gb ;
+    rdfs:label "Water Body"@en-gb ;
+    rdfs:subClassOf ies:GeographicFeature .
+
+building:Waterwheel
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a large wheel driven by flowing water to transmit mechanical power."@en-gb ;
+    rdfs:label "Waterwheel"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Weighbridge
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that houses apparatus for weighing vehicles and their loads."@en-gb ;
+    rdfs:label "Weighbridge"@en-gb ;
+    rdfs:seeAlso <https://www.gov.uk/find-licences/weighbridge-operator-certificate> ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Weir
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a barrier built across a watercourse to control or divert flow."@en-gb ;
+    rdfs:label "Weir"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:Well
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a constructed shaft or hole for extracting water from the ground."@en-gb ;
+    rdfs:label "Well"@en-gb ;
+    rdfs:subClassOf ies:ArtificialFeature .
+
+building:WelshCommunityArea
+    a rdfs:Class ;
+    rdfs:comment "A `building:LowerTierLocalAdministrativeRegion` that is a direct administrative division of a Welsh principal area; community areas can be viewed as the Welsh analog of English civil parishes and have similarly localized responsibilities"@en-gb ;
+    rdfs:label "Welsh Community Area"@en-gb ;
+    rdfs:subClassOf building:CivilParishOrCommunityArea .
+
+building:WelshPreservedCounty
+    a rdfs:Class ;
+    rdfs:comment "A `building:CeremonialCounty` that is part of Wales; each Welsh Preserved County has one Lord Lieutenant and one High Sheriff"@en-gb ;
+    rdfs:label "Welsh Preserved County"@en-gb ;
+    rdfs:subClassOf building:CeremonialCounty .
+
+building:WelshPrincipalArea
+    a rdfs:Class ;
+    rdfs:comment "A `building:UpperTierLocalAdministrativeRegion` that is a direct administrative division of Wales; all Welsh principal areas are unitary authority regions"@en-gb ;
+    rdfs:label "Welsh Principal Area"@en-gb ;
+    rdfs:subClassOf building:UnitaryAuthorityRegion .
+
+building:WheelHouse
+    a rdfs:Class ;
+    rdfs:comment "A `building:Building` that houses the lifting gear associated with mining operations."@en-gb ;
+    rdfs:label "Wheel House"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+building:WindGeneratedElectricityFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:ElectricityFlow` that is generated using the energy derived from the movement of air"@en-gb ;
+    rdfs:label "Wind-Generated Electricity Flow"@en-gb ;
+    rdfs:subClassOf
+        building:ElectricityFlow ,
+        building:RenewableEnergyCarrierFlow .
+
+building:WindPump
+    a rdfs:Class ;
+    rdfs:comment "An `ies:ArtificialFeature` that is a tower or mast supporting wind‑driven blades used to pump water."@en-gb ;
+    rdfs:label "Wind Pump"@en-gb ;
+    rdfs:subClassOf building:Tower .
+
+building:WindTurbine
+    a rdfs:Class ;
+    rdfs:comment "A `building:ElectricityGenerationSystem`  that converts wind energy into electricity."@en-gb ;
+    rdfs:label "Wind Turbine"@en-gb ;
+    rdfs:subClassOf building:ElectricityGenerationSystem .
+
+building:Windmill
+    a rdfs:Class ;
+    rdfs:comment "A `building:Building` that is designed to be wind‑driven for milling or pumping and typically comprises an occupiable tower with sails."@en-gb ;
+    rdfs:label "Windmill"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+building:WoodChipsFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:WoodFlow` that comes into small bits"@en-gb ;
+    rdfs:label "Wood Chips Flow"@en-gb ;
+    rdfs:subClassOf building:WoodFlow .
+
+building:WoodFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:RenewableEnergyCarrierFlow` that consists of wood, that is, the strengthening and nutrient-conducting tissues of trees, lianas, and shrubs"@en-gb ;
+    rdfs:label "Wood Flow"@en-gb ;
+    rdfs:subClassOf building:RenewableEnergyCarrierFlow .
+
+building:WoodLogsFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:WoodFlow` that comes in medium-sized, hand-portable chunks"@en-gb ;
+    rdfs:label "Wood Logs Flow"@en-gb ;
+    rdfs:subClassOf building:WoodFlow .
+
+building:WoodPelletsFlow
+    a
+        building:ClassOfEnergyCarrierFlow ,
+        rdfs:Class ;
+    rdfs:comment "A `building:WoodFlow` that comes in the form of cylinders of compressed sawdust and other wood waste"@en-gb ;
+    rdfs:label "Wood Pellets Flow"@en-gb ;
+    rdfs:subClassOf building:WoodFlow .
+
+building:Woodland
+    a rdfs:Class ;
+    rdfs:comment "An `ies:GeographicFeature` that is an area of land covered predominantly with trees and undergrowth. Includes forests, copses, and other wooded areas."@en-gb ;
+    rdfs:label "Woodland"@en-gb ;
+    rdfs:subClassOf ies:GeographicFeature .
+
+building:Zone
+    a rdfs:Class ;
+    rdfs:comment "A `ies:Space` identified for a particular analytical, regulatory, or management purpose (for example a thermal zone, fire zone, or occupancy zone). A building:Zone may coincide with one ies:Space, with part of a ies:Space, or with multiple ies:Spaces."@en-gb ;
+    rdfs:label "Zone"@en-gb ;
+    rdfs:subClassOf ies:Space .
+
+building:assessedInEnergyPerformanceBand
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:relationship` that relates a `building:EnergyPerformanceAssessmentResult` to the `building:EnergyPerformanceBand` which was allocated as during the `building:EnergyPerformanceAssessment` "@en-gb ;
+    rdfs:domain building:EnergyPerformanceAssessmentResult ;
+    rdfs:label "assessed In Energy Performance Band"@en-gb ;
+    rdfs:range building:EnergyPerformanceBand ;
+    rdfs:subPropertyOf ies:relationship .
+
+building:assessedSAPRating
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:relationship` that relates a `building:EnergyPerformanceAssessmentResult` to a `building:SAPRating` that indicates the SAP rating assigned to the building."@en-gb ;
+    rdfs:domain building:EnergyPerformanceAssessmentResult ;
+    rdfs:label "has SAP Rating"@en-gb ;
+    rdfs:range building:SAPRatingValue ;
+    rdfs:subPropertyOf ies:relationship .
+
+building:epcValidFromDate
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:validFromDate` relationship that relates a `building:EnergyPerformanceCertificate` to a `ies:ParticularPeriod` that indicates the date from which the `building:EnergyPerformanceCertificate` is valid."@en-gb ;
+    rdfs:domain building:EnergyPerformanceCertificate ;
+    rdfs:label "EPC Valid From Date"@en-gb ;
+    rdfs:range ies:ParticularPeriod ;
+    rdfs:subPropertyOf ies:validFromDate .
+
+building:epcValidToDate
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:validFromDate` relationship that relates a `building:EnergyPerformanceCertificate` to a `ies:ParticularPeriod` that indicates the date until which the `building:EnergyPerformanceCertificate` is valid."@en-gb ;
+    rdfs:domain building:EnergyPerformanceCertificate ;
+    rdfs:label "EPC Valid To Date"@en-gb ;
+    rdfs:range ies:ParticularPeriod ;
+    rdfs:subPropertyOf ies:validToDate .
+
+building:hasDomicileIn
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:inLocation` relationship that relates an `ies:PersonState` to an `ies:Location`."@en-gb ;
+    rdfs:domain ies:PersonState ;
+    rdfs:label "has Domicile In"@en-gb ;
+    rdfs:range ies:Location ;
+    rdfs:subPropertyOf ies:inLocation .
+
+building:hasEnvelopeAirtighnessValue
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:relationship` that relates a `building:Envelope` to a `building:EnvelopeAirtightnessValue` that indicates the airtightness of the building envelope."@en-gb ;
+    rdfs:domain building:Envelope ;
+    rdfs:label "has Envelope Airtighness Value"@en-gb ;
+    rdfs:range building:AirTightnessTestValue ;
+    rdfs:subPropertyOf ies:relationship .
+
+building:hasEnvironmentalImpactRating
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:relationship` that relates a `building:EnergyPerformanceAssessmentResult` to a `building:EnvironmentalImpactRating` that indicates the environmental impact rating assigned to the building."@en-gb ;
+    rdfs:domain building:EnergyPerformanceAssessmentResult ;
+    rdfs:label "has Environmental Impact Rating"@en-gb ;
+    rdfs:range building:EnvironmentalImpactRatingValue ;
+    rdfs:subPropertyOf ies:relationship .
+
+building:hasEstimatedAnnualHeatingCost
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:relationship` that relates a `building:EnergyPerformanceCertificate` to an `ies:AmountOfMoney` that indicates the estimated annual heating cost for the building unit."@en-gb ;
+    rdfs:domain building:EnergyPerformanceAssessmentResult ;
+    rdfs:label "has Estimated Annual Heating Cost"@en-gb ;
+    rdfs:range ies:AmountOfMoney ;
+    rdfs:subPropertyOf ies:relationship .
+
+building:hasEstimatedAnnualLightingCost
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:relationship` that relates a `building:EnergyPerformanceCertificate` to an `ies:AmountOfMoney` that indicates the estimated annual lighting cost for the building unit."@en-gb ;
+    rdfs:domain building:EnergyPerformanceAssessmentResult ;
+    rdfs:label "has Estimated Annual Lighting Cost"@en-gb ;
+    rdfs:range ies:AmountOfMoney ;
+    rdfs:subPropertyOf ies:relationship .
+
+building:hasEstimatedAnnualWaterHeatingCost
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:relationship` that relates a `building:EnergyPerformanceCertificate` to an `ies:AmountOfMoney` that indicates the estimated annual water heating cost for the building unit."@en-gb ;
+    rdfs:domain building:EnergyPerformanceAssessmentResult ;
+    rdfs:label "has Estimated Annual Water Heating Cost"@en-gb ;
+    rdfs:range ies:AmountOfMoney ;
+    rdfs:subPropertyOf ies:relationship .
+
+building:hasEstimatedCO2Emissions
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:relationship` that relates a `building:EnergyPerformanceCertificate` to an `ies:Mass` that indicates the estimated annual CO2 emissions for the building unit."@en-gb ;
+    rdfs:domain building:EnergyPerformanceAssessmentResult ;
+    rdfs:label "has Estimated CO2 Emissions"@en-gb ;
+    rdfs:range ies:Mass ;
+    rdfs:subPropertyOf ies:relationship .
+
+building:hasLodgementDate
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:relationship` that relates an `ies: ParticularPeriod ` to the date on which the `building:EnergyPerformanceResult` was lodged into the Register."@en-gb ;
+    rdfs:domain building:EnergyPerformanceCertificate ;
+    rdfs:label "has Lodgement Date"@en-gb ;
+    rdfs:range ies:ParticularPeriod ;
+    rdfs:subPropertyOf ies:relationship .
+
+building:hasNumberOfOccupants
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:relationship` connecting a `building:BuildingUnit` to its `building:NumberOfOccupants`."@en-gb ;
+    rdfs:domain building:BuildingUnit ;
+    rdfs:label "has number of Occupants"@en-gb ;
+    rdfs:range building:NumberOfOccupants ;
+    rdfs:subPropertyOf ies:relationship .
+
+building:hasOperationCost
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:transferValue` relation connecting a `building:TechnicalSystemOperation` to an `ies:AmountOfMoney` as the cost of its operation."@en-gb ;
+    rdfs:domain building:TechnicalSystemOperation ;
+    rdfs:label "has Operation Cost"@en-gb ;
+    rdfs:range ies:AmountOfMoney ;
+    rdfs:subPropertyOf ies:transferValue .
+
+building:hasRoofingArea
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:relationship` that relates `building:Roofing` to a `ies:Area` that is the surface area of the `building:Roofing`."@en-gb ;
+    rdfs:domain building:Roofing ;
+    rdfs:label "has Roofing Area"@en-gb ;
+    rdfs:range ies:Area ;
+    rdfs:subPropertyOf ies:relationship .
+
+building:hasTMLicence
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:inPossessionOf` relationship that relates between a `building:TMInstaller` and an asset (TrustMark licence) in their possession."@en-gb ;
+    rdfs:domain building:TrustMarkInstaller ;
+    rdfs:label "has TrustMark Licence"@en-gb ;
+    rdfs:range building:TrustMarkLicence ;
+    rdfs:subPropertyOf ies:inPossessionOf .
+
+building:hasTotalFlooringArea
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:relationship` that relates `building:BuildingUnit` to a `qudt:Area` that is the total area of all usable flooring in a `building:BuildingUnit`."@en-gb ;
+    rdfs:domain building:BuildingUnit ;
+    rdfs:label "has Flooring Area"@en-gb ;
+    rdfs:range ies:Area ;
+    rdfs:subPropertyOf ies:relationship .
+
+building:isEquipmentOf
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:relationship` that obtains between an element e and a technical system t if and only if (i) e is not part of t, and (ii) e enhances or completes t's capabilities"@en-gb ;
+    rdfs:domain ies:Element ;
+    rdfs:label "is Equipment Of"@en-gb ;
+    rdfs:range building:TechnicalSystem ;
+    rdfs:subPropertyOf ies:relationship .
+
+building:isGeopoliticalDependencyOf
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:relationship` that obtains between a `building:GeopoliticalDependency` D and a sovereign country C if and only if the government of D is in some respects under the jurisdiction of the institutions of C."@en-gb ;
+    rdfs:domain building:GeopoliticalDependency ;
+    rdfs:label "is Geopolitical Dependency Of"@en-gb ;
+    rdfs:range building:SovereignCountry ;
+    rdfs:subPropertyOf ies:relationship .
+
+building:isHeatedBy
+    a owl:ObjectProperty ;
+    rdfs:comment "A `building:isServicedBy` relationship that obtains between a state of a structure unit or space and the heating system that is put in place for heating it; a structure unit or space state can be heated even by a heating system that is located far away from it: for example, a flat can be heated by a community heating system whose heat production system is installed in another part of the building; when a heating system heats an entire structure unit, the relation building:isHeatedBy obtains between the entire structure unit state and the heating system, as well as between each individual space and the heating system"@en-gb ;
+    rdfs:label "is Heated By"@en-gb ;
+    rdfs:range building:HeatingSystem ;
+    rdfs:subPropertyOf building:isServicedBy ;
+    skos:note "from RC1 rdfs:domain building:StructureUnitOrSpaceState" .
+
+building:isInstitutionalSuccessorOf
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:successorTo` relationship that obtains between two regions of an `ies:Country` (ies:RegionOfCountry) if and only if the former has replaced the latter within the administrative hierarchy of an `ies:Country`."@en-gb ;
+    rdfs:domain ies:RegionOfCountry ;
+    rdfs:label "is Institutional Successor Of"@en-gb ;
+    rdfs:range ies:RegionOfCountry ;
+    rdfs:subPropertyOf ies:successorTo .
+
+building:isMainlyOperableWith
+    a owl:ObjectProperty ;
+    rdfs:comment "A `building:isOperableWith` relationship that obtains between a technical system state and a class of energy carrier flows if and only if the former has the latter as its main energy source"@en-gb ;
+    rdfs:domain building:TechnicalSystem ;
+    rdfs:label "is Mainly Operable With"@en-gb ;
+    rdfs:range building:ClassOfEnergyCarrierFlow ;
+    rdfs:subPropertyOf building:isOperableWith .
+
+building:isOperableWith
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:relationship` that obtains between a technical system state and a class of energy carrier flows if and only if the former can operate with instances of the latter"@en-gb ;
+    rdfs:domain building:TechnicalSystem ;
+    rdfs:label "is Operable With"@en-gb ;
+    rdfs:range building:ClassOfEnergyCarrierFlow ;
+    rdfs:subPropertyOf ies:relationship .
+
+building:isPrimarilyHeatedBy
+    a owl:ObjectProperty ;
+    rdfs:comment "A `building:isHeatedBy` relationship that obtains between a state of a structure unit or space and the heating system that is considered the primary source of heating."@en-gb ;
+    rdfs:label "is Primarily Heated By"@en-gb ;
+    rdfs:range building:HeatingSystem ;
+    rdfs:subPropertyOf building:isHeatedBy ;
+    skos:note "from RC1 rdfs:domain building:StructureUnitOrSpaceState" .
+
+building:isSecondarilyHeatedBy
+    a owl:ObjectProperty ;
+    rdfs:comment "A `building:isHeatedBy` relationship that obtains between a state of a structure unit or space and a heating system that is considered a secondary source of heating."@en-gb ;
+    rdfs:label "is Secondarily Heated By"@en-gb ;
+    rdfs:range building:HeatingSystem ;
+    rdfs:subPropertyOf building:isHeatedBy ;
+    skos:note "from RC1 rdfs:domain building:StructureUnitOrSpaceState" .
+
+building:isSecondarilyOperableWith
+    a owl:ObjectProperty ;
+    rdfs:comment "A `building:isOperableWith` relationship that obtains between a technical system state and a class of energy carrier flows if and only if the former has the latter as a secondary energy source"@en-gb ;
+    rdfs:domain building:TechnicalSystem ;
+    rdfs:label "is Secondarily Operable With"@en-gb ;
+    rdfs:range building:ClassOfEnergyCarrierFlow ;
+    rdfs:subPropertyOf building:isOperableWith .
+
+building:isServicedBy
+    a owl:ObjectProperty ;
+    rdfs:comment "An `ies:relationship` that obtains between a state of a structure unit or space s and a technical system t if and only if t is put in place for enhancing the capabilities of s or benefiting the occupiers of s; examples of technical systems that service structure units or space include heating systems, power supply systems, and plumbing systems"@en-gb ;
+    rdfs:label "is Serviced By"@en-gb ;
+    rdfs:range building:TechnicalSystem ;
+    rdfs:subPropertyOf ies:relationship ;
+    skos:note "from RC1 rdfs:domain building:StructureUnitOrSpaceState" .
+
+building:residesIn
+    a owl:ObjectProperty ;
+    rdfs:comment "A `building:hasDomicileIn` connecting a `ies:PersonState` to an `ies:Location` in which they live."@en-gb ;
+    rdfs:domain ies:PersonState ;
+    rdfs:label "Resides In"@en-gb ;
+    rdfs:range ies:Location ;
+    rdfs:subPropertyOf building:hasDomicileIn .
+
+building:hasEnergyPerformanceAssessmentReason
+    a owl:DatatypeProperty ;
+    rdfs:comment "An `ies:relationship` that relates a `building:EPCAssessment` to a `building:EnergyPerformanceAssessmentReason` that indicates the reason for conducting the energy performance assessment."@en-gb ;
+    rdfs:domain building:EPCAssessment ;
+    rdfs:label "has Energy Performance Assessment Reason"@en-gb ;
+    rdfs:range xsd:string ;
+    rdfs:subPropertyOf ies:relationship .
+
+building:heatingControlDescription
+    a owl:DatatypeProperty ;
+    rdfs:comment "An `ies:attribute` that is a description of the heating control system, typically a string of text"@en-gb ;
+    rdfs:domain building:ClassOfHeatingControlSystem ;
+    rdfs:label "Heating Control Description"@en-gb ;
+    rdfs:range xsd:string ;
+    rdfs:subPropertyOf ies:attribute .
+
+building:EnergyEfficiencyProject
+    a building:RdSAPWorkType ;
+    rdfs:comment "A `building:RenovationProject` to improve the energy efficiency."@en-gb ;
+    rdfs:label "Energy Efficiency Project"@en-gb ;
+    rdfs:subClassOf building:RenovationProject .
+
+building:OtherProject
+    a building:RdSAPWorkType ;
+    rdfs:comment "A `building:RenovationProject` that does not fit into the other categories."@en-gb ;
+    rdfs:label "Other Project"@en-gb ;
+    rdfs:subClassOf building:RenovationProject .
+
+building:RepairMaintenanceImprovement
+    a building:RdSAPWorkType ;
+    rdfs:comment "A `building:RenovationProject` to repair, maintain, or improve existing `building:structure`s."@en-gb ;
+    rdfs:label "Repair Maintenance and Improvement"@en-gb ;
+    rdfs:subClassOf building:RenovationProject .
+
+building:UKDomesticEPC_A
+    a building:UkDomesticEnergyPerformanceBand ;
+    ies:isIdentifiedBy [
+        a ies:Identifier ;
+        ies:representationValue "A"
+    ] ;
+    ies:lowerBound [
+        a building:SAPRatingValue ;
+        qudt:numericValue "92.0"^^xsd:float
+    ] ;
+    ies:upperBound [
+        a building:SAPRatingValue ;
+        qudt:numericValue "100.0"^^xsd:float
+    ] ;
+    rdfs:comment "A `building:UkDomesticEnergyPerformanceBand` that is the result of a `building:EPCAssessment` assessed as grade A, corresponding to a `building:SAPRating` of between 92 and 100.  "@en-gb ;
+    rdfs:label "UK Domestic EPC A"@en-gb .
+
+building:UKDomesticEPC_B
+    a building:UkDomesticEnergyPerformanceBand ;
+    ies:isIdentifiedBy [
+        a ies:Identifier ;
+        ies:representationValue "E"
+    ] ;
+    ies:lowerBound [
+        a building:SAPRatingValue ;
+        qudt:numericValue "81.0"^^xsd:float
+    ] ;
+    ies:upperBound [
+        a building:SAPRatingValue ;
+        qudt:numericValue "91.0"^^xsd:float
+    ] ;
+    rdfs:comment "A `building:UkDomesticEnergyPerformanceBand` that is the result of a `building:EPCAssessment` assessed as grade B, corresponding to a `building:SAPRating` of between 81 and 91.  "@en-gb ;
+    rdfs:label "UK Domestic EPC B"@en-gb .
+
+building:UKDomesticEPC_C
+    a building:UkDomesticEnergyPerformanceBand ;
+    ies:isIdentifiedBy [
+        a ies:Identifier ;
+        ies:representationValue "C"
+    ] ;
+    ies:lowerBound [
+        a building:SAPRatingValue ;
+        qudt:numericValue "69.0"^^xsd:float
+    ] ;
+    ies:upperBound [
+        a building:SAPRatingValue ;
+        qudt:numericValue "80.0"^^xsd:float
+    ] ;
+    rdfs:comment "A `building:UkDomesticEnergyPerformanceBand` that is the result of a `building:EPCAssessment` assessed as grade C, corresponding to a `building:SAPRating` of between 69 and 80. "@en-gb ;
+    rdfs:label "UK Domestic EPC C"@en-gb .
+
+building:UKDomesticEPC_D
+    a building:UkDomesticEnergyPerformanceBand ;
+    ies:isIdentifiedBy [
+        a ies:Identifier ;
+        ies:representationValue "D"
+    ] ;
+    ies:lowerBound [
+        a building:SAPRatingValue ;
+        qudt:numericValue "55.0"^^xsd:float
+    ] ;
+    ies:upperBound [
+        a building:SAPRatingValue ;
+        qudt:numericValue "68.0"^^xsd:float
+    ] ;
+    rdfs:comment "A `building:UkDomesticEnergyPerformanceBand` that is the result of a `building:EPCAssessment` assessed as grade D, corresponding to a `building:SAPRating` of between 55 and 68.  "@en-gb ;
+    rdfs:label "UK Domestic EPC D"@en-gb .
+
+building:UKDomesticEPC_E
+    a building:UkDomesticEnergyPerformanceBand ;
+    ies:isIdentifiedBy [
+        a ies:Identifier ;
+        ies:representationValue "E"
+    ] ;
+    ies:lowerBound [
+        a building:SAPRatingValue ;
+        qudt:numericValue "39.0"^^xsd:float
+    ] ;
+    ies:upperBound [
+        a building:SAPRatingValue ;
+        qudt:numericValue "54.0"^^xsd:float
+    ] ;
+    rdfs:comment "A `building:UkDomesticEnergyPerformanceBand` that is the result of a `building:EPCAssessment` assessed as grade E, corresponding to a `building:SAPRating` of between 39 and 54."@en-gb ;
+    rdfs:label "UK Domestic EPC E"@en-gb .
+
+building:UKDomesticEPC_F
+    a building:UkDomesticEnergyPerformanceBand ;
+    ies:isIdentifiedBy [
+        a ies:Identifier ;
+        ies:representationValue "F"
+    ] ;
+    ies:lowerBound [
+        a building:SAPRatingValue ;
+        qudt:numericValue "21.0"^^xsd:float
+    ] ;
+    ies:upperBound [
+        a building:SAPRatingValue ;
+        qudt:numericValue "38.0"^^xsd:float
+    ] ;
+    rdfs:comment "A `building:UkDomesticEnergyPerformanceBand` that is the result of a `building:EPCAssessment` assessed as grade F, corresponding to a `building:SAPRating` of between 21 and 38.  "@en-gb ;
+    rdfs:label "UK Domestic EPC F"@en-gb .
+
+building:UKDomesticEPC_G
+    a building:UkDomesticEnergyPerformanceBand ;
+    ies:isIdentifiedBy [
+        a ies:Identifier ;
+        ies:representationValue "G"
+    ] ;
+    ies:lowerBound [
+        a building:SAPRatingValue ;
+        qudt:numericValue "1.0"^^xsd:float
+    ] ;
+    ies:upperBound [
+        a building:SAPRatingValue ;
+        qudt:numericValue "20.0"^^xsd:float
+    ] ;
+    rdfs:comment "A `building:UkDomesticEnergyPerformanceBand` that is the result of a `building:EPCAssessment` assessed as grade G, corresponding to a `building:SAPRating` of between 1 and 20.  "@en-gb ;
+    rdfs:label "UK Domestic EPC G"@en-gb .

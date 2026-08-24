@@ -15,6 +15,9 @@
         {% if shapes and config.include_shapes %}
         <li><a href="#shapes">Shapes</a></li>
         {% endif %}
+        {% if other_properties and config.include_other_properties %}
+        <li><a href="#other-properties">Other Properties</a></li>
+        {% endif %}
         {% if (concepts or concept_schemes) and config.include_skos %}
         <li><a href="#skos">SKOS Vocabulary</a></li>
         {% endif %}
@@ -167,6 +170,24 @@
         {% endif %}
         {% if 'node_shape' in shape.kinds and shape.properties %}
         <p><strong>Property constraints:</strong> {{ shape.properties | length }}</p>
+        {% endif %}
+    </article>
+    {% endfor %}
+</section>
+{% endif %}
+
+{% if other_properties and config.include_other_properties %}
+<section id="other-properties">
+    <h2>Other Properties</h2>
+    {% for prop in other_properties %}
+    <article class="entity-card" id="other-prop-{{ prop.qname | qname_local }}">
+        <h3>
+            {{ prop.label or prop.qname }}
+            <span class="entity-type rdf">rdf property</span>
+        </h3>
+        <p class="uri">{{ prop.uri }}</p>
+        {% if prop.definition %}
+        <p class="definition">{{ prop.definition }}</p>
         {% endif %}
     </article>
     {% endfor %}

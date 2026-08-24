@@ -142,6 +142,8 @@ class MarkdownRenderer:
         lines.append(f"- **Object Properties:** {len(entities.object_properties)}")
         lines.append(f"- **Datatype Properties:** {len(entities.datatype_properties)}")
         lines.append(f"- **Annotation Properties:** {len(entities.annotation_properties)}")
+        if entities.other_properties and self.config.include_other_properties:
+            lines.append(f"- **Other Properties:** {len(entities.other_properties)}")
         if entities.shapes and self.config.include_shapes:
             lines.append(f"- **Shapes:** {len(entities.shapes)}")
         if entities.concepts and self.config.include_skos:
@@ -187,6 +189,21 @@ class MarkdownRenderer:
             lines.append("")
             for p in entities.datatype_properties:
                 link = self._entity_link(p.qname, "datatype_property", p.label or p.qname)
+                lines.append(f"- {link}")
+            lines.append("")
+
+        # Properties whose kind the source does not state (#76)
+        if entities.other_properties and self.config.include_other_properties:
+            lines.append("## Other Properties")
+            lines.append("")
+            lines.append(
+                "Properties declared `rdf:Property`, `owl:FunctionalProperty` or "
+                "`owl:DeprecatedProperty` without an object, datatype or annotation "
+                "declaration — the source does not state which kind they are."
+            )
+            lines.append("")
+            for p in entities.other_properties:
+                link = self._entity_link(p.qname, "rdf_property", p.label or p.qname)
                 lines.append(f"- {link}")
             lines.append("")
 
@@ -1156,6 +1173,8 @@ class MarkdownRenderer:
         lines.append("- [Classes](#classes)")
         lines.append("- [Object Properties](#object-properties)")
         lines.append("- [Datatype Properties](#datatype-properties)")
+        if entities.other_properties and self.config.include_other_properties:
+            lines.append("- [Other Properties](#other-properties)")
         if entities.shapes and self.config.include_shapes:
             lines.append("- [Shapes](#shapes)")
         if (entities.concepts or entities.concept_schemes) and self.config.include_skos:
@@ -1197,6 +1216,19 @@ class MarkdownRenderer:
             if p.definition:
                 lines.append(p.definition)
                 lines.append("")
+
+        # Properties whose kind the source does not state (#76)
+        if entities.other_properties and self.config.include_other_properties:
+            lines.append("## Other Properties")
+            lines.append("")
+            for p in entities.other_properties:
+                lines.append(f"### {p.label or p.qname}")
+                lines.append("")
+                lines.append(f"**URI:** `{p.uri}`")
+                lines.append("")
+                if p.definition:
+                    lines.append(p.definition)
+                    lines.append("")
 
         # Shapes (#60)
         if entities.shapes and self.config.include_shapes:

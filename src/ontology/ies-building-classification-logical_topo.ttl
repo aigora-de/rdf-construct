@@ -1,0 +1,1533 @@
+PREFIX blg-class: <http://informationexchangestandard.org/ont/ies/building-classification/>
+PREFIX building: <http://informationexchangestandard.org/ont/ies/env/building/>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+PREFIX ies: <http://informationexchangestandard.org/ont/ies/common/>
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX vann: <http://purl.org/vocab/vann/>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+<http://informationexchangestandard.org/ont/ies/building-classification/>
+    a owl:Ontology ;
+    dcterms:modified "2026-01-29"^^xsd:date ;
+    dcterms:title "IES Domain Ontology - Building Ontology Classification Layer"@en-gb ;
+    owl:versionIRI <http://informationexchangestandard.org/ont/ies-building-classification/1.0.0-rc2> ;
+    owl:versionInfo "1.0.0-rc2" ;
+    vann:preferredNamespacePrefix "blg-class" ;
+    vann:preferredNamespaceUri "http://informationexchangestandard.org/ont/ies/building-classification/" .
+
+blg-class:0mm_RoofingInsulation
+    a
+        building:ClassOfRoofingByInsulationThickness ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification that has 0mm of insulation thickness"@en-gb ;
+    rdfs:label "0mm Roofing Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:100mm_RoofingInsulation
+    a
+        building:ClassOfRoofingByInsulationThickness ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification that has 100mm of insulation thickness"@en-gb ;
+    rdfs:label "100mm Roofing Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:12mm_RoofingInsulation
+    a
+        building:ClassOfRoofingByInsulationThickness ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification that has 12mm of insulation thickness"@en-gb ;
+    rdfs:label "12mm Roofing Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:150mm_RoofingInsulation
+    a
+        building:ClassOfRoofingByInsulationThickness ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification that has 150mm of insulation thickness"@en-gb ;
+    rdfs:label "150mm Roofing Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:200mm_RoofingInsulation
+    a
+        building:ClassOfRoofingByInsulationThickness ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification that has 200mm of insulation thickness"@en-gb ;
+    rdfs:label "200mm Roofing Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:250mm_RoofingInsulation
+    a
+        building:ClassOfRoofingByInsulationThickness ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification that has 250mm of insulation thickness"@en-gb ;
+    rdfs:label "250mm Roofing Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:25mm_RoofingInsulation
+    a
+        building:ClassOfRoofingByInsulationThickness ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification that has 25mm of insulation thickness"@en-gb ;
+    rdfs:label "25mm Roofing Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:270mm_RoofingInsulation
+    a
+        building:ClassOfRoofingByInsulationThickness ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification that has 270mm of insulation thickness"@en-gb ;
+    rdfs:label "270mm Roofing Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:300mm_RoofingInsulation
+    a
+        building:ClassOfRoofingByInsulationThickness ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification that has 300mm of insulation thickness"@en-gb ;
+    rdfs:label "300mm Roofing Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:350mm_RoofingInsulation
+    a
+        building:ClassOfRoofingByInsulationThickness ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification that has 350mm of insulation thickness"@en-gb ;
+    rdfs:label "350mm Roofing Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:400mm_RoofingInsulation
+    a
+        building:ClassOfRoofingByInsulationThickness ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification that has 400mm of insulation thickness"@en-gb ;
+    rdfs:label "400mm Roofing Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:50mm_RoofingInsulation
+    a
+        building:ClassOfRoofingByInsulationThickness ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification that has 50mm of insulation thickness"@en-gb ;
+    rdfs:label "50mm Roofing Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:75mm_RoofingInsulation
+    a
+        building:ClassOfRoofingByInsulationThickness ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification that has 75mm of insulation thickness"@en-gb ;
+    rdfs:label "75mm Roofing Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:AccessPedestrianAndVehicular
+    a
+        building:ClassOfAccessPointByAccessMode ,
+        rdfs:Class ;
+    rdfs:comment "An instance of `building:ClassOfAccessPointByAccessMode` corresponding to OS NGD `accessmodevalue` 'Pedestrian And Vehicular' — an entrance/exit location for both pedestrians and vehicles."@en-gb ;
+    rdfs:label "Access Pedestrian And Vehicular"@en-gb ;
+    rdfs:subClassOf building:AccessPoint .
+
+blg-class:AccessPedestrianOnly
+    a
+        building:ClassOfAccessPointByAccessMode ,
+        rdfs:Class ;
+    rdfs:comment "An instance of `building:ClassOfAccessPointByAccessMode` corresponding to OS NGD `accessmodevalue` 'Pedestrian' — an entrance/exit location for pedestrians only."@en-gb ;
+    rdfs:label "Access Pedestrian Only"@en-gb ;
+    rdfs:subClassOf building:AccessPoint .
+
+blg-class:AccessPointObstructedByRamp
+    a
+        building:ClassOfAccessPointByObstruction ,
+        rdfs:Class ;
+    rdfs:comment "An instance of `building:ClassOfAccessPointByObstruction` corresponding to OS NGD `accessobstructionvalue` 'Ramp' — an entrance/exit location that is partially or fully blocked by a ramp."@en-gb ;
+    rdfs:label "Access Point Obstructed By Ramp"@en-gb ;
+    rdfs:subClassOf building:AccessPoint .
+
+blg-class:AccessPointObstructedByStairs
+    a
+        building:ClassOfAccessPointByObstruction ,
+        rdfs:Class ;
+    rdfs:comment "An instance of `building:ClassOfAccessPointByObstruction` corresponding to OS NGD `accessobstructionvalue` 'Stairs' — an entrance/exit location that is partially or fully blocked by stairs."@en-gb ;
+    rdfs:label "Access Point Obstructed By Stairs"@en-gb ;
+    rdfs:subClassOf building:AccessPoint .
+
+blg-class:AccessPointObstructedByUnknownObject
+    a
+        building:ClassOfAccessPointByObstruction ,
+        rdfs:Class ;
+    rdfs:comment "An instance of `building:ClassOfAccessPointByObstruction` corresponding to OS NGD `accessobstructionvalue` 'Other Obstruction' — an entrance/exit location that is partially or fully blocked by an unidentified physical obstruction."@en-gb ;
+    rdfs:label "Access Point Obstructed By Unknown Object"@en-gb ;
+    rdfs:subClassOf building:AccessPoint .
+
+blg-class:AccessVehicularOnly
+    a
+        building:ClassOfAccessPointByAccessMode ,
+        rdfs:Class ;
+    rdfs:comment "An instance of `building:ClassOfAccessPointByAccessMode` corresponding to OS NGD `accessmodevalue` 'Vehicular' — an entrance/exit location for vehicles only."@en-gb ;
+    rdfs:label "Access Vehicular Only"@en-gb ;
+    rdfs:subClassOf building:AccessPoint .
+
+blg-class:AdditionalInsulation
+    a
+        building:ClassOfRoofingByInsulationLocation ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification that includes some additional insulation without specifying its precise location"@en-gb ;
+    rdfs:label "Insulated"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:AdditionalWallInsulation
+    a
+        building:ClassOfWallingByInsulation ,
+        rdfs:Class ;
+    rdfs:comment "A Walling specification in which additional insulation has been added"@en-gb ;
+    rdfs:label "Additional Wall Insulation"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:AgricultureAndAquacultureStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for agricultural or aquacultural purposes, such as farming, livestock rearing, or fish cultivation."@en-gb ;
+    rdfs:label "Agriculture And Aquaculture Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:AirTransportStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for air transport purposes, such as airports, hangars, or air traffic control towers."@en-gb ;
+    rdfs:label "Air Transport Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:AnotherDwellingAbove
+    a
+        building:ClassOfFlooring-CeilingWorkByVerticalAdjacency ,
+        rdfs:Class ;
+    rdfs:comment "A Flooring–Ceiling adjacency condition where another dwelling is located above"@en-gb ;
+    rdfs:label "Another Dwelling Above"@en-gb ;
+    rdfs:subClassOf building:Flooring-CeilingWork .
+
+blg-class:AnotherDwellingBelow
+    a
+        building:ClassOfFlooring-CeilingWorkByVerticalAdjacency ,
+        rdfs:Class ;
+    rdfs:comment "A Flooring–Ceiling adjacency condition where another dwelling is located below"@en-gb ;
+    rdfs:label "Another Dwelling Below"@en-gb ;
+    rdfs:subClassOf building:Flooring-CeilingWork .
+
+blg-class:AsbestosRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A roofing that is made of tiles or sheets of asbestos"@en-gb ;
+    rdfs:label "Asbestos Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:AttractionOrActivityStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for attractions or activities, such as amusement parks, museums, or entertainment venues."@en-gb ;
+    rdfs:label "Attraction Or Activity Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:BrickCladWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A walling that is cladded with bricks"@en-gb ;
+    rdfs:label "Brick-Cladded Walling"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:BuildingComplete
+    a
+        building:ClassOfBuildingByBuiltStatus ,
+        rdfs:Class ;
+    rdfs:comment "A Building whose construction is complete"@en-gb ;
+    rdfs:label "Building Complete"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:BuildingUnderConstruction
+    a
+        building:ClassOfBuildingByCompletionStatus ,
+        rdfs:Class ;
+    rdfs:comment "A Building that is the temporal condition of a Building while construction is in progress and completion has not yet occurred."@en-gb ;
+    rdfs:label "Building Under Construction"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:BuildingUnitNotServicedWithHeating
+    a
+        building:ClassOfBuildingUnitByPresenceOfHeating ,
+        rdfs:Class ;
+    rdfs:comment "A Building Unit that does not have a heating system installed or provided."@en-gb ;
+    rdfs:label "Building Unit Not Serviced With Heating"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:BuildingUnitServicedWithHeating
+    a
+        building:ClassOfBuildingUnitByPresenceOfHeating ,
+        rdfs:Class ;
+    rdfs:comment "A Building Unit that has a heating system installed or provided."@en-gb ;
+    rdfs:label "Building Unit Serviced With Heating"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:BuildingWithCarParkOnRoof
+    a
+        building:ClassOfBuildingByTopLevelFeature ,
+        rdfs:Class ;
+    rdfs:comment "A `building:Building` that is the temporal condition of a Building whose roof is used as a car‑parking surface."@en-gb ;
+    rdfs:label "Building With Car Park On Roof"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:BuildingWithDovecot
+    a
+        building:ClassOfBuildingByTopLevelFeature ,
+        rdfs:Class ;
+    rdfs:comment "A `building:Building` that is the temporal condition of a Building equipped with internal provision for dovecote roosting."@en-gb ;
+    rdfs:label "Building And Dovecot"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:BuildingWithLight
+    a
+        building:ClassOfBuildingByTopLevelFeature ,
+        rdfs:Class ;
+    rdfs:comment "A `building:Building` that is the temporal condition of a Building equipped with a light for illuminating surrounding areas."@en-gb ;
+    rdfs:label "Building And Light"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:BuildingWithMadeSurface
+    a
+        building:ClassOfBuildingByTopLevelFeature ,
+        rdfs:Class ;
+    rdfs:comment "A `building:Building` that is a man‑made surface which simultaneously serves as the roof to a Building below."@en-gb ;
+    rdfs:label "Building And Made Surface"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:BuildingWithPathOnRoof
+    a
+        building:ClassOfBuildingByTopLevelFeature ,
+        rdfs:Class ;
+    rdfs:comment "A `building:Building` that is the temporal condition of a Building whose roof provides a pedestrian pathway."@en-gb ;
+    rdfs:label "Building With Path On Roof"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:Bungalow
+    a
+        building:ClassOfBuildingUnitByDwellingType ,
+        rdfs:Class ;
+    rdfs:comment "A `building:BuildingUnit` that is a type of low-rise residential building, typically consisting of a single story or a partial second story built into a sloped roof. Bungalows are characterised by their compact layout, often featuring a broad, covered porch, wide eaves, and a low-pitched roof."@en-gb ;
+    rdfs:label "Bungalow"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:CeilingInsulated
+    a
+        building:ClassOfRoofingByInsulationLocation ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification in which insulation is located at the ceiling level"@en-gb ;
+    rdfs:label "Ceiling Insulated"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:ClayOrStoneRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A roofing that is made of clay tiles or of sheets or stiles of stone"@en-gb ;
+    rdfs:label "Clay Or Stone Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:ClayRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A roofing that is made of clay tiles"@en-gb ;
+    rdfs:label "Clay Roofing"@en-gb ;
+    rdfs:subClassOf blg-class:ClayOrStoneRoofing .
+
+blg-class:CobWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "Walling that is made from a natural building material composed of subsoil, water, fibrous organic material (typically straw), and sometimes lime. Cob is a traditional building method, particularly common in regions with suitable soil, and is known for its durability, thermal mass, and ability to regulate humidity."@en-gb ;
+    rdfs:label "Cob"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:CommercialAnimalServicesStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for commercial animal services, such as veterinary clinics, pet grooming salons, or animal boarding facilities."@en-gb ;
+    rdfs:label "Commercial Animal Services Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:CommercialBuildingUnit
+    a
+        building:ClassOfBuildingUnitByFunctionalPurpose ,
+        rdfs:Class ;
+    rdfs:comment "A Building Unit that is designed and used primarily for commercial purposes, such as offices, retail spaces, or service establishments."@en-gb ;
+    rdfs:label "Commercial Building Unit"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:CommercialDistributionOrStorageStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for commercial distribution or storage purposes, such as warehouses, distribution centers, or logistics hubs."@en-gb ;
+    rdfs:label "Commercial Distribution Or Storage Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:CommercialIndustrialOrManufacturingStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for commercial industrial or manufacturing purposes, such as factories, production facilities, or industrial plants."@en-gb ;
+    rdfs:label "Commercial Industrial Or Manufacturing Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:CommercialOtherStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is used for commercial purposes not specifically classified under other categories."@en-gb ;
+    rdfs:label "Commercial Other Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:CommercialRetailStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for commercial retail purposes, such as shops, malls, or retail outlets."@en-gb ;
+    rdfs:label "Commercial Retail Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:CommunityEmergencyServicesStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for community emergency services, such as fire stations, police stations, or emergency response centers."@en-gb ;
+    rdfs:label "Community Emergency Services Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:CommunityFuneralServicesStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for community funeral services, such as funeral homes, crematoriums, or cemeteries."@en-gb ;
+    rdfs:label "Community Funeral Services Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:CommunityOtherStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is used for community purposes not specifically classified under other categories."@en-gb ;
+    rdfs:label "Community Other Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:CommunityReligiousStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for religious purposes, such as churches, mosques, temples, or synagogues."@en-gb ;
+    rdfs:label "Community Religious Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:CompletedStructure
+    a
+        building:ClassOfStructureByPhysicalState ,
+        rdfs:Class ;
+    rdfs:comment "An `ies:Structure` whose construction is complete"@en-gb ;
+    rdfs:label "Completed Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:ConcreteOrWaterproofMembraneRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A roofing that is either made of concrete or consists of a solid surface covered with a continuous water-tight barrier"@en-gb ;
+    rdfs:label "Concrete Or Waterproof Membrane Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:BitumenRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A waterproof membrane roofing that consists of a solid surface coated with bitumen"@en-gb ;
+    rdfs:label "Bitumen Roofing"@en-gb ;
+    rdfs:subClassOf blg-class:ConcreteOrWaterproofMembraneRoofing .
+
+blg-class:ConcreteRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A roofing that is made of concrete tiles"@en-gb ;
+    rdfs:label "Concrete Roofing"@en-gb ;
+    rdfs:subClassOf blg-class:ConcreteOrWaterproofMembraneRoofing .
+
+blg-class:ConstructionStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is actively involved in the construction process, such as scaffolding, cranes, or temporary buildings used on construction sites."@en-gb ;
+    rdfs:label "Construction Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:ConstructionTransitionalStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is temporarily used during the construction phase, serving as a transitional facility before the final structure is completed."@en-gb ;
+    rdfs:label "Construction Transitional Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:ConventionalBuilding
+    a
+        building:ClassOfBuildingByRiskGrade ,
+        rdfs:Class ;
+    rdfs:comment "A Building that is classified as conventional in terms of its risk grade, typically indicating standard construction methods and materials without special risk considerations."@en-gb ;
+    rdfs:label "Conventional Building"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:DefenceStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for defence or military purposes, such as forts, bunkers, or military bases."@en-gb ;
+    rdfs:label "Defence Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:DerelictStructure
+    a
+        building:ClassOfStructureByPhysicalState ,
+        rdfs:Class ;
+    rdfs:comment "An `ies:Structure` that is in a derelict or severely neglected condition"@en-gb ;
+    rdfs:label "Derelict Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:DetachedBuildingUnit
+    a
+        building:ClassOfBuildingUnitByBuiltForm ,
+        rdfs:Class ;
+    rdfs:comment "A Building Unit that is a self-contained residence that does not share any walls with another residence."@en-gb ;
+    rdfs:label "Detached Building Unit"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:DoubleGlazed
+    a
+        building:ClassOfGlazingByPaneCount ,
+        rdfs:Class ;
+    rdfs:comment "A Glazing specification that has two panes of glass"@en-gb ;
+    rdfs:label "Double Glazed"@en-gb ;
+    rdfs:subClassOf building:Glazing .
+
+blg-class:DoubleGlazedAfter2002
+    a
+        building:ClassOfGlazingByPaneCount ,
+        rdfs:Class ;
+    rdfs:comment "A Glazing specification that has two panes of glass, but manufactured after 2002"@en-gb ;
+    rdfs:label "Double Glazed"@en-gb ;
+    rdfs:subClassOf blg-class:DoubleGlazed .
+
+blg-class:DoubleGlazedBefore2002
+    a
+        building:ClassOfGlazingByPaneCount ,
+        rdfs:Class ;
+    rdfs:comment "A Glazing specification that has two panes of glass, but manufactured before 2002"@en-gb ;
+    rdfs:label "Double Glazed"@en-gb ;
+    rdfs:subClassOf blg-class:DoubleGlazed .
+
+blg-class:EastFacingRoofing
+    a
+        building:ClassOfRoofingByCompassOrientation ,
+        rdfs:Class ;
+    rdfs:comment "Roofing that faces east."@en-gb ;
+    rdfs:label "East Facing Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:EducationStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for educational purposes, such as schools, colleges, or universities."@en-gb ;
+    rdfs:label "Education Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:EmergencyAccess
+    a
+        building:ClassOfAccessPointByAccessPurpose ,
+        rdfs:Class ;
+    rdfs:comment "An instance of `building:ClassOfAccessPointByAccessPurpose` corresponding to OS NGD `accesspurposevalue` 'Emergency' — an entrance/exit location that is solely intended for use in emergencies."@en-gb ;
+    rdfs:label "Emergency Access"@en-gb ;
+    rdfs:subClassOf building:AccessPoint .
+
+blg-class:EnclosedEndOfTerrace
+    a
+        building:ClassOfBuildingUnitByBuiltForm ,
+        rdfs:Class ;
+    rdfs:comment "A Building Unit that is at the end of a row, but has two rather than three external walls.  This could be through some addition like a conservatory."@en-gb ;
+    rdfs:label "Enclosed End Of Terrace"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:EnclosedMidTerrace
+    a
+        building:ClassOfBuildingUnitByBuiltForm ,
+        rdfs:Class ;
+    rdfs:comment "A Building Unit that is not at the end of a row, but has one rather than two external walls.  This could be through some addition like a conservatory."@en-gb ;
+    rdfs:label "Enclosed Mid Terrace"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:EndConnectedBuilding
+    a
+        building:ClassOfBuildingByConnectivity ,
+        rdfs:Class ;
+    rdfs:comment "A Building that is connected to one or more of its neighbours at its end"@en-gb ;
+    rdfs:label "End Connected Building"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:EndOfTerraceBuildingUnit
+    a
+        building:ClassOfBuildingUnitByBuiltForm ,
+        rdfs:Class ;
+    rdfs:comment "A Building Unit that is a residence located at the end of a row of connected residences, sharing one common wall with another residence."@en-gb ;
+    rdfs:label "End Of Terrace Building Unit"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:ExternalInsulation
+    a
+        building:ClassOfWallingByInsulation ,
+        rdfs:Class ;
+    rdfs:comment "A Walling specification in which insulation is applied externally"@en-gb ;
+    rdfs:label "External Insulation"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:FabricRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A roofing that consists of a fabric - such as PVC or canvas - usually stretched over a steel frame; fabric roofing is commonly used in stadium construction"@en-gb ;
+    rdfs:label "Fabric Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:FibreCementCladWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A walling that is cladded with sheets of fibre-cement"@en-gb ;
+    rdfs:label "Fibre-Cement-Cladded Walling"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:FilledWallCavityInsulation
+    a
+        building:ClassOfWallingByInsulation ,
+        rdfs:Class ;
+    rdfs:comment "A Walling specification in which the wall cavity has been filled with insulation"@en-gb ;
+    rdfs:label "Filled Wall Cavity Insulation"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:Flat
+    a
+        building:ClassOfBuildingUnitByDwellingType ,
+        rdfs:Class ;
+    rdfs:comment "A `building:BuildingUnit` that is a unit within a larger building, typically consisting of multiple rooms such as a living area, kitchen, bathroom, and one or more bedrooms. "@en-gb ;
+    rdfs:label "Flat"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:FlatRoofing
+    a
+        building:ClassOfRoofingByConstruction ,
+        rdfs:Class ;
+    rdfs:comment "Roofing that is predominantly comprised of faces with a pitch value of ≤ 15° (OS NGD Roof Shape: Flat)."@en-gb ;
+    rdfs:label "Flat Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:FlooringExposedToExternalAir
+    a
+        building:ClassOfFlooringByConstruction ,
+        rdfs:Class ;
+    rdfs:comment "A Flooring construction exposed to external air beneath or around the floor"@en-gb ;
+    rdfs:label "To External Air"@en-gb ;
+    rdfs:subClassOf building:Flooring .
+
+blg-class:FlooringExposedToUnheatedSpace
+    a
+        building:ClassOfFlooringByConstruction ,
+        rdfs:Class ;
+    rdfs:comment "A Flooring construction situated above or adjacent to an unheated space"@en-gb ;
+    rdfs:label "To Unheated Space"@en-gb ;
+    rdfs:subClassOf building:Flooring .
+
+blg-class:GlassOrPolycarbonateRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A roofing that is made of sheets of glass or polycarbonate or a combination of both, usually supported by a metal or UPVC frame"@en-gb ;
+    rdfs:label "Glass Or Polycarbonate Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:GlassRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A roofing that is made of sheets of glass, usually supported by a metal or UPVC frame"@en-gb ;
+    rdfs:label "Glass Roofing"@en-gb ;
+    rdfs:subClassOf blg-class:GlassOrPolycarbonateRoofing .
+
+blg-class:GlassWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A walling that consists of sheets or panels of glass"@en-gb ;
+    rdfs:label "Glass Walling"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:GovernmentOrPublicAdministrationStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for government or public administration purposes, such as government offices, courthouses, or municipal buildings."@en-gb ;
+    rdfs:label "Government Or Public Administration Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:HighRiseBuilding
+    a
+        building:ClassOfBuildingByRiskGrade ,
+        rdfs:Class ;
+    rdfs:comment "A Building that is classified as high rise in terms of its risk grade, generally defined as a building significantly taller than the surrounding structures, often requiring special safety and evacuation measures."@en-gb ;
+    rdfs:label "High Rise Building"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:HistoricBuilding
+    a
+        building:ClassOfBuildingByBuiltStatus ,
+        rdfs:Class ;
+    rdfs:comment "A Building recognised as historic due to age, heritage, or cultural significance"@en-gb ;
+    rdfs:label "Historic Building"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:HistoricOrHeritageStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that holds historical or heritage significance, often preserved for its cultural, architectural, or historical value."@en-gb ;
+    rdfs:label "Historic Or Heritage Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:HospitalityAndTemporaryStayStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for hospitality or temporary accommodation purposes, such as hotels, motels, or guesthouses."@en-gb ;
+    rdfs:label "Hospitality And Temporary Stay Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:House
+    a
+        building:ClassOfBuildingUnitByDwellingType ,
+        rdfs:Class ;
+    rdfs:comment "A `building:BuildingUnit` that is a class of self-contained residential dwelling which designed primarily for living purposes, typically intended to accommodate a single household or family."@en-gb ;
+    rdfs:label "House"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:IndustrialBuildingUnit
+    a
+        building:ClassOfBuildingUnitByFunctionalPurpose ,
+        rdfs:Class ;
+    rdfs:comment "A Building Unit that is designed and used primarily for industrial purposes, such as manufacturing, warehousing, or distribution."@en-gb ;
+    rdfs:label "Industrial Building Unit"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:Insulated
+    a
+        building:ClassOfRoofingByInsulationLocation ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification that includes insulation without specifying its precise location"@en-gb ;
+    rdfs:label "Insulated"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:InsulatedAtRafters
+    a
+        building:ClassOfRoofingByInsulationLocation ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification in which insulation is located at the rafters"@en-gb ;
+    rdfs:label "Insulated At Rafters"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:InsulatedFlooring
+    a
+        building:ClassOfFlooringByInsulation ,
+        rdfs:Class ;
+    rdfs:comment "A Flooring specification in which insulation is present"@en-gb ;
+    rdfs:label "Insulated Flooring"@en-gb ;
+    rdfs:subClassOf building:Flooring .
+
+blg-class:InsulatedWalling
+    a
+        building:ClassOfWallingByInsulation ,
+        rdfs:Class ;
+    rdfs:comment "A Walling specification in which insulation is present"@en-gb ;
+    rdfs:label "Insulated Walling"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:InsulatedWithThatched
+    a
+        building:ClassOfRoofingByInsulationLocation ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification where thatching material provides insulation"@en-gb ;
+    rdfs:label "Insulated With Thatched"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:InternalInsulation
+    a
+        building:ClassOfWallingByInsulation ,
+        rdfs:Class ;
+    rdfs:comment "A Walling specification in which insulation is applied internally"@en-gb ;
+    rdfs:label "Internal Insulation"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:LimitedFlooringInsulation
+    a
+        building:ClassOfFlooringByInsulation ,
+        rdfs:Class ;
+    rdfs:comment "A Flooring specification with only limited insulation present"@en-gb ;
+    rdfs:label "Limited Flooring Insulation"@en-gb ;
+    rdfs:subClassOf building:Flooring .
+
+blg-class:LimitedInsulation
+    a
+        building:ClassOfRoofingByInsulationLocation ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification with only limited insulation present"@en-gb ;
+    rdfs:label "Limited Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:LoftInsulation
+    a
+        building:ClassOfRoofingByInsulationLocation ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification in which insulation is located within the loft space"@en-gb ;
+    rdfs:label "Loft Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:Maisonette
+    a
+        building:ClassOfBuildingUnitByDwellingType ,
+        rdfs:Class ;
+    rdfs:comment "A `building:BuildingUnit` that is a self-contained residential dwelling that occupies part of a larger `building:Building` and typically spans two or more floors. Maisonettes often have their own private entrance from the outside, rather than a shared hallway or lobby. It combines elements of both a house and an apartment, often featuring internal stairs and sometimes a small outdoor space like a balcony or garden."@en-gb ;
+    rdfs:label "Maisonette"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:MasonryWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A walling that is made of bricks or stones or concrete blocks bound together with mortar"@en-gb ;
+    rdfs:label "Brick Or Concrete Or Stone Walling"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:BrickWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A walling that is made of bricks glued together with mortar"@en-gb ;
+    rdfs:label "Brick Walling"@en-gb ;
+    rdfs:subClassOf blg-class:MasonryWalling .
+
+blg-class:ConcreteWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A walling that is made of blocks or panels of concrete"@en-gb ;
+    rdfs:label "Concrete Walling"@en-gb ;
+    rdfs:subClassOf blg-class:MasonryWalling .
+
+blg-class:MedicalOrHealthStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for medical or health-related purposes, such as hospitals, clinics, or healthcare facilities."@en-gb ;
+    rdfs:label "Medical Or Health Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:MetalCladWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A walling that is cladded with sheets or panels of metal"@en-gb ;
+    rdfs:label "Metal-Cladded Walling"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:MetalRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A roofing that is made of metal panels or sheets"@en-gb ;
+    rdfs:label "Metal Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:MidTerraceBuildingUnit
+    a
+        building:ClassOfBuildingUnitByBuiltForm ,
+        rdfs:Class ;
+    rdfs:comment "A Building Unit that is a residence located in the middle of a row of connected residences, sharing common walls with two adjacent residences."@en-gb ;
+    rdfs:label "Mid Terrace Building Unit"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:MixedMaterialRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A roofing that is made of multiple different materials, with none of those materials accounting for more than 60% of the entire roof"@en-gb ;
+    rdfs:label "Mixed Material Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:MixedUseStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that serves multiple functional purposes, combining different uses such as residential, commercial, and recreational within the same structure."@en-gb ;
+    rdfs:label "Mixed Use Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:MoreThan300mm_RoofingInsulation
+    a
+        building:ClassOfRoofingByInsulationThickness ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification that has more than 300mm of insulation thickness"@en-gb ;
+    rdfs:label "More Than 300mm Roofing Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:MoreThan400mm_RoofingInsulation
+    a
+        building:ClassOfRoofingByInsulationThickness ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification that has more than 400mm of insulation thickness"@en-gb ;
+    rdfs:label "More Than 400mm Roofing Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:MultiConnectedBuilding
+    a
+        building:ClassOfBuildingByConnectivity ,
+        rdfs:Class ;
+    rdfs:comment "A Building that is connected to more than one neighbouring Building"@en-gb ;
+    rdfs:label "Multi Connected Building"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:NoInsulationInFlooring
+    a
+        building:ClassOfFlooringByInsulation ,
+        rdfs:Class ;
+    rdfs:comment "A Flooring specification in which no insulation is present in the floor"@en-gb ;
+    rdfs:label "No Insulation In Flooring"@en-gb ;
+    rdfs:subClassOf building:Flooring .
+
+blg-class:NoInsulationInRoof
+    a
+        building:ClassOfRoofingByInsulationLocation ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification in which no insulation is present in the roof"@en-gb ;
+    rdfs:label "No Insulation In Roof"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:NoInsulationInWalling
+    a
+        building:ClassOfWallingByInsulation ,
+        rdfs:Class ;
+    rdfs:comment "A Walling specification in which no insulation is present in the wall"@en-gb ;
+    rdfs:label "No Insulation In Walling"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:NorthEastFacingRoofing
+    a
+        building:ClassOfRoofingByCompassOrientation ,
+        rdfs:Class ;
+    rdfs:comment "Roofing that faces northeast."@en-gb ;
+    rdfs:label "Northeast Facing Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:NorthFacingRoofing
+    a
+        building:ClassOfRoofingByCompassOrientation ,
+        rdfs:Class ;
+    rdfs:comment "Roofing that faces north."@en-gb ;
+    rdfs:label "North Facing Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:NorthWestFacingRoofing
+    a
+        building:ClassOfRoofingByCompassOrientation ,
+        rdfs:Class ;
+    rdfs:comment "Roofing that faces northwest."@en-gb ;
+    rdfs:label "Northwest Facing Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:OccupiedBuilding
+    a
+        building:ClassOfBuildingByBuiltStatus ,
+        rdfs:Class ;
+    rdfs:comment "A Building that currently has one or more occupants"@en-gb ;
+    rdfs:label "Occupied Building"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:OtherPremisesAbove
+    a
+        building:ClassOfFlooring-CeilingWorkByVerticalAdjacency ,
+        rdfs:Class ;
+    rdfs:comment "A Flooring–Ceiling adjacency condition where non-dwelling premises are located above"@en-gb ;
+    rdfs:label "Other Premises Above"@en-gb ;
+    rdfs:subClassOf building:Flooring-CeilingWork .
+
+blg-class:OtherPremisesBelow
+    a
+        building:ClassOfFlooring-CeilingWorkByVerticalAdjacency ,
+        rdfs:Class ;
+    rdfs:comment "A Flooring–Ceiling adjacency condition where non-dwelling premises are located below"@en-gb ;
+    rdfs:label "Other Premises Below"@en-gb ;
+    rdfs:subClassOf building:Flooring-CeilingWork .
+
+blg-class:OwnerOccupiedBuildingUnit
+    a
+        building:ClassOfBuildingUnitByTenure ,
+        rdfs:Class ;
+    rdfs:comment "A Building Unit that is occupied by the individual or entity that owns it."@en-gb ;
+    rdfs:label "Owner Occupied Building Unit"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:ParkHome
+    a
+        building:ClassOfBuildingUnitByDwellingType ,
+        rdfs:Class ;
+    rdfs:comment "A `building:BuildingUnit` that is a single-storey, detached residential `ies:StructureUnit` situated within private or local authority-run parks."@en-gb ;
+    rdfs:label "Park Home"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:PartiallyInsulatedWalling
+    a
+        building:ClassOfWallingByInsulation ,
+        rdfs:Class ;
+    rdfs:comment "A Walling specification in which insulation is present but incomplete or limited"@en-gb ;
+    rdfs:label "Partially Insulated Walling"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:PitchedRoofing
+    a
+        building:ClassOfRoofingByConstruction ,
+        rdfs:Class ;
+    rdfs:comment "Roofing that is predominantly comprised of faces with a pitch value of > 15° (OS NGD Roof Shape: Pitched)."@en-gb ;
+    rdfs:label "Pitched Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:PolycarbonateRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A roofing that is made of sheets of polycarbonate material, usually supported by a metal or UPVC frame"@en-gb ;
+    rdfs:label "Polycarbonate Roofing"@en-gb ;
+    rdfs:subClassOf blg-class:GlassOrPolycarbonateRoofing .
+
+blg-class:PolycarbonateWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A walling that is made of sheets or panels of polycarbonate material"@en-gb ;
+    rdfs:label "Polycarbonate Walling"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:Prebuilding
+    a
+        building:ClassOfBuildingByBuiltStatus ,
+        rdfs:Class ;
+    rdfs:comment "A Building that is is under construction, reconstruction, or redevelopment."@en-gb ;
+    rdfs:label "Prebuild"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:PrimaryPublicAccess
+    a
+        building:ClassOfAccessPointByAccessPurpose ,
+        rdfs:Class ;
+    rdfs:comment "An instance of `building:ClassOfAccessPointByAccessPurpose` corresponding to OS NGD `accesspurposevalue` 'Primary Public' — a principal entrance/exit location that is intended for public use, usually referred to as the ‘Main Entrance’. A given Site/Building may have more than one primary public access location, especially for larger features."@en-gb ;
+    rdfs:label "Primary Public Access"@en-gb ;
+    rdfs:subClassOf building:AccessPoint .
+
+blg-class:PrivateAccess
+    a
+        building:ClassOfAccessPointByAccessPurpose ,
+        rdfs:Class ;
+    rdfs:comment "An instance of `building:ClassOfAccessPointByAccessPurpose` corresponding to OS NGD `accesspurposevalue` 'Private' — an entrance/exit location that is not intended for public use."@en-gb ;
+    rdfs:label "Private Access"@en-gb ;
+    rdfs:subClassOf building:AccessPoint .
+
+blg-class:PrivatelyRentedBuildingUnit
+    a
+        building:ClassOfBuildingUnitByTenure ,
+        rdfs:Class ;
+    rdfs:comment "A Building Unit that is rented out by a private landlord to tenants."@en-gb ;
+    rdfs:label "Privately Rented Building Unit"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:ProtectedBuilding
+    a
+        building:ClassOfBuildingByRiskGrade ,
+        rdfs:Class ;
+    rdfs:comment "A Building that is classified as protected in terms of its risk grade, often denoting structures that are legally safeguarded due to their historical, architectural, or cultural significance, which may impose restrictions on modifications and require specialized maintenance."@en-gb ;
+    rdfs:label "Protected Building"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:PublicAccess
+    a
+        building:ClassOfAccessPointByAccessPurpose ,
+        rdfs:Class ;
+    rdfs:comment "An instance of `building:ClassOfAccessPointByAccessPurpose` corresponding to OS NGD `accesspurposevalue` 'Public' — an entrance/exit location that is intended for public use."@en-gb ;
+    rdfs:label "Public Access"@en-gb ;
+    rdfs:subClassOf building:AccessPoint .
+
+blg-class:QuadrupleGlazed
+    a
+        building:ClassOfGlazingByPaneCount ,
+        rdfs:Class ;
+    rdfs:comment "A Glazing specification that has four panes of glass"@en-gb ;
+    rdfs:label "Quadruple Glazed"@en-gb ;
+    rdfs:subClassOf building:Glazing .
+
+blg-class:RailTransportStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for rail transport purposes, such as railway stations, rail yards, or maintenance depots."@en-gb ;
+    rdfs:label "Rail Transport Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:ResidentialBuildingUnit
+    a
+        building:ClassOfBuildingUnitByFunctionalPurpose ,
+        rdfs:Class ;
+    rdfs:comment "A Building Unit that is designed and used primarily for residential purposes, providing living accommodations for individuals or families."@en-gb ;
+    rdfs:label "Residential Building Unit"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:ResidentialStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for residential purposes, providing living accommodations for individuals or families."@en-gb ;
+    rdfs:label "Residential Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:RoadTrackOrPathTransportStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for road, track, or path transport purposes, such as roads, bridges, or tunnels."@en-gb ;
+    rdfs:label "Road Track Or Path Transport Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:RoofRooms
+    a
+        building:ClassOfRoofingByConstruction ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing construction that incorporates habitable rooms within the roof structure"@en-gb ;
+    rdfs:label "Roof Rooms"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:RuinedBuilding
+    a
+        building:ClassOfBuildingByCompletionStatus ,
+        rdfs:Class ;
+    rdfs:comment "A Building that is the temporal condition of a Building when much of its fabric has decayed or collapsed so it is no longer fully functional."@en-gb ;
+    rdfs:label "Ruined Building"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:SemiConnectedBuilding
+    a
+        building:ClassOfBuildingByConnectivity ,
+        rdfs:Class ;
+    rdfs:comment "A Building that is connected to exactly one neighbouring Building"@en-gb ;
+    rdfs:label "Semi Connected Building"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:SemiDetachedBuildingUnit
+    a
+        building:ClassOfBuildingUnitByBuiltForm ,
+        rdfs:Class ;
+    rdfs:comment "A Building Unit that is a residence sharing one common wall with another residence."@en-gb ;
+    rdfs:label "Semi-Detached Building Unit"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:SheetRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A roofing that is made of sheets - that is, large panels; sheets can be of various materials, such as metal, concrete, or polycarbonate"@en-gb ;
+    rdfs:label "Sheet Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:SingleGlazed
+    a
+        building:ClassOfGlazingByPaneCount ,
+        rdfs:Class ;
+    rdfs:comment "A Glazing specification that has one pane of glass"@en-gb ;
+    rdfs:label "Single Glazed"@en-gb ;
+    rdfs:subClassOf building:Glazing .
+
+blg-class:SlateCladWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A walling that is cladded with sheets of slate - which is a fine-grained, foliated, homogenous, metamorphic rock"@en-gb ;
+    rdfs:label "Slate-Cladded Walling"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:SlateRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A stone roofing that is made of tiles or sheets of slate, which is a fine-grained, foliated, homogenous, metamorphic rock"@en-gb ;
+    rdfs:label "Slate Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:SocialHousingBuildingUnit
+    a
+        building:ClassOfBuildingUnitByTenure ,
+        rdfs:Class ;
+    rdfs:comment "A Building Unit that is provided by government or non-profit organizations to individuals or families in need of affordable housing."@en-gb ;
+    rdfs:label "Social Housing Building Unit"@en-gb ;
+    rdfs:subClassOf building:BuildingUnit .
+
+blg-class:SolidBrickWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A walling that is only bricks and mortar."@en-gb ;
+    rdfs:label "Solid Brick Walling"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:SolidFlooring
+    a
+        building:ClassOfFlooringByConstruction ,
+        rdfs:Class ;
+    rdfs:comment "A Flooring construction that is solid and typically in direct contact with the ground or substrate"@en-gb ;
+    rdfs:label "Solid"@en-gb ;
+    rdfs:subClassOf building:Flooring .
+
+blg-class:SouthEastFacingRoofing
+    a
+        building:ClassOfRoofingByCompassOrientation ,
+        rdfs:Class ;
+    rdfs:comment "Roofing that faces southeast."@en-gb ;
+    rdfs:label "Southeast Facing Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:SouthFacingRoofing
+    a
+        building:ClassOfRoofingByCompassOrientation ,
+        rdfs:Class ;
+    rdfs:comment "Roofing that faces south."@en-gb ;
+    rdfs:label "South Facing Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:SouthWestFacingRoofing
+    a
+        building:ClassOfRoofingByCompassOrientation ,
+        rdfs:Class ;
+    rdfs:comment "Roofing that faces southwest."@en-gb ;
+    rdfs:label "Southwest Facing Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:SportsAndRecreationStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for sports or recreational activities, such as stadiums, gyms, or recreational centers."@en-gb ;
+    rdfs:label "Sports And Recreation Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:StandaloneBuilding
+    a
+        building:ClassOfBuildingByConnectivity ,
+        rdfs:Class ;
+    rdfs:comment "A Building that is not connected to any neighbouring Buildings"@en-gb ;
+    rdfs:label "Standalone Building"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:SteelFrameWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A walling that consists of a frame of steel studs cladded with various materials"@en-gb ;
+    rdfs:label "Steel Frame Walling"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:StoneOrLimestoneWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A walling that is made of either stone in general or specifically limestone"@en-gb ;
+    rdfs:label "Stone or Limestone Walling"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:LimestoneWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A stone walling that is made of blocks of limestone glued together with mortar"@en-gb ;
+    rdfs:label "Limestone Walling"@en-gb ;
+    rdfs:subClassOf blg-class:StoneOrLimestoneWalling .
+
+blg-class:StoneRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A roofing that is made of tiles or sheets of stone"@en-gb ;
+    rdfs:label "Stone Roofing"@en-gb ;
+    rdfs:subClassOf blg-class:ClayOrStoneRoofing .
+
+blg-class:StoneWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A walling that is made of blocks of stone glued together with mortar"@en-gb ;
+    rdfs:label "Stone Walling"@en-gb ;
+    rdfs:subClassOf
+        blg-class:MasonryWalling ,
+        blg-class:StoneOrLimestoneWalling .
+
+blg-class:GraniteOrWhinstoneWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A stone walling that is made of either granite or whinstone blocks bonded together with mortar"@en-gb ;
+    rdfs:label "Granite or Whinstone Walling"@en-gb ;
+    rdfs:subClassOf blg-class:StoneWalling .
+
+blg-class:GraniteWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A stone walling that is made of blocks of granite glued together with mortar"@en-gb ;
+    rdfs:label "Granite Walling"@en-gb ;
+    rdfs:subClassOf blg-class:GraniteOrWhinstoneWalling .
+
+blg-class:SandstoneWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A stone walling that is made of blocks of sandstone glued together with mortar"@en-gb ;
+    rdfs:label "Sandstone Walling"@en-gb ;
+    rdfs:subClassOf blg-class:StoneWalling .
+
+blg-class:StructureUnderConstruction
+    a
+        building:ClassOfStructureByPhysicalState ,
+        rdfs:Class ;
+    rdfs:comment "An `ies:Structure` that is currently under construction"@en-gb ;
+    rdfs:label "Structure Under Construction"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:SuspendedFlooring
+    a
+        building:ClassOfFlooringByConstruction ,
+        rdfs:Class ;
+    rdfs:comment "A Flooring construction that is suspended above the ground or supporting structure"@en-gb ;
+    rdfs:label "Suspended Flooring"@en-gb ;
+    rdfs:subClassOf building:Flooring .
+
+blg-class:SystemBuiltBuilding
+    a
+        building:ClassOfBuildingByRiskGrade ,
+        rdfs:Class ;
+    rdfs:comment "A Building that is classified as system-built in terms of its risk grade, indicating construction using prefabricated components or modular systems that may influence structural integrity and safety assessments."@en-gb ;
+    rdfs:label "System-Built Building"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:SystemBuiltWalling
+    a
+        building:ClassOfWalling ,
+        rdfs:Class ;
+    rdfs:comment "Walling that is realised using a standardised, pre-designed construction system, typically involving prefabricated or industrially produced components."@en-gb ;
+    rdfs:label "System Built Walling"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:ThatchRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A roofing that is made of dry plant materials, such as straw, reeds, sedge, rushes, or heathers"@en-gb ;
+    rdfs:label "Thatch Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:ThatchedRoofing
+    a
+        building:ClassOfRoofingByConstruction ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing construction that uses thatch as the primary covering material"@en-gb ;
+    rdfs:label "Thatched Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:ThatchedWithAdditionalInsulation
+    a
+        building:ClassOfRoofingByInsulationLocation ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing specification where thatching is supplemented with additional insulation"@en-gb ;
+    rdfs:label "Thatched With Additional Insulation"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:TileOrStoneOrSlateRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A Roofing that is made of either tile, stone, or slate"@en-gb ;
+    rdfs:label "Tile or Stone or Slate Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:TileRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A roofing that is made of tiles - that is, small pieces with a thin, slate-like edge; tiles can be of various materials, such as clay, concrete, or slate"@en-gb ;
+    rdfs:label "Tile Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:TimberCladWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A walling that is cladded with sheets or boards of timber"@en-gb ;
+    rdfs:label "Timber-Cladded Walling"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:TimberFrameWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A walling that consists of a frame of timber studs cladded with various materials"@en-gb ;
+    rdfs:label "Timber Frame Walling"@en-gb ;
+    rdfs:subClassOf building:Walling .
+
+blg-class:TraditionalBuilding
+    a
+        building:ClassOfBuildingByRiskGrade ,
+        rdfs:Class ;
+    rdfs:comment "A Building that is classified as traditional in terms of its risk grade, typically reflecting historical construction techniques and materials that may present unique preservation and safety challenges."@en-gb ;
+    rdfs:label "Traditional Building"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:TripleGlazed
+    a
+        building:ClassOfGlazingByPaneCount ,
+        rdfs:Class ;
+    rdfs:comment "A Glazing specification that has three panes of glass"@en-gb ;
+    rdfs:label "Triple Glazed"@en-gb ;
+    rdfs:subClassOf building:Glazing .
+
+blg-class:UnknownArtificialStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` of human-made origin whose specific use or function is unknown."@en-gb ;
+    rdfs:label "Unknown Artificial Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:UnknownNaturalStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` of natural origin whose specific use or function is unknown."@en-gb ;
+    rdfs:label "Unknown Natural Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:UnobstructedAccessPoint
+    a
+        building:ClassOfAccessPointByObstruction ,
+        rdfs:Class ;
+    rdfs:comment "An instance of `building:ClassOfAccessPointByObstruction` corresponding to OS NGD `accessobstructionvalue` 'Unobstructed' — an entrance/exit location that is free from any physical obstructions."@en-gb ;
+    rdfs:label "Unobstructed Access Point"@en-gb ;
+    rdfs:subClassOf building:AccessPoint .
+
+blg-class:UnoccupiedBuilding
+    a
+        building:ClassOfBuildingByBuiltStatus ,
+        rdfs:Class ;
+    rdfs:comment "A Building that currently has no occupants"@en-gb ;
+    rdfs:label "Unoccupied Building"@en-gb ;
+    rdfs:subClassOf building:Building .
+
+blg-class:UtilitiesAndEnvironmentalProtectionStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for utilities or environmental protection purposes, such as water treatment plants, power stations, or waste management facilities."@en-gb ;
+    rdfs:label "Utilities And Environmental Protection Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:WaterTransportStructure
+    a
+        building:ClassOfStructureByUse ,
+        rdfs:Class ;
+    rdfs:comment "A `ies:Structure` that is primarily used for water transport purposes, such as ports, docks, or marinas."@en-gb ;
+    rdfs:label "Water Transport Structure"@en-gb ;
+    rdfs:subClassOf ies:Structure .
+
+blg-class:WaterproofMembraneRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A roofing that consists of solid surface covered with a continuous watertight barrier"@en-gb ;
+    rdfs:label "Waterproof Membrane Roofing"@en-gb ;
+    rdfs:subClassOf blg-class:ConcreteOrWaterproofMembraneRoofing .
+
+blg-class:GreenRoofing
+    a
+        building:ClassOfRoofingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A waterproof membrane roofing whose waterproof membrane that is partly or completely covered with vegetation and a growing medium"@en-gb ;
+    rdfs:label "Green Roofing"@en-gb ;
+    rdfs:subClassOf blg-class:WaterproofMembraneRoofing .
+
+blg-class:WestFacingRoofing
+    a
+        building:ClassOfRoofingByCompassOrientation ,
+        rdfs:Class ;
+    rdfs:comment "Roofing that faces west."@en-gb ;
+    rdfs:label "West Facing Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:WhinstoneWalling
+    a
+        building:ClassOfWallingByMaterial ,
+        rdfs:Class ;
+    rdfs:comment "A stone walling that is made of blocks of whinstone bonded together with mortar"@en-gb ;
+    rdfs:label "Whinstone Walling"@en-gb ;
+    rdfs:subClassOf blg-class:GraniteOrWhinstoneWalling .
+
+blg-class:MixedRoofing
+    a building:ClassOfRoofingByShape ;
+    rdfs:comment "Roofing that is comprised of multiple faces with different pitch and aspect values; there is no one predominant shape due to near-equal areas of flat (≤ 15°) and pitched (> 15°) faces (OS NGD Roof Shape: Mixed)."@en-gb ;
+    rdfs:label "Mixed Roofing"@en-gb ;
+    rdfs:subClassOf building:Roofing .
+
+blg-class:UKCtrl_2106
+    a building:ClassOfHeatingControlSystem ;
+    building:heatingControlDescription "Programmer, room thermostat and TRVs"^^xsd:string ;
+    ies:isIdentifiedBy [
+        a ies:Identifier ;
+        ies:representationValue "2106"
+    ] ;
+    rdfs:comment "Control code 2106 for `building:StructureUnits` with programmer, room thermostat and TRVs"@en-gb ;
+    rdfs:label "UK Heating Control Code 2106"@en-gb ;
+    rdfs:seeAlso <https://files.bregroup.com/SAP/SAP-2012_9-92.pdf> ;
+    rdfs:subClassOf building:HeatingControlSystem ;
+    skos:note "There are a large number of codes as in the link above page 212 table 4e" .
+
+blg-class:UKCtrl_2204
+    a building:ClassOfHeatingControlSystem ;
+    building:heatingControlDescription "Programmer and room thermostat"^^xsd:string ;
+    ies:isIdentifiedBy [
+        a ies:Identifier ;
+        ies:representationValue "2204"
+    ] ;
+    rdfs:comment "Control code 2204 for `building:HeatingControlSystem` with programmer and room thermostat"@en-gb ;
+    rdfs:label "UK Heating Control Code 2204"@en-gb ;
+    rdfs:seeAlso <https://files.bregroup.com/SAP/SAP-2012_9-92.pdf> ;
+    rdfs:subClassOf building:HeatingControlSystem ;
+    skos:note "There are a large number of codes as in the link above page 212 table 4e" .

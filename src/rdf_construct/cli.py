@@ -1293,6 +1293,7 @@ def docs(
         doc_config.include_annotation_properties = (
             "properties" in types or "annotation_properties" in types
         )
+        doc_config.include_other_properties = "properties" in types or "other_properties" in types
         doc_config.include_instances = "instances" in types
         doc_config.include_shapes = "shapes" in types
         # One toggle covers both SKOS kinds; "concepts", "concept_schemes"
@@ -1307,6 +1308,7 @@ def docs(
             doc_config.include_object_properties = False
             doc_config.include_datatype_properties = False
             doc_config.include_annotation_properties = False
+            doc_config.include_other_properties = False
         if "instances" in types:
             doc_config.include_instances = False
         if "shapes" in types:

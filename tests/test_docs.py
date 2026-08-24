@@ -2112,3 +2112,227 @@ class TestNamedIndividualEnum:
 
     def test_json_serialises_as_plain_string(self):
         assert json.dumps(EntityKind.NAMED_INDIVIDUAL) == '"named_individual"'
+
+
+# ---------------------------------------------------------------------------
+# Characteristic-only declarations — issue #76
+# ---------------------------------------------------------------------------
+
+
+CHARACTERISTIC_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "docs" / "characteristic_properties.ttl"
+)
+
+
+@pytest.fixture
+def characteristic_ontology() -> Graph:
+    """Load the tracked characteristic-only-declaration ontology.
+
+    Every property in it was extracted as an *instance* before #76,
+    because the extractor recognised only the obvious four property
+    types. See the fixture's header for the two groups it separates.
+    """
+    g = Graph()
+    g.parse(CHARACTERISTIC_FIXTURE, format="turtle")
+    return g
+
+
+def _prop(entities: ExtractedEntities, local_name: str) -> PropertyInfo:
+    """Find a property by the local part of its qname."""
+    return next(p for p in entities.properties if p.qname.split(":")[-1] == local_name)
+
+
+class TestCharacteristicOnlyProperties:
+    """A term declared solely by an OWL characteristic is still a property."""
+
+    @pytest.mark.parametrize(
+        "local_name",
+        ["hasPart", "adjacentTo", "precedes", "sameAgeAs", "differentFrom", "hasIdentifier"],
+    )
+    def test_characteristic_implies_object_property(
+        self, characteristic_ontology: Graph, local_name: str
+    ):
+        """The six characteristics that are owl:ObjectProperty subclasses.
+
+        Declaring one alone is legal and common in older ontologies, and
+        OWL 2 makes each a subclass of owl:ObjectProperty — so the kind is
+        inferable and the term belongs in the object-property bucket.
+        """
+        entities = extract_all(characteristic_ontology)
+        prop = _prop(entities, local_name)
+        assert prop.property_type == "object"
+        assert prop.kinds == [EntityKind.PROPERTY, EntityKind.OBJECT_PROPERTY]
+
+    @pytest.mark.parametrize("local_name", ["hasParent", "oldProperty", "plainProperty"])
+    def test_kind_not_inferable_goes_to_other(
+        self, characteristic_ontology: Graph, local_name: str
+    ):
+        """owl:FunctionalProperty and owl:DeprecatedProperty imply no kind.
+
+        Both are subclasses of rdf:Property only, so nothing says object or
+        datatype. They must land somewhere rather than being guessed into a
+        bucket — the CLAUDE.md invariant is explicit about this.
+        """
+        entities = extract_all(characteristic_ontology)
+        prop = _prop(entities, local_name)
+        assert prop.property_type == "rdf"
+        assert prop.kinds == [EntityKind.PROPERTY, EntityKind.RDF_PROPERTY]
+        assert prop in entities.other_properties
+
+    def test_no_property_is_extracted_as_an_instance(self, characteristic_ontology: Graph):
+        """The central #76 bug: properties misfiled into the instance bucket."""
+        entities = extract_all(characteristic_ontology)
+        instance_qnames = {i.qname for i in entities.instances}
+
+        for local_name in (
+            "hasPart",
+            "adjacentTo",
+            "precedes",
+            "sameAgeAs",
+            "differentFrom",
+            "hasIdentifier",
+            "hasParent",
+            "oldProperty",
+            "plainProperty",
+        ):
+            assert f"ex:{local_name}" not in instance_qnames
+
+        # The genuine individual is untouched
+        assert "ex:alice" in instance_qnames
+
+    def test_explicit_kind_beats_the_characteristic(self, characteristic_ontology: Graph):
+        """A characteristic alongside an explicit kind does not override it."""
+        entities = extract_all(characteristic_ontology)
+        assert _prop(entities, "knows").property_type == "object"
+        assert _prop(entities, "retiredName").property_type == "datatype"
+
+    def test_deprecated_class_is_a_class(self, characteristic_ontology: Graph):
+        """owl:DeprecatedClass has the same problem on the class side."""
+        entities = extract_all(characteristic_ontology)
+        assert "ex:OldClass" in {c.qname for c in entities.classes}
+        assert "ex:OldClass" not in {i.qname for i in entities.instances}
+
+    def test_class_not_listed_among_its_metaclass_instances(self, characteristic_ontology: Graph):
+        """ex:OldClass is typed ex:Thing, but it is a class, not an instance of one."""
+        entities = extract_all(characteristic_ontology)
+        thing = next(c for c in entities.classes if c.qname == "ex:Thing")
+        assert not any("OldClass" in str(uri) for uri in thing.instances)
+        assert any("alice" in str(uri) for uri in thing.instances)
+
+    def test_domain_and_range_still_extracted(self, characteristic_ontology: Graph):
+        """A characteristic-only property keeps the rest of its metadata."""
+        entities = extract_all(characteristic_ontology)
+        has_part = _prop(entities, "hasPart")
+        assert [str(u) for u in has_part.domain] == ["http://example.org/char#Thing"]
+        assert [str(u) for u in has_part.range] == ["http://example.org/char#Thing"]
+        assert has_part.label == "has part"
+
+
+class TestOtherPropertiesRendering:
+    """Properties of unstated kind need somewhere to go, not just a bucket."""
+
+    def test_html_pages_under_properties_other(
+        self, characteristic_ontology: Graph, output_dir: Path
+    ):
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(characteristic_ontology)
+
+        assert (output_dir / "properties" / "other" / "hasParent.html").exists()
+        assert (output_dir / "properties" / "other" / "plainProperty.html").exists()
+        # And the inferable ones are with the object properties
+        assert (output_dir / "properties" / "object" / "hasPart.html").exists()
+
+    def test_nothing_lands_in_the_junk_directory(
+        self, characteristic_ontology: Graph, output_dir: Path
+    ):
+        """`entity_to_path` falls back to `other/` for an unknown type.
+
+        Before #76 an rdf:Property-only term routed there and was never
+        rendered at all, so the fallback should now be unreachable.
+        """
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(characteristic_ontology)
+
+        assert not (output_dir / "other").exists()
+
+    def test_markdown_and_json_pages(self, characteristic_ontology: Graph, output_dir: Path):
+        for fmt, ext in (("markdown", ".md"), ("json", ".json")):
+            target = output_dir / fmt
+            config = DocsConfig(output_dir=target, format=fmt)
+            DocsGenerator(config).generate(characteristic_ontology)
+            assert (target / "properties" / "other" / f"hasParent{ext}").exists()
+
+    def test_html_badge_and_css(self, characteristic_ontology: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(characteristic_ontology)
+
+        page = (output_dir / "properties" / "other" / "hasParent.html").read_text()
+        assert 'class="entity-type rdf"' in page
+
+        css = (output_dir / "assets" / "style.css").read_text()
+        assert ".entity-type.rdf { background: #334155; }" in css
+
+    def test_html_index_lists_them(self, characteristic_ontology: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(characteristic_ontology)
+
+        html = (output_dir / "index.html").read_text()
+        assert "Other Properties" in html
+        assert "properties/other/hasParent.html" in html
+
+    def test_markdown_index_lists_them(self, characteristic_ontology: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="markdown")
+        DocsGenerator(config).generate(characteristic_ontology)
+
+        md = (output_dir / "index.md").read_text()
+        assert "## Other Properties" in md
+
+    def test_json_other_properties_array(self, characteristic_ontology: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="json")
+        DocsGenerator(config).generate(characteristic_ontology)
+
+        data = json.loads((output_dir / "index.json").read_text())
+        qnames = {p["qname"] for p in data["other_properties"]}
+        assert qnames == {"ex:hasParent", "ex:oldProperty", "ex:plainProperty"}
+        assert data["statistics"]["other_properties"] == 3
+        # They left the instances array, where they used to be
+        assert not qnames & {i["qname"] for i in data["instances"]}
+
+    def test_search_index_includes_them(self, characteristic_ontology: Graph):
+        entities = extract_all(characteristic_ontology)
+        entries = generate_search_index(entities, DocsConfig())
+
+        entry = next(e for e in entries if e.qname == "ex:hasParent")
+        assert entry.entity_type == "rdf_property"
+        assert entry.url == "properties/other/hasParent.html"
+        assert entry.kinds == ["property", "rdf_property"]
+
+    def test_include_other_properties_false(self, characteristic_ontology: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="html", include_other_properties=False)
+        DocsGenerator(config).generate(characteristic_ontology)
+
+        assert not (output_dir / "properties" / "other").exists()
+        entries = generate_search_index(
+            extract_all(characteristic_ontology),
+            DocsConfig(include_other_properties=False),
+        )
+        assert not [e for e in entries if e.entity_type == "rdf_property"]
+
+    def test_default_include_other_properties_true(self):
+        assert DocsConfig().include_other_properties is True
+        assert (
+            DocsConfig.from_dict({"include_other_properties": False}).include_other_properties
+            is False
+        )
+
+    def test_routing(self):
+        config = DocsConfig(format="html")
+        assert entity_to_path("ex:hasParent", "rdf_property", config) == Path(
+            "properties/other/hasParent.html"
+        )
+        # A term reachable only via rdfs:domain, carrying no rdf:type at all,
+        # keeps the default "property" type — it lands with its siblings
+        # rather than in the junk directory.
+        assert entity_to_path("ex:untyped", "property", config) == Path(
+            "properties/other/untyped.html"
+        )

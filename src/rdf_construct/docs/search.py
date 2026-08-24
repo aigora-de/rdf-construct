@@ -496,6 +496,11 @@ def generate_search_index(
         for prop_info in entities.annotation_properties:
             entries.append(property_to_search_entry(prop_info, config))
 
+    # Properties whose kind is not implied by their declaration (#76)
+    if config.include_other_properties:
+        for prop_info in entities.other_properties:
+            entries.append(property_to_search_entry(prop_info, config))
+
     # Instances
     if config.include_instances:
         for instance_info in entities.instances:

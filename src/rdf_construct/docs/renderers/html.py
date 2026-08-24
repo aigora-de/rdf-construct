@@ -176,6 +176,7 @@ class HTMLRenderer:
             "object_properties": entities.object_properties,
             "datatype_properties": entities.datatype_properties,
             "annotation_properties": entities.annotation_properties,
+            "other_properties": entities.other_properties,
             "instances": entities.instances,
             "shapes": entities.shapes,
             "node_shapes": entities.node_shapes,
@@ -823,6 +824,15 @@ h4 { font-size: 1.1rem; }
 .entity-type.datatype { background: #06b6d4; }
 .entity-type.annotation { background: #f59e0b; }
 .entity-type.instance { background: #10b981; }
+
+/* Properties whose kind is not implied by their declaration (#76) —
+   rdf:Property, owl:FunctionalProperty, owl:DeprecatedProperty. Neutral
+   slate rather than a hue: the badge's job is to say "the source does not
+   state which kind this is", and a saturated colour would imply it sits
+   alongside object/datatype/annotation as a fourth kind. 10.35:1 against
+   white, clearing WCAG AA, and outside every hue family in the palette
+   (nearest neighbour 5.8 CIEDE2000, under simulated tritanopia). */
+.entity-type.rdf { background: #334155; }
 
 /* Shape badges (#60). Red-to-rose hue family signals kinship between
    NodeShape and PropertyShape; brightness gradient (NodeShape darker
