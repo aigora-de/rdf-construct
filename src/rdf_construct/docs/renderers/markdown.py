@@ -412,56 +412,66 @@ class MarkdownRenderer:
         uri: Any,
         entities: "ExtractedEntities",
         default_type: str = "class",
+        *,
+        link: bool = True,
     ) -> str:
         """Convert a URI to a display string, linking if possible.
 
-        Searches classes, properties, instances, and shapes (in that
-        order — most specific match wins). Falls back to the URI's
-        local name in code formatting when no entity matches.
+        Searches classes, properties, instances, shapes and SKOS entities
+        (in that order — most specific match wins). Falls back to the
+        URI's local name in code formatting when no entity matches.
 
         Args:
             uri: URI to convert.
             entities: All entities for lookups.
             default_type: Entity type if not found.
+            link: Whether to emit a Markdown link. Pass ``False`` when the
+                target has no page of its own to link to — single-page
+                output writes one file, so a link to an entity's own page
+                would be a dead reference (#113). The qname is rendered in
+                code formatting instead, which stays greppable within the
+                single document.
 
         Returns:
-            Display string with link if available.
+            Display string, linked when ``link`` is true and the entity
+            is one this run documents.
         """
         uri_str = str(uri)
+
+        def render(qname: str, label: str | None, entity_type: str) -> str:
+            """Format one resolved match, with or without a link."""
+            if not link:
+                return f"`{qname}`"
+            return self._entity_link(qname, entity_type, label or qname)
 
         # Check if it's a known class
         for c in entities.classes:
             if str(c.uri) == uri_str:
-                return self._entity_link(c.qname, "class", c.label or c.qname)
+                return render(c.qname, c.label, "class")
 
         # Check if it's a known property
         for p in entities.properties:
             if str(p.uri) == uri_str:
-                entity_type = f"{p.property_type}_property"
-                return self._entity_link(p.qname, entity_type, p.label or p.qname)
+                return render(p.qname, p.label, f"{p.property_type}_property")
 
         # Check if it's a known instance
         for i in entities.instances:
             if str(i.uri) == uri_str:
-                return self._entity_link(i.qname, "instance", i.label or i.qname)
+                return render(i.qname, i.label, "instance")
 
         # Check if it's a known shape
         for s in entities.shapes:
             if str(s.uri) == uri_str:
-                return self._entity_link(s.qname, "shape", s.label or s.qname)
+                return render(s.qname, s.label, "shape")
 
         # Check if it's a known SKOS concept or concept scheme (#63)
         for concept in entities.concepts:
             if str(concept.uri) == uri_str:
-                return self._entity_link(
-                    concept.qname, "skos_concept", concept.label or concept.qname
-                )
+                return render(concept.qname, concept.label, "skos_concept")
 
         for scheme in entities.concept_schemes:
             if str(scheme.uri) == uri_str:
-                return self._entity_link(
-                    scheme.qname, "skos_concept_scheme", scheme.label or scheme.qname
-                )
+                return render(scheme.qname, scheme.label, "skos_concept_scheme")
 
         # Fall back to extracting local name
         if "#" in uri_str:
@@ -1150,6 +1160,12 @@ class MarkdownRenderer:
 
         Returns:
             Path to the rendered file.
+
+        Note:
+            Cross-references are rendered unlinked. Single-page output
+            writes one file, so a link to an entity's own page would point
+            at something this run never produced — see #113. The HTML
+            single-page template takes the same line.
         """
         lines = []
 
@@ -1247,7 +1263,9 @@ class MarkdownRenderer:
                     lines.append(s.definition)
                     lines.append("")
                 if s.target_classes:
-                    joined = ", ".join(self._uri_to_display(u, entities) for u in s.target_classes)
+                    joined = ", ".join(
+                        self._uri_to_display(u, entities, link=False) for u in s.target_classes
+                    )
                     lines.append(f"**Target classes:** {joined}")
                     lines.append("")
                 if "node_shape" in s.kinds and s.properties:
@@ -1284,21 +1302,21 @@ class MarkdownRenderer:
                     lines.append("")
                 if concept.broader:
                     joined = ", ".join(
-                        self._uri_to_display(uri, entities, "skos_concept")
+                        self._uri_to_display(uri, entities, "skos_concept", link=False)
                         for uri in concept.broader
                     )
                     lines.append(f"**Broader:** {joined}")
                     lines.append("")
                 if concept.narrower:
                     joined = ", ".join(
-                        self._uri_to_display(uri, entities, "skos_concept")
+                        self._uri_to_display(uri, entities, "skos_concept", link=False)
                         for uri in concept.narrower
                     )
                     lines.append(f"**Narrower:** {joined}")
                     lines.append("")
                 if concept.in_schemes:
                     joined = ", ".join(
-                        self._uri_to_display(uri, entities, "skos_concept_scheme")
+                        self._uri_to_display(uri, entities, "skos_concept_scheme", link=False)
                         for uri in concept.in_schemes
                     )
                     lines.append(f"**In scheme:** {joined}")

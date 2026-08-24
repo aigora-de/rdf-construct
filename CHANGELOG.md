@@ -100,6 +100,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   normal vision, 15.3 under simulated deuteranopia
 
 ### Fixed
+- **Single-page Markdown no longer links to pages it never writes** (#113).
+  `--format markdown --single-page` produces exactly one file, but rendered
+  cross-references as links to each entity's own page — `concepts/Dwelling.md`,
+  `classes/Person.md` — every one of them dead. Both the SKOS section and the
+  Shapes section were affected; the latter since v0.5.0. References now render
+  as the entity's qname in code formatting, which stays greppable within the
+  single document and matches what the HTML single-page template already did.
+  Multi-page Markdown output is unchanged, byte for byte
 - **`docs` output is now byte-reproducible between runs** (#107). Keyword lists
   in `search.json` were built with `list(set(...))`, and Python randomises
   string hashing per process, so two runs over identical input produced a
