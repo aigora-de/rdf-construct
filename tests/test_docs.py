@@ -1609,8 +1609,13 @@ class TestSKOSRendering:
         DocsGenerator(config).generate(skos_vocabulary)
 
         css = (output_dir / "assets" / "style.css").read_text()
-        assert ".entity-type.skos_concept { background: #1d4ed8; }" in css
-        assert ".entity-type.skos_concept_scheme { background: #1e3a8a; }" in css
+        # The colours themselves are the palette's business, and
+        # TestBadgePaletteContrast owns that policy — asserting a hex here
+        # would mean every palette change touches three unrelated tests
+        # (#106). What matters to SKOS is that both kinds have a rule of
+        # their own rather than inheriting the default.
+        assert ".entity-type.skos_concept { background: #" in css
+        assert ".entity-type.skos_concept_scheme { background: #" in css
 
     def test_html_multilingual_label_table(self, skos_vocabulary: Graph, output_dir: Path):
         """Labels render one row per language, not as duplicate triples."""
@@ -2019,7 +2024,7 @@ class TestNamedIndividualRendering:
         DocsGenerator(config).generate(named_individual_ontology)
 
         css = (output_dir / "assets" / "style.css").read_text()
-        assert ".entity-type.named_individual { background: #047857; }" in css
+        assert ".entity-type.named_individual { background: #" in css
 
     def test_html_index_shows_the_badge(self, named_individual_ontology: Graph, output_dir: Path):
         config = DocsConfig(output_dir=output_dir, format="html")
@@ -2271,7 +2276,7 @@ class TestOtherPropertiesRendering:
         assert 'class="entity-type rdf"' in page
 
         css = (output_dir / "assets" / "style.css").read_text()
-        assert ".entity-type.rdf { background: #334155; }" in css
+        assert ".entity-type.rdf { background: #" in css
 
     def test_html_index_lists_them(self, characteristic_ontology: Graph, output_dir: Path):
         config = DocsConfig(output_dir=output_dir, format="html")
@@ -3069,3 +3074,113 @@ class TestDeprecationRendering:
             and not (page.parent / ref).resolve().exists()
         ]
         assert not broken
+
+
+# ---------------------------------------------------------------------------
+# Badge palette contrast — issue #106
+# ---------------------------------------------------------------------------
+
+
+def _relative_luminance(hex_colour: str) -> float:
+    """WCAG relative luminance of an #rrggbb colour."""
+    channels = [int(hex_colour[i : i + 2], 16) / 255 for i in (1, 3, 5)]
+    linear = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def contrast_against_white(hex_colour: str) -> float:
+    """WCAG contrast ratio of white text on the given background."""
+    return 1.05 / (_relative_luminance(hex_colour) + 0.05)
+
+
+class TestBadgePaletteContrast:
+    """Every badge must clear WCAG AA against its white text.
+
+    Badge text is 0.75rem bold uppercase — 12px, below the 18.66px-bold
+    large-text threshold — so **AA requires 4.5:1**, not 3.0:1.
+
+    Four badges failed before #106: annotation 2.15:1, datatype 2.43:1,
+    instance 2.54:1 and object 4.23:1. The palette was re-derived as a set
+    rather than patched colour by colour, because darkening one badge to
+    pass moves it toward its neighbours.
+
+    This reads the stylesheet the renderer actually emits, so a badge added
+    later without checking fails here rather than shipping.
+    """
+
+    AA_NORMAL_TEXT = 4.5
+
+    @staticmethod
+    def _badges(output_dir: Path) -> dict[str, str]:
+        """Every badge colour in the emitted CSS, including the default."""
+        import re
+
+        css = (output_dir / "assets" / "style.css").read_text()
+        found = dict(
+            re.findall(r"\.entity-type\.([a-z_]+) \{ background: (#[0-9a-fA-F]{6}); \}", css)
+        )
+        # The Class badge carries no kind class, so it falls through to
+        # --primary-colour. It is a badge like any other and was missing from
+        # the original inventory in #106 precisely because it has no class.
+        primary = re.search(r"--primary-colour: (#[0-9a-fA-F]{6});", css)
+        assert primary is not None, "no --primary-colour in the stylesheet"
+        found["class (default)"] = primary.group(1)
+        return found
+
+    def test_every_badge_clears_aa(self, simple_ontology: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(simple_ontology)
+
+        badges = self._badges(output_dir)
+        failing = {
+            name: (colour, round(contrast_against_white(colour), 2))
+            for name, colour in badges.items()
+            if contrast_against_white(colour) < self.AA_NORMAL_TEXT
+        }
+        assert not failing, f"badges below {self.AA_NORMAL_TEXT}:1 — {failing}"
+
+    def test_the_inventory_is_complete(self, simple_ontology: Graph, output_dir: Path):
+        """Guard the guard: every kind that renders a badge must be covered.
+
+        If a new `EntityKind` gains a badge and no CSS rule, it silently
+        inherits --primary-colour and looks like a Class. The contrast test
+        above would pass while the palette quietly lost a distinction.
+        """
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(simple_ontology)
+
+        styled = set(self._badges(output_dir)) - {"class (default)"}
+        expected = {
+            "object",
+            "datatype",
+            "annotation",
+            "rdf",
+            "instance",
+            "named_individual",
+            "shape",
+            "node_shape",
+            "property_shape",
+            "skos_concept",
+            "skos_concept_scheme",
+        }
+        assert expected <= styled, f"badges with no colour of their own: {expected - styled}"
+
+    def test_deprecated_marker_clears_aa_as_text(self, simple_ontology: Graph, output_dir: Path):
+        """The deprecation marker is an outline, so its *text* carries the contrast."""
+        import re
+
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(simple_ontology)
+
+        css = (output_dir / "assets" / "style.css").read_text()
+        block = re.search(r"\.entity-type\.deprecated \{(.*?)\}", css, re.S)
+        assert block is not None
+        colour = re.search(r"color: (#[0-9a-fA-F]{6});", block.group(1))
+        assert colour is not None
+        assert contrast_against_white(colour.group(1)) >= self.AA_NORMAL_TEXT
+
+    def test_contrast_helper_is_right(self):
+        """Anchor the maths against values WebAIM agrees with."""
+        assert round(contrast_against_white("#ffffff"), 2) == 1.0
+        assert round(contrast_against_white("#000000"), 2) == 21.0
+        assert round(contrast_against_white("#dc2626"), 2) == 4.83
