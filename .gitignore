@@ -215,3 +215,6 @@ PROMPT-*.md
 # Local scratch script for generating the project tree, and its output.
 project_tree.py
 project-structure*.txt
+# Output written by local `order` runs against the IES ontologies. Regenerable,
+# and specific to whoever ran it.
+src/ontology/
