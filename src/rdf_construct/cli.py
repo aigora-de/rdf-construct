@@ -19,6 +19,9 @@ from rdf_construct.core import (
     build_section_graph,
     extract_prefix_map,
     rebind_prefixes,
+    BUILTIN_SELECTOR_KEYS,
+    UnknownSelectorError,
+    is_known_selector,
     select_subjects,
     serialise_turtle,
     sort_subjects,
@@ -284,14 +287,7 @@ def cast(
 # Selector keys understood by select_subjects(), most specific first, used to tell a
 # user which section they are missing. Keys defined in the config are appended to
 # these, so a profile with custom selector names still gets a usable suggestion.
-_SELECTOR_KEYS = (
-    "classes",
-    "obj_props",
-    "data_props",
-    "ann_props",
-    "other_props",
-    "individuals",
-)
+_SELECTOR_KEYS = BUILTIN_SELECTOR_KEYS
 
 # How many unclaimed subjects to name before summarising the rest.
 _UNCLAIMED_SHOWN = 3
@@ -341,6 +337,11 @@ def _selector_hints(
     for key in keys:
         if not remaining:
             break
+        # The config may define keys that resolve to nothing — since #89 those
+        # raise rather than returning empty, and this loop is probing on
+        # purpose, so skip them instead.
+        if not is_known_selector(key, selectors):
+            continue
         claimed = select_subjects(graph, key, selectors)
         for subject in list(remaining):
             if subject in claimed:
@@ -514,7 +515,15 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path):
             roots_cfg = sec_cfg.get("roots")
 
             # Select and sort subjects
-            chosen = select_subjects(graph, select_key, ordering_config.selectors)
+            try:
+                chosen = select_subjects(graph, select_key, ordering_config.selectors)
+            except UnknownSelectorError as exc:
+                click.secho(
+                    f"\u2717 profile '{prof_name}', section '{sec_name}': {exc}",
+                    fg="red",
+                    err=True,
+                )
+                raise SystemExit(2)
             chosen = [s for s in chosen if s not in seen]
 
             ordered = sort_subjects(graph, set(chosen), sort_mode, roots_cfg)

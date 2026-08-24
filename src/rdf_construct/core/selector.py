@@ -13,6 +13,60 @@ from .vocab import (
 )
 
 
+#: Selector keys ``select_subjects`` dispatches on, in the order they are
+#: documented. A profile section's ``select:`` must name one of these, or a key
+#: in the config's ``selectors:`` block whose value one of them recognises.
+BUILTIN_SELECTOR_KEYS: tuple[str, ...] = (
+    "classes",
+    "obj_props",
+    "data_props",
+    "ann_props",
+    "other_props",
+    "individuals",
+)
+
+#: Values accepted in a ``selectors:`` block, mapped to the built-in key they
+#: resolve to. Kept beside the dispatch below so the two cannot drift.
+_SELECTOR_VALUES: dict[str, str] = {
+    "owl:Class": "classes",
+    "rdf:type owl:Class": "classes",
+    "owl:ObjectProperty": "obj_props",
+    "owl:DatatypeProperty": "data_props",
+    "owl:AnnotationProperty": "ann_props",
+    "rdf:Property": "other_props",
+}
+
+
+class UnknownSelectorError(ValueError):
+    """A selector key that nothing knows how to resolve.
+
+    Raised rather than returning an empty set, because an empty set is
+    indistinguishable from "this ontology has none of those" and the
+    section simply vanishes from the output. See issue #89.
+    """
+
+
+def is_known_selector(selector_key: str, selectors: dict[str, str]) -> bool:
+    """Report whether ``select_subjects`` can resolve this selector key.
+
+    For callers that legitimately probe keys they are not sure about —
+    the unclaimed-subject hinting in the CLI walks every key in the
+    config looking for one that would have claimed a subject.
+
+    Args:
+        selector_key: Key to test
+        selectors: Selector definitions from the ordering config
+
+    Returns:
+        True if the key resolves to a selection, False otherwise
+    """
+    if selector_key in BUILTIN_SELECTOR_KEYS:
+        return True
+    raw = selectors.get(selector_key, "")
+    value = raw.strip() if isinstance(raw, str) else ""
+    return value in _SELECTOR_VALUES or value.startswith("FILTER")
+
+
 def _subjects_of_types(graph: Graph, types: frozenset[URIRef]) -> set[Node]:
     """Collect every subject declared with any of the given rdf:type values.
 
@@ -57,8 +111,19 @@ def select_subjects(graph: Graph, selector_key: str, selectors: dict[str, str]) 
 
     Returns:
         Set of URIRefs matching the selection criteria
+
+    Raises:
+        UnknownSelectorError: If the key names neither a built-in selector
+            nor a config entry with a recognised value. Silently selecting
+            nothing was #89.
     """
-    sel = selectors.get(selector_key, "").strip()
+    # A selector value is a string in this grammar, but templates/ordering_starter.yml
+    # — the file users are told to copy — writes lists, and `.strip()` on a list is an
+    # AttributeError traceback rather than anything a user can act on. Non-strings are
+    # treated as an unrecognised *value*: a built-in key still dispatches on its name,
+    # so the shipped template works, and anything else reaches the error below.
+    raw = selectors.get(selector_key, "")
+    sel = raw.strip() if isinstance(raw, str) else ""
     subjects: set = set()
 
     # Classes - check owl:Class, rdfs:Class and owl:DeprecatedClass
@@ -93,5 +158,24 @@ def select_subjects(graph: Graph, selector_key: str, selectors: dict[str, str]) 
 
         all_subjects = {s for (s, _, _) in graph}
         subjects = all_subjects - classes - properties
+
+    else:
+        # Nothing matched. Returning an empty set here is what #89 was: the
+        # section renders empty, the output is silently short, and the
+        # unclaimed-subjects warning then names a section the user believes
+        # they already have.
+        known = ", ".join(BUILTIN_SELECTOR_KEYS)
+        defined = ", ".join(sorted(selectors)) or "none"
+        if selector_key in selectors:
+            raise UnknownSelectorError(
+                f"selector {selector_key!r} is defined in the config as {sel!r}, "
+                f"which is not a value this version understands. Accepted values: "
+                f"{', '.join(sorted(_SELECTOR_VALUES))}, or a string starting 'FILTER'. "
+                f"Built-in selector keys, usable without defining them: {known}"
+            )
+        raise UnknownSelectorError(
+            f"unknown selector {selector_key!r}. Built-in selector keys: {known}. "
+            f"Defined in this config: {defined}"
+        )
 
     return subjects
