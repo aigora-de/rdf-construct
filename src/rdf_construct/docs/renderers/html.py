@@ -82,6 +82,9 @@ class HTMLRenderer:
 
         # Add global context
         env.globals["config"] = self.config
+        # Templates ask this before emitting a cross-reference: a link to a
+        # page this run is not generating is a dead link (#115).
+        env.globals["included"] = self._included
 
         return env
 
@@ -110,6 +113,16 @@ class HTMLRenderer:
             qname = uri_or_qname
 
         return entity_to_url(qname, entity_type, self.config, from_path=self._current_page)
+
+    def _included(self, entity_type: str) -> bool:
+        """Whether this run generates pages of the given entity type.
+
+        Exposed to templates as ``included(...)``. See
+        :func:`rdf_construct.docs.config.entity_type_included`.
+        """
+        from ..config import entity_type_included
+
+        return entity_type_included(entity_type, self.config)
 
     def _qname_local_filter(self, qname: str) -> str:
         """Jinja2 filter to get the local part of a QName.
@@ -261,6 +274,11 @@ class HTMLRenderer:
         uri_str = str(uri)
         resolved = self._reference_index(entities).get(uri_str)
         if resolved is not None:
+            # An entity whose type this run excludes has no page to link to,
+            # so it degrades to plain text exactly as an undocumented one
+            # does (#115) — the reference stays visible either way.
+            if not self._included(str(resolved["entity_type"])):
+                return {**resolved, "entity_type": None}
             return resolved
         return {"label": uri_str, "qname": uri_str, "entity_type": None}
 

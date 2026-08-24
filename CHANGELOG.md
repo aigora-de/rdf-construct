@@ -117,6 +117,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AttributeError` traceback. Non-string values no longer crash: a built-in key
   dispatches on its name regardless, and anything unresolvable gets the
   actionable error above. Found while fixing #89, on the same line
+- **`--include` / `--exclude` are now honoured by links, not just by page
+  generation** (#115). Filtering decided what was *generated* and nothing
+  decided what was *linked to*, so excluding an entity type filled the output
+  with links to pages that were never written. The workflow DOCS_GUIDE
+  advertises as "only classes" produced **43 dead links** in HTML. Two causes,
+  both fixed:
+  - Four of the six index sections checked their config flag — the ones added
+    in #60, #63 and #76 — and the older Classes, Object Properties and
+    Datatype Properties sections did not. Same split in the Markdown index,
+    and in the index statistics cards
+  - Entity pages cross-linked to excluded entities. A class page linked to its
+    properties with no guard, which is why `--exclude properties` broke every
+    class page while `--exclude instances` broke nothing: the Instances section
+    of that same template was already guarded
+  A reference to an excluded entity is now rendered **unlinked but still
+  visible** (`ex:hasPart` in code formatting) rather than dropped — a document
+  that filtered properties out of the *documentation* must not imply the class
+  has no properties. Output with default configuration is byte-identical
 - **Single-page Markdown no longer links to pages it never writes** (#113).
   `--format markdown --single-page` produces exactly one file, but rendered
   cross-references as links to each entity's own page — `concepts/Dwelling.md`,

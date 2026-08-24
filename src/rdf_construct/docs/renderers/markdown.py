@@ -80,9 +80,14 @@ class MarkdownRenderer:
         Returns:
             Markdown link string.
         """
-        from ..config import entity_to_path
+        from ..config import entity_to_path, entity_type_included
 
         display = label or qname
+        # A link to a page this run is not generating is a dead link (#115).
+        # Same treatment single-page output gives every reference (#113):
+        # unlinked, but still visible.
+        if not entity_type_included(entity_type, self.config):
+            return f"`{qname}`"
         path = entity_to_path(qname, entity_type, self.config, extension=".md")
         # Make path relative from root
         return f"[{display}]({path})"
@@ -162,7 +167,7 @@ class MarkdownRenderer:
         lines.append("")
 
         # Classes section
-        if entities.classes:
+        if entities.classes and self.config.include_classes:
             lines.append("## Classes")
             lines.append("")
             for c in entities.classes:
@@ -176,7 +181,7 @@ class MarkdownRenderer:
             lines.append("")
 
         # Properties section
-        if entities.object_properties:
+        if entities.object_properties and self.config.include_object_properties:
             lines.append("## Object Properties")
             lines.append("")
             for p in entities.object_properties:
@@ -184,7 +189,7 @@ class MarkdownRenderer:
                 lines.append(f"- {link}")
             lines.append("")
 
-        if entities.datatype_properties:
+        if entities.datatype_properties and self.config.include_datatype_properties:
             lines.append("## Datatype Properties")
             lines.append("")
             for p in entities.datatype_properties:

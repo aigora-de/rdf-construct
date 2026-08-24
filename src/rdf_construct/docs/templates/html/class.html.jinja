@@ -20,7 +20,11 @@
                 {% set found = namespace(value=false) %}
                 {% for c in classes %}
                     {% if c.uri|string == uri|string %}
+                    {% if included('class') %}
                     <a href="{{ c.qname | entity_url('class') }}">{{ c.label or c.qname }}</a>
+                {% else %}
+                <code>{{ c.qname }}</code>
+                {% endif %}
                     {% set found.value = true %}
                     {% endif %}
                 {% endfor %}
@@ -42,7 +46,11 @@
                 {% set found = namespace(value=false) %}
                 {% for c in classes %}
                     {% if c.uri|string == uri|string %}
+                    {% if included('class') %}
                     <a href="{{ c.qname | entity_url('class') }}">{{ c.label or c.qname }}</a>
+                {% else %}
+                <code>{{ c.qname }}</code>
+                {% endif %}
                     {% set found.value = true %}
                     {% endif %}
                 {% endfor %}
@@ -61,9 +69,16 @@
         <ul class="entity-list">
             {% for prop in class_info.domain_of %}
             <li>
+                {% if included(prop.property_type + '_property') %}
                 <a href="{{ prop.qname | entity_url(prop.property_type + '_property') }}">
                     {{ prop.label or prop.qname }}
                 </a>
+                {% else %}
+                {# That property type is excluded from this run, so there is no
+                   page to link to. The reference stays — a filtered document
+                   must not imply the class has no such property (#115). #}
+                <code>{{ prop.qname }}</code>
+                {% endif %}
                 <span class="entity-type {{ prop.property_type }}">{{ prop.property_type }}</span>
             </li>
             {% endfor %}
@@ -77,9 +92,16 @@
         <ul class="entity-list">
             {% for prop in inherited_properties %}
             <li>
+                {% if included(prop.property_type + '_property') %}
                 <a href="{{ prop.qname | entity_url(prop.property_type + '_property') }}">
                     {{ prop.label or prop.qname }}
                 </a>
+                {% else %}
+                {# That property type is excluded from this run, so there is no
+                   page to link to. The reference stays — a filtered document
+                   must not imply the class has no such property (#115). #}
+                <code>{{ prop.qname }}</code>
+                {% endif %}
                 <span class="entity-type {{ prop.property_type }}">{{ prop.property_type }}</span>
                 <span class="annotation">(inherited)</span>
             </li>
@@ -94,9 +116,16 @@
         <ul class="entity-list">
             {% for prop in class_info.range_of %}
             <li>
+                {% if included(prop.property_type + '_property') %}
                 <a href="{{ prop.qname | entity_url(prop.property_type + '_property') }}">
                     {{ prop.label or prop.qname }}
                 </a>
+                {% else %}
+                {# That property type is excluded from this run, so there is no
+                   page to link to. The reference stays — a filtered document
+                   must not imply the class has no such property (#115). #}
+                <code>{{ prop.qname }}</code>
+                {% endif %}
             </li>
             {% endfor %}
         </ul>
@@ -112,7 +141,11 @@
                 {% set found = namespace(value=false) %}
                 {% for i in instances %}
                     {% if i.uri|string == uri|string %}
+                    {% if included('instance') %}
                     <a href="{{ i.qname | entity_url('instance') }}">{{ i.label or i.qname }}</a>
+                {% else %}
+                <code>{{ i.qname }}</code>
+                {% endif %}
                     {% set found.value = true %}
                     {% endif %}
                 {% endfor %}
