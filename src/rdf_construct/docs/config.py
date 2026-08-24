@@ -253,6 +253,36 @@ def entity_to_path(
     return Path(subdir) / filename
 
 
+def entity_type_included(entity_type: str, config: DocsConfig) -> bool:
+    """Report whether pages of this entity type are being generated.
+
+    Filtering decides what is *generated*; it has to decide what is
+    *linked to* as well, or the output fills with links to pages that
+    were never written (#115). Unknown types default to True so a new
+    entity kind is linked rather than silently unlinked before its flag
+    exists.
+
+    Args:
+        entity_type: Entity type string, as used by ``entity_to_path``.
+        config: Documentation configuration.
+
+    Returns:
+        True if that type's pages are part of this run.
+    """
+    return {
+        "class": config.include_classes,
+        "object_property": config.include_object_properties,
+        "datatype_property": config.include_datatype_properties,
+        "annotation_property": config.include_annotation_properties,
+        "rdf_property": config.include_other_properties,
+        "property": config.include_other_properties,
+        "instance": config.include_instances,
+        "shape": config.include_shapes,
+        "skos_concept": config.include_skos,
+        "skos_concept_scheme": config.include_skos,
+    }.get(entity_type, True)
+
+
 def relative_url_prefix(page_path: Path | str) -> str:
     """Compute the relative URL prefix from a page back to the docs root.
 

@@ -31,7 +31,11 @@
             {% set found = namespace(value=false) %}
             {% for c in classes %}
                 {% if c.uri|string == ps.class_|string %}
-                <a href="{{ c.qname | entity_url('class') }}">{{ c.label or c.qname }}</a>
+                {% if included('class') %}
+                    <a href="{{ c.qname | entity_url('class') }}">{{ c.label or c.qname }}</a>
+                {% else %}
+                <code>{{ c.qname }}</code>
+                {% endif %}
                 {% set found.value = true %}
                 {% endif %}
             {% endfor %}
@@ -90,7 +94,11 @@
                     {% set found = namespace(value=false) %}
                     {% for c in classes %}
                         {% if c.uri|string == uri|string %}
-                        <a href="{{ c.qname | entity_url('class') }}">{{ c.label or c.qname }}</a>
+                        {% if included('class') %}
+                    <a href="{{ c.qname | entity_url('class') }}">{{ c.label or c.qname }}</a>
+                {% else %}
+                <code>{{ c.qname }}</code>
+                {% endif %}
                         {% set found.value = true %}
                         {% endif %}
                     {% endfor %}

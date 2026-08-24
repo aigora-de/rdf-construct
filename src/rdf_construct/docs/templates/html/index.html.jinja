@@ -4,14 +4,19 @@
 
 {% block content %}
 <section class="stats">
+    {% if config.include_classes %}
     <div class="stat-card">
         <div class="number">{{ total_classes }}</div>
         <div class="label">Classes</div>
     </div>
+    {% endif %}
+    {% if config.include_object_properties or config.include_datatype_properties
+        or config.include_annotation_properties or config.include_other_properties %}
     <div class="stat-card">
         <div class="number">{{ total_properties }}</div>
         <div class="label">Properties</div>
     </div>
+    {% endif %}
     {% if shapes and config.include_shapes %}
     <div class="stat-card">
         <div class="number">{{ shapes | length }}</div>
@@ -24,7 +29,7 @@
         <div class="label">Concepts</div>
     </div>
     {% endif %}
-    {% if instances %}
+    {% if instances and config.include_instances %}
     <div class="stat-card">
         <div class="number">{{ total_instances }}</div>
         <div class="label">Instances</div>
@@ -32,7 +37,7 @@
     {% endif %}
 </section>
 
-{% if classes %}
+{% if classes and config.include_classes %}
 <section class="section">
     <h2>Classes</h2>
     <ul class="entity-list">
@@ -50,7 +55,7 @@
 </section>
 {% endif %}
 
-{% if object_properties %}
+{% if object_properties and config.include_object_properties %}
 <section class="section">
     <h2>Object Properties</h2>
     <ul class="entity-list">
@@ -69,7 +74,7 @@
 </section>
 {% endif %}
 
-{% if datatype_properties %}
+{% if datatype_properties and config.include_datatype_properties %}
 <section class="section">
     <h2>Datatype Properties</h2>
     <ul class="entity-list">
@@ -88,7 +93,7 @@
 </section>
 {% endif %}
 
-{% if annotation_properties %}
+{% if annotation_properties and config.include_annotation_properties %}
 <section class="section">
     <h2>Annotation Properties</h2>
     <ul class="entity-list">

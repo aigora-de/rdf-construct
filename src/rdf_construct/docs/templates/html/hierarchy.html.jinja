@@ -9,9 +9,15 @@
 <ul class="hierarchy-tree">
     {% for node in nodes %}
     <li>
+        {% if included('class') %}
         <a href="{{ node.class.qname | entity_url('class') }}">
             {{ node.class.label or node.class.qname }}
         </a>
+        {% else %}
+        {# Classes are excluded from this run, so there is no page to link to.
+           The taxonomy is still worth showing — it is what this page is for. #}
+        <code>{{ node.class.qname }}</code>
+        {% endif %}
         {% if node.children %}
         {{ render_tree(node.children) }}
         {% endif %}

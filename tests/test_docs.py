@@ -2686,3 +2686,177 @@ class TestSinglePageMarkdownLinks:
         content = (output_dir / "concepts" / "Dwelling.md").read_text()
         assert "](" in content
         assert "Building.md" in content
+
+
+# ---------------------------------------------------------------------------
+# Entity-type filtering and cross-references — issue #115
+# ---------------------------------------------------------------------------
+
+
+EXCLUSION_FLAGS = [
+    "include_classes",
+    "include_object_properties",
+    "include_datatype_properties",
+    "include_annotation_properties",
+    "include_other_properties",
+    "include_instances",
+    "include_shapes",
+    "include_skos",
+]
+
+
+@pytest.fixture
+def mixed_ontology() -> Graph:
+    """One graph carrying every entity type, so exclusions have something to bite."""
+    g = Graph()
+    g.parse(SKOS_FIXTURE, format="turtle")
+    g.parse(CHARACTERISTIC_FIXTURE, format="turtle")
+    return g
+
+
+class TestExcludedEntityLinks:
+    """Filtering decides what is generated; it must decide what is linked.
+
+    `--include` / `--exclude` were honoured by the generator and ignored
+    by the templates, so excluding an entity type filled the output with
+    links to pages that were never written. `--include classes` alone
+    produced 43 dead links in HTML (#115).
+    """
+
+    @pytest.mark.parametrize("flag", EXCLUSION_FLAGS)
+    def test_html_has_no_dead_links_under_any_exclusion(
+        self, mixed_ontology: Graph, output_dir: Path, flag: str
+    ):
+        import re
+
+        config = DocsConfig(output_dir=output_dir, format="html", **{flag: False})
+        DocsGenerator(config).generate(mixed_ontology)
+
+        ref_pat = re.compile(r'(?:href|src)="([^"#?]+)"')
+        broken = [
+            (str(page.relative_to(output_dir)), ref)
+            for page in output_dir.rglob("*.html")
+            for ref in ref_pat.findall(page.read_text())
+            if not ref.startswith(("http://", "https://", "mailto:", "#"))
+            and not (page.parent / ref).resolve().exists()
+        ]
+        assert not broken, f"{flag}=False left {len(broken)} dead links, e.g. {broken[:3]}"
+
+    def test_html_include_classes_only(self, output_dir: Path):
+        """The documented 'only classes' workflow, which was the worst case."""
+        import re
+
+        graph = Graph()
+        graph.parse("examples/animal_ontology.ttl", format="turtle")
+        config = DocsConfig(
+            output_dir=output_dir,
+            format="html",
+            include_object_properties=False,
+            include_datatype_properties=False,
+            include_annotation_properties=False,
+            include_other_properties=False,
+            include_instances=False,
+            include_skos=False,
+            include_shapes=False,
+        )
+        DocsGenerator(config).generate(graph)
+
+        ref_pat = re.compile(r'(?:href|src)="([^"#?]+)"')
+        broken = [
+            (str(page.relative_to(output_dir)), ref)
+            for page in output_dir.rglob("*.html")
+            for ref in ref_pat.findall(page.read_text())
+            if not ref.startswith(("http://", "https://", "mailto:", "#"))
+            and not (page.parent / ref).resolve().exists()
+        ]
+        assert not broken, f"{len(broken)} dead links, e.g. {broken[:3]}"
+
+    @pytest.mark.parametrize("flag", EXCLUSION_FLAGS)
+    def test_markdown_never_links_to_an_ungenerated_page(
+        self, mixed_ontology: Graph, output_dir: Path, flag: str
+    ):
+        """Markdown links must at least *name a file that exists*.
+
+        Checked by filename rather than by resolved path: #87 (root-relative
+        Markdown links, open in #105) makes every Markdown link resolve from
+        the wrong directory, which would mask this. Once #105 lands,
+        ``broken_markdown_links`` covers both at once.
+        """
+        import re
+
+        config = DocsConfig(output_dir=output_dir, format="markdown", **{flag: False})
+        DocsGenerator(config).generate(mixed_ontology)
+
+        written = {p.name for p in output_dir.rglob("*.md")}
+        missing = [
+            (str(page.relative_to(output_dir)), ref)
+            for page in output_dir.rglob("*.md")
+            for ref in re.findall(r"\]\(([^)#]+)\)", page.read_text())
+            if not ref.startswith(("http://", "https://", "mailto:"))
+            and Path(ref).name not in written
+        ]
+        assert not missing, f"{flag}=False left {len(missing)} links to nothing, e.g. {missing[:3]}"
+
+    def test_excluded_reference_stays_visible(self, output_dir: Path):
+        """Unlinked, not deleted — the fact is still in the document.
+
+        Hiding the row would misrepresent the ontology: a class whose
+        properties were filtered out of the *documentation* has not lost
+        its properties.
+        """
+        graph = Graph()
+        graph.parse(CHARACTERISTIC_FIXTURE, format="turtle")
+        config = DocsConfig(
+            output_dir=output_dir, format="markdown", include_object_properties=False
+        )
+        DocsGenerator(config).generate(graph)
+
+        content = (output_dir / "classes" / "Thing.md").read_text()
+        assert "`ex:hasPart`" in content
+        assert "hasPart.md)" not in content
+
+    def test_html_excluded_reference_stays_visible(self, output_dir: Path):
+        graph = Graph()
+        graph.parse(CHARACTERISTIC_FIXTURE, format="turtle")
+        config = DocsConfig(output_dir=output_dir, format="html", include_object_properties=False)
+        DocsGenerator(config).generate(graph)
+
+        content = (output_dir / "classes" / "Thing.html").read_text()
+        assert "<code>ex:hasPart</code>" in content
+        assert "hasPart.html" not in content
+
+    @pytest.mark.parametrize(
+        "flag,heading",
+        [
+            ("include_classes", "Classes"),
+            ("include_object_properties", "Object Properties"),
+            ("include_datatype_properties", "Datatype Properties"),
+        ],
+    )
+    def test_index_sections_respect_the_flags(
+        self, mixed_ontology: Graph, output_dir: Path, flag: str, heading: str
+    ):
+        """The index listed excluded types, which is where most links came from.
+
+        Four of the six index sections already checked their flag — the
+        ones added in #60, #63 and #76. The older three did not.
+        """
+        for fmt, name in (("html", "index.html"), ("markdown", "index.md")):
+            target = output_dir / fmt
+            config = DocsConfig(output_dir=target, format=fmt, **{flag: False})
+            DocsGenerator(config).generate(mixed_ontology)
+            assert f">{heading}<" not in (target / name).read_text()
+            assert f"## {heading}" not in (target / name).read_text()
+
+    def test_entity_type_included_defaults_to_true(self):
+        """An unknown type links rather than silently unlinking.
+
+        A new entity kind should be visible before someone remembers to
+        give it a flag.
+        """
+        from rdf_construct.docs.config import entity_type_included
+
+        config = DocsConfig()
+        assert entity_type_included("class", config) is True
+        assert entity_type_included("something_new", config) is True
+        assert entity_type_included("class", DocsConfig(include_classes=False)) is False

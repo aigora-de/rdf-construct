@@ -492,6 +492,12 @@ Valid type names: `classes`, `properties`, `object_properties`, `datatype_proper
 
 `properties` covers all four property groups, `other_properties` included.
 
+Excluding a type removes its pages, its index section and its statistics
+card. References to it from pages that *are* generated stay visible but
+stop being links — a class page still lists the properties whose domain it
+is, in code formatting rather than as links to pages this run did not
+write.
+
 `concepts` covers both SKOS kinds — concepts and concept schemes are one
 toggle. `concept_schemes` and `skos` are accepted as spellings of it.
 
