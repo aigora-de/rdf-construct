@@ -92,7 +92,18 @@ class MarkdownRenderer:
         # Resolved from the page that contains the link rather than from the
         # docs root, so a cross-reference from a sub-folder page does not
         # resolve one level too deep (#87).
-        path = entity_to_url(qname, entity_type, self.config, from_path=self._current_page)
+        #
+        # The extension is stated rather than derived: entity_to_url falls
+        # back to config.format, whose map knows "markdown" but not the "md"
+        # alias DocsGenerator accepts — and under that alias the files are
+        # still written .md while every link would point at .html.
+        path = entity_to_url(
+            qname,
+            entity_type,
+            self.config,
+            from_path=self._current_page,
+            extension=".md",
+        )
         return f"[{display}]({path})"
 
     def _frontmatter(self, **kwargs: Any) -> str:
@@ -719,6 +730,14 @@ class MarkdownRenderer:
         Returns:
             Path to the rendered file.
         """
+        from ..config import entity_to_path
+
+        # Set before any line is built: _entity_link resolves every
+        # cross-reference against this, and a method that does not set it
+        # inherits whatever page rendered last (#87).
+        rel_path = entity_to_path(concept_info.qname, "skos_concept", self.config, extension=".md")
+        self._current_page = rel_path
+
         lines = []
 
         lines.append(
@@ -824,9 +843,6 @@ class MarkdownRenderer:
             lines.append("")
 
         content = "\n".join(lines)
-        from ..config import entity_to_path
-
-        rel_path = entity_to_path(concept_info.qname, "skos_concept", self.config, extension=".md")
         return self._write_file(self.config.output_dir / rel_path, content)
 
     def render_concept_scheme(
@@ -844,6 +860,16 @@ class MarkdownRenderer:
             Path to the rendered file.
         """
         from ..extractors import build_concept_tree
+
+        from ..config import entity_to_path
+
+        # Set before any line is built: _entity_link resolves every
+        # cross-reference against this, and a method that does not set it
+        # inherits whatever page rendered last (#87).
+        rel_path = entity_to_path(
+            scheme_info.qname, "skos_concept_scheme", self.config, extension=".md"
+        )
+        self._current_page = rel_path
 
         lines = []
 
@@ -941,14 +967,6 @@ class MarkdownRenderer:
             lines.append("")
 
         content = "\n".join(lines)
-        from ..config import entity_to_path
-
-        rel_path = entity_to_path(
-            scheme_info.qname,
-            "skos_concept_scheme",
-            self.config,
-            extension=".md",
-        )
         return self._write_file(self.config.output_dir / rel_path, content)
 
     def _render_property_shape_table(
