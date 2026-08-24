@@ -100,6 +100,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   normal vision, 15.3 under simulated deuteranopia
 
 ### Fixed
+- **`order` now fails on a section whose `select:` names a selector nothing can
+  resolve** (#89), instead of selecting nothing and saying nothing. The section
+  simply vanished from the output — the same failure shape as #84 one level
+  down: there a *profile* claimed nothing, here a *section* did. Worse, the
+  unclaimed-subjects warning added in #88 then misdiagnosed it, telling the user
+  to "add a section with `select: obj_props`" when their profile had exactly
+  that section, misspelled. The run now exits 2, names the profile and the
+  section, and lists both the built-in selector keys and the ones the config
+  defines. Two spellings are affected: a key that resolves to nothing at all,
+  and a key defined in `selectors:` whose *value* is not one this version
+  recognises
+- **The shipped `templates/ordering_starter.yml` now runs.** It defines each
+  selector as a YAML list, and selector resolution called `.strip()` on the
+  value — so the template the documentation tells users to copy exited 1 with an
+  `AttributeError` traceback. Non-string values no longer crash: a built-in key
+  dispatches on its name regardless, and anything unresolvable gets the
+  actionable error above. Found while fixing #89, on the same line
 - **Single-page Markdown no longer links to pages it never writes** (#113).
   `--format markdown --single-page` produces exactly one file, but rendered
   cross-references as links to each entity's own page — `concepts/Dwelling.md`,

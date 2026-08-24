@@ -8,7 +8,12 @@ from .profile import (
     OrderingProfile,
     load_yaml,
 )
-from .selector import select_subjects
+from .selector import (
+    BUILTIN_SELECTOR_KEYS,
+    UnknownSelectorError,
+    is_known_selector,
+    select_subjects,
+)
 from .vocab import (
     ALL_PROPERTY_TYPES,
     ANNOTATION_PROPERTY_TYPES,
@@ -55,6 +60,9 @@ __all__ = [
     "DEFAULT_UNCLAIMED_POLICY",
     # Selector
     "select_subjects",
+    "is_known_selector",
+    "UnknownSelectorError",
+    "BUILTIN_SELECTOR_KEYS",
     # Vocabulary
     "ALL_PROPERTY_TYPES",
     "ANNOTATION_PROPERTY_TYPES",
