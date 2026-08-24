@@ -4,7 +4,7 @@
 
 {% block content %}
 <article class="entity-card">
-    <h1>{{ class_info.label or class_info.qname }} <span class="entity-type">Class</span></h1>
+    <h1>{{ class_info.label or class_info.qname }} <span class="entity-type">Class</span>{% if class_info.deprecated %}<span class="entity-type deprecated" title="This term is marked deprecated in the source">deprecated</span>{% endif %}</h1>
     <p class="uri">{{ class_info.uri }}</p>
 
     {% if class_info.definition %}

@@ -43,6 +43,7 @@ class SearchEntry:
     keywords: list[str]
     url: str
     kinds: list[str] = field(default_factory=list)
+    deprecated: bool = False
 
 
 def extract_keywords(text: str | None) -> list[str]:
@@ -186,6 +187,10 @@ def class_to_search_entry(
         elif "/" in str(uri):
             keywords.extend(extract_keywords(str(uri).split("/")[-1]))
 
+    # Searchable by the word itself, so "deprecated" finds them all (#108).
+    if class_info.deprecated:
+        keywords.append("deprecated")
+
     from .config import entity_to_url
 
     return SearchEntry(
@@ -196,6 +201,7 @@ def class_to_search_entry(
         keywords=sorted(set(keywords)),
         url=entity_to_url(class_info.qname, "class", config),
         kinds=[str(k) for k in class_info.kinds],
+        deprecated=class_info.deprecated,
     )
 
 
@@ -240,6 +246,10 @@ def property_to_search_entry(
 
     entity_type = f"{prop_info.property_type}_property"
 
+    # Searchable by the word itself, so "deprecated" finds them all (#108).
+    if prop_info.deprecated:
+        keywords.append("deprecated")
+
     from .config import entity_to_url
 
     return SearchEntry(
@@ -250,6 +260,7 @@ def property_to_search_entry(
         keywords=sorted(set(keywords)),
         url=entity_to_url(prop_info.qname, entity_type, config),
         kinds=[str(k) for k in prop_info.kinds],
+        deprecated=prop_info.deprecated,
     )
 
 
@@ -295,6 +306,10 @@ def instance_to_search_entry(
     for kind in instance_info.kinds:
         keywords.append(str(kind))
 
+    # Searchable by the word itself, so "deprecated" finds them all (#108).
+    if instance_info.deprecated:
+        keywords.append("deprecated")
+
     from .config import entity_to_url
 
     return SearchEntry(
@@ -305,6 +320,7 @@ def instance_to_search_entry(
         keywords=sorted(set(keywords)),
         url=entity_to_url(instance_info.qname, "instance", config),
         kinds=[str(k) for k in instance_info.kinds],
+        deprecated=instance_info.deprecated,
     )
 
 
@@ -357,6 +373,10 @@ def shape_to_search_entry(
         elif "/" in uri_str:
             keywords.extend(extract_keywords(uri_str.split("/")[-1]))
 
+    # Searchable by the word itself, so "deprecated" finds them all (#108).
+    if shape_info.deprecated:
+        keywords.append("deprecated")
+
     from .config import entity_to_url
 
     return SearchEntry(
@@ -367,6 +387,7 @@ def shape_to_search_entry(
         keywords=sorted(set(keywords)),
         url=entity_to_url(shape_info.qname, "shape", config),
         kinds=[str(k) for k in shape_info.kinds],
+        deprecated=shape_info.deprecated,
     )
 
 
@@ -409,6 +430,10 @@ def concept_to_search_entry(
     keywords.append("concept")
     keywords.append("skos")
 
+    # Searchable by the word itself, so "deprecated" finds them all (#108).
+    if concept_info.deprecated:
+        keywords.append("deprecated")
+
     from .config import entity_to_url
 
     return SearchEntry(
@@ -419,6 +444,7 @@ def concept_to_search_entry(
         keywords=sorted(set(keywords)),
         url=entity_to_url(concept_info.qname, "skos_concept", config),
         kinds=[str(k) for k in concept_info.kinds],
+        deprecated=concept_info.deprecated,
     )
 
 
@@ -456,6 +482,10 @@ def concept_scheme_to_search_entry(
     keywords.append("scheme")
     keywords.append("skos")
 
+    # Searchable by the word itself, so "deprecated" finds them all (#108).
+    if scheme_info.deprecated:
+        keywords.append("deprecated")
+
     from .config import entity_to_url
 
     return SearchEntry(
@@ -466,6 +496,7 @@ def concept_scheme_to_search_entry(
         keywords=sorted(set(keywords)),
         url=entity_to_url(scheme_info.qname, "skos_concept_scheme", config),
         kinds=[str(k) for k in scheme_info.kinds],
+        deprecated=scheme_info.deprecated,
     )
 
 

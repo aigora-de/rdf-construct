@@ -11,6 +11,7 @@
         {% for kind in instance_info.kinds %}
         <span class="entity-type {{ kind }}">{{ kind | replace('_', ' ') }}</span>
         {% endfor %}
+        {% if instance_info.deprecated %}<span class="entity-type deprecated" title="This term is marked deprecated in the source">deprecated</span>{% endif %}
     </h1>
     <p class="uri">{{ instance_info.uri }}</p>
 

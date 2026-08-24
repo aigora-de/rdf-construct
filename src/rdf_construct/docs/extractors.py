@@ -156,6 +156,7 @@ class PropertyInfo:
     kinds: list[EntityKind] = field(default_factory=list)
     label: str | None = None
     definition: str | None = None
+    deprecated: bool = False
     property_type: str = "property"  # object, datatype, annotation, rdf
     domain: list[URIRef] = field(default_factory=list)
     range: list[URIRef] = field(default_factory=list)
@@ -176,6 +177,7 @@ class ClassInfo:
     kinds: list[EntityKind] = field(default_factory=list)
     label: str | None = None
     definition: str | None = None
+    deprecated: bool = False
     superclasses: list[URIRef] = field(default_factory=list)
     subclasses: list[URIRef] = field(default_factory=list)
     domain_of: list[PropertyInfo] = field(default_factory=list)
@@ -196,6 +198,7 @@ class InstanceInfo:
     kinds: list[EntityKind] = field(default_factory=list)
     label: str | None = None
     definition: str | None = None
+    deprecated: bool = False
     types: list[URIRef] = field(default_factory=list)
     properties: dict[URIRef, list[str | URIRef]] = field(default_factory=dict)
     annotations: dict[str, list[str]] = field(default_factory=dict)
@@ -305,6 +308,7 @@ class ShapeInfo:
     kinds: list[EntityKind] = field(default_factory=list)  # e.g. [SHAPE, NODE_SHAPE]
     label: str | None = None
     definition: str | None = None
+    deprecated: bool = False
 
     # Target declarations
     target_classes: list[URIRef] = field(default_factory=list)
@@ -372,6 +376,7 @@ class ConceptInfo:
     kinds: list[EntityKind] = field(default_factory=list)
     label: str | None = None
     definition: str | None = None
+    deprecated: bool = False
 
     # Labels grouped by language, and the seven SKOS note properties.
     labels: list[LabelGroup] = field(default_factory=list)
@@ -405,6 +410,7 @@ class ConceptSchemeInfo:
     kinds: list[EntityKind] = field(default_factory=list)
     label: str | None = None
     definition: str | None = None
+    deprecated: bool = False
 
     labels: list[LabelGroup] = field(default_factory=list)
     notes: dict[str, list[NoteValue]] = field(default_factory=dict)
@@ -594,6 +600,46 @@ def extract_ontology_info(graph: Graph) -> OntologyInfo:
     return info
 
 
+#: Types whose subjects are deprecated. OWL offers two mechanisms and real
+#: ontologies use either or both, so both are recognised (#108).
+DEPRECATED_TYPES: frozenset[URIRef] = frozenset({OWL.DeprecatedClass, OWL.DeprecatedProperty})
+
+
+def _is_deprecated(graph: Graph, uri: URIRef) -> bool:
+    """Report whether a term is marked deprecated, by either mechanism.
+
+    OWL says this two ways: an ``rdf:type`` of ``owl:DeprecatedClass`` or
+    ``owl:DeprecatedProperty``, and the ``owl:deprecated`` annotation. A
+    term may carry either or both.
+
+    The annotation is checked by **value**, not presence:
+    ``owl:deprecated false`` is legal, appears in real ontologies, and
+    means the opposite. Truthiness is not enough either — an untyped
+    literal ``"false"`` is a non-empty string, so it would read as
+    deprecated.
+
+    Args:
+        graph: RDF graph to query.
+        uri: Entity URI.
+
+    Returns:
+        True if the source marks the term deprecated.
+    """
+    if any((uri, RDF.type, type_uri) in graph for type_uri in DEPRECATED_TYPES):
+        return True
+
+    for obj in graph.objects(uri, OWL.deprecated):
+        if not isinstance(obj, Literal):
+            continue
+        if obj.value is True:
+            return True
+        # Hand-written ontologies often write an untyped "true".
+        if isinstance(obj.value, str) and obj.value.strip().lower() == "true":
+            return True
+
+    return False
+
+
 def _is_named_individual(graph: Graph, uri: URIRef) -> bool:
     """Report whether ``owl:NamedIndividual`` is asserted on a subject.
 
@@ -631,6 +677,7 @@ def extract_class_info(graph: Graph, uri: URIRef) -> ClassInfo:
         label=get_label(graph, uri),
         definition=get_definition(graph, uri),
         annotations=get_annotations(graph, uri),
+        deprecated=_is_deprecated(graph, uri),
     )
 
     # Superclasses (direct)
@@ -693,6 +740,7 @@ def extract_property_info(graph: Graph, uri: URIRef) -> PropertyInfo:
         label=get_label(graph, uri),
         definition=get_definition(graph, uri),
         annotations=get_annotations(graph, uri),
+        deprecated=_is_deprecated(graph, uri),
     )
 
     # Determine property type from every declaring type, not just the obvious
@@ -782,6 +830,7 @@ def extract_instance_info(graph: Graph, uri: URIRef) -> InstanceInfo:
         label=get_label(graph, uri),
         definition=get_definition(graph, uri),
         annotations=get_annotations(graph, uri),
+        deprecated=_is_deprecated(graph, uri),
     )
 
     if _is_named_individual(graph, uri):
@@ -990,6 +1039,7 @@ def extract_shape_info(graph: Graph, uri: URIRef) -> ShapeInfo:
         label=get_label(graph, uri),
         definition=get_definition(graph, uri),
         annotations=get_annotations(graph, uri),
+        deprecated=_is_deprecated(graph, uri),
     )
 
     is_node_shape = (uri, RDF.type, SH.NodeShape) in graph
@@ -1256,6 +1306,7 @@ def extract_concept_info(graph: Graph, uri: URIRef) -> ConceptInfo:
         uri=uri,
         qname=get_qname(graph, uri),
         kinds=[EntityKind.SKOS_CONCEPT],
+        deprecated=_is_deprecated(graph, uri),
         label=get_label(graph, uri),
         definition=get_definition(graph, uri),
         labels=_skos_label_groups(graph, uri),
@@ -1308,6 +1359,7 @@ def extract_concept_scheme_info(graph: Graph, uri: URIRef) -> ConceptSchemeInfo:
         uri=uri,
         qname=get_qname(graph, uri),
         kinds=[EntityKind.SKOS_CONCEPT_SCHEME],
+        deprecated=_is_deprecated(graph, uri),
         label=get_label(graph, uri),
         definition=get_definition(graph, uri),
         labels=_skos_label_groups(graph, uri),

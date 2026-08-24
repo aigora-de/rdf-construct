@@ -412,6 +412,40 @@ Not covered: `skos:Collection` / `skos:OrderedCollection` and SKOS-XL
 (`skosxl:Label`). Both fall through to their existing treatment; file an
 issue if a real vocabulary needs them.
 
+## Deprecated Terms
+
+A term marked deprecated in the source carries a **deprecated** marker —
+an outlined badge in HTML beside its kind badge, a `> **Deprecated.**`
+banner on Markdown pages, and a `deprecated` boolean in JSON. It is
+searchable: typing `deprecated` finds them all.
+
+**Both OWL mechanisms are recognised**, because real ontologies use
+either or both:
+
+```turtle
+ex:LegacyClass    a owl:DeprecatedClass .        # by rdf:type
+ex:RetiredClass   a owl:Class ; owl:deprecated true .   # by annotation
+```
+
+The annotation is read by **value**, not presence. `owl:deprecated false`
+is legal, appears in real ontologies, and means the opposite — so it does
+*not* mark the term.
+
+**Deprecation is orthogonal to entity kind**, which is why it is a marker
+rather than an entity kind of its own. A class, any property, an
+instance, a SKOS concept and a SHACL shape can each be deprecated, and
+each keeps its own kind badge alongside the marker. Nothing changes
+bucket: a deprecated class is still documented as a class.
+
+**It does not propagate.** A property whose domain is a deprecated class
+is not itself marked, and neither are the subclasses of a deprecated
+class. Nothing in OWL says they should be, and inferring it would mark
+terms the source never marked.
+
+Deprecated terms are still documented. Hiding them behind a flag would
+need per-entity link handling — the `--include` / `--exclude` machinery
+works per entity *type* — so it is not offered yet.
+
 ## Named Individuals
 
 An entity explicitly typed `owl:NamedIndividual` carries a
