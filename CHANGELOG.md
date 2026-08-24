@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Completes the `docs` entity-type taxonomy carried over from v0.5.0, and fixes
+much of the output around it: links that resolved from the wrong place, entity
+filtering that was honoured by page generation but not by links, non-reproducible
+search output, and a badge palette in which four of twelve colours failed WCAG AA
+contrast.
+
+**If you consume the JSON output, two arrays have moved.** `skos:Concept` and
+`skos:ConceptScheme` subjects leave `instances` for top-level `concepts` and
+`concept_schemes`; properties whose kind the source does not state leave it for
+`other_properties`. Both are described below, and both mirror what v0.5.0 did for
+shapes.
+
+**If you publish generated HTML, ten of the twelve badge colours have changed.**
+The palette was re-derived as a set so that all of them clear WCAG AA — four did
+not — and so that no two are closer than 5.3 CIEDE2000 units under simulated
+colour-vision deficiency. Only the class and shape badges keep their previous
+values. Regenerated documentation will look different.
+
+**If you run `order` with a hand-written profile, check your selector names.** A
+section whose `select:` names something that cannot be resolved now fails the run
+instead of silently emitting a file with that section missing. A profile that has
+been quietly producing short output will start reporting it.
+
+Everything else is additive.
+
 ### Added
 - **First-class SKOS support in the `docs` command** (#63). `skos:Concept` and
   `skos:ConceptScheme` are now rendered as a distinct entity type alongside
@@ -121,6 +146,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   WCAG AA), a deeper emerald than the `#10b981` instance badge it sits
   beside so the two read as one family — 21.7 CIEDE2000 units apart in
   normal vision, 15.3 under simulated deuteranopia
+
+### Changed
+- **Breaking (JSON output):** `skos:Concept` and `skos:ConceptScheme` subjects
+  have left the `instances` array for new top-level `concepts` and
+  `concept_schemes` arrays, mirroring what v0.5.0 did for shapes. The
+  `statistics` block gains `concepts` and `concept_schemes` counts. Consumers
+  reading `instances` for SKOS entities must read the new arrays
+- A subject typed both `skos:Concept` and `owl:Class` (or a property, or a
+  SHACL shape) keeps its existing page and does not gain a second one: classes,
+  properties and shapes outrank SKOS in routing. It remains listed as a member
+  of its scheme, cross-linked to the page it does have
 
 ### Fixed
 - **Every entity-kind badge now clears WCAG AA contrast** (#106). Four failed
@@ -239,17 +275,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cannot drift between commands again. The `order` command moved to them in v0.5.0
 - New `include_other_properties` config key; `other_properties` accepted in
   `--include` / `--exclude`, and `properties` covers it
-
-### Changed
-- **Breaking (JSON output):** `skos:Concept` and `skos:ConceptScheme` subjects
-  have left the `instances` array for new top-level `concepts` and
-  `concept_schemes` arrays, mirroring what v0.5.0 did for shapes. The
-  `statistics` block gains `concepts` and `concept_schemes` counts. Consumers
-  reading `instances` for SKOS entities must read the new arrays
-- A subject typed both `skos:Concept` and `owl:Class` (or a property, or a
-  SHACL shape) keeps its existing page and does not gain a second one: classes,
-  properties and shapes outrank SKOS in routing. It remains listed as a member
-  of its scheme, cross-linked to the page it does have
 
 ## [0.5.0] - 2026-08-22
 
