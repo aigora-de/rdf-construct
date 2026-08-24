@@ -123,6 +123,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   normal vision, 15.3 under simulated deuteranopia
 
 ### Fixed
+- **Every entity-kind badge now clears WCAG AA contrast** (#106). Four failed
+  outright — `annotation` 2.15:1, `datatype` 2.43:1, `instance` 2.54:1 and
+  `object` 4.23:1, against badge text that is 12px bold and so needs 4.5:1,
+  not 3.0:1. The closest pair in the palette was also 2.1 CIEDE2000 units
+  apart, below the ~2.3 just-noticeable difference:
+  - The palette was **re-derived as a set**, not patched colour by colour,
+    because darkening one badge to pass moves it toward its neighbours.
+    Chosen by constrained search: maximise the smallest pairwise distance
+    across normal vision and simulated deuteranopia, protanopia and
+    tritanopia, subject to the contrast floor, to each family keeping its hue,
+    and to the derived kind staying the darker of its pair. Worst pair is now
+    **5.3**, lowest contrast **4.71:1**
+  - **Hue identity is preserved wherever a badge has shipped** — classes stay
+    blue, object properties violet, datatypes cyan, annotations amber,
+    instances emerald, shapes red-rose. Only the shade moves
+  - **SKOS moves from blue to fuchsia.** It collided with the Class badge,
+    which has always been blue via `--primary-colour`; SKOS arrived in this
+    unreleased version, so no user has ever seen it and the move costs nothing
+  - The **Class badge was missing from the original inventory** — it carries
+    no kind class and falls through to `--primary-colour`, so it was invisible
+    to a survey of `.entity-type.*` rules. It passes at 5.17:1 and is unchanged
+  - A test now reads the stylesheet the renderer emits and fails if any badge
+    drops below AA, so a kind added later cannot ship unchecked
 - **`order` now fails on a section whose `select:` names a selector nothing can
   resolve** (#89), instead of selecting nothing and saying nothing. The section
   simply vanished from the output — the same failure shape as #84 one level

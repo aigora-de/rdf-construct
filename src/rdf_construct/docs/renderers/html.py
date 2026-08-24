@@ -838,69 +838,67 @@ h4 { font-size: 1.1rem; }
     margin-left: 0.5rem;
 }
 
-.entity-type.object { background: #8b5cf6; }
-.entity-type.datatype { background: #06b6d4; }
-.entity-type.annotation { background: #f59e0b; }
-.entity-type.instance { background: #10b981; }
+/* Kind badge palette, re-derived as a set (#106).
 
-/* Properties whose kind is not implied by their declaration (#76) —
-   rdf:Property, owl:FunctionalProperty, owl:DeprecatedProperty. Neutral
-   slate rather than a hue: the badge's job is to say "the source does not
-   state which kind this is", and a saturated colour would imply it sits
-   alongside object/datatype/annotation as a fourth kind. 10.35:1 against
-   white, clearing WCAG AA, and outside every hue family in the palette
-   (nearest neighbour 5.8 CIEDE2000, under simulated tritanopia). */
-.entity-type.rdf { background: #334155; }
+   Every badge here clears WCAG AA (4.5:1) against its white text, and the
+   closest pair in the whole palette is 5.3 CIEDE2000 units apart — measured
+   across normal vision and simulated deuteranopia, protanopia and
+   tritanopia. Before this, four badges failed AA outright (annotation
+   2.15:1, datatype 2.43:1, instance 2.54:1, object 4.23:1) and the closest
+   pair was 2.1 units, below the ~2.3 just-noticeable difference.
 
-/* Shape badges (#60). Red-to-rose hue family signals kinship between
-   NodeShape and PropertyShape; brightness gradient (NodeShape darker
-   than PropertyShape) reads as parent-child. All three pass WCAG AA
-   contrast against the badge's white text:
-     .shape          #dc2626  4.83:1
-     .node_shape     #b91c1c  6.47:1
-     .property_shape #e11d48  4.70:1
-   The hue family is distinct from the other four badges under common
-   colour-vision deficiencies (amber goes pale-yellow under
-   deuteranopia; reds stay warm-saturated). Badge text labels
-   ("node shape" / "property shape") carry the category regardless of
-   perceived colour. */
+   Chosen by constrained search rather than by eye: maximise the smallest
+   pairwise distance, subject to the contrast floor, to each family keeping
+   its hue, and to the derived kind staying the darker of its pair. Raising
+   the floor to 5.0:1 was tried and rejected — it forces amber darker until
+   it collides with the reds, taking the closest pair down to 3.9.
+
+   Hue identity is preserved wherever a badge has shipped, so only the shade
+   moves: classes stay blue, object properties violet, datatypes cyan,
+   annotations amber, instances emerald, shapes red-rose. SKOS is the one
+   exception and it was free — it arrived in the unreleased v0.6.0, so no
+   user has ever seen it, and it vacates blue (which the class badge has
+   always owned via --primary-colour) for fuchsia.
+
+     class (default)      #2563eb   5.17:1   unchanged
+     object               #7c3aed   5.70:1
+     datatype             #0e7490   5.36:1
+     annotation           #b45309   5.02:1
+     rdf                  #1f2937  14.68:1
+     instance             #047857   5.48:1
+     named_individual     #14532d   9.11:1
+     shape                #dc2626   4.83:1   unchanged
+     node_shape           #7f1d1d  10.02:1
+     property_shape       #9f1239   8.02:1
+     skos_concept         #c026d3   4.71:1
+     skos_concept_scheme  #86198f   8.24:1
+
+   Badge text labels carry the category regardless of perceived colour, which
+   remains the real accessibility guarantee; the palette is the affordance,
+   not the mechanism. */
+
+/* Property kinds. */
+.entity-type.object { background: #7c3aed; }
+.entity-type.datatype { background: #0e7490; }
+.entity-type.annotation { background: #b45309; }
+
+/* Properties whose kind is not implied by their declaration (#76) — neutral
+   rather than a hue, because the badge says the source did not state one. */
+.entity-type.rdf { background: #1f2937; }
+
+/* Instances. The named-individual badge is the darker of the pair (#64). */
+.entity-type.instance { background: #047857; }
+.entity-type.named_individual { background: #14532d; }
+
+/* SHACL shapes (#60): one hue family, NodeShape darkest. */
 .entity-type.shape { background: #dc2626; }
-.entity-type.node_shape { background: #b91c1c; }
-.entity-type.property_shape { background: #e11d48; }
+.entity-type.node_shape { background: #7f1d1d; }
+.entity-type.property_shape { background: #9f1239; }
 
-/* SKOS badges (#63). Blue family, with the scheme darker than the concept
-   so the container reads as the parent — the same gradient the shape
-   family uses. Contrast against the badge's white text:
-     .skos_concept        #1d4ed8   6.70:1
-     .skos_concept_scheme #1e3a8a  10.36:1
-   Both clear WCAG AA for normal text. Blue was measured against the
-   existing badges rather than assumed: the indigo family suggested in
-   #63 sits only 11.3 CIEDE2000 units from the object-property violet
-   (10.7 under simulated deuteranopia), which is too close to call apart,
-   whereas #1d4ed8 keeps 15.3 (17.7 deuteranopia, 21.3 protanopia). Its
-   one weak axis is tritanopia, where it falls to 6.0 against the instance
-   emerald — still distinguishable, and the badge's text label carries the
-   category regardless. */
-.entity-type.skos_concept { background: #1d4ed8; }
-.entity-type.skos_concept_scheme { background: #1e3a8a; }
+/* SKOS (#63): scheme darker than concept, so the container reads as parent. */
+.entity-type.skos_concept { background: #c026d3; }
+.entity-type.skos_concept_scheme { background: #86198f; }
 
-/* Named-individual badge (#64). A darker, deeper emerald than the plain
-   instance badge it sits beside, so the two read as one family the way
-   NodeShape and PropertyShape share red-rose:
-     .instance         #10b981  (existing)
-     .named_individual #047857  5.48:1 — clears WCAG AA against white
-   It stays 21.7 CIEDE2000 units from the instance emerald in normal
-   vision and 15.3 under simulated deuteranopia — related, not confusable
-   — and is further still from every other badge in the palette. */
-.entity-type.named_individual { background: #047857; }
-
-/* Deprecation marker (#108). Deliberately NOT another solid hue: deprecation
-   is orthogonal to entity kind — a deprecated class, property, concept and
-   shape all want the same marker — so it has to sit *beside* a kind badge
-   without competing with it or claiming to be one. An outline rather than a
-   fill does that structurally, so it needs no slot in the kind palette and
-   does not pre-empt #106. Text and border are #b91c1c, 6.47:1 against the
-   page background, already in the palette as the NodeShape red. */
 .entity-type.deprecated {
     background: transparent;
     color: #b91c1c;
