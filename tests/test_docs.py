@@ -1,6 +1,7 @@
 """Tests for the documentation generation module."""
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -2546,3 +2547,142 @@ class TestSearchIndexDeterminism:
             if (first / rel).read_bytes() != (second / rel).read_bytes()
         ]
         assert not differing, f"output differs between runs: {differing}"
+
+
+# ---------------------------------------------------------------------------
+# Markdown link resolution — issue #113, and the helper #87 needs
+# ---------------------------------------------------------------------------
+
+
+MARKDOWN_LINK = re.compile(r"\]\(([^)]+)\)")
+MARKDOWN_HEADING = re.compile(r"^#{1,6}\s+(.*?)\s*$", re.MULTILINE)
+
+
+def _heading_slug(text: str) -> str:
+    """Slugify a heading the way GitHub and MkDocs both do.
+
+    Lowercase, drop anything that is not alphanumeric, space or hyphen,
+    then spaces to hyphens. The two differ on collisions and on some
+    punctuation; this covers the headings this project emits.
+    """
+    cleaned = re.sub(r"[^a-z0-9 \-]", "", text.lower())
+    return re.sub(r"\s+", "-", cleaned.strip())
+
+
+def broken_markdown_links(root: Path) -> list[tuple[str, str]]:
+    """Find Markdown links that do not resolve, anywhere under ``root``.
+
+    The Markdown counterpart of
+    ``TestPathResolution::test_all_links_resolve_for_every_entity_kind``.
+    There was no equivalent for Markdown, which is a fair part of why
+    #87, #105 and #113 all survived as long as they did — a renderer
+    with no link walk over its own output has nothing holding it to
+    account.
+
+    Two kinds of link are checked:
+
+    - **File links** resolve against the directory of the file that
+      contains them, which is what every Markdown consumer does and what
+      makes a root-relative link from a sub-folder page wrong (#87).
+    - **Anchor links** (``#section``) must match a heading in the same
+      file, slugified — that is what single-page output relies on.
+
+    External links (``http``, ``https``, ``mailto``) are skipped.
+
+    Args:
+        root: Directory of generated Markdown to walk.
+
+    Returns:
+        ``(file, link)`` pairs, one per unresolved link, sorted.
+    """
+    broken: list[tuple[str, str]] = []
+
+    for page in sorted(root.rglob("*.md")):
+        text = page.read_text(encoding="utf-8")
+        slugs = {_heading_slug(h) for h in MARKDOWN_HEADING.findall(text)}
+
+        for target in MARKDOWN_LINK.findall(text):
+            if target.startswith(("http://", "https://", "mailto:")):
+                continue
+            if target.startswith("#"):
+                if target[1:] not in slugs:
+                    broken.append((str(page.relative_to(root)), target))
+                continue
+            path_part = target.split("#", 1)[0]
+            if not (page.parent / path_part).resolve().exists():
+                broken.append((str(page.relative_to(root)), target))
+
+    return broken
+
+
+class TestSinglePageMarkdownLinks:
+    """Single-page Markdown must not link to pages it never writes.
+
+    Single-page output produces exactly one file. Cross-references were
+    rendered as links to each entity's own page — `concepts/Dwelling.md`,
+    `classes/Person.md` — none of which exist in that mode. Every one was
+    a dead link (#113).
+    """
+
+    @pytest.mark.parametrize(
+        "fixture_name", ["skos_vocabulary", "shape_ontology", "simple_ontology"]
+    )
+    def test_no_dead_links_in_single_page_output(
+        self,
+        fixture_name: str,
+        request: pytest.FixtureRequest,
+        output_dir: Path,
+    ):
+        graph = request.getfixturevalue(fixture_name)
+        config = DocsConfig(output_dir=output_dir, format="markdown", single_page=True)
+        DocsGenerator(config).generate(graph)
+
+        assert (output_dir / "index.md").exists()
+        assert broken_markdown_links(output_dir) == []
+
+    def test_single_page_writes_exactly_one_file(self, skos_vocabulary: Graph, output_dir: Path):
+        """The premise of the bug: there is nowhere for a link to point."""
+        config = DocsConfig(output_dir=output_dir, format="markdown", single_page=True)
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        assert [p.name for p in output_dir.rglob("*.md")] == ["index.md"]
+
+    def test_references_stay_visible_as_qnames(self, skos_vocabulary: Graph, output_dir: Path):
+        """Unlinked does not mean dropped — the reference is still readable.
+
+        A qname in code formatting is greppable within the single
+        document, which is the navigation story once a link is not
+        available.
+        """
+        config = DocsConfig(output_dir=output_dir, format="markdown", single_page=True)
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        content = (output_dir / "index.md").read_text()
+        assert "**Broader:** `ex:Dwelling`" in content
+        assert "**In scheme:** `ex:BuildingScheme`" in content
+
+    def test_shape_targets_too(self, shape_ontology: Graph, output_dir: Path):
+        """The Shapes section had the same defect, and predates the SKOS one."""
+        config = DocsConfig(output_dir=output_dir, format="markdown", single_page=True)
+        DocsGenerator(config).generate(shape_ontology)
+
+        content = (output_dir / "index.md").read_text()
+        assert "**Target classes:** `ex:Person`" in content
+
+    def test_table_of_contents_anchors_resolve(self, skos_vocabulary: Graph, output_dir: Path):
+        """The anchors single-page output does rely on must actually exist."""
+        config = DocsConfig(output_dir=output_dir, format="markdown", single_page=True)
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        content = (output_dir / "index.md").read_text()
+        assert "- [SKOS Vocabulary](#skos-vocabulary)" in content
+        assert "## SKOS Vocabulary" in content
+
+    def test_multi_page_links_are_still_links(self, skos_vocabulary: Graph, output_dir: Path):
+        """Only single-page output drops the links; multi-page keeps them."""
+        config = DocsConfig(output_dir=output_dir, format="markdown")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        content = (output_dir / "concepts" / "Dwelling.md").read_text()
+        assert "](" in content
+        assert "Building.md" in content
