@@ -2451,3 +2451,98 @@ class TestSearchOverlayPaths:
         assert "window.location.protocol === 'file:'" in js
         assert "searchInput.disabled = true" in js
         assert "placeholder" in js
+
+
+# ---------------------------------------------------------------------------
+# Search index determinism — issue #107
+# ---------------------------------------------------------------------------
+
+
+class TestSearchIndexDeterminism:
+    """Generated output must be byte-identical between runs.
+
+    ``extract_keywords()`` and every ``*_to_search_entry`` ended with
+    ``list(set(...))``. Python randomises string hashing per process, so
+    the key order in ``search.json`` changed on every run over identical
+    input — for every entity kind. Regenerating a committed docs site
+    showed a diff with no semantic change, and the project's own
+    verification technique (generate at two commits, diff the output)
+    could not be used on this command without pinning the hash seed.
+    """
+
+    def test_keywords_are_sorted(self, skos_vocabulary: Graph):
+        """Every entry's keyword list is in a defined order."""
+        entities = extract_all(skos_vocabulary)
+        entries = generate_search_index(entities, DocsConfig())
+
+        assert entries
+        for entry in entries:
+            assert entry.keywords == sorted(entry.keywords)
+            assert len(entry.keywords) == len(set(entry.keywords))
+
+    def test_extract_keywords_returns_sorted(self):
+        """Enough words that a sorted result cannot be luck.
+
+        With three words there is a one-in-six chance an unsorted
+        implementation comes out sorted anyway under a given hash seed,
+        and pytest picks a fresh seed each session — so the input is
+        long enough to make that vanishingly unlikely.
+        """
+        text = "Zebra apple Mango apple Kiwi banana Cherry damson elder fig"
+        assert extract_keywords(text) == [
+            "apple",
+            "banana",
+            "cherry",
+            "damson",
+            "elder",
+            "fig",
+            "kiwi",
+            "mango",
+            "zebra",
+        ]
+
+    @pytest.mark.parametrize("output_format", ["html", "markdown", "json"])
+    def test_output_is_byte_identical_across_processes(self, tmp_path: Path, output_format: str):
+        """Two runs in separate processes produce identical bytes.
+
+        The second process is given a different ``PYTHONHASHSEED``, which
+        is what makes this a real test: within a single process,
+        ``list(set(...))`` iterates in a stable order, so generating twice
+        in-process passes even on the broken code.
+        """
+        import os
+        import subprocess
+        import sys
+
+        source = Path(__file__).parent / "fixtures" / "docs" / "skos_vocabulary.ttl"
+        runs = []
+
+        for index, hash_seed in enumerate(("1", "99999")):
+            out = tmp_path / f"run{index}"
+            script = (
+                "from pathlib import Path\n"
+                "from rdf_construct.docs import generate_docs\n"
+                f"generate_docs(Path({str(source)!r}), Path({str(out)!r}), "
+                f"None, {output_format!r})\n"
+            )
+            result = subprocess.run(
+                [sys.executable, "-c", script],
+                env={**os.environ, "PYTHONHASHSEED": hash_seed},
+                capture_output=True,
+                text=True,
+            )
+            assert result.returncode == 0, result.stderr
+            runs.append(out)
+
+        first, second = runs
+        first_files = sorted(p.relative_to(first) for p in first.rglob("*") if p.is_file())
+        second_files = sorted(p.relative_to(second) for p in second.rglob("*") if p.is_file())
+        assert first_files == second_files, "the two runs produced different file sets"
+        assert first_files, "no files generated"
+
+        differing = [
+            str(rel)
+            for rel in first_files
+            if (first / rel).read_bytes() != (second / rel).read_bytes()
+        ]
+        assert not differing, f"output differs between runs: {differing}"

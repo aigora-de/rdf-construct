@@ -48,14 +48,15 @@ class SearchEntry:
 def extract_keywords(text: str | None) -> list[str]:
     """Extract searchable keywords from text.
 
-    Splits on whitespace and punctuation, lowercases, and removes
-    common stop words.
+    Splits on whitespace and punctuation, lowercases, removes common
+    stop words, and returns the result sorted so repeated builds of the
+    same ontology produce byte-identical output.
 
     Args:
         text: Text to extract keywords from.
 
     Returns:
-        List of keyword strings.
+        Sorted list of unique keyword strings.
     """
     if not text:
         return []
@@ -140,7 +141,12 @@ def extract_keywords(text: str | None) -> list[str]:
     }
 
     keywords = [w for w in words if w and len(w) > 2 and w not in stop_words]
-    return list(set(keywords))  # Remove duplicates
+    # Sorted, not just de-duplicated: Python randomises string hashing per
+    # process, so `list(set(...))` gives a different order on every run and
+    # search.json is never byte-identical between two builds of the same
+    # ontology. Keyword order has never been meaningful to search.js, which
+    # substring-matches over the whole list. See issue #107.
+    return sorted(set(keywords))
 
 
 def class_to_search_entry(
@@ -187,7 +193,7 @@ def class_to_search_entry(
         qname=class_info.qname,
         entity_type="class",
         label=class_info.label or class_info.qname,
-        keywords=list(set(keywords)),
+        keywords=sorted(set(keywords)),
         url=entity_to_url(class_info.qname, "class", config),
         kinds=[str(k) for k in class_info.kinds],
     )
@@ -241,7 +247,7 @@ def property_to_search_entry(
         qname=prop_info.qname,
         entity_type=entity_type,
         label=prop_info.label or prop_info.qname,
-        keywords=list(set(keywords)),
+        keywords=sorted(set(keywords)),
         url=entity_to_url(prop_info.qname, entity_type, config),
         kinds=[str(k) for k in prop_info.kinds],
     )
@@ -296,7 +302,7 @@ def instance_to_search_entry(
         qname=instance_info.qname,
         entity_type="instance",
         label=instance_info.label or instance_info.qname,
-        keywords=list(set(keywords)),
+        keywords=sorted(set(keywords)),
         url=entity_to_url(instance_info.qname, "instance", config),
         kinds=[str(k) for k in instance_info.kinds],
     )
@@ -358,7 +364,7 @@ def shape_to_search_entry(
         qname=shape_info.qname,
         entity_type="shape",
         label=shape_info.label or shape_info.qname,
-        keywords=list(set(keywords)),
+        keywords=sorted(set(keywords)),
         url=entity_to_url(shape_info.qname, "shape", config),
         kinds=[str(k) for k in shape_info.kinds],
     )
@@ -410,7 +416,7 @@ def concept_to_search_entry(
         qname=concept_info.qname,
         entity_type="skos_concept",
         label=concept_info.label or concept_info.qname,
-        keywords=list(set(keywords)),
+        keywords=sorted(set(keywords)),
         url=entity_to_url(concept_info.qname, "skos_concept", config),
         kinds=[str(k) for k in concept_info.kinds],
     )
@@ -457,7 +463,7 @@ def concept_scheme_to_search_entry(
         qname=scheme_info.qname,
         entity_type="skos_concept_scheme",
         label=scheme_info.label or scheme_info.qname,
-        keywords=list(set(keywords)),
+        keywords=sorted(set(keywords)),
         url=entity_to_url(scheme_info.qname, "skos_concept_scheme", config),
         kinds=[str(k) for k in scheme_info.kinds],
     )

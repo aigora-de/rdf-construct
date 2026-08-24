@@ -100,6 +100,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   normal vision, 15.3 under simulated deuteranopia
 
 ### Fixed
+- **`docs` output is now byte-reproducible between runs** (#107). Keyword lists
+  in `search.json` were built with `list(set(...))`, and Python randomises
+  string hashing per process, so two runs over identical input produced a
+  different key order every time — for every entity kind. Regenerating a
+  committed docs site showed a diff with no semantic change, and the project's
+  own verification technique (generate output at two commits and diff it) could
+  not be used on this command without pinning `PYTHONHASHSEED`. Keyword order
+  has never been meaningful to `search.js`, which substring-matches over the
+  whole list
 - **The search overlay now works on every page, not just the three at the docs
   root** (#86). `assets/search.js` made two root-relative assumptions that the
   #59 fix did not reach, because that fix covered the Jinja templates only:
