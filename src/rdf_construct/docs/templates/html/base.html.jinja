@@ -43,6 +43,11 @@
     </footer>
 
     {% if config.include_search %}
+    {# search.js needs the same per-page root the templates use, for both the
+       index fetch and the result links. Without it the script has to assume
+       it is running at the docs root, which is only true of three pages —
+       see issue #86. Set before the script loads, not inside it. #}
+    <script>window.DOCS_ROOT = "{{ link_root }}";</script>
     <script src="{{ link_root }}/assets/search.js"></script>
     {% endif %}
     {% block scripts %}{% endblock %}

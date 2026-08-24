@@ -100,6 +100,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   normal vision, 15.3 under simulated deuteranopia
 
 ### Fixed
+- **The search overlay now works on every page, not just the three at the docs
+  root** (#86). `assets/search.js` made two root-relative assumptions that the
+  #59 fix did not reach, because that fix covered the Jinja templates only:
+  - It fetched `search.json` page-relatively, so from `classes/Dog.html` the
+    browser requested `classes/search.json`, got a 404, and the index never
+    loaded — typing in the box did nothing at all, with no error and no
+    empty-results message. On `examples/animal_ontology.ttl` the index was
+    unreachable from **16 of 19 pages**
+  - It injected the index's root-relative result URLs verbatim as hrefs, so a
+    result clicked from a sub-folder page resolved one level too deep —
+    **256 broken (page, result) pairs** on the same corpus
+  Both now resolve against a per-page `window.DOCS_ROOT`, set by
+  `base.html.jinja` from the same `link_root` every other link already uses, so
+  an explicit `base_url` keeps working unchanged
+- **The search box now says why it is unavailable under `file://`** instead of
+  rendering and silently doing nothing. `fetch` is CORS-blocked on `file://`
+  whatever the path, so search genuinely cannot work from a double-clicked
+  page; the input is disabled and explains itself
 - **`docs` no longer misfiles properties declared only by an OWL characteristic**
   (#76). A term declared solely `owl:TransitiveProperty`, `owl:SymmetricProperty`,
   `owl:AsymmetricProperty`, `owl:ReflexiveProperty`, `owl:IrreflexiveProperty`

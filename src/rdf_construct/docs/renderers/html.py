@@ -1075,10 +1075,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (!searchInput || !resultsContainer) return;
 
+    // Where the docs root sits relative to THIS page. Set by base.html.jinja,
+    // which computes it per page (".", "..", "../.." or an absolute base_url).
+    // Falling back to "." keeps a hand-written page working at the root.
+    const docsRoot = (typeof window.DOCS_ROOT === 'string' && window.DOCS_ROOT)
+        ? window.DOCS_ROOT.replace(/\\/$/, '')
+        : '.';
+
+    // fetch() is blocked by CORS on file:// regardless of the path, so search
+    // cannot work from a double-clicked page. Say so rather than presenting a
+    // box that silently does nothing.
+    if (window.location.protocol === 'file:') {
+        searchInput.disabled = true;
+        searchInput.placeholder = 'Search needs an HTTP server (unavailable when opened as a file)';
+        return;
+    }
+
     let searchIndex = null;
 
-    // Load search index
-    fetch('search.json')
+    // Load search index, resolved from this page rather than assuming the root
+    fetch(docsRoot + '/search.json')
         .then(response => response.json())
         .then(data => {
             searchIndex = data.entities;
@@ -1121,8 +1137,11 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        // Entry URLs in search.json are stored relative to the docs root, so
+        // they have to be resolved against it — injected verbatim they
+        // resolve against the current page and 404 from any sub-folder.
         resultsContainer.innerHTML = results
-            .map(r => `<li><a href="${r.entity.url}">${r.entity.label}</a> <span class="entity-type ${r.entity.entity_type}">${r.entity.entity_type}</span></li>`)
+            .map(r => `<li><a href="${docsRoot}/${r.entity.url}">${r.entity.label}</a> <span class="entity-type ${r.entity.entity_type}">${r.entity.entity_type}</span></li>`)
             .join('');
     }
 

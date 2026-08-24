@@ -2336,3 +2336,118 @@ class TestOtherPropertiesRendering:
         assert entity_to_path("ex:untyped", "property", config) == Path(
             "properties/other/untyped.html"
         )
+
+
+# ---------------------------------------------------------------------------
+# Search overlay path resolution — issue #86
+# ---------------------------------------------------------------------------
+
+
+class TestSearchOverlayPaths:
+    """The search overlay has to work from a page at any depth.
+
+    ``assets/search.js`` made two root-relative assumptions that #59 did
+    not reach, because #59 covered the Jinja templates only: it fetched
+    ``search.json`` page-relatively, and it injected the index's
+    root-relative result URLs verbatim as hrefs. On the animal-ontology
+    corpus that left the index unreachable from 16 of 19 pages and 256
+    (page, result) pairs pointing at files that do not exist.
+
+    These tests check the arithmetic the script performs rather than
+    driving a browser: the failure mode is a dead input and a 404, both
+    of which are decided entirely by these two path computations.
+    """
+
+    @staticmethod
+    def _docs_root(page: Path) -> str:
+        """Extract the per-page DOCS_ROOT the template declared."""
+        import re
+
+        match = re.search(r'window\.DOCS_ROOT = "([^"]*)"', page.read_text())
+        assert match is not None, f"{page} declares no DOCS_ROOT"
+        return match.group(1)
+
+    def test_docs_root_declared_on_every_page(self, shape_ontology: Graph, output_dir: Path):
+        """Every page states where the docs root is, relative to itself."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(shape_ontology)
+
+        for page in output_dir.rglob("*.html"):
+            expected = relative_url_prefix(page.relative_to(output_dir))
+            assert self._docs_root(page) == expected
+
+    def test_index_fetch_resolves_from_every_page(self, shape_ontology: Graph, output_dir: Path):
+        """`fetch(docsRoot + '/search.json')` has to hit the real file.
+
+        This is the half that made the box inert: the request 404s, the
+        index never loads, and typing does nothing at all — no error, no
+        empty-results message.
+        """
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(shape_ontology)
+
+        unreachable = [
+            str(page.relative_to(output_dir))
+            for page in output_dir.rglob("*.html")
+            if not (page.parent / f"{self._docs_root(page)}/search.json").resolve().exists()
+        ]
+        assert not unreachable, f"search.json unreachable from: {unreachable}"
+
+    def test_every_result_link_resolves_from_every_page(
+        self, skos_vocabulary: Graph, output_dir: Path
+    ):
+        """A result clicked from any page has to land on a real file.
+
+        Run over the SKOS fixture because its pages sit in a sub-folder,
+        which is precisely where the old behaviour broke.
+        """
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        entries = json.loads((output_dir / "search.json").read_text())["entities"]
+        assert entries, "fixture produced an empty search index"
+
+        broken = [
+            (str(page.relative_to(output_dir)), entry["url"])
+            for page in output_dir.rglob("*.html")
+            for entry in entries
+            if not (page.parent / f"{self._docs_root(page)}/{entry['url']}").resolve().exists()
+        ]
+        assert not broken, f"{len(broken)} broken result links, e.g. {broken[:3]}"
+
+    def test_script_does_not_hardcode_the_root(self, simple_ontology: Graph, output_dir: Path):
+        """The old page-relative fetch must not come back."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(simple_ontology)
+
+        js = (output_dir / "assets" / "search.js").read_text()
+        assert "fetch('search.json')" not in js
+        assert "docsRoot" in js
+
+    def test_explicit_base_url_is_used(self, simple_ontology: Graph, output_dir: Path):
+        """A configured base_url wins, as it does for every other link."""
+        config = DocsConfig(
+            output_dir=output_dir,
+            format="html",
+            base_url="https://example.com/docs",
+        )
+        DocsGenerator(config).generate(simple_ontology)
+
+        for rel in ("index.html", "classes/Dog.html"):
+            assert self._docs_root(output_dir / rel) == "https://example.com/docs"
+
+    def test_file_protocol_is_explained_not_silent(self, simple_ontology: Graph, output_dir: Path):
+        """Under file:// the box says why it cannot work.
+
+        `fetch` is CORS-blocked on file:// whatever the path, so search
+        genuinely cannot work from a double-clicked page. Rendering an
+        input that silently does nothing is the worst of the options
+        available.
+        """
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(simple_ontology)
+
+        js = (output_dir / "assets" / "search.js").read_text()
+        assert "window.location.protocol === 'file:'" in js
+        assert "searchInput.disabled = true" in js
+        assert "placeholder" in js
