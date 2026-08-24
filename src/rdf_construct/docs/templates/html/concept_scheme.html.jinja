@@ -31,6 +31,7 @@
         {% for kind in scheme_info.kinds %}
         <span class="entity-type {{ kind }}">{{ kind | replace('_', ' ') }}</span>
         {% endfor %}
+        {% if scheme_info.deprecated %}<span class="entity-type deprecated" title="This term is marked deprecated in the source">deprecated</span>{% endif %}
     </h1>
     <p class="uri">{{ scheme_info.uri }}</p>
 

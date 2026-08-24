@@ -894,6 +894,19 @@ h4 { font-size: 1.1rem; }
    — and is further still from every other badge in the palette. */
 .entity-type.named_individual { background: #047857; }
 
+/* Deprecation marker (#108). Deliberately NOT another solid hue: deprecation
+   is orthogonal to entity kind — a deprecated class, property, concept and
+   shape all want the same marker — so it has to sit *beside* a kind badge
+   without competing with it or claiming to be one. An outline rather than a
+   fill does that structurally, so it needs no slot in the kind palette and
+   does not pre-empt #106. Text and border are #b91c1c, 6.47:1 against the
+   page background, already in the palette as the NodeShape red. */
+.entity-type.deprecated {
+    background: transparent;
+    color: #b91c1c;
+    border: 1px solid #b91c1c;
+}
+
 /* Language tag beside a SKOS label or note value. */
 .lang-tag {
     font-family: 'SF Mono', Consolas, monospace;

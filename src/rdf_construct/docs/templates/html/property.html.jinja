@@ -7,6 +7,7 @@
     <h1>
         {{ property_info.label or property_info.qname }}
         <span class="entity-type {{ property_info.property_type }}">{{ property_info.property_type }} property</span>
+        {% if property_info.deprecated %}<span class="entity-type deprecated" title="This term is marked deprecated in the source">deprecated</span>{% endif %}
     </h1>
     <p class="uri">{{ property_info.uri }}</p>
 

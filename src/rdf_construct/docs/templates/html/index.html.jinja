@@ -46,6 +46,7 @@
             <a href="{{ class.qname | entity_url('class') }}">
                 {{ class.label or class.qname }}
             </a>
+            {% if class.deprecated %}<span class="entity-type deprecated" title="This term is marked deprecated in the source">deprecated</span>{% endif %}
             {% if class.definition %}
             <span class="definition">— {{ class.definition[:100] }}{% if class.definition|length > 100 %}...{% endif %}</span>
             {% endif %}
@@ -64,6 +65,7 @@
             <a href="{{ prop.qname | entity_url('object_property') }}">
                 {{ prop.label or prop.qname }}
             </a>
+            {% if prop.deprecated %}<span class="entity-type deprecated" title="This term is marked deprecated in the source">deprecated</span>{% endif %}
             <span class="entity-type object">Object</span>
             {% if prop.definition %}
             <span class="definition">— {{ prop.definition[:80] }}{% if prop.definition|length > 80 %}...{% endif %}</span>
@@ -83,6 +85,7 @@
             <a href="{{ prop.qname | entity_url('datatype_property') }}">
                 {{ prop.label or prop.qname }}
             </a>
+            {% if prop.deprecated %}<span class="entity-type deprecated" title="This term is marked deprecated in the source">deprecated</span>{% endif %}
             <span class="entity-type datatype">Datatype</span>
             {% if prop.definition %}
             <span class="definition">— {{ prop.definition[:80] }}{% if prop.definition|length > 80 %}...{% endif %}</span>
@@ -118,6 +121,7 @@
             <a href="{{ shape.qname | entity_url('shape') }}">
                 {{ shape.label or shape.qname }}
             </a>
+            {% if shape.deprecated %}<span class="entity-type deprecated" title="This term is marked deprecated in the source">deprecated</span>{% endif %}
             {% for kind in shape.kinds %}
             {% if kind != 'shape' %}
             <span class="entity-type {{ kind }}">{{ kind | replace('_', ' ') }}</span>
@@ -174,6 +178,7 @@
             <a href="{{ concept.qname | entity_url('skos_concept') }}">
                 {{ concept.label or concept.qname }}
             </a>
+            {% if concept.deprecated %}<span class="entity-type deprecated" title="This term is marked deprecated in the source">deprecated</span>{% endif %}
             <span class="entity-type skos_concept">skos concept</span>
             {% if concept.definition %}
             <span class="definition">— {{ concept.definition[:80] }}{% if concept.definition|length > 80 %}...{% endif %}</span>

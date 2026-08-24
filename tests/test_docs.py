@@ -2860,3 +2860,212 @@ class TestExcludedEntityLinks:
         assert entity_type_included("class", config) is True
         assert entity_type_included("something_new", config) is True
         assert entity_type_included("class", DocsConfig(include_classes=False)) is False
+
+
+# ---------------------------------------------------------------------------
+# Deprecated terms — issue #108
+# ---------------------------------------------------------------------------
+
+
+DEPRECATED_FIXTURE = Path(__file__).parent / "fixtures" / "docs" / "deprecated_terms.ttl"
+
+
+@pytest.fixture
+def deprecated_ontology() -> Graph:
+    """Load the tracked deprecation fixture.
+
+    Carries both OWL mechanisms, a typed and an untyped annotation, the
+    two negative cases, and one of every entity kind — see the file's
+    own header.
+    """
+    g = Graph()
+    g.parse(DEPRECATED_FIXTURE, format="turtle")
+    return g
+
+
+class TestDeprecationExtraction:
+    """Deprecation is read from both mechanisms, and by value."""
+
+    def test_deprecated_type_marks_a_class(self, deprecated_ontology: Graph):
+        entities = extract_all(deprecated_ontology)
+        legacy = next(c for c in entities.classes if c.qname == "ex:LegacyClass")
+        assert legacy.deprecated is True
+
+    def test_deprecated_type_marks_a_property(self, deprecated_ontology: Graph):
+        entities = extract_all(deprecated_ontology)
+        legacy = next(p for p in entities.properties if p.qname == "ex:legacyProperty")
+        assert legacy.deprecated is True
+
+    def test_annotation_marks_a_class(self, deprecated_ontology: Graph):
+        entities = extract_all(deprecated_ontology)
+        retired = next(c for c in entities.classes if c.qname == "ex:RetiredClass")
+        assert retired.deprecated is True
+
+    def test_untyped_true_literal_counts(self, deprecated_ontology: Graph):
+        """Hand-written ontologies write `owl:deprecated "true"` unquoted-typed."""
+        entities = extract_all(deprecated_ontology)
+        old_style = next(c for c in entities.classes if c.qname == "ex:OldStyleClass")
+        assert old_style.deprecated is True
+
+    def test_absent_annotation_is_not_deprecated(self, deprecated_ontology: Graph):
+        entities = extract_all(deprecated_ontology)
+        current = next(c for c in entities.classes if c.qname == "ex:CurrentClass")
+        assert current.deprecated is False
+
+    def test_explicit_false_is_not_deprecated(self, deprecated_ontology: Graph):
+        """The case a truthiness test gets backwards.
+
+        `owl:deprecated false` is legal and means the opposite. Reading
+        presence rather than value — or relying on a non-empty literal
+        being truthy — marks it deprecated.
+        """
+        entities = extract_all(deprecated_ontology)
+        for qname in ("ex:ExplicitlyCurrentClass",):
+            entity = next(c for c in entities.classes if c.qname == qname)
+            assert entity.deprecated is False
+
+        prop = next(p for p in entities.properties if p.qname == "ex:explicitlyCurrentProperty")
+        assert prop.deprecated is False
+
+    def test_every_entity_kind_can_be_deprecated(self, deprecated_ontology: Graph):
+        """Orthogonal to kind — that is why it is not an EntityKind member."""
+        entities = extract_all(deprecated_ontology)
+
+        assert next(i for i in entities.instances if i.qname == "ex:legacyThing").deprecated
+        assert next(c for c in entities.concepts if c.qname == "ex:LegacyConcept").deprecated
+        assert next(s for s in entities.concept_schemes if s.qname == "ex:LegacyScheme").deprecated
+        assert next(s for s in entities.shapes if s.qname == "ex:LegacyShape").deprecated
+
+    def test_deprecation_does_not_change_routing(self, deprecated_ontology: Graph):
+        """A deprecated class is still a class. Nothing moves bucket."""
+        entities = extract_all(deprecated_ontology)
+
+        assert "ex:LegacyClass" in {c.qname for c in entities.classes}
+        assert "ex:legacyProperty" in {p.qname for p in entities.properties}
+        assert "ex:LegacyClass" not in {i.qname for i in entities.instances}
+
+    def test_deprecation_does_not_propagate(self, deprecated_ontology: Graph):
+        """A property whose domain is deprecated is not itself deprecated.
+
+        Nothing in OWL says it should be, and inferring it would mark
+        terms the source never marked.
+        """
+        entities = extract_all(deprecated_ontology)
+        retired_name = next(p for p in entities.properties if p.qname == "ex:retiredName")
+        current = next(c for c in entities.classes if c.qname == "ex:CurrentClass")
+
+        assert retired_name.deprecated is True  # marked in its own right
+        assert current.deprecated is False  # referenced by a deprecated term, unmarked
+
+
+class TestDeprecationRendering:
+    """The marker has to be visible without reading the annotations table."""
+
+    def test_html_badge_on_entity_pages(self, deprecated_ontology: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(deprecated_ontology)
+
+        for rel in (
+            "classes/LegacyClass.html",
+            "classes/RetiredClass.html",
+            "properties/object/retiredProperty.html",
+            "properties/other/legacyProperty.html",
+            "instances/legacyThing.html",
+            "concepts/LegacyConcept.html",
+            "concepts/LegacyScheme.html",
+            "shapes/LegacyShape.html",
+        ):
+            content = (output_dir / rel).read_text()
+            assert 'class="entity-type deprecated"' in content, rel
+
+    def test_html_no_badge_when_not_deprecated(self, deprecated_ontology: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(deprecated_ontology)
+
+        for rel in ("classes/CurrentClass.html", "classes/ExplicitlyCurrentClass.html"):
+            content = (output_dir / rel).read_text()
+            assert 'class="entity-type deprecated"' not in content, rel
+
+    def test_html_badge_composes_with_the_kind_badge(
+        self, deprecated_ontology: Graph, output_dir: Path
+    ):
+        """It sits beside the kind badge rather than replacing it."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(deprecated_ontology)
+
+        content = (output_dir / "concepts" / "LegacyConcept.html").read_text()
+        assert 'class="entity-type skos_concept"' in content
+        assert 'class="entity-type deprecated"' in content
+
+    def test_html_css_is_an_outline_not_a_fill(self, deprecated_ontology: Graph, output_dir: Path):
+        """Outlined so it cannot be mistaken for a kind badge, and so it
+        needs no slot in the kind palette (#106)."""
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(deprecated_ontology)
+
+        css = (output_dir / "assets" / "style.css").read_text()
+        assert ".entity-type.deprecated {" in css
+        assert "background: transparent;" in css
+        assert "border: 1px solid #b91c1c;" in css
+
+    def test_html_index_marks_them(self, deprecated_ontology: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(deprecated_ontology)
+
+        content = (output_dir / "index.html").read_text()
+        assert 'class="entity-type deprecated"' in content
+
+    def test_markdown_banner(self, deprecated_ontology: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="markdown")
+        DocsGenerator(config).generate(deprecated_ontology)
+
+        content = (output_dir / "classes" / "LegacyClass.md").read_text()
+        assert "> **Deprecated.**" in content
+
+        current = (output_dir / "classes" / "CurrentClass.md").read_text()
+        assert "Deprecated" not in current
+
+    def test_markdown_index_marker(self, deprecated_ontology: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="markdown")
+        DocsGenerator(config).generate(deprecated_ontology)
+
+        content = (output_dir / "index.md").read_text()
+        assert "**(deprecated)**" in content
+
+    def test_json_field(self, deprecated_ontology: Graph, output_dir: Path):
+        config = DocsConfig(output_dir=output_dir, format="json")
+        DocsGenerator(config).generate(deprecated_ontology)
+
+        legacy = json.loads((output_dir / "classes" / "LegacyClass.json").read_text())
+        assert legacy["deprecated"] is True
+
+        current = json.loads((output_dir / "classes" / "CurrentClass.json").read_text())
+        assert current["deprecated"] is False
+
+    def test_search_index_field_and_keyword(self, deprecated_ontology: Graph):
+        entities = extract_all(deprecated_ontology)
+        entries = generate_search_index(entities, DocsConfig())
+
+        legacy = next(e for e in entries if e.qname == "ex:LegacyClass")
+        assert legacy.deprecated is True
+        assert "deprecated" in legacy.keywords
+
+        current = next(e for e in entries if e.qname == "ex:CurrentClass")
+        assert current.deprecated is False
+        assert "deprecated" not in current.keywords
+
+    def test_no_dead_links_introduced(self, deprecated_ontology: Graph, output_dir: Path):
+        import re
+
+        config = DocsConfig(output_dir=output_dir, format="html")
+        DocsGenerator(config).generate(deprecated_ontology)
+
+        ref_pat = re.compile(r'(?:href|src)="([^"#?]+)"')
+        broken = [
+            (str(page.relative_to(output_dir)), ref)
+            for page in output_dir.rglob("*.html")
+            for ref in ref_pat.findall(page.read_text())
+            if not ref.startswith(("http://", "https://", "mailto:", "#"))
+            and not (page.parent / ref).resolve().exists()
+        ]
+        assert not broken

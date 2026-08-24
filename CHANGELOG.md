@@ -91,6 +91,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `rdfs:Datatype` and `owl:DeprecatedClass` / `owl:DeprecatedProperty`
     remain out of scope. Deprecation is orthogonal to entity kind and needs
     its own design
+- **Deprecated terms are now marked in `docs` output** (#108). A term the
+  source marks deprecated carries a visible marker — an outlined badge beside
+  its kind badge in HTML, a `> **Deprecated.**` banner on Markdown pages, a
+  `deprecated` boolean in JSON, and a `deprecated` search keyword. Previously
+  the only trace was a row in the annotations table, next to `seeAlso`:
+  - **Both OWL mechanisms are recognised** — an `rdf:type` of
+    `owl:DeprecatedClass` / `owl:DeprecatedProperty`, and the `owl:deprecated`
+    annotation. Real ontologies use either or both, and before this the type
+    form produced no trace at all
+  - **The annotation is read by value, not presence.** `owl:deprecated false`
+    is legal and means the opposite; truthiness alone gets it backwards,
+    because an untyped `"false"` literal is a non-empty string
+  - **Deprecation is orthogonal to entity kind**, so it is a marker rather
+    than an `EntityKind` member: a class, any property, an instance, a SKOS
+    concept and a SHACL shape can each be deprecated, and each keeps its own
+    kind badge. Nothing changes bucket
+  - **It does not propagate** — a property whose domain is a deprecated class
+    is not itself marked, and nor are the subclasses of one
+  - The badge is an outline rather than a fill, so it composes with a kind
+    badge instead of competing with one, and needs no slot in the kind palette
+  - Deprecated terms are still documented; hiding them behind a flag needs
+    per-entity link handling rather than the per-type `--include` / `--exclude`
+    machinery, so it is deferred
 - New `EntityKind` member `NAMED_INDIVIDUAL`, and a new tracked fixture
   (`tests/fixtures/docs/named_individuals.ttl`) — the repository previously
   contained no `owl:NamedIndividual` in any RDF file

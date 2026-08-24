@@ -1,0 +1,102 @@
+@prefix ex:   <http://example.org/dep#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+#
+# Deprecation, by both of the mechanisms OWL offers (issue #108).
+#
+# OWL says "deprecated" two ways, and real ontologies use either or both:
+#
+#   1. an rdf:type of owl:DeprecatedClass / owl:DeprecatedProperty
+#   2. the owl:deprecated annotation
+#
+# The annotation has to be read by VALUE, not presence: `owl:deprecated
+# false` is legal and means the opposite, and an untyped "false" literal is
+# a non-empty string, so truthiness alone gets it backwards.
+#
+# Deprecation is orthogonal to entity kind, so every kind carries a case:
+# class, each property kind, instance, SKOS concept and SHACL shape.
+#
+
+ex:Ont a owl:Ontology ;
+    rdfs:label "Deprecation demo"@en .
+
+#
+# Mechanism 1: the deprecated types.
+#
+
+ex:LegacyClass a owl:DeprecatedClass ;
+    rdfs:label "Legacy Class"@en ;
+    rdfs:comment "Deprecated by its rdf:type alone."@en .
+
+ex:legacyProperty a owl:DeprecatedProperty ;
+    rdfs:label "legacy property"@en ;
+    rdfs:comment "Deprecated by its rdf:type alone, and of unstated kind."@en .
+
+#
+# Mechanism 2: the annotation, typed boolean.
+#
+
+ex:RetiredClass a owl:Class ;
+    rdfs:label "Retired Class"@en ;
+    owl:deprecated true .
+
+ex:retiredProperty a owl:ObjectProperty ;
+    rdfs:label "retired property"@en ;
+    rdfs:domain ex:RetiredClass ;
+    owl:deprecated true .
+
+ex:retiredName a owl:DatatypeProperty ;
+    rdfs:label "retired name"@en ;
+    rdfs:range xsd:string ;
+    owl:deprecated true .
+
+#
+# Mechanism 2 again, written as an untyped literal — common in
+# hand-written ontologies.
+#
+
+ex:OldStyleClass a owl:Class ;
+    rdfs:label "Old Style Class"@en ;
+    owl:deprecated "true" .
+
+#
+# The negative cases. Neither of these is deprecated, and the second is the
+# one that catches a truthiness test: the annotation is present and says so.
+#
+
+ex:CurrentClass a owl:Class ;
+    rdfs:label "Current Class"@en .
+
+ex:ExplicitlyCurrentClass a owl:Class ;
+    rdfs:label "Explicitly Current Class"@en ;
+    owl:deprecated false .
+
+ex:explicitlyCurrentProperty a owl:ObjectProperty ;
+    rdfs:label "explicitly current property"@en ;
+    owl:deprecated false .
+
+#
+# The other entity kinds, so the marker is proven orthogonal rather than
+# a class-and-property feature.
+#
+
+ex:legacyThing a ex:CurrentClass ;
+    rdfs:label "legacy thing"@en ;
+    owl:deprecated true .
+
+ex:LegacyConcept a skos:Concept ;
+    skos:prefLabel "Legacy Concept"@en ;
+    owl:deprecated true .
+
+ex:LegacyScheme a skos:ConceptScheme ;
+    skos:prefLabel "Legacy Scheme"@en ;
+    owl:deprecated true .
+
+ex:LegacyShape a sh:NodeShape ;
+    rdfs:label "Legacy Shape"@en ;
+    sh:targetClass ex:CurrentClass ;
+    owl:deprecated true .

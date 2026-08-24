@@ -172,6 +172,8 @@ class MarkdownRenderer:
             lines.append("")
             for c in entities.classes:
                 link = self._entity_link(c.qname, "class", c.label or c.qname)
+                if c.deprecated:
+                    link = f"{link} **(deprecated)**"
                 if c.definition:
                     # Truncate long definitions
                     desc = c.definition[:100] + "..." if len(c.definition) > 100 else c.definition
@@ -186,7 +188,8 @@ class MarkdownRenderer:
             lines.append("")
             for p in entities.object_properties:
                 link = self._entity_link(p.qname, "object_property", p.label or p.qname)
-                lines.append(f"- {link}")
+                marker = " **(deprecated)**" if p.deprecated else ""
+                lines.append(f"- {link}{marker}")
             lines.append("")
 
         if entities.datatype_properties and self.config.include_datatype_properties:
@@ -194,7 +197,8 @@ class MarkdownRenderer:
             lines.append("")
             for p in entities.datatype_properties:
                 link = self._entity_link(p.qname, "datatype_property", p.label or p.qname)
-                lines.append(f"- {link}")
+                marker = " **(deprecated)**" if p.deprecated else ""
+                lines.append(f"- {link}{marker}")
             lines.append("")
 
         # Properties whose kind the source does not state (#76)
@@ -344,6 +348,9 @@ class MarkdownRenderer:
 
         lines.append(f"# {class_info.label or class_info.qname}")
         lines.append("")
+        if class_info.deprecated:
+            lines.append("> **Deprecated.** This term is marked deprecated in the source.")
+            lines.append("")
         lines.append(f"**URI:** `{class_info.uri}`")
         lines.append("")
 
@@ -511,6 +518,9 @@ class MarkdownRenderer:
 
         lines.append(f"# {prop_info.label or prop_info.qname}")
         lines.append("")
+        if prop_info.deprecated:
+            lines.append("> **Deprecated.** This term is marked deprecated in the source.")
+            lines.append("")
         lines.append(f"**Type:** {type_label} Property")
         lines.append("")
         lines.append(f"**URI:** `{prop_info.uri}`")
@@ -602,6 +612,9 @@ class MarkdownRenderer:
 
         lines.append(f"# {instance_info.label or instance_info.qname}")
         lines.append("")
+        if instance_info.deprecated:
+            lines.append("> **Deprecated.** This term is marked deprecated in the source.")
+            lines.append("")
         # All kinds, mirroring the HTML badges — an explicit
         # owl:NamedIndividual declaration is visible here too (#64).
         kind_labels = " ".join(f"`{kind}`" for kind in instance_info.kinds)
@@ -709,6 +722,9 @@ class MarkdownRenderer:
 
         lines.append(f"# {concept_info.label or concept_info.qname}")
         lines.append("")
+        if concept_info.deprecated:
+            lines.append("> **Deprecated.** This term is marked deprecated in the source.")
+            lines.append("")
         kind_labels = " ".join(f"`{kind}`" for kind in concept_info.kinds)
         if kind_labels:
             lines.append(f"**Kinds:** {kind_labels}")
@@ -832,6 +848,9 @@ class MarkdownRenderer:
 
         lines.append(f"# {scheme_info.label or scheme_info.qname}")
         lines.append("")
+        if scheme_info.deprecated:
+            lines.append("> **Deprecated.** This term is marked deprecated in the source.")
+            lines.append("")
         kind_labels = " ".join(f"`{kind}`" for kind in scheme_info.kinds)
         if kind_labels:
             lines.append(f"**Kinds:** {kind_labels}")
@@ -1027,6 +1046,9 @@ class MarkdownRenderer:
 
         lines.append(f"# {shape_info.label or shape_info.qname}")
         lines.append("")
+        if shape_info.deprecated:
+            lines.append("> **Deprecated.** This term is marked deprecated in the source.")
+            lines.append("")
         # All kinds as a Markdown badge-style line, mirroring HTML output.
         kind_labels = " ".join(f"`{kind}`" for kind in shape_info.kinds if kind != "shape")
         if kind_labels:
