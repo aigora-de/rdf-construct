@@ -36,6 +36,7 @@ class MarkdownRenderer:
             config: Documentation configuration.
         """
         self.config = config
+        self._current_page: Path | None = None
 
     def _get_output_path(self, filename: str, subdir: str | None = None) -> Path:
         """Get the full output path for a file.
@@ -80,7 +81,7 @@ class MarkdownRenderer:
         Returns:
             Markdown link string.
         """
-        from ..config import entity_to_path, entity_type_included
+        from ..config import entity_to_url, entity_type_included
 
         display = label or qname
         # A link to a page this run is not generating is a dead link (#115).
@@ -88,8 +89,21 @@ class MarkdownRenderer:
         # unlinked, but still visible.
         if not entity_type_included(entity_type, self.config):
             return f"`{qname}`"
-        path = entity_to_path(qname, entity_type, self.config, extension=".md")
-        # Make path relative from root
+        # Resolved from the page that contains the link rather than from the
+        # docs root, so a cross-reference from a sub-folder page does not
+        # resolve one level too deep (#87).
+        #
+        # The extension is stated rather than derived: entity_to_url falls
+        # back to config.format, whose map knows "markdown" but not the "md"
+        # alias DocsGenerator accepts — and under that alias the files are
+        # still written .md while every link would point at .html.
+        path = entity_to_url(
+            qname,
+            entity_type,
+            self.config,
+            from_path=self._current_page,
+            extension=".md",
+        )
         return f"[{display}]({path})"
 
     def _frontmatter(self, **kwargs: Any) -> str:
@@ -122,6 +136,7 @@ class MarkdownRenderer:
         Returns:
             Path to the rendered file.
         """
+        self._current_page = Path("index.md")
         lines = []
 
         # Frontmatter
@@ -261,6 +276,7 @@ class MarkdownRenderer:
         Returns:
             Path to the rendered file.
         """
+        self._current_page = Path("hierarchy.md")
         lines = []
 
         lines.append(self._frontmatter(title="Class Hierarchy"))
@@ -337,6 +353,10 @@ class MarkdownRenderer:
         Returns:
             Path to the rendered file.
         """
+        from ..config import entity_to_path
+
+        rel_path = entity_to_path(class_info.qname, "class", self.config, extension=".md")
+        self._current_page = rel_path
         lines = []
 
         lines.append(
@@ -414,9 +434,6 @@ class MarkdownRenderer:
             lines.append("")
 
         content = "\n".join(lines)
-        from ..config import entity_to_path
-
-        rel_path = entity_to_path(class_info.qname, "class", self.config, extension=".md")
         return self._write_file(self.config.output_dir / rel_path, content)
 
     def _uri_to_display(
@@ -506,6 +523,11 @@ class MarkdownRenderer:
         Returns:
             Path to the rendered file.
         """
+        from ..config import entity_to_path
+
+        entity_type = f"{prop_info.property_type}_property"
+        rel_path = entity_to_path(prop_info.qname, entity_type, self.config, extension=".md")
+        self._current_page = rel_path
         lines = []
 
         type_label = prop_info.property_type.replace("_", " ").title()
@@ -581,10 +603,6 @@ class MarkdownRenderer:
             lines.append("")
 
         content = "\n".join(lines)
-        entity_type = f"{prop_info.property_type}_property"
-        from ..config import entity_to_path
-
-        rel_path = entity_to_path(prop_info.qname, entity_type, self.config, extension=".md")
         return self._write_file(self.config.output_dir / rel_path, content)
 
     def render_instance(
@@ -601,6 +619,10 @@ class MarkdownRenderer:
         Returns:
             Path to the rendered file.
         """
+        from ..config import entity_to_path
+
+        rel_path = entity_to_path(instance_info.qname, "instance", self.config, extension=".md")
+        self._current_page = rel_path
         lines = []
 
         lines.append(
@@ -654,9 +676,6 @@ class MarkdownRenderer:
             lines.append("")
 
         content = "\n".join(lines)
-        from ..config import entity_to_path
-
-        rel_path = entity_to_path(instance_info.qname, "instance", self.config, extension=".md")
         return self._write_file(self.config.output_dir / rel_path, content)
 
     def _render_label_table(self, labels: list["LabelGroup"]) -> list[str]:
@@ -711,6 +730,14 @@ class MarkdownRenderer:
         Returns:
             Path to the rendered file.
         """
+        from ..config import entity_to_path
+
+        # Set before any line is built: _entity_link resolves every
+        # cross-reference against this, and a method that does not set it
+        # inherits whatever page rendered last (#87).
+        rel_path = entity_to_path(concept_info.qname, "skos_concept", self.config, extension=".md")
+        self._current_page = rel_path
+
         lines = []
 
         lines.append(
@@ -816,9 +843,6 @@ class MarkdownRenderer:
             lines.append("")
 
         content = "\n".join(lines)
-        from ..config import entity_to_path
-
-        rel_path = entity_to_path(concept_info.qname, "skos_concept", self.config, extension=".md")
         return self._write_file(self.config.output_dir / rel_path, content)
 
     def render_concept_scheme(
@@ -836,6 +860,16 @@ class MarkdownRenderer:
             Path to the rendered file.
         """
         from ..extractors import build_concept_tree
+
+        from ..config import entity_to_path
+
+        # Set before any line is built: _entity_link resolves every
+        # cross-reference against this, and a method that does not set it
+        # inherits whatever page rendered last (#87).
+        rel_path = entity_to_path(
+            scheme_info.qname, "skos_concept_scheme", self.config, extension=".md"
+        )
+        self._current_page = rel_path
 
         lines = []
 
@@ -933,14 +967,6 @@ class MarkdownRenderer:
             lines.append("")
 
         content = "\n".join(lines)
-        from ..config import entity_to_path
-
-        rel_path = entity_to_path(
-            scheme_info.qname,
-            "skos_concept_scheme",
-            self.config,
-            extension=".md",
-        )
         return self._write_file(self.config.output_dir / rel_path, content)
 
     def _render_property_shape_table(
@@ -1028,6 +1054,10 @@ class MarkdownRenderer:
         Returns:
             Path to the rendered file.
         """
+        from ..config import entity_to_path
+
+        rel_path = entity_to_path(shape_info.qname, "shape", self.config, extension=".md")
+        self._current_page = rel_path
         lines = []
 
         # Frontmatter — pick the most-specific kind for the type field
@@ -1149,9 +1179,6 @@ class MarkdownRenderer:
             lines.append("")
 
         content = "\n".join(lines)
-        from ..config import entity_to_path
-
-        rel_path = entity_to_path(shape_info.qname, "shape", self.config, extension=".md")
         return self._write_file(self.config.output_dir / rel_path, content)
 
     def render_namespaces(self, entities: "ExtractedEntities") -> Path:
@@ -1163,6 +1190,7 @@ class MarkdownRenderer:
         Returns:
             Path to the rendered file.
         """
+        self._current_page = Path("namespaces.md")
         lines = []
 
         lines.append(self._frontmatter(title="Namespaces"))
@@ -1194,6 +1222,7 @@ class MarkdownRenderer:
             at something this run never produced — see #113. The HTML
             single-page template takes the same line.
         """
+        self._current_page = Path("index.md")
         lines = []
 
         lines.append(

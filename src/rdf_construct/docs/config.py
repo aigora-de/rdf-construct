@@ -312,6 +312,7 @@ def entity_to_url(
     entity_type: str,
     config: DocsConfig,
     from_path: Path | str | None = None,
+    extension: str | None = None,
 ) -> str:
     """Generate the URL for an entity's documentation page.
 
@@ -326,11 +327,16 @@ def entity_to_url(
             depth in the output tree. When ``config.base_url`` is set, that
             value takes precedence and ``from_path`` is ignored, preserving
             the previous behaviour.
+        extension: File extension, passed through to
+            :func:`entity_to_path`. Defaults to one derived from
+            ``config.format`` — which knows ``"markdown"`` but not the
+            ``"md"`` alias that :class:`DocsGenerator` accepts, so a caller
+            that may see either should state it.
 
     Returns:
         URL path for linking to the entity.
     """
-    path = entity_to_path(qname, entity_type, config)
+    path = entity_to_path(qname, entity_type, config, extension=extension)
     url = str(path).replace("\\", "/")  # Ensure forward slashes
 
     if config.base_url:

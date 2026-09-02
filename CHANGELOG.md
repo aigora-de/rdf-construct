@@ -159,6 +159,25 @@ Everything else is additive.
   of its scheme, cross-linked to the page it does have
 
 ### Fixed
+- **Markdown cross-references now resolve from the page that contains them**
+  (#87, contributed by @tasodoufu). Entity links were emitted as a path from
+  the docs root regardless of where the page sat, so from `classes/Dog.md` a
+  link to `Mammal` read `classes/Mammal.md` and resolved as
+  `classes/classes/Mammal.md` — broken in GitHub's blob view, in MkDocs and in
+  any local previewer. The renderer now threads the page being written through
+  to the link helper, as the HTML renderer has done since #59. Two follow-ons
+  landed with it:
+  - `render_concept` and `render_concept_scheme` set the current page too.
+    Without it the SKOS pages inherited whatever rendered last, which happened
+    to be the right depth when instances were present and one level too high
+    when they were not — 38 wrong-depth links under `--no-instances`
+  - Link extensions are stated rather than derived from `config.format`, whose
+    map knows `"markdown"` but not the `"md"` alias `DocsGenerator` accepts.
+    Under that alias the files were written `.md` while every link pointed at
+    `.html`
+  A Markdown link walk now covers all of it — the counterpart of the HTML walk
+  that has caught this class of bug since #60, and whose absence is a fair part
+  of why #87 lasted as long as it did
 - **Every entity-kind badge now clears WCAG AA contrast** (#106). Four failed
   outright — `annotation` 2.15:1, `datatype` 2.43:1, `instance` 2.54:1 and
   `object` 4.23:1, against badge text that is 12px bold and so needs 4.5:1,

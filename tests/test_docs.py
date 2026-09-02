@@ -284,6 +284,9 @@ class TestGenerator:
 
         assert (output_dir / "index.md").exists()
         assert (output_dir / "hierarchy.md").exists()
+        content = (output_dir / "classes" / "Dog.md").read_text(encoding="utf-8")
+        assert "../classes/Mammal.md" in content
+        assert "classes/classes/Mammal.md" not in content
 
     def test_generator_json_output(self, simple_ontology: Graph, output_dir: Path):
         """Test JSON documentation generation."""
@@ -3184,3 +3187,82 @@ class TestBadgePaletteContrast:
         assert round(contrast_against_white("#ffffff"), 2) == 1.0
         assert round(contrast_against_white("#000000"), 2) == 21.0
         assert round(contrast_against_white("#dc2626"), 2) == 4.83
+
+
+# ---------------------------------------------------------------------------
+# Multi-page Markdown link resolution — issue #87
+# ---------------------------------------------------------------------------
+
+
+class TestMarkdownLinkResolution:
+    """Markdown cross-references must resolve from the page containing them.
+
+    The renderer emitted every entity link as a path from the docs root, so
+    from ``classes/Dog.md`` a link to ``Mammal`` read ``classes/Mammal.md``
+    and resolved as ``classes/classes/Mammal.md``. Broken in GitHub's blob
+    view, in MkDocs and in any local previewer.
+
+    This is the walk the HTML side has had since #60 and Markdown never
+    had — which is a fair part of why #87 survived, and why the two
+    regressions below were possible.
+    """
+
+    @pytest.mark.parametrize(
+        "fixture_name", ["simple_ontology", "shape_ontology", "skos_vocabulary"]
+    )
+    def test_every_link_resolves(
+        self,
+        fixture_name: str,
+        request: pytest.FixtureRequest,
+        output_dir: Path,
+    ):
+        graph = request.getfixturevalue(fixture_name)
+        config = DocsConfig(output_dir=output_dir, format="markdown")
+        DocsGenerator(config).generate(graph)
+
+        # The walk is pointless if the fixture produced nothing at depth.
+        assert list(output_dir.rglob("*/*.md")), "fixture generated no pages in sub-folders"
+        assert broken_markdown_links(output_dir) == []
+
+    def test_links_resolve_from_two_levels_deep(self, simple_ontology: Graph, output_dir: Path):
+        """Property pages sit at ``properties/object/``, so they need ``../..``."""
+        config = DocsConfig(output_dir=output_dir, format="markdown")
+        DocsGenerator(config).generate(simple_ontology)
+
+        page = output_dir / "properties" / "object" / "hasOwner.md"
+        assert page.exists()
+        assert "](../../classes/" in page.read_text()
+
+    def test_skos_pages_do_not_inherit_a_stale_page(self, skos_vocabulary: Graph, output_dir: Path):
+        """The regression that hides behind unrelated flags.
+
+        ``_current_page`` is set per render method and never restored, so a
+        method that does not set it inherits whatever rendered last. With
+        instances present the SKOS pages happened to be at the same depth
+        and looked correct; without them the previous page is a property,
+        two levels deep, and every concept link resolves one level too high.
+        """
+        config = DocsConfig(output_dir=output_dir, format="markdown", include_instances=False)
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        assert broken_markdown_links(output_dir) == []
+
+    def test_md_format_alias_links_stay_markdown(self, output_dir: Path):
+        """``DocsGenerator`` accepts ``format="md"``; the links must follow.
+
+        ``entity_to_url`` derives the extension from ``config.format``,
+        whose map knows ``"markdown"`` but not the alias — under which the
+        files are still written ``.md`` while every link would point at
+        ``.html``. The CLI normalises ``md`` to ``markdown``, so this is
+        only reachable through the public API, which is exactly why it
+        needs a test.
+        """
+        graph = Graph()
+        graph.parse("examples/animal_ontology.ttl", format="turtle")
+        config = DocsConfig(output_dir=output_dir, format="md")
+        DocsGenerator(config).generate(graph)
+
+        page = output_dir / "classes" / "Dog.md"
+        assert page.exists()
+        assert ".html)" not in page.read_text()
+        assert broken_markdown_links(output_dir) == []
