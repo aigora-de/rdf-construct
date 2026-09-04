@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.6.0] - 2026-09-02
+## [0.6.0] - 2026-09-04
 
 Completes the `docs` entity-type taxonomy carried over from v0.5.0, and fixes
 much of the output around it: links that resolved from the wrong place, entity
@@ -914,7 +914,7 @@ Initial public release.
 
 | Version | Date       | Highlights                                                                                          |
 |---------|------------|-----------------------------------------------------------------------------------------------------|
-| [0.6.0] | 2026-09-02 | SKOS, named individuals and deprecation in `docs`; link, contrast and determinism fixes             |
+| [0.6.0] | 2026-09-04 | SKOS, named individuals and deprecation in `docs`; link, contrast and determinism fixes             |
 | [0.5.0] | 2026-08-22 | SHACL shapes in `docs`; `order` no longer drops unclaimed subjects                                  |
 | [0.4.7] | 2026-05-07 | Fix cosmetic glitch in `lint --init` generated config                                               |
 | [0.4.6] | 2026-03-27 | Fix invalid Turtle prefix declarations in `order` output                                            |
