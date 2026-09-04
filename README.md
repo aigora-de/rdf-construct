@@ -387,7 +387,7 @@ properties:
 
 ## Project Status
 
-**Current**: v0.5.0 - Feature complete for core ontology workflows
+**Current**: v0.6.0 - Feature complete for core ontology workflows
 **License**: MIT
 
 ### Implemented
@@ -475,6 +475,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Status**: v0.5.0
+**Status**: v0.6.0
 **Python**: 3.10+ required
 **Maintainer**: See [CONTRIBUTING.md](CONTRIBUTING.md)

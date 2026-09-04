@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-02
+
 Completes the `docs` entity-type taxonomy carried over from v0.5.0, and fixes
 much of the output around it: links that resolved from the wrong place, entity
 filtering that was honoured by page generation but not by links, non-reproducible
@@ -294,6 +296,10 @@ Everything else is additive.
   cannot drift between commands again. The `order` command moved to them in v0.5.0
 - New `include_other_properties` config key; `other_properties` accepted in
   `--include` / `--exclude`, and `properties` covers it
+
+### Contributors
+- Thanks to @tasodoufu for diagnosing and fixing #87, and for reviewing the
+  follow-on commit that closed the two gaps `main` had opened underneath it
 
 ## [0.5.0] - 2026-08-22
 
@@ -908,6 +914,8 @@ Initial public release.
 
 | Version | Date       | Highlights                                                                                          |
 |---------|------------|-----------------------------------------------------------------------------------------------------|
+| [0.6.0] | 2026-09-02 | SKOS, named individuals and deprecation in `docs`; link, contrast and determinism fixes             |
+| [0.5.0] | 2026-08-22 | SHACL shapes in `docs`; `order` no longer drops unclaimed subjects                                  |
 | [0.4.7] | 2026-05-07 | Fix cosmetic glitch in `lint --init` generated config                                               |
 | [0.4.6] | 2026-03-27 | Fix invalid Turtle prefix declarations in `order` output                                            |
 | [0.4.5] | 2026-03-17 | Documentation for `cast` command                                                                    |
@@ -920,7 +928,8 @@ Initial public release.
 | [0.2.0] | 2025-12-03 | Stats, CQ testing, SHACL gen, docs gen, diff, lint, puml2rdf                                        |
 | [0.1.0] | 2025-11-30 | Initial release: ordering, UML generation, styling                                                  |
 
-[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/aigora-de/rdf-construct/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/aigora-de/rdf-construct/compare/v0.4.7...v0.5.0
 [0.4.7]: https://github.com/aigora-de/rdf-construct/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/aigora-de/rdf-construct/compare/v0.4.5...v0.4.6

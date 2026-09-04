@@ -16,7 +16,7 @@ context.
 **rdf-construct** is a Python CLI toolkit for semantic RDF operations, named after the Dixie
 Flatline ROM construct in Gibson's *Neuromancer*. Its founding feature: serialising RDF/Turtle in
 **semantic order** — respecting class and property hierarchies — instead of the alphabetical order
-every rdflib serialiser imposes. Public, MIT, published to PyPI; v0.5.0.
+every rdflib serialiser imposes. Public, MIT, published to PyPI; v0.6.0.
 
 17 commands across 14 subpackages under `src/rdf_construct/`: `order`, `cast`, `uml`,
 `lint`, `diff`, `docs`, `shacl-gen`, `puml2rdf`, `cq-test`, `stats`, `describe`, `merge`, `split`,
