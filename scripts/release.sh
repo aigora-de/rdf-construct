@@ -301,25 +301,63 @@ do_dry_run() {
 
 # --- after you have published --------------------------------------------------
 
+# The whole CHANGELOG section made a 302-line release page for v0.6.0, opening
+# with the lead and then 280 lines of bullets nobody scrolls (#125). The release
+# page and the CHANGELOG want different things: the file stays complete and
+# canonical, the page carries the lead, the credits and a link to the rest.
+#
+# Written to stdout so it can be inspected without publishing anything.
+build_notes() {
+  local lead contributors anchor repo_url
+
+  # Everything between the version heading and its first '###' subsection.
+  lead="$(awk -v v="$VERSION" \
+    '$0 ~ "^## \\["v"\\]" {f=1; next} /^## \[/ {f=0} /^### / {f=0} f' CHANGELOG.md \
+    | awk 'NF {seen=1} seen')"
+
+  # The credits, if the section has any, kept verbatim with their heading.
+  contributors="$(awk -v v="$VERSION" \
+    '$0 ~ "^## \\["v"\\]" {s=1; next} /^## \[/ {s=0}
+     s && /^### Contributors/ {c=1}
+     s && c && /^### / && !/^### Contributors/ {c=0}
+     s && c' CHANGELOG.md)"
+
+  echo "PyPI: https://pypi.org/project/rdf-construct/$VERSION/"
+  echo
+  echo '```'
+  echo "pip install rdf-construct==$VERSION"
+  echo '```'
+  echo
+  echo "---"
+  echo
+
+  if [[ -z "$(printf '%s' "$lead" | tr -d '[:space:]')" ]]; then
+    # No lead paragraph — the sections before v0.6.0 carry none, and #121 said
+    # so deliberately. Fall back to the whole section rather than publishing an
+    # empty release body.
+    awk -v v="$VERSION" '$0 ~ "^## \\["v"\\]"{f=1;next} /^## \[/{f=0} f' CHANGELOG.md
+    return
+  fi
+
+  printf '%s\n\n' "$lead"
+  [[ -n "$contributors" ]] && printf '%s\n\n' "$contributors"
+
+  # GitHub's heading anchor for '## [0.6.0] - 2026-09-04' is '#060---2026-09-04'.
+  anchor="$(grep -m1 -E "^## \[$VERSION\]" CHANGELOG.md \
+    | sed 's/^## //' | tr -d '][.' | tr ' ' '-' | tr '[:upper:]' '[:lower:]')"
+  repo_url="$(gh api repos/:owner/:repo --jq .html_url 2>/dev/null)"
+  echo "**Full changelog:** ${repo_url:-https://github.com/aigora-de/rdf-construct}/blob/$TAG/CHANGELOG.md#$anchor"
+}
+
 do_post() {
   say "GitHub release for $TAG"
   if gh release view "$TAG" >/dev/null 2>&1; then
     ok "release already exists"
   else
     local notes; notes="$(mktemp)"
-    {
-      echo "PyPI: https://pypi.org/project/rdf-construct/$VERSION/"
-      echo
-      echo '```'
-      echo "pip install rdf-construct==$VERSION"
-      echo '```'
-      echo
-      echo "---"
-      echo
-      awk -v v="$VERSION" '$0 ~ "^## \\["v"\\]"{f=1;next} /^## \[/{f=0} f' CHANGELOG.md
-    } > "$notes"
+    build_notes > "$notes"
     if gh release create "$TAG" --title "$TAG" --notes-file "$notes" --verify-tag >/dev/null 2>&1; then
-      ok "created, notes taken from the CHANGELOG entry"
+      ok "created, notes built from the CHANGELOG entry"
     else
       bad "gh release create failed"
     fi
