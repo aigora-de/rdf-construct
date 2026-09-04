@@ -58,7 +58,8 @@ Checks performed:
   gate       scripts/ci-local.sh passes
   versions   pyproject.toml = __init__.py = CHANGELOG = README.md = CLAUDE.md
   changelog  top entry is dated, matches the version, [Unreleased] is empty,
-             and the footer carries this version's compare link
+             the footer carries this version's compare link, and the Version
+             History Summary table's top row is this version, dated to match
   tag        does not already exist, locally or on origin
 
 Then: a clean dist/; a build; the wheel installed into a throwaway venv and
@@ -169,9 +170,11 @@ check_versions() {
 check_changelog() {
   say "CHANGELOG"
 
-  local top; top="$(grep -m1 -E '^## \[[0-9]' CHANGELOG.md)"
+  local top entry_date=""
+  top="$(grep -m1 -E '^## \[[0-9]' CHANGELOG.md)"
   if [[ "$top" =~ ^\#\#\ \[$VERSION\]\ -\ ([0-9]{4}-[0-9]{2}-[0-9]{2})$ ]]; then
-    ok "top entry is [$VERSION], dated ${BASH_REMATCH[1]}"
+    entry_date="${BASH_REMATCH[1]}"
+    ok "top entry is [$VERSION], dated $entry_date"
   else
     bad "top dated entry is not '## [$VERSION] - YYYY-MM-DD'"
     note "found: $top"
@@ -195,6 +198,28 @@ check_changelog() {
   grep -q "^\[Unreleased\]: .*compare/v$VERSION\.\.\.HEAD$" CHANGELOG.md \
     && ok "[Unreleased] link is based on v$VERSION" \
     || bad "[Unreleased] link does not read 'compare/v$VERSION...HEAD'"
+
+  # The Version History Summary table is maintained by hand, and it drifted a
+  # whole release before anyone noticed: the 0.5.0 row was never added, so the
+  # table sat at 0.4.7 throughout the v0.6.0 cycle (#124).
+  #
+  # Only the TOP row is checked. The table has never been complete — 0.2.1 has a
+  # section heading and a compare link but no row, from 2025-12-03 — so asserting
+  # completeness would fail on history nobody is releasing, and a check that fails
+  # for reasons outside the release is one people learn to skip.
+  local row
+  row="$(grep -m1 -E '^\| \[[0-9]+\.[0-9]+\.[0-9]+\] \|' CHANGELOG.md)"
+  if [[ -z "$row" ]]; then
+    bad "no version rows found in the Version History Summary table"
+  elif [[ ! "$row" =~ ^\|\ \[$VERSION\]\ \| ]]; then
+    bad "Version History Summary table has no row for $VERSION"
+    note "its top row is: $row"
+  elif [[ "$row" =~ ^\|\ \[$VERSION\]\ \|\ ([0-9]{4}-[0-9]{2}-[0-9]{2})\ \| ]] \
+       && [[ -n "$entry_date" ]] && [[ "${BASH_REMATCH[1]}" != "$entry_date" ]]; then
+    bad "summary table dates $VERSION ${BASH_REMATCH[1]}, the entry says $entry_date"
+  else
+    ok "summary table's top row is $VERSION"
+  fi
 }
 
 check_tag() {
