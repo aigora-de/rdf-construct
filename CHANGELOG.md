@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**If you run `order` without `-o`, your output moves.** The default output
+directory is now `ordered/` instead of `src/ontology/`. Pass `-o src/ontology`
+to keep the previous location.
+
+### Changed
+- **`order` defaults `-o/--outdir` to `ordered/`, not `src/ontology/`** (#128).
+  `src/` is a Python packaging convention that says nothing about ordered RDF,
+  and the old default silently created a two-level tree wherever the command
+  happened to be run. `ordered/` names what it holds, matching `uml` →
+  `diagrams/`, `docs` → `docs/` and `split` → `modules/`. An explicit `-o` is
+  unaffected, and `-o src/ontology` restores the previous behaviour.
+
 ## [0.6.0] - 2026-09-04
 
 Completes the `docs` entity-type taxonomy carried over from v0.5.0, and fixes

@@ -114,7 +114,7 @@ rdf-construct order SOURCE CONFIG [OPTIONS]
 
 **Options**:
 - `-p, --profile NAME`: Profile(s) to generate (can specify multiple, default: all)
-- `-o, --outdir PATH`: Output directory (default: `src/ontology`)
+- `-o, --outdir PATH`: Output directory (default: `ordered`)
 
 **Examples**:
 
@@ -1525,7 +1525,7 @@ profiles:
 
 **Default Output Directories**:
 - `diagrams/` - UML diagram output
-- `src/ontology/` - Ordered RDF output
+- `ordered/` - Ordered RDF output
 - `docs/` - Documentation output
 - _(source directory)_ - `cast` output files (default)
 

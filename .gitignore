@@ -216,5 +216,7 @@ PROMPT-*.md
 project_tree.py
 project-structure*.txt
 # Output written by local `order` runs against the IES ontologies. Regenerable,
-# and specific to whoever ran it.
+# and specific to whoever ran it. `src/ontology/` was the default output
+# directory before #128; `ordered/` is the one a bare `order` run produces now.
 src/ontology/
+/ordered/
