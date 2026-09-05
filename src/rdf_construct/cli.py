@@ -426,8 +426,8 @@ def _warn_unclaimed(
     "--outdir",
     "-o",
     type=click.Path(path_type=Path),
-    default="src/ontology",
-    help="Output directory (default: src/ontology)",
+    default="ordered",
+    help="Output directory (default: ordered)",
 )
 def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path):
     """Reorder RDF Turtle files according to semantic profiles.
