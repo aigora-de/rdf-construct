@@ -581,3 +581,89 @@ class TestUnclaimedReporting:
 
         assert result.exit_code == 0
         assert "<http://elsewhere.invalid/lost>" in result.output
+
+
+# -- The material the Order Guide runs against must keep working --
+
+
+class TestOrderGuideExamples:
+    """`docs/user_guides/ORDER_GUIDE.md` claims every command in it runs verbatim.
+
+    Nothing executed the shipped ordering examples before, which is how #84
+    reached a shipped config and how #244's example script shipped through ten
+    releases without ever having run. These pin the material the guide is
+    written against, so the guide cannot rot silently.
+
+    Relates to: #127
+    """
+
+    CONFIG = EXAMPLES / "order" / "ordering.yml"
+    SOURCE = EXAMPLES / "order" / "library.ttl"
+
+    def test_the_guides_material_exists(self) -> None:
+        assert self.SOURCE.exists(), "ORDER_GUIDE.md is written against examples/order/library.ttl"
+        assert self.CONFIG.exists(), "ORDER_GUIDE.md is written against examples/order/ordering.yml"
+
+    @pytest.mark.parametrize("profile", ["alpha", "hierarchy", "anchored"])
+    def test_complete_profiles_preserve_every_triple(self, tmp_path: Path, profile: str) -> None:
+        """The three profiles with a section for every kind must lose nothing."""
+        result = _order(self.SOURCE, self.CONFIG, tmp_path, "-p", profile)
+        assert result.exit_code == 0
+
+        base = Graph()
+        base.parse(self.SOURCE)
+        ordered = Graph()
+        ordered.parse(tmp_path / f"library-{profile}.ttl")
+
+        assert ordered.isomorphic(
+            base
+        ), f"profile '{profile}' lost {len(base) - len(ordered)} triple(s) of library.ttl"
+
+    def test_alphabetical_and_hierarchical_orders_disagree(self, tmp_path: Path) -> None:
+        """The guide's central claim, and the reason library.ttl is shaped as it is.
+
+        Every class in the fixture sorts before its own parent, so a profile
+        that claims to order by hierarchy and silently falls back to
+        alphabetical (#242) is visible here rather than plausible.
+        """
+        result = _order(self.SOURCE, self.CONFIG, tmp_path, "-p", "alpha", "-p", "hierarchy")
+        assert result.exit_code == 0
+
+        def class_order(profile: str) -> list[str]:
+            text = (tmp_path / f"library-{profile}.ttl").read_text(encoding="utf-8")
+            return [
+                line[len("lib:") :]
+                for line in text.splitlines()
+                if line.startswith("lib:") and line[len("lib:") : len("lib:") + 1].isupper()
+            ]
+
+        assert class_order("alpha")[0] == "Anthology"
+        assert class_order("hierarchy")[0] == "Work"
+        assert class_order("alpha") != class_order("hierarchy")
+
+    def test_unclaimed_subjects_are_reported_not_hidden(self, tmp_path: Path) -> None:
+        """`schema-only` omits the individuals section; the guide shows the warning."""
+        result = _order(self.SOURCE, self.CONFIG, tmp_path, "-p", "schema-only")
+
+        assert result.exit_code == 0
+        assert "claimed by no section" in result.output
+        assert "lib:GreatExpectations" in result.output
+        assert "select: individuals" in result.output
+
+    def test_a_filtering_profile_keeps_its_blank_node_closure(self, tmp_path: Path) -> None:
+        """`classes-only` drops lib:publishes but must keep the restriction whole.
+
+        Without this the extract would carry ``rdfs:subClassOf [ ]`` — a
+        tautology in place of a real axiom, which is #176's failure in `split`.
+        """
+        result = _order(self.SOURCE, self.CONFIG, tmp_path, "-p", "classes-only")
+        assert result.exit_code == 0
+
+        extract = Graph()
+        extract.parse(tmp_path / "library-classes-only.ttl")
+
+        restrictions = list(extract.subjects(RDF.type, OWL.Restriction))
+        assert len(restrictions) == 1, "the Journal restriction must survive the extract"
+        assert list(
+            extract.objects(restrictions[0], OWL.onProperty)
+        ), "the restriction kept its owl:onProperty rather than collapsing to [ ]"

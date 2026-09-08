@@ -3,6 +3,7 @@
 ## Quick Links
 
 **New User?** → [Getting Started](user_guides/GETTING_STARTED.md)
+**Reorder RDF Semantically?** → [Order Guide](user_guides/ORDER_GUIDE.md)
 **Quick Ontology Overview?** → [Describe Guide](user_guides/DESCRIBE_GUIDE.md)
 **Generate Documentation?** → [Docs Guide](user_guides/DOCS_GUIDE.md)
 **Generate Diagrams?** → [UML Guide](user_guides/UML_GUIDE.md)
@@ -32,6 +33,14 @@ For users of rdf-construct who want to generate diagrams and work with RDF ontol
   - Command categories overview
   - Basic concepts
   - Common tasks
+
+- **[Order Guide](user_guides/ORDER_GUIDE.md)** - Semantic serialisation, the founding feature
+  - The ordering configuration file
+  - Selectors, sections and profiles
+  - Sorting: alphabetical, topological, and anchored branches
+  - Unclaimed subjects and blank-node closure
+  - Prefix handling
+  - Known limitations
 
 - **[Describe Guide](user_guides/DESCRIBE_GUIDE.md)** - Quick ontology orientation
   - Metadata and metrics extraction

@@ -220,6 +220,7 @@ rdf-construct localise report ontology.ttl --languages en,de,fr
 
 **For Users**:
 - [Getting Started](docs/user_guides/GETTING_STARTED.md) - 5-minute quick start
+- [Order Guide](docs/user_guides/ORDER_GUIDE.md) - Semantic serialisation, the founding feature
 - [Describe Guide](docs/user_guides/DESCRIBE_GUIDE.md) - Quick ontology orientation
 - [Docs Guide](docs/user_guides/DOCS_GUIDE.md) - Documentation generation
 - [UML Guide](docs/user_guides/UML_GUIDE.md) - Complete UML features

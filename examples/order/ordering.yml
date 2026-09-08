@@ -1,0 +1,89 @@
+# Ordering configuration for the ORDER_GUIDE.md worked examples.
+#
+#   rdf-construct order examples/order/library.ttl examples/order/ordering.yml
+#
+# Every key in this file is one the tool actually reads. The other shipped
+# configs in this directory carry keys that are parsed and never used; see
+# issue #243 and the guide's "Keys that do nothing" section.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# defaults — settings inherited by every profile below
+# ─────────────────────────────────────────────────────────────────────────────
+defaults:
+  # What to do with subjects no section of a profile claims:
+  #   warn   — emit what was claimed, report the loss on stderr (the default)
+  #   emit   — append them, so nothing is ever lost
+  #   ignore — emit what was claimed, silently; for a profile that filters
+  unclaimed: warn
+
+# ─────────────────────────────────────────────────────────────────────────────
+# selectors — names for the six built-in selections
+# ─────────────────────────────────────────────────────────────────────────────
+# The KEY is what a section's `select:` refers to. The value is documentation:
+# selection dispatches on the six built-in key names, not on what you write
+# here. You cannot define a selector of your own. See the guide.
+selectors:
+  classes:      "owl:Class, rdfs:Class and owl:DeprecatedClass"
+  obj_props:    "owl:ObjectProperty, plus the six object-property characteristics"
+  data_props:   "owl:DatatypeProperty"
+  ann_props:    "owl:AnnotationProperty"
+  other_props:  "rdf:Property, owl:FunctionalProperty, owl:DeprecatedProperty"
+  individuals:  "everything that is not a class or a kind-specific property"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# profiles — each writes one file, named <source-stem>-<profile>.ttl
+# ─────────────────────────────────────────────────────────────────────────────
+profiles:
+
+  alpha:
+    description: "Alphabetical throughout — the stable choice for diffs."
+    sections:
+      - header: {}
+      - classes:               {select: classes,      sort: alpha}
+      - object_properties:     {select: obj_props,    sort: alpha}
+      - datatype_properties:   {select: data_props,   sort: alpha}
+      - annotation_properties: {select: ann_props,    sort: alpha}
+      - other_properties:      {select: other_props,  sort: alpha}
+      - individuals:           {select: individuals,  sort: alpha}
+
+  hierarchy:
+    description: "Parents before children, super-properties before sub-properties."
+    sections:
+      - header: {}
+      - classes:               {select: classes,      sort: topological}
+      - object_properties:     {select: obj_props,    sort: topological}
+      - datatype_properties:   {select: data_props,   sort: alpha}
+      - annotation_properties: {select: ann_props,    sort: alpha}
+      - other_properties:      {select: other_props,  sort: alpha}
+      - individuals:           {select: individuals,  sort: alpha}
+
+  anchored:
+    description: "Hierarchical, but lead with the Journal branch."
+    sections:
+      - header: {}
+      - classes:
+          select: classes
+          sort: topological
+          roots: ["lib:Journal"]
+      - object_properties:     {select: obj_props,    sort: topological}
+      - datatype_properties:   {select: data_props,   sort: alpha}
+      - annotation_properties: {select: ann_props,    sort: alpha}
+      - other_properties:      {select: other_props,  sort: alpha}
+      - individuals:           {select: individuals,  sort: alpha}
+
+  schema-only:
+    description: "Classes and properties, no individuals — leaves subjects unclaimed."
+    sections:
+      - header: {}
+      - classes:               {select: classes,      sort: topological}
+      - object_properties:     {select: obj_props,    sort: topological}
+      - datatype_properties:   {select: data_props,   sort: alpha}
+      - annotation_properties: {select: ann_props,    sort: alpha}
+      - other_properties:      {select: other_props,  sort: alpha}
+
+  classes-only:
+    description: "Header and classes only — a deliberate extract."
+    unclaimed: ignore
+    sections:
+      - header: {}
+      - classes: {select: classes, sort: topological}

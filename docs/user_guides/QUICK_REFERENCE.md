@@ -83,6 +83,8 @@ rdf-construct order ontology.ttl config.yml -p profile_name
 rdf-construct profiles config.yml                     # List available profiles
 ```
 
+Ordering is configuration-driven; see the **[Order Guide](ORDER_GUIDE.md)** for the file format.
+
 ## Format Conversion
 
 ```bash
