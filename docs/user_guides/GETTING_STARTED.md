@@ -236,6 +236,10 @@ rdf-construct order ontology.ttl order.yml
 rdf-construct profiles order.yml
 ```
 
+The ordering configuration file is where all the detail lives — selectors, sections, profiles, and
+what happens to subjects no section claims. See the **[Order Guide](ORDER_GUIDE.md)**, which walks a
+worked example you can run.
+
 ## Common Patterns
 
 ### CI/CD Integration

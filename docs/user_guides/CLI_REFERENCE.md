@@ -103,6 +103,7 @@ rdf-construct describe ontology.ttl --no-colour
 ### order - Reorder RDF Files
 
 Reorder RDF Turtle files according to semantic profiles.
+See the [Order Guide](ORDER_GUIDE.md) for the configuration file format.
 
 ```bash
 rdf-construct order SOURCE CONFIG [OPTIONS]
