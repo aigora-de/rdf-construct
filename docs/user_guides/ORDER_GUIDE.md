@@ -187,6 +187,21 @@ nothing says whether such a term is an object or a datatype property, and guessi
 `other_props` is where those terms go. `examples/order/library.ttl` carries one,
 `lib:catalogueNumber`, declared only as `owl:FunctionalProperty`.
 
+The distinction between `lib:cites` and `lib:catalogueNumber` in that file is worth understanding,
+because it is the whole reason two selectors exist rather than one:
+
+- **`lib:cites a owl:TransitiveProperty`** is under-declared but not ambiguous.
+  `owl:TransitiveProperty` is a subclass of `owl:ObjectProperty` in OWL 2, so the declaration is
+  entailed and `obj_props` claims it correctly.
+- **`lib:catalogueNumber a owl:FunctionalProperty`** is genuinely ambiguous. Functionality applies
+  to object *and* datatype properties, so nothing here says which this is, and no amount of
+  inference will settle it. `other_props` exists so such a term has somewhere to go that is not a
+  guess — and not the individuals bucket, which is where a shortened type list would put it.
+
+Both are legal RDF and both are common in older and hand-maintained ontologies. Declaring the kind
+explicitly as well is better practice in a new ontology; these are written this way because handling
+the input as it arrives is the point.
+
 A profile with no `other_props` section does not lose the term — `individuals` still claims it, so
 it is emitted — but it is filed under individuals, which is not what it is. Give it a section.
 
@@ -198,6 +213,11 @@ job is to produce small, readable diffs between versions.
 `sort: topological` orders parents before children over `rdfs:subClassOf`, and super-properties
 before sub-properties over `rdfs:subPropertyOf`. Ties are broken alphabetically, so the output is
 deterministic — the same input always produces the same file, in any process.
+
+> **Check the spelling.** Exactly four values are understood: `alpha`, `qname_alpha`, `topological`
+> and `topological_then_alpha`. Anything else — a typo, or the reasonable-looking `topo` — currently
+> means **alphabetical**, silently, at exit 0 ([#242](https://github.com/aigora-de/rdf-construct/issues/242)).
+> If a profile is not ordering the way you expect, this is the first thing to check.
 
 Which of the two hierarchy predicates a section uses is decided per section, from the types of the
 subjects it claimed. In practice: class sections walk `rdfs:subClassOf`, property sections walk
@@ -356,6 +376,9 @@ below.
 These are open issues, current as of v0.6.0. They are here because a guide that describes intended
 behaviour is worse than no guide.
 
+**This table is a maintenance contract: a fix that lands should delete its row in the same PR.** If
+it is still growing three releases from now, that is the signal, not the table.
+
 | Issue | Behaviour today |
 |---|---|
 | [#242](https://github.com/aigora-de/rdf-construct/issues/242) | A `sort:` value the tool does not recognise **silently means alphabetical**. Only `alpha`, `qname_alpha`, `topological` and `topological_then_alpha` are understood — `topo` and a typo both give you alphabetical order at exit 0. If a profile is not ordering as expected, check this spelling first. |
@@ -428,6 +451,12 @@ Wrote library-hierarchy.ttl with 17 subjects
 Two things worth copying from it: parse with `bind_namespaces="none"`, or rdflib's well-known
 prefixes will displace your own (#239); and run `bnode_closure` before serialising, or a filtering
 selection can strip the interior of a class expression.
+
+That the snippet is this long is itself a finding rather than a style choice — there is no public
+"order this graph with this profile" entry point, so a library user has to re-derive the section
+loop, and re-deriving it is how the shipped script came to omit the blank-node closure (#244).
+Settling what the package exposes is part of
+[#263](https://github.com/aigora-de/rdf-construct/issues/263).
 
 ## Starting from the template
 
