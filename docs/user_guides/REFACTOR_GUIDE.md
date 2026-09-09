@@ -303,5 +303,5 @@ rdf-construct refactor deprecate ontology.ttl \
 
 ## See Also
 
-- [MERGE_GUIDE.md](MERGE_GUIDE.md) - Merging multiple ontology files
+- [MERGE_SPLIT_GUIDE.md](MERGE_SPLIT_GUIDE.md) - Merging multiple ontology files
 - [CLI_REFERENCE.md](CLI_REFERENCE.md) - Complete CLI documentation

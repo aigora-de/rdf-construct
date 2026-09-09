@@ -497,6 +497,6 @@ Planned features:
 
 ## See Also
 
-- [UML Guide](docs/user_guides/UML_GUIDE.md) - Complete UML documentation
-- [Getting Started](docs/user_guides/GETTING_STARTED.md) - Quick introduction
-- [Examples](examples/uml_contexts_explicit_examples.yml) - Full example configurations
+- [UML Guide](UML_GUIDE.md) - Complete UML documentation
+- [Getting Started](GETTING_STARTED.md) - Quick introduction
+- [Examples](../../examples/uml/uml_contexts_explicit.yml) - Full example configurations
