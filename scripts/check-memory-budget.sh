@@ -31,7 +31,9 @@ CLAUDE_HARD=12288        # 12 KiB — hard ceiling for the always-loaded router
 CLAUDE_SOFT=8192         # 8 KiB — router target; more than this is reference to route out
 MEMORY_HARD=24400        # ~24.4 KiB — the harness silently TRUNCATES at/over this
 MEMORY_SOFT=16384        # 16 KiB — MEMORY.md index target
-TOPIC_SOFT=40960         # 40 KiB — a topic file this big wants a split or an archive
+TOPIC_SOFT=32768         # 32 KiB — early warning: a topic file this big should be planning its
+                         #          rotation, so the cap is never reached mid-session
+TOPIC_HARD=40960         # 40 KiB — CLAUDE.md's documented cap; split it or rotate into archive/
 ARCHIVE_SOFT=153600      # 150 KiB — cold storage may be big, but not unbounded
 EXPERTS_SOFT=40960       # 40 KiB — the routed-to persona file
 DESC_SOFT=500            # chars — frontmatter `description:` one-liner cap
@@ -124,9 +126,17 @@ else
     [[ "$(basename "$f")" == "MEMORY.md" ]] && continue
     b="$(bytes "$f")"
     rel="${f#"$MEMDIR"/}"
-    if (( b >= TOPIC_SOFT )); then
-      echo "warn  $rel $(kib "$b") KiB >= $(kib "$TOPIC_SOFT") KiB — split it, or rotate closed history into archive/"
+    # A file that passes prints `ok` rather than nothing: silence from a check is
+    # indistinguishable from a check that never ran, and that ambiguity has already
+    # caused this guard to be misread as not covering topic files at all.
+    if (( b >= TOPIC_HARD )); then
+      echo "warn  $rel $(kib "$b") KiB >= $(kib "$TOPIC_HARD") KiB cap — split it, or rotate closed history into archive/"
       (( warns++ )) || true
+    elif (( b >= TOPIC_SOFT )); then
+      echo "warn  $rel $(kib "$b") KiB >= $(kib "$TOPIC_SOFT") KiB — nearing the $(kib "$TOPIC_HARD") KiB cap; plan the rotation now, not at the cap"
+      (( warns++ )) || true
+    else
+      echo "ok    $rel $(kib "$b") KiB"
     fi
     desc="$(sed -n 's/^description: *//p' "$f" | head -1)"
     if [[ -z "$desc" ]]; then
