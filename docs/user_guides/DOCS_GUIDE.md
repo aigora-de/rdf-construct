@@ -86,9 +86,11 @@ The JSON output includes:
 - Hierarchy structure
 - Suitable for building custom documentation UIs
 
-#### JSON schema (v0.5.0+)
+#### JSON schema
 
-The top-level shape of `index.json` is:
+Multi-page and single-page JSON output both write the same `index.json`, so a
+consumer does not need to know which mode produced a directory. The top-level
+shape of `index.json` is:
 
 ```json
 {

@@ -723,7 +723,9 @@ class JSONRenderer:
             "concept_schemes": [self._concept_scheme_to_dict(s) for s in entities.concept_schemes],
         }
 
-        return self._write_json(self._get_output_path("ontology.json"), data)
+        # Same filename as the multi-page index. Consumers should not have to
+        # know which mode produced a directory to know what to open (#258).
+        return self._write_json(self._get_output_path("index.json"), data)
 
     def copy_assets(self) -> None:
         """Copy static assets. No assets needed for JSON."""

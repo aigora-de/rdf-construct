@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 directory is now `ordered/` instead of `src/ontology/`. Pass `-o src/ontology`
 to keep the previous location.
 
+**If you consume single-page JSON output, the filename changed.**
+`docs --format json --single-page` now writes `index.json`, the name the guide
+always documented, instead of `ontology.json`.
+
 ### Changed
 - **`order` defaults `-o/--outdir` to `ordered/`, not `src/ontology/`** (#128).
   `src/` is a Python packaging convention that says nothing about ordered RDF,
@@ -18,6 +22,11 @@ to keep the previous location.
   happened to be run. `ordered/` names what it holds, matching `uml` →
   `diagrams/`, `docs` → `docs/` and `split` → `modules/`. An explicit `-o` is
   unaffected, and `-o src/ontology` restores the previous behaviour.
+- **`docs --format json --single-page` writes `index.json`, not `ontology.json`** (#258).
+  The single-page branch picked its own filename while the guide, including its
+  own worked example, documented `index.json`. Both modes now use the documented
+  name, so a consumer can open `index.json` without knowing which mode produced
+  the directory. The schema is unchanged.
 
 ## [0.6.0] - 2026-09-04
 
