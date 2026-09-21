@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 directory is now `ordered/` instead of `src/ontology/`. Pass `-o src/ontology`
 to keep the previous location.
 
+### Fixed
+- **`puml2rdf` no longer doubles the class count for packaged diagrams** (#154).
+  Each class is stored under both `name` and `qualified_name` for relationship
+  lookup; the summary now counts distinct URIs so it matches the parse line.
+
 ### Changed
 - **`order` defaults `-o/--outdir` to `ordered/`, not `src/ontology/`** (#128).
   `src/` is a Python packaging convention that says nothing about ordered RDF,

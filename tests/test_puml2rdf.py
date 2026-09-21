@@ -3,25 +3,27 @@
 Tests cover parsing, conversion, validation, and merging functionality.
 """
 
-import pytest
 from pathlib import Path
-from rdflib import Graph, Namespace, RDF, RDFS, Literal
+from textwrap import dedent
+
+from click.testing import CliRunner
+from rdflib import RDF, RDFS, Graph, Literal, Namespace
 from rdflib.namespace import OWL, XSD
 
+from rdf_construct.cli import cli
 from rdf_construct.puml2rdf import (
-    PlantUMLParser,
-    PumlToRdfConverter,
     ConversionConfig,
-    PumlModel,
-    PumlClass,
+    OntologyMerger,
+    PlantUMLParser,
     PumlAttribute,
+    PumlClass,
+    PumlModel,
     PumlRelationship,
+    PumlToRdfConverter,
     RelationshipType,
     validate_puml,
     validate_rdf,
-    OntologyMerger,
 )
-
 
 # ==============================================================================
 # Parser Tests
@@ -599,3 +601,42 @@ class TestRoundTrip:
         # Comment from note
         comments = list(graph.objects(ns.Building, RDFS.comment))
         assert len(comments) >= 1
+
+
+# ==============================================================================
+# CLI summary Tests
+# ==============================================================================
+
+
+class TestPuml2rdfCliSummary:
+    """Tests for the puml2rdf command's conversion summary."""
+
+    def test_packaged_diagram_summary_counts_distinct_classes(self, tmp_path: Path) -> None:
+        """Summary class count must match distinct classes, not dual-keyed map size.
+
+        Packaged classes are stored under both ``name`` and ``qualified_name``.
+        The parse line reports the real class count; the final summary must too.
+        """
+        puml = tmp_path / "building.puml"
+        puml.write_text(
+            dedent(
+                """
+                @startuml
+                package "http://example.org/building#" as bld {
+                  class Building
+                  class Floor
+                  class Room
+                }
+                Building --> Floor : hasFloor
+                Floor --> Room : hasRoom
+                @enduml
+                """
+            )
+        )
+        output = tmp_path / "building.ttl"
+        result = CliRunner().invoke(cli, ["puml2rdf", str(puml), "-o", str(output)])
+
+        assert result.exit_code == 0, result.output
+        assert "Found: 3 classes" in result.output
+        assert "Classes: 3," in result.output
+        assert "Classes: 6," not in result.output
