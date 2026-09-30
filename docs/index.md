@@ -387,8 +387,4 @@ MIT License. See [LICENSE](../LICENSE) file.
 
 See [CHANGELOG.md](../CHANGELOG.md) for version history.
 
----
 
-## Archive
-
-Previous documentation versions are preserved in [docs/archive/](archive/) for reference.
