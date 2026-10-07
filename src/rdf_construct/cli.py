@@ -3759,7 +3759,8 @@ def localise_report(
     )
 
     # Parse languages
-    lang_list = [lang.strip() for lang in languages.split(",")]
+    # drop empty entries and dedupe while preserving order (see #163)
+    lang_list = list(dict.fromkeys(lang.strip() for lang in languages.split(",") if lang.strip()))
 
     # Parse properties
     prop_list = None
@@ -3786,7 +3787,7 @@ def localise_report(
     # Output
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(report_text)
+        output.write_text(report_text, encoding="utf-8")
         click.secho(f"\u2713 Wrote {output}", fg="green")
     else:
         click.echo()
