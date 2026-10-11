@@ -11,6 +11,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 directory is now `ordered/` instead of `src/ontology/`. Pass `-o src/ontology`
 to keep the previous location.
 
+### Added
+- **`docs/user_guides/ORDER_GUIDE.md`, a guide to `order`** (#127). `order` is
+  the founding feature, and it was the only substantial command without a
+  guide. The guide is written from the command's audited behaviour rather than
+  its intended behaviour. Where the two differ, it states what the command does
+  today and links the issue. Open findings are listed in a "Known limitations"
+  table, and a fix deletes its row in the same PR. The guide covers:
+  - how the configuration file's sections compose;
+  - the six built-in selectors;
+  - the `unclaimed:` policy;
+  - sorting, roots and hierarchy cycles;
+  - prefix handling.
+- **`examples/order/library.ttl` and `ordering.yml`**, the guide's worked
+  material. The ontology is built so that alphabetical and hierarchical order
+  visibly disagree, and every key in the configuration is one the tool reads.
+  Every command in the guide runs verbatim against these files.
+- **Tests that execute the guide's material** (`tests/test_unclaimed_subjects.py`).
+  They assert that complete profiles preserve every triple, that the two orders
+  differ, that unclaimed subjects are reported, and that a filtering profile
+  keeps its blank-node closure. Nothing executed the shipped ordering examples
+  before.
+
 ### Changed
 - **`order` defaults `-o/--outdir` to `ordered/`, not `src/ontology/`** (#128).
   `src/` is a Python packaging convention that says nothing about ordered RDF,
