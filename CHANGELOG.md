@@ -42,6 +42,14 @@ change, and what to do about it, is listed command by command in the
   differ, that unclaimed subjects are reported, and that a filtering profile
   keeps its blank-node closure. Nothing executed the shipped ordering examples
   before.
+- **Three pinned IES ontologies in `tests/fixtures/ies/`, the first realistic
+  test material in the repository** (#307). They are `ies-common` 5.0.3,
+  `ies-env-building` 1.0.0 and `ies-env-building-classification` 1.0.0,
+  copied verbatim from public UK Government repositories under the MIT
+  Licence, © Crown Copyright. A README records each file's source and commit.
+  `tests/test_ies_fixtures.py` checks each file's bytes against its pinned
+  commit and its declared versions, so a silent upstream swap fails the suite.
+  The release process now runs every command over them before a tag.
 
 ### Changed
 - **`order` defaults `-o/--outdir` to `ordered/`, not `src/ontology/`** (#128).
