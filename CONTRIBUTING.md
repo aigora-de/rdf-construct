@@ -245,6 +245,9 @@ making them:
 2. Date the CHANGELOG entry, empty `[Unreleased]`, add the version's `compare/…` link to the
    footer, and move the `[Unreleased]` link on to the new version
 3. Update the version where prose states it — `README.md` and `CLAUDE.md`
+4. Exercise the release against realistic ontologies: run every command over the three pinned IES
+   files in [`tests/fixtures/ies/`](tests/fixtures/ies/README.md), and read the output, not just
+   the exit code. They were not written for this tool, so they find what the toy fixtures cannot
 
 Then:
 
