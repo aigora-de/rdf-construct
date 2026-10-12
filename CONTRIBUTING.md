@@ -24,7 +24,7 @@ Be respectful, constructive, and professional. We're all here to build better RD
 ### Labels and Milestones
 
 A minimal label set: `bug`, `enhancement`, `documentation`, `question`, `chore`,
-`good-first-issue`, `backlog`. Add `breaking-change` when a change affects the public API.
+`good-first-issue`, `backlog`. Add `breaking` when a change affects the public API.
 
 Milestones group related issues into a release. A feature developed across several issues and PRs
 shares one milestone (e.g. `v0.5.0 - Entity-type taxonomy in docs`), which makes it clear what is
@@ -212,6 +212,9 @@ If the black gate fails, `poetry run black .` fixes it; the usual cause is not h
 1. Run `scripts/ci-local.sh` and ensure the gate is green
 2. Update documentation as needed
 3. Add entry to CHANGELOG.md under "Unreleased"
+   - If the PR closes a `breaking` issue or changes output, also add or amend its row in
+     [`docs/MIGRATION_v0.7.0.md`](docs/MIGRATION_v0.7.0.md) in the same PR. The note is built as
+     fixes land, not reconstructed at release time.
 4. Reference related issues in the PR description
 5. Wait for review - maintainers will provide feedback
 6. Make requested changes if needed

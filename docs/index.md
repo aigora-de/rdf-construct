@@ -19,6 +19,7 @@
 **Multi-Language Support?** → [Localise Guide](user_guides/LOCALISE_GUIDE.md)
 **Need Command Syntax?** → [CLI Reference](user_guides/CLI_REFERENCE.md)
 **Quick Cheat Sheet?** → [Quick Reference](user_guides/QUICK_REFERENCE.md)
+**Upgrading to v0.7.0?** → [Migration Note](MIGRATION_v0.7.0.md)
 **Contributing?** → [Contributing Guide](../CONTRIBUTING.md)
 **Code Reference?** → [Code Index](../CODE_INDEX.md)
 
@@ -385,7 +386,8 @@ MIT License. See [LICENSE](../LICENSE) file.
 
 ## Recent Changes
 
-See [CHANGELOG.md](../CHANGELOG.md) for version history.
+See [CHANGELOG.md](../CHANGELOG.md) for version history. Upgrading to v0.7.0? Every breaking
+change, and what to do about it, is in the [v0.7.0 migration note](MIGRATION_v0.7.0.md).
 
 ---
 
