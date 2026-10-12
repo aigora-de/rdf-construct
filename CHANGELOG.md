@@ -11,7 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 directory is now `ordered/` instead of `src/ontology/`. Pass `-o src/ontology`
 to keep the previous location.
 
+**v0.7.0 changes behaviour in most commands, deliberately and once.** Every
+change, and what to do about it, is listed command by command in the
+[v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
+
 ### Added
+- **`docs/MIGRATION_v0.7.0.md`, the single migration note for v0.7.0** (#312).
+  It has a section for changes that cut across commands (exit codes, default
+  output directories, flags versus configuration files) and then one section
+  per command, each a table of issue, what changed and what to do. The note is
+  built as fixes land: every PR that closes a `breaking` issue, or changes
+  output, adds or amends its own row in the same PR.
 - **`docs/user_guides/ORDER_GUIDE.md`, a guide to `order`** (#127). `order` is
   the founding feature, and it was the only substantial command without a
   guide. The guide is written from the command's audited behaviour rather than
