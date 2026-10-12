@@ -1807,7 +1807,7 @@ def puml2rdf(
         graph.serialize(str(output), format=rdf_format)
         click.secho(f"\u2713 Wrote {output}", fg="green")
         click.echo(
-            f"  Classes: {len(conversion_result.class_uris)}, "
+            f"  Classes: {len(set(conversion_result.class_uris.values()))}, "
             f"Properties: {len(conversion_result.property_uris)}"
         )
     except Exception as e:

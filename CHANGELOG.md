@@ -51,6 +51,11 @@ change, and what to do about it, is listed command by command in the
   `diagrams/`, `docs` → `docs/` and `split` → `modules/`. An explicit `-o` is
   unaffected, and `-o src/ontology` restores the previous behaviour.
 
+### Fixed
+- **`puml2rdf` no longer doubles the class count for packaged diagrams** (#154).
+  Each class is stored under both `name` and `qualified_name` for relationship
+  lookup; the summary now counts distinct URIs so it matches the parse line.
+
 ## [0.6.0] - 2026-09-04
 
 Completes the `docs` entity-type taxonomy carried over from v0.5.0, and fixes
