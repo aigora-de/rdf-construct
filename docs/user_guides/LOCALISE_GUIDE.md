@@ -398,8 +398,8 @@ The extractor treats literals without language tags as the source language. If y
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | Success with warnings (some translations skipped) |
-| 2 | Error (file not found, invalid format) |
+| 1 | `merge` only: completed, but some translated entities were not found in the ontology |
+| 2 | Input refused or run failed (invalid options or config, file not found, parse error) |
 
 ## Related Commands
 

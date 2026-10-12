@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**If you gate CI on `lint`'s exit code, it has changed.** Error findings now exit
+1, not 2, and a run with only warnings exits 0. Pass `--fail-on warning` to keep
+failing on warnings. Every command now uses one convention: 0 success, 1
+completed with findings, 2 refused or failed. See
+[Exit codes](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#exit-codes)
+in the migration note.
+
 **If you run `order` without `-o`, your output moves.** The default output
 directory is now `ordered/` instead of `src/ontology/`. Pass `-o src/ontology`
 to keep the previous location.
@@ -58,6 +65,19 @@ change, and what to do about it, is listed command by command in the
   happened to be run. `ordered/` names what it holds, matching `uml` →
   `diagrams/`, `docs` → `docs/` and `split` → `modules/`. An explicit `-o` is
   unaffected, and `-o src/ontology` restores the previous behaviour.
+- **One exit-code convention across every command** (#286): 0 the command did
+  what you asked, 1 it finished and has something to report, 2 it did not do it.
+  The 30 `click.Abort()` refusals in `order`, `uml`, `lint`, `merge`, `split`,
+  `refactor` and `localise config` now exit 2, not 1, through one `Refusal`
+  exception that names what was refused and what is accepted. `stats` and
+  `shacl-gen` errors exit 2, not 1. A malformed YAML config in `merge`, `split`
+  and `refactor` is refused at 2 instead of a traceback.
+- **`lint` error findings exit 1, not 2, and `--fail-on` sets the gate** (#286).
+  `--fail-on error|warning|info|never` (default `error`) is the lowest severity
+  that exits 1, so a warnings-only run now exits 0. The severity-to-exit-code
+  mapping moved out of the engine: `LintSummary.exit_code` is removed.
+- **`orphan-class` defaults to `warning`** (#302). A root class is not a
+  defect, and 16 of 17 shipped example ontologies failed the linter on it.
 
 ### Fixed
 - **`puml2rdf` no longer doubles the class count for packaged diagrams** (#154).

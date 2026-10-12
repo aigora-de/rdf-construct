@@ -220,19 +220,6 @@ class LintSummary:
         self.total_info += result.info_count
 
     @property
-    def exit_code(self) -> int:
-        """Get appropriate exit code based on results.
-
-        Returns:
-            0 if no issues, 1 if warnings only, 2 if errors.
-        """
-        if self.total_errors > 0:
-            return 2
-        if self.total_warnings > 0:
-            return 1
-        return 0
-
-    @property
     def files_with_issues(self) -> int:
         """Number of files that had at least one issue."""
         return sum(1 for r in self.results if r.total_issues > 0)

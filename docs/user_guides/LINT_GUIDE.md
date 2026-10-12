@@ -22,15 +22,26 @@ rdf-construct lint ontology.ttl --format json
 
 | Code | Meaning |
 |------|---------|
-| 0 | No issues found |
-| 1 | Warnings found (no errors) |
-| 2 | Errors found |
+| 0 | No findings at or above `--fail-on` |
+| 1 | Findings at or above `--fail-on` |
+| 2 | Input refused or run failed (invalid options or config, file not found, parse error) |
+
+`--fail-on` sets the lowest severity that counts: `error` (the default), `warning`, `info` or
+`never`. With the default, a run with only warnings exits 0.
 
 Use exit codes in CI pipelines:
 
 ```bash
-rdf-construct lint ontology.ttl --level strict || exit 1
+# Fail on errors only (the default)
+rdf-construct lint ontology.ttl || exit 1
+
+# Fail on warnings too
+rdf-construct lint ontology.ttl --fail-on warning || exit 1
 ```
+
+A `1` always means the run completed and found something; a `2` means it could not check the file
+at all. Before v0.7.0, error findings exited 2 — see the
+[migration note](../MIGRATION_v0.7.0.md#lint).
 
 ## Strictness Levels
 
@@ -170,11 +181,11 @@ The linter automatically searches for configuration files in this order:
 Human-readable output with optional colours:
 
 ```
-ontology.ttl:12: error[orphan-class]: 'Building' Class has no rdfs:subClassOf declaration
+ontology.ttl:12: warning[orphan-class]: 'Building' Class has no rdfs:subClassOf declaration
 ontology.ttl:18: warning[missing-label]: 'hasFloor' Property lacks rdfs:label
 ontology.ttl:24: info[property-no-domain]: 'builtIn' Object property has no rdfs:domain
 
-Found 1 error, 1 warning, 1 info in 1 file
+Found 0 errors, 2 warnings, 1 info in 1 file
 ```
 
 Disable colours for piping:
@@ -199,16 +210,16 @@ rdf-construct lint ontology.ttl --format json
       "issues": [
         {
           "rule": "orphan-class",
-          "severity": "error",
+          "severity": "warning",
           "entity": "http://example.org/Building",
           "message": "Class has no rdfs:subClassOf declaration",
           "line": null
         }
       ],
-      "summary": {"errors": 1, "warnings": 0, "info": 0}
+      "summary": {"errors": 0, "warnings": 1, "info": 0}
     }
   ],
-  "summary": {"errors": 1, "warnings": 0, "info": 0, "files": 1}
+  "summary": {"errors": 0, "warnings": 1, "info": 0, "files": 1}
 }
 ```
 
@@ -265,6 +276,9 @@ repos:
         args: [--level, standard]
 ```
 
+With the default `--fail-on error`, a file with only warnings passes this hook. Add
+`--fail-on, warning` to `args` to block on warnings as well.
+
 ## Listing Available Rules
 
 ```bash
@@ -277,7 +291,7 @@ Output:
 Available lint rules:
 
   Structural
-    orphan-class: error - Class has no rdfs:subClassOf declaration
+    orphan-class: warning - Class has no rdfs:subClassOf declaration
     dangling-reference: error - Reference to undefined entity
     ...
 

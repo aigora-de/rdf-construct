@@ -298,8 +298,8 @@ rdf-construct refactor deprecate ontology.ttl \
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | Success with warnings (e.g., some URIs not found) |
-| 2 | Error (file not found, parse error, invalid config) |
+| 1 | `deprecate` only: success, but some entities were not found |
+| 2 | Input refused or run failed (invalid options or config, file not found, parse error) |
 
 ## See Also
 

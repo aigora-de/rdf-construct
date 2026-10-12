@@ -1,9 +1,12 @@
 """Command-line interface for rdf-construct."""
 
 import sys
+from collections.abc import Iterable
 from pathlib import Path
+from typing import IO, Any
 
 import click
+import yaml
 from rdflib import BNode, Graph, RDF, URIRef
 from rdflib.namespace import OWL
 from rdflib.term import Node
@@ -49,6 +52,7 @@ from rdf_construct.uml.odm_renderer import render_odm_plantuml
 from rdf_construct.lint import (
     LintEngine,
     LintConfig,
+    LintSummary,
     load_lint_config,
     find_config_file,
     get_formatter as get_lint_formatter,
@@ -58,6 +62,7 @@ from rdf_construct.lint import (
 
 LINT_LEVELS = ["strict", "standard", "relaxed"]
 LINT_FORMATS = ["text", "json"]
+LINT_FAIL_ON = ["error", "warning", "info", "never"]
 
 from rdf_construct.diff import compare_files, format_diff, filter_diff, parse_filter_string
 
@@ -134,6 +139,36 @@ from rdf_construct.localise import (
 
 # Valid rendering modes
 RENDERING_MODES = ["default", "odm"]
+
+
+class Refusal(click.ClickException):
+    """The command did not do what was asked: the input was refused or the run failed.
+
+    Exit code 2 under the convention decided on #286: 0 the command did what you
+    asked, 1 it finished and has something to report, 2 it did not do it. Raise
+    this where a command refuses its input. Click's standalone ``main`` turns it
+    into the process exit, so it is defined here in the CLI layer and never raised
+    by the library.
+
+    The message names the value and what it was checked against. ``accepted``,
+    when given, lists what would have been accepted instead.
+
+    Args:
+        message: What was refused, and why.
+        accepted: Values that would have been accepted, if the set is known.
+    """
+
+    exit_code = 2
+
+    def __init__(self, message: str, *, accepted: Iterable[str] | None = None) -> None:
+        super().__init__(message)
+        self.accepted = list(accepted) if accepted is not None else None
+
+    def show(self, file: IO[Any] | None = None) -> None:
+        """Write the refusal to stderr: the message, then what is accepted."""
+        click.secho(f"Error: {self.format_message()}", file=file, fg="red", err=True)
+        if self.accepted is not None:
+            click.echo(f"Accepted: {', '.join(self.accepted) or '(none)'}", file=file, err=True)
 
 
 @click.group()
@@ -458,10 +493,10 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path):
     # Validate requested profiles exist
     for prof_name in profiles_to_gen:
         if prof_name not in ordering_config.profiles:
-            click.secho(f"Error: Profile '{prof_name}' not found in config.", fg="red", err=True)
-            available = ", ".join(ordering_config.list_profiles())
-            click.echo(f"Available profiles: {available}", err=True)
-            raise click.Abort()
+            raise Refusal(
+                f"Profile '{prof_name}' not found in {config}.",
+                accepted=ordering_config.list_profiles(),
+            )
 
     # Resolve the unclaimed-subject policies before writing anything: a typo in one
     # profile should not surface only after the earlier profiles have been written.
@@ -471,8 +506,7 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path):
             for prof_name in profiles_to_gen
         }
     except ValueError as exc:
-        click.secho(f"Error: {exc}", fg="red", err=True)
-        raise click.Abort() from exc
+        raise Refusal(str(exc)) from exc
 
     # Create output directory
     outdir.mkdir(parents=True, exist_ok=True)
@@ -670,9 +704,10 @@ def uml(
             style_scheme = style_cfg.get_scheme(style)
             click.echo(f"Using style: {style}")
         except KeyError as e:
-            click.secho(str(e), fg="red", err=True)
-            click.echo(f"Available styles: {', '.join(style_cfg.list_schemes())}")
-            raise click.Abort()
+            raise Refusal(
+                f"Style scheme '{style}' not found in {style_config}.",
+                accepted=style_cfg.list_schemes(),
+            ) from e
 
     # Load layout if provided
     layout_cfg = None
@@ -682,9 +717,10 @@ def uml(
             layout_cfg = layout_mgr.get_layout(layout)
             click.echo(f"Using layout: {layout}")
         except KeyError as e:
-            click.secho(str(e), fg="red", err=True)
-            click.echo(f"Available layouts: {', '.join(layout_mgr.list_layouts())}")
-            raise click.Abort()
+            raise Refusal(
+                f"Layout '{layout}' not found in {layout_config}.",
+                accepted=layout_mgr.list_layouts(),
+            ) from e
 
     # Display rendering mode
     if rendering_mode == "odm":
@@ -704,10 +740,10 @@ def uml(
     # Validate requested contexts exist
     for ctx_name in contexts_to_gen:
         if ctx_name not in uml_config.contexts:
-            click.secho(f"Error: Context '{ctx_name}' not found in config.", fg="red", err=True)
-            available = ", ".join(uml_config.list_contexts())
-            click.echo(f"Available contexts: {available}", err=True)
-            raise click.Abort()
+            raise Refusal(
+                f"Context '{ctx_name}' not found in {config}.",
+                accepted=uml_config.list_contexts(),
+            )
 
     # Create output directory
     # ToDo - handle exceptions properly
@@ -861,6 +897,13 @@ def contexts(config: Path):
     is_flag=True,
     help="Generate a default .rdf-lint.yml config file and exit",
 )
+@click.option(
+    "--fail-on",
+    type=click.Choice(LINT_FAIL_ON),
+    default="error",
+    show_default=True,
+    help="Lowest severity that makes the run exit 1 ('never' always exits 0)",
+)
 def lint(
     sources: tuple[Path, ...],
     level: str,
@@ -871,6 +914,7 @@ def lint(
     no_colour: bool,
     list_rules_flag: bool,  # Must match the name above
     init_config: bool,
+    fail_on: str,
 ):
     """Check RDF ontologies for quality issues.
 
@@ -882,9 +926,9 @@ def lint(
 
     \b
     Exit codes:
-      0 - No issues found
-      1 - Warnings found (no errors)
-      2 - Errors found
+      0 - No findings at or above --fail-on (default: error)
+      1 - Findings at or above --fail-on
+      2 - Input refused or run failed
 
     \b
     Examples:
@@ -896,6 +940,9 @@ def lint(
 
       # Strict mode (warnings become errors)
       rdf-construct lint ontology.ttl --level strict
+
+      # Fail CI on warnings as well as errors
+      rdf-construct lint ontology.ttl --fail-on warning
 
       # JSON output for CI
       rdf-construct lint ontology.ttl --format json
@@ -915,8 +962,7 @@ def lint(
 
         config_path = Path(".rdf-lint.yml")
         if config_path.exists():
-            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
-            raise click.Abort()
+            raise Refusal(f"Config file already exists: {config_path}")
 
         config_content = create_default_config()
         config_path.write_text(config_content)
@@ -958,8 +1004,7 @@ def lint(
 
     # Validate we have sources for actual linting
     if not sources:
-        click.secho("Error: No source files specified.", fg="red", err=True)
-        raise click.Abort()
+        raise Refusal("No source files specified.")
 
     lint_config: LintConfig
 
@@ -969,8 +1014,7 @@ def lint(
             lint_config = load_lint_config(config)
             click.echo(f"Using config: {config}")
         except (FileNotFoundError, ValueError) as e:
-            click.secho(f"Error loading config: {e}", fg="red", err=True)
-            raise click.Abort()
+            raise Refusal(f"Could not load config {config}: {e}") from e
     else:
         # Try to find config file automatically
         found_config = find_config_file()
@@ -979,8 +1023,7 @@ def lint(
                 lint_config = load_lint_config(found_config)
                 click.echo(f"Using config: {found_config}")
             except (FileNotFoundError, ValueError) as e:
-                click.secho(f"Error loading config: {e}", fg="red", err=True)
-                raise click.Abort()
+                raise Refusal(f"Could not load config {found_config}: {e}") from e
         else:
             lint_config = LintConfig()
 
@@ -1007,8 +1050,28 @@ def lint(
     output = formatter.format_summary(summary)
     click.echo(output)
 
-    # Exit with appropriate code
-    raise SystemExit(summary.exit_code)
+    raise SystemExit(_lint_exit_code(summary, fail_on))
+
+
+def _lint_exit_code(summary: LintSummary, fail_on: str) -> int:
+    """Map a lint summary to an exit code (#286).
+
+    The engine reports severities; this decides what they mean for the process.
+
+    Args:
+        summary: The completed lint run.
+        fail_on: Lowest severity that counts as a finding: error, warning, info or never.
+
+    Returns:
+        1 if any finding is at or above ``fail_on``, otherwise 0.
+    """
+    counts = {
+        "error": summary.total_errors,
+        "warning": summary.total_errors + summary.total_warnings,
+        "info": summary.total_errors + summary.total_warnings + summary.total_info,
+        "never": 0,
+    }
+    return 1 if counts[fail_on] > 0 else 0
 
 
 @cli.command()
@@ -1558,13 +1621,13 @@ def shacl_gen(
 
     except FileNotFoundError as e:
         click.secho(f"Error: {e}", fg="red", err=True)
-        raise SystemExit(1)
+        raise SystemExit(2)
     except ValueError as e:
         click.secho(f"Configuration error: {e}", fg="red", err=True)
-        raise SystemExit(1)
+        raise SystemExit(2)
     except Exception as e:
         click.secho(f"Error generating shapes: {e}", fg="red", err=True)
-        raise SystemExit(1)
+        raise SystemExit(2)
 
 
 # Output format choices
@@ -2065,7 +2128,7 @@ def stats(
     \b
     Exit codes:
         0 - Success
-        1 - Error occurred
+        2 - Input refused or run failed (invalid options, unreadable file, etc.)
     """
     try:
         # Validate file count for compare mode
@@ -2076,7 +2139,7 @@ def stats(
                     fg="red",
                     err=True,
                 )
-                sys.exit(1)
+                sys.exit(2)
 
         # Parse include/exclude categories
         include_set: set[str] | None = None
@@ -2154,13 +2217,13 @@ def stats(
 
     except ValueError as e:
         click.secho(f"Error: {e}", fg="red", err=True)
-        sys.exit(1)
+        sys.exit(2)
     except FileNotFoundError as e:
         click.secho(f"Error: {e}", fg="red", err=True)
-        sys.exit(1)
+        sys.exit(2)
     except Exception as e:
         click.secho(f"Error: {e}", fg="red", err=True)
-        sys.exit(1)
+        sys.exit(2)
 
 
 @cli.command()
@@ -2397,7 +2460,7 @@ def merge(
     Exit codes:
       0 - Merge successful, no unresolved conflicts
       1 - Merge successful, but unresolved conflicts marked in output
-      2 - Error (file not found, parse error, etc.)
+      2 - Input refused or run failed (invalid options or config, parse error, etc.)
 
     \b
     Examples:
@@ -2427,8 +2490,7 @@ def merge(
     if init_config:
         config_path = Path("merge.yml")
         if config_path.exists():
-            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
-            raise click.Abort()
+            raise Refusal(f"Config file already exists: {config_path}")
 
         config_content = create_default_config()
         config_path.write_text(config_content)
@@ -2439,9 +2501,10 @@ def merge(
 
     # Validate we have sources
     if not sources and not config_file:
-        click.secho("Error: No source files specified.", fg="red", err=True)
-        click.echo("Provide source files or use --config with a configuration file.", err=True)
-        raise click.Abort()
+        raise Refusal(
+            "No source files specified. "
+            "Provide source files or use --config with a configuration file."
+        )
 
     # Build configuration
     if config_file:
@@ -2452,9 +2515,8 @@ def merge(
             # Override output if provided on CLI
             if output:
                 config.output = OutputConfig(path=output)
-        except (FileNotFoundError, ValueError) as e:
-            click.secho(f"Error loading config: {e}", fg="red", err=True)
-            raise click.Abort()
+        except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
+            raise Refusal(f"Could not load config {config_file}: {e}") from e
     else:
         # Build config from CLI arguments
         priorities_list = list(priority) if priority else list(range(1, len(sources) + 1))
@@ -2661,7 +2723,7 @@ def split(
     Exit codes:
       0 - Split successful
       1 - Split successful with unmatched entities in common module
-      2 - Error (file not found, config invalid, etc.)
+      2 - Input refused or run failed (invalid options or config, parse error, etc.)
 
     \b
     Examples:
@@ -2685,8 +2747,7 @@ def split(
     if init_config:
         config_path = Path("split.yml")
         if config_path.exists():
-            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
-            raise click.Abort()
+            raise Refusal(f"Config file already exists: {config_path}")
 
         config_content = create_default_split_config()
         config_path.write_text(config_content)
@@ -2697,8 +2758,7 @@ def split(
 
     # Validate we have a source
     if not source:
-        click.secho("Error: SOURCE is required.", fg="red", err=True)
-        raise click.Abort()
+        raise Refusal("SOURCE is required.")
 
     # Handle --by-namespace mode
     if by_namespace:
@@ -2723,20 +2783,16 @@ def split(
             config.dry_run = dry_run
             config.generate_manifest = not no_manifest
             click.echo(f"Using config: {config_file}")
-        except (FileNotFoundError, ValueError) as e:
-            click.secho(f"Error loading config: {e}", fg="red", err=True)
-            raise click.Abort()
+        except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
+            raise Refusal(f"Could not load config {config_file}: {e}") from e
     else:
         # Need either --by-namespace or --config
         if not by_namespace:
-            click.secho(
-                "Error: Specify either --by-namespace or --config.",
-                fg="red",
-                err=True,
+            raise Refusal(
+                "Specify either --by-namespace or --config. "
+                "Use --by-namespace for auto-detection or -c for a config file; "
+                "run 'rdf-construct split --init' to generate a config template."
             )
-            click.echo("Use --by-namespace for auto-detection or -c for a config file.")
-            click.echo("Run 'rdf-construct split --init' to generate a config template.")
-            raise click.Abort()
 
         # Build minimal config
         config = SplitConfig(
@@ -2968,8 +3024,7 @@ def refactor_rename(
     \b
     Exit codes:
       0 - Success
-      1 - Success with warnings (some URIs not found)
-      2 - Error (file not found, parse error, etc.)
+      2 - Input refused or run failed (invalid options or config, parse error, etc.)
 
     \b
     Examples:
@@ -3010,8 +3065,7 @@ def refactor_rename(
     if init_config:
         config_path = Path("refactor_rename.yml")
         if config_path.exists():
-            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
-            raise click.Abort()
+            raise Refusal(f"Config file already exists: {config_path}")
 
         config_content = create_default_rename_config()
         config_path.write_text(config_content)
@@ -3022,23 +3076,20 @@ def refactor_rename(
 
     # Validate input options
     if not sources and not config_file:
-        click.secho("Error: No source files specified.", fg="red", err=True)
-        click.echo("Provide source files or use --config with a configuration file.", err=True)
-        raise click.Abort()
+        raise Refusal(
+            "No source files specified. "
+            "Provide source files or use --config with a configuration file."
+        )
 
     # Validate rename options
     if from_uri and not to_uri:
-        click.secho("Error: --from requires --to", fg="red", err=True)
-        raise click.Abort()
+        raise Refusal("--from requires --to.")
     if to_uri and not from_uri:
-        click.secho("Error: --to requires --from", fg="red", err=True)
-        raise click.Abort()
+        raise Refusal("--to requires --from.")
     if from_namespace and not to_namespace:
-        click.secho("Error: --from-namespace requires --to-namespace", fg="red", err=True)
-        raise click.Abort()
+        raise Refusal("--from-namespace requires --to-namespace.")
     if to_namespace and not from_namespace:
-        click.secho("Error: --to-namespace requires --from-namespace", fg="red", err=True)
-        raise click.Abort()
+        raise Refusal("--to-namespace requires --from-namespace.")
 
     # Build configuration
     if config_file:
@@ -3056,9 +3107,8 @@ def refactor_rename(
             # Override sources if provided on CLI
             if sources:
                 config.source_files = list(sources)
-        except (FileNotFoundError, ValueError) as e:
-            click.secho(f"Error loading config: {e}", fg="red", err=True)
-            raise click.Abort()
+        except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
+            raise Refusal(f"Could not load config {config_file}: {e}") from e
     else:
         # Build config from CLI arguments
         rename_config = RenameConfig()
@@ -3080,13 +3130,10 @@ def refactor_rename(
 
     # Validate we have something to rename
     if config.rename is None or (not config.rename.namespaces and not config.rename.entities):
-        click.secho(
-            "Error: No renames specified. Use --from/--to, --from-namespace/--to-namespace, "
-            "or provide a config file.",
-            fg="red",
-            err=True,
+        raise Refusal(
+            "No renames specified. Use --from/--to, --from-namespace/--to-namespace, "
+            "or provide a config file."
         )
-        raise click.Abort()
 
     # Execute rename
     formatter = RefactorTextFormatter(use_colour=not no_colour)
@@ -3263,7 +3310,7 @@ def refactor_deprecate(
     Exit codes:
       0 - Success
       1 - Success with warnings (some entities not found)
-      2 - Error (file not found, parse error, etc.)
+      2 - Input refused or run failed (invalid options or config, parse error, etc.)
 
     \b
     Examples:
@@ -3296,8 +3343,7 @@ def refactor_deprecate(
     if init_config:
         config_path = Path("refactor_deprecate.yml")
         if config_path.exists():
-            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
-            raise click.Abort()
+            raise Refusal(f"Config file already exists: {config_path}")
 
         config_content = create_default_deprecation_config()
         config_path.write_text(config_content)
@@ -3308,9 +3354,10 @@ def refactor_deprecate(
 
     # Validate input options
     if not sources and not config_file:
-        click.secho("Error: No source files specified.", fg="red", err=True)
-        click.echo("Provide source files or use --config with a configuration file.", err=True)
-        raise click.Abort()
+        raise Refusal(
+            "No source files specified. "
+            "Provide source files or use --config with a configuration file."
+        )
 
     # Build configuration
     if config_file:
@@ -3325,18 +3372,12 @@ def refactor_deprecate(
             # Override sources if provided on CLI
             if sources:
                 config.source_files = list(sources)
-        except (FileNotFoundError, ValueError) as e:
-            click.secho(f"Error loading config: {e}", fg="red", err=True)
-            raise click.Abort()
+        except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
+            raise Refusal(f"Could not load config {config_file}: {e}") from e
     else:
         # Build config from CLI arguments
         if not entity:
-            click.secho(
-                "Error: --entity is required when not using a config file.",
-                fg="red",
-                err=True,
-            )
-            raise click.Abort()
+            raise Refusal("--entity is required when not using a config file.")
 
         spec = DeprecationSpec(
             entity=entity,
@@ -3354,12 +3395,7 @@ def refactor_deprecate(
 
     # Validate we have something to deprecate
     if not config.deprecations:
-        click.secho(
-            "Error: No deprecations specified. Use --entity or provide a config file.",
-            fg="red",
-            err=True,
-        )
-        raise click.Abort()
+        raise Refusal("No deprecations specified. Use --entity or provide a config file.")
 
     # Execute deprecation
     formatter = RefactorTextFormatter(use_colour=not no_colour)
@@ -3890,8 +3926,7 @@ def localise_config(init_config: bool):
     if init_config:
         config_path = Path("localise.yml")
         if config_path.exists():
-            click.secho(f"Config file already exists: {config_path}", fg="red", err=True)
-            raise click.Abort()
+            raise Refusal(f"Config file already exists: {config_path}")
 
         config_content = create_default_localise_config()
         config_path.write_text(config_content)

@@ -338,7 +338,7 @@ class TestLintEngine:
         result = engine.lint_graph(g)
 
         assert result.total_issues > 0
-        assert result.error_count > 0  # orphan-class is an error
+        assert result.warning_count > 0  # orphan-class is a warning (#302)
 
     def test_lint_with_config(self):
         """Engine should respect config."""
