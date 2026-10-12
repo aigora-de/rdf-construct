@@ -65,7 +65,7 @@ rdf-construct merge [OPTIONS] [SOURCES]...
 |------|---------|
 | 0 | Merge successful, no unresolved conflicts |
 | 1 | Merge successful, but unresolved conflicts marked in output |
-| 2 | Error (file not found, parse error, etc.) |
+| 2 | Input refused or run failed (invalid options or config, file not found, parse error) |
 
 ### Conflict Detection
 
@@ -408,7 +408,7 @@ rdf-construct split SOURCE [OPTIONS]
 |------|---------|
 | 0 | Split successful |
 | 1 | Split successful, unmatched entities in common module |
-| 2 | Error (file not found, config invalid, etc.) |
+| 2 | Input refused or run failed (invalid options or config, file not found, parse error) |
 
 ### Splitting Strategies
 

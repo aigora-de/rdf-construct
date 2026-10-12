@@ -549,12 +549,14 @@ rdf-construct lint SOURCE [SOURCE...] [OPTIONS]
 - `--no-colour`: Disable coloured output
 - `--list-rules`: List available rules and exit
 - `--init`: Generate a default `.rdf-lint.yml` config file and exit
+- `--fail-on SEVERITY`: Lowest severity that makes the run exit 1: `error`, `warning`, `info` or
+  `never` (default: error)
 
 **Available Rules**:
 
 | Rule | Category | Severity | Description |
 |------|----------|----------|-------------|
-| `orphan-class` | Structural | error | Class with no superclass or subclasses |
+| `orphan-class` | Structural | warning | Class with no superclass or subclasses |
 | `dangling-reference` | Structural | error | Reference to undefined entity |
 | `circular-subclass` | Structural | error | Circular subclass hierarchy |
 | `property-no-type` | Structural | error | Property without type declaration |
@@ -587,6 +589,9 @@ rdf-construct lint ontology.ttl -e missing-label -e missing-comment
 # Disable specific rules
 rdf-construct lint ontology.ttl -d orphan-class
 
+# Fail on warnings as well as errors
+rdf-construct lint ontology.ttl --fail-on warning
+
 # List all available rules
 rdf-construct lint --list-rules
 
@@ -595,9 +600,9 @@ rdf-construct lint --init
 ```
 
 **Exit Codes**:
-- `0`: No issues found
-- `1`: Warnings found (with standard/strict level)
-- `2`: Errors found
+- `0`: No findings at or above `--fail-on` (default: error)
+- `1`: Findings at or above `--fail-on`
+- `2`: Input refused or run failed (invalid options or config, file not found, parse error)
 
 ---
 
@@ -716,7 +721,7 @@ migrate_data:
 **Exit Codes**:
 - `0`: Merge successful, no unresolved conflicts
 - `1`: Merge successful, but unresolved conflicts marked in output
-- `2`: Error (file not found, parse error, etc.)
+- `2`: Input refused or run failed (invalid options or config, file not found, parse error)
 
 ---
 
@@ -828,7 +833,7 @@ summary:
 **Exit Codes**:
 - `0`: Split successful
 - `1`: Split successful, unmatched entities placed in common module
-- `2`: Error (file not found, config invalid, etc.)
+- `2`: Input refused or run failed (invalid options or config, file not found, parse error)
 
 ---
 
@@ -1021,8 +1026,8 @@ ex:LegacyTerm
 
 **Exit Codes**:
 - `0`: Success
-- `1`: Success with warnings (some entities not found)
-- `2`: Error (file not found, parse error, etc.)
+- `1`: `deprecate` only: success, but some entities were not found
+- `2`: Input refused or run failed (invalid options or config, file not found, parse error)
 
 ---
 
@@ -1244,8 +1249,8 @@ summary:
 
 **Exit Codes**:
 - `0`: Success
-- `1`: Success with warnings
-- `2`: Error
+- `1`: `merge` only: completed, but some translated entities were not found in the ontology
+- `2`: Input refused or run failed (invalid options or config, file not found, parse error)
 
 ---
 
@@ -1373,7 +1378,7 @@ rdf-construct stats ontology.ttl --exclude connectivity,complexity
 
 **Exit Codes**:
 - `0`: Success
-- `1`: Error occurred
+- `2`: Input refused or run failed (invalid options or config, file not found, parse error)
 
 ---
 
@@ -1501,9 +1506,14 @@ profiles:
 
 | Code | Meaning |
 |------|---------|
-| `0` | Success (or no differences/issues) |
-| `1` | General error (or differences/warnings/failures found) |
-| `2` | Command line usage error (or errors found for lint) |
+| `0` | The command did what you asked |
+| `1` | The command finished and has something to report: differences, conflicts, unmatched entities, failing questions, lint findings, skipped translations |
+| `2` | The command did not do it: input refused, run failed, or a usage error |
+
+Every command follows this convention ([#286](https://github.com/aigora-de/rdf-construct/issues/286)).
+`lint` reports findings at or above `--fail-on` (default `error`) as `1`. Each command's section
+lists what its `1` means. `docs` is the one exception for now: malformed input is still a traceback
+([#301](https://github.com/aigora-de/rdf-construct/issues/301)).
 
 ---
 

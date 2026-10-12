@@ -162,9 +162,9 @@ rdf-construct localise report ontology.ttl -l en,de,fr
 
 | Code | Meaning |
 |------|--------|
-| `0` | Success / No issues |
-| `1` | Warnings / Differences found / Tests failed / Partial failure |
-| `2` | Errors / Invalid input / Complete failure |
+| `0` | Did what you asked |
+| `1` | Finished, with something to report (differences, conflicts, failed tests, lint findings at or above `--fail-on`) |
+| `2` | Did not do it: input refused, run failed, or a usage error |
 
 ## Output Formats
 

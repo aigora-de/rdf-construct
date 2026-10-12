@@ -22,8 +22,27 @@ touches, so the affected rows appear together.
 
 ### Exit codes
 
-Not landed yet. One convention for what each exit code means, applied to every command:
-[#286](https://github.com/aigora-de/rdf-construct/issues/286) (PR group P2 on #312).
+Exit codes are now consistent across every command ([#286](https://github.com/aigora-de/rdf-construct/issues/286)): **0** success, **1** the run
+completed and has something to report, **2** the input was refused or the run failed. Previously
+several commands rejected input with exit 1 — the same code others use for findings — and `lint`
+reported error-severity findings as 2. `lint` gains `--fail-on` (default `error`) so a pipeline can
+still gate on severity.
+
+| Code | Meaning |
+|---|---|
+| `0` | The command did what you asked. |
+| `1` | The command finished and has something to report: differences, conflicts, unmatched entities, failing questions, lint findings, entities not found. |
+| `2` | The command did not do it: input refused, run failed, or a usage error. |
+
+**What moved:** refusals in `order`, `uml`, `lint`, `merge`, `split`, `refactor` and
+`localise config` (1 → 2); errors in `stats` and `shacl-gen` (1 → 2); and `lint`'s findings (see
+[`lint`](#lint)). A refusal no longer prints `Aborted!`. **What did not move:** every command's
+"completed with findings" code was already 1, and `diff`, `cast`, `cq-test`, `describe` and
+`puml2rdf` are unchanged. `docs` still reports malformed input as a traceback until
+[#301](https://github.com/aigora-de/rdf-construct/issues/301) lands.
+
+**What to do:** anywhere a script tests for `1` to detect a rejected command line or config, test
+for `2` instead. Anywhere it tests `lint` for `2`, read the [`lint`](#lint) section.
 
 ### Default output directories
 
@@ -54,6 +73,7 @@ Nothing has landed yet.
 | Issue | What changed | What to do |
 |---|---|---|
 | [#128](https://github.com/aigora-de/rdf-construct/issues/128) | Without `-o/--outdir`, output is written to `ordered/` instead of `src/ontology/`. An explicit `-o` is unaffected. | Pass `-o src/ontology` to keep the previous location, or point whatever reads the output at `ordered/`. See the [Order Guide](user_guides/ORDER_GUIDE.md). |
+| [#286](https://github.com/aigora-de/rdf-construct/issues/286) | A refusal exits **2** instead of 1: an unknown `-p/--profile`, or an invalid `unclaimed:` policy. | If a script tests for exit 1 to catch a rejected invocation, test for 2. |
 
 ## `profiles`
 
@@ -64,10 +84,9 @@ Nothing has landed yet.
 
 ## `uml`
 
-Nothing has landed yet.
-
 | Issue | What changed | What to do |
 |---|---|---|
+| [#286](https://github.com/aigora-de/rdf-construct/issues/286) | A refusal exits **2** instead of 1: an unknown `-c/--context`, `-s/--style` or `-l/--layout`. The list of accepted names now goes to stderr. | If a script tests for exit 1 to catch a rejected invocation, test for 2. |
 
 ## `contexts`
 
@@ -78,10 +97,11 @@ Nothing has landed yet.
 
 ## `lint`
 
-Nothing has landed yet.
-
 | Issue | What changed | What to do |
 |---|---|---|
+| [#286](https://github.com/aigora-de/rdf-construct/issues/286) | **Error-severity findings exit 1, not 2.** A run with only warnings exits **0**, not 1. A new `--fail-on error\|warning\|info\|never` (default `error`) sets the lowest severity that exits 1. A refusal (a config that will not load, `--init` over an existing file) exits **2** instead of 1. | Gate on findings with `-ne 0` or `--fail-on`, not by testing for 2. To keep failing on warnings, pass `--fail-on warning`. `--level strict` still turns warnings into errors, so `--level strict` pipelines still fail on them. |
+| [#286](https://github.com/aigora-de/rdf-construct/issues/286) | Python API: `LintSummary.exit_code` is removed. The engine reports severities, and the CLI decides the exit code. | Read `total_errors`, `total_warnings` and `total_info` instead. |
+| [#302](https://github.com/aigora-de/rdf-construct/issues/302) | `orphan-class` defaults to `warning`, not `error`. A root class is not a defect. A run whose only errors were `orphan-class` now exits **0**. | To keep it as an error, set `severity: {orphan-class: error}` in `.rdf-lint.yml`, or use `--level strict`. |
 
 ## `diff`
 
@@ -99,10 +119,9 @@ Nothing has landed yet.
 
 ## `shacl-gen`
 
-Nothing has landed yet.
-
 | Issue | What changed | What to do |
 |---|---|---|
+| [#286](https://github.com/aigora-de/rdf-construct/issues/286) | Errors (a missing file, a configuration that will not load, a failed generation) exit **2** instead of 1. | Test for 2. |
 
 ## `puml2rdf`
 
@@ -120,10 +139,9 @@ Nothing has landed yet.
 
 ## `stats`
 
-Nothing has landed yet.
-
 | Issue | What changed | What to do |
 |---|---|---|
+| [#286](https://github.com/aigora-de/rdf-construct/issues/286) | Errors, including `--compare` with other than two files, exit **2** instead of 1. | Test for 2. |
 
 ## `describe`
 
@@ -134,32 +152,29 @@ Nothing has landed yet.
 
 ## `merge`
 
-Nothing has landed yet.
-
 | Issue | What changed | What to do |
 |---|---|---|
+| [#286](https://github.com/aigora-de/rdf-construct/issues/286) | A refusal exits **2** instead of 1: no sources, a config that will not load (including malformed YAML, which was a traceback), `--init` over an existing file. | If a script tests for exit 1 to catch a rejected invocation, test for 2. |
 
 ## `split`
 
-Nothing has landed yet.
-
 | Issue | What changed | What to do |
 |---|---|---|
+| [#286](https://github.com/aigora-de/rdf-construct/issues/286) | A refusal exits **2** instead of 1: neither `--by-namespace` nor `--config`, a config that will not load (including malformed YAML, which was a traceback), `--init` over an existing file. | If a script tests for exit 1 to catch a rejected invocation, test for 2. |
 
 ## `refactor`
 
 Covers `refactor rename` and `refactor deprecate`; each row names its subcommand.
 
-Nothing has landed yet.
-
 | Issue | What changed | What to do |
 |---|---|---|
+| [#286](https://github.com/aigora-de/rdf-construct/issues/286) | `rename`: a refusal exits **2** instead of 1: unpaired `--from`/`--to` or `--from-namespace`/`--to-namespace`, nothing to rename, a config that will not load (including malformed YAML), `--init` over an existing file. `--help` no longer documents an exit 1, which no path produced ([#183](https://github.com/aigora-de/rdf-construct/issues/183)). | If a script tests for exit 1 to catch a rejected invocation, test for 2. |
+| [#286](https://github.com/aigora-de/rdf-construct/issues/286) | `deprecate`: a refusal exits **2** instead of 1: no `--entity`, nothing to deprecate, a config that will not load (including malformed YAML), `--init` over an existing file. "Entity not found" still exits 1. | If a script tests for exit 1 to catch a rejected invocation, test for 2. |
 
 ## `localise`
 
 Covers `localise extract`, `merge`, `report`, `init` and `config`; each row names its subcommand.
 
-Nothing has landed yet.
-
 | Issue | What changed | What to do |
 |---|---|---|
+| [#286](https://github.com/aigora-de/rdf-construct/issues/286) | `config`: `--init` over an existing `localise.yml` exits **2** instead of 1. | If a script tests for exit 1 to catch a rejected invocation, test for 2. |
