@@ -276,6 +276,9 @@ repos:
         args: [--level, standard]
 ```
 
+With the default `--fail-on error`, a file with only warnings passes this hook. Add
+`--fail-on, warning` to `args` to block on warnings as well.
+
 ## Listing Available Rules
 
 ```bash

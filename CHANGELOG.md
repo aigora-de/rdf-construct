@@ -7,16 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-**If you run `order` without `-o`, your output moves.** The default output
-directory is now `ordered/` instead of `src/ontology/`. Pass `-o src/ontology`
-to keep the previous location.
-
 **If you gate CI on `lint`'s exit code, it has changed.** Error findings now exit
 1, not 2, and a run with only warnings exits 0. Pass `--fail-on warning` to keep
 failing on warnings. Every command now uses one convention: 0 success, 1
 completed with findings, 2 refused or failed. See
 [Exit codes](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#exit-codes)
 in the migration note.
+
+**If you run `order` without `-o`, your output moves.** The default output
+directory is now `ordered/` instead of `src/ontology/`. Pass `-o src/ontology`
+to keep the previous location.
 
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the

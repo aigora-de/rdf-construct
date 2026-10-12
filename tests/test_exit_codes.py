@@ -5,6 +5,7 @@ to report; 2 it did not do it (input refused, run failed, or a usage error).
 """
 
 import ast
+import io
 from pathlib import Path
 from textwrap import dedent
 
@@ -63,6 +64,17 @@ class TestRefusal:
     def test_show_without_accepted_has_no_accepted_line(self, capsys):
         Refusal("No source files specified.").show()
         assert "Accepted" not in capsys.readouterr().err
+
+    def test_show_honours_file(self):
+        buffer = io.StringIO()
+        Refusal("x", accepted=["a"]).show(file=buffer)
+        assert buffer.getvalue() == "Error: x\nAccepted: a\n"
+
+    def test_config_refusal_names_the_file(self, runner, tmp_path, malformed_yaml):
+        result = runner.invoke(
+            cli, ["merge", "-c", str(malformed_yaml), "-o", str(tmp_path / "m.ttl")]
+        )
+        assert f"Could not load config {malformed_yaml}" in result.stderr
 
 
 # ---------------------------------------------------------------------------

@@ -166,9 +166,9 @@ class Refusal(click.ClickException):
 
     def show(self, file: IO[Any] | None = None) -> None:
         """Write the refusal to stderr: the message, then what is accepted."""
-        click.secho(f"Error: {self.format_message()}", fg="red", err=True)
+        click.secho(f"Error: {self.format_message()}", file=file, fg="red", err=True)
         if self.accepted is not None:
-            click.echo(f"Accepted: {', '.join(self.accepted) or '(none)'}", err=True)
+            click.echo(f"Accepted: {', '.join(self.accepted) or '(none)'}", file=file, err=True)
 
 
 @click.group()
@@ -1014,7 +1014,7 @@ def lint(
             lint_config = load_lint_config(config)
             click.echo(f"Using config: {config}")
         except (FileNotFoundError, ValueError) as e:
-            raise Refusal(f"Could not load config: {e}") from e
+            raise Refusal(f"Could not load config {config}: {e}") from e
     else:
         # Try to find config file automatically
         found_config = find_config_file()
@@ -1023,7 +1023,7 @@ def lint(
                 lint_config = load_lint_config(found_config)
                 click.echo(f"Using config: {found_config}")
             except (FileNotFoundError, ValueError) as e:
-                raise Refusal(f"Could not load config: {e}") from e
+                raise Refusal(f"Could not load config {found_config}: {e}") from e
         else:
             lint_config = LintConfig()
 
@@ -2516,7 +2516,7 @@ def merge(
             if output:
                 config.output = OutputConfig(path=output)
         except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
-            raise Refusal(f"Could not load config: {e}") from e
+            raise Refusal(f"Could not load config {config_file}: {e}") from e
     else:
         # Build config from CLI arguments
         priorities_list = list(priority) if priority else list(range(1, len(sources) + 1))
@@ -2784,7 +2784,7 @@ def split(
             config.generate_manifest = not no_manifest
             click.echo(f"Using config: {config_file}")
         except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
-            raise Refusal(f"Could not load config: {e}") from e
+            raise Refusal(f"Could not load config {config_file}: {e}") from e
     else:
         # Need either --by-namespace or --config
         if not by_namespace:
@@ -3108,7 +3108,7 @@ def refactor_rename(
             if sources:
                 config.source_files = list(sources)
         except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
-            raise Refusal(f"Could not load config: {e}") from e
+            raise Refusal(f"Could not load config {config_file}: {e}") from e
     else:
         # Build config from CLI arguments
         rename_config = RenameConfig()
@@ -3373,7 +3373,7 @@ def refactor_deprecate(
             if sources:
                 config.source_files = list(sources)
         except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
-            raise Refusal(f"Could not load config: {e}") from e
+            raise Refusal(f"Could not load config {config_file}: {e}") from e
     else:
         # Build config from CLI arguments
         if not entity:
