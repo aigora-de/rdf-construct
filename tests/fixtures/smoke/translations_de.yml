@@ -1,0 +1,17 @@
+# A minimal German translation of examples/animal_ontology.ttl for the CLI smoke test (#195).
+# Trimmed from `localise extract` output to one entity, with its label translated.
+metadata:
+  source_file: examples/animal_ontology.ttl
+  source_language: en
+  target_language: de
+  tool: rdf-construct
+  properties:
+  - rdfs:label
+entities:
+- uri: http://example.org/animals#Animal
+  type: owl:Class
+  labels:
+  - property: rdfs:label
+    source: Animal
+    translation: Tier
+    status: translated

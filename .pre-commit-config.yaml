@@ -28,7 +28,9 @@ repos:
       - id: end-of-file-fixer
         exclude: ^tests/fixtures/ies/
       # Read-only checks; all pass repo-wide as at 2026-08-22.
+      # The smoke test's malformed.yml is invalid on purpose (#195).
       - id: check-yaml
+        exclude: ^tests/fixtures/smoke/malformed\.yml$
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: check-toml
