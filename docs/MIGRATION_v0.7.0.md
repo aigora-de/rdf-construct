@@ -46,6 +46,10 @@ traceback still on stderr ([#320](https://github.com/aigora-de/rdf-construct/iss
 **What to do:** anywhere a script tests for `1` to detect a rejected command line or config, test
 for `2` instead. Anywhere it tests `lint` for `2`, read the [`lint`](#lint) section.
 
+| Issue | What changed | What to do |
+|---|---|---|
+| [#320](https://github.com/aigora-de/rdf-construct/issues/320) | Every command: a crash (an error no command handled) exits **2** instead of 1, with `Error: rdf-construct flatlined: …` and the traceback on stderr. Exit 1 now always means the run finished with something to report. | If a script treats 1 as "findings, carry on", a crash now fails it instead, which is the intent. A script that tests for non-zero is unaffected. |
+
 ### Default output directories
 
 Not landed yet. How `docs`, `uml`, `split` and `order` treat a default output directory that

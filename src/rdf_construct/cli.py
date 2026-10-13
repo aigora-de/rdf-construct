@@ -218,9 +218,9 @@ class CrashHandlingGroup(click.Group):
             if not standalone_mode:
                 raise
             click.secho(
-                "Error: rdf-construct flatlined. This is a bug, not a refusal of your input; "
-                "please report it with the traceback below at "
-                "https://github.com/aigora-de/rdf-construct/issues",
+                "Error: rdf-construct flatlined: an error no command handled. If it isn't your "
+                "environment (a path, permissions, disk), please report it with the traceback "
+                "below at https://github.com/aigora-de/rdf-construct/issues",
                 fg="red",
                 err=True,
             )
