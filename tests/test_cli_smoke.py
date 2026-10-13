@@ -22,12 +22,17 @@ remove its marker, so the list cannot go quietly stale.
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 import pytest
 from click.testing import CliRunner, Result
 
 from rdf_construct.cli import cli
+
+if TYPE_CHECKING:
+    # pytest.param() returns this, and pytest exports it only from its private package.
+    from _pytest.mark import ParameterSet
 
 REPO = Path(__file__).parent.parent
 EXAMPLES = REPO / "examples"
@@ -100,6 +105,13 @@ def assert_no_crash(result: Result) -> None:
     its traceback to stderr. Whichever it chooses, this helper is the one place that changes to
     look for it. Nothing else in this module may decide what counts as a crash.
 
+    **A known limit (#325).** ``diff``, ``shacl-gen``, ``cq-test``, ``stats`` and ``describe``
+    wrap most of their body in ``except Exception`` and exit 2. A crash inside one of them
+    reaches this helper as a deliberate ``SystemExit(2)``, and it cannot be seen as a crash.
+    Their clean and IES rows still fail on the exit code, because 2 is not 0 or 1, but a
+    refused row passes. The fix is to narrow those handlers, not to match exception names in
+    stderr.
+
     Args:
         result: The ``CliRunner`` result to check.
     """
@@ -154,7 +166,7 @@ class Row:
     existing: tuple[str, ...] = ()
 
 
-def _row(row: Row, *, xfail: str | None = None, label: str = ""):
+def _row(row: Row, *, xfail: str | None = None, label: str = "") -> "ParameterSet":
     marks = [pytest.mark.xfail(strict=True, reason=xfail)] if xfail else []
     test_id = f"{row.command}::{row.state}" + (f"-{label}" if label else "")
     return pytest.param(row, marks=marks, id=test_id)
