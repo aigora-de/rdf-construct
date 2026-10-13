@@ -1,7 +1,8 @@
 """Command-line interface for rdf-construct."""
 
 import sys
-from collections.abc import Iterable
+import traceback
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import IO, Any
 
@@ -171,7 +172,63 @@ class Refusal(click.ClickException):
             click.echo(f"Accepted: {', '.join(self.accepted) or '(none)'}", file=file, err=True)
 
 
-@click.group()
+class CrashHandlingGroup(click.Group):
+    """The top-level group: an exception no command handled exits 2, with its traceback (#320).
+
+    Without this, an uncaught exception exits 1, Python's default, which under #286 reads as
+    "finished, with findings". A crash is a run that did not do what was asked, so it exits 2.
+
+    The handler wraps ``main`` rather than ``invoke``. In standalone mode Click's own ``main``
+    has already turned ``ClickException`` (and so ``Refusal``), ``Abort``, ``Exit``,
+    ``KeyboardInterrupt`` and a broken pipe into ``SystemExit`` before anything escapes it, and
+    ``SystemExit`` is not an ``Exception``. So nothing Click handles can be caught here.
+    ``CliRunner.invoke`` calls ``main``, so the tests exercise this path.
+
+    A crash stays distinguishable from a refusal at the same code: the traceback always goes to
+    stderr, and the ``SystemExit`` is raised ``from`` the original exception, so it is the
+    ``__cause__``. Outside standalone mode every exception propagates unchanged.
+    """
+
+    def main(
+        self,
+        args: Sequence[str] | None = None,
+        prog_name: str | None = None,
+        complete_var: str | None = None,
+        standalone_mode: bool = True,
+        **extra: Any,
+    ) -> Any:
+        """Run the CLI, turning an unhandled exception into exit 2 with its traceback.
+
+        Args:
+            args: The arguments to parse; ``sys.argv[1:]`` when omitted.
+            prog_name: The program name shown in usage messages.
+            complete_var: The environment variable that drives shell completion.
+            standalone_mode: Whether Click handles exceptions and exits itself.
+            **extra: Passed through to ``click.Group.main``.
+
+        Returns:
+            Whatever ``click.Group.main`` returns outside standalone mode.
+
+        Raises:
+            SystemExit: With code 2, chained from the exception no command handled.
+        """
+        try:
+            return super().main(args, prog_name, complete_var, standalone_mode, **extra)
+        except Exception as exc:
+            if not standalone_mode:
+                raise
+            click.secho(
+                "Error: rdf-construct flatlined. This is a bug, not a refusal of your input; "
+                "please report it with the traceback below at "
+                "https://github.com/aigora-de/rdf-construct/issues",
+                fg="red",
+                err=True,
+            )
+            traceback.print_exception(exc, file=sys.stderr)
+            raise SystemExit(2) from exc
+
+
+@click.group(cls=CrashHandlingGroup)
 @click.version_option(__version__, prog_name="rdf-construct")
 def cli():
     """rdf-construct: Semantic RDF manipulation toolkit.
