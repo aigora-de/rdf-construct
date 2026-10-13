@@ -1512,8 +1512,14 @@ profiles:
 
 Every command follows this convention ([#286](https://github.com/aigora-de/rdf-construct/issues/286)).
 `lint` reports findings at or above `--fail-on` (default `error`) as `1`. Each command's section
-lists what its `1` means. `docs` is the one exception for now: malformed input is still a traceback
-([#301](https://github.com/aigora-de/rdf-construct/issues/301)).
+lists what its `1` means.
+
+A crash also exits `2` ([#320](https://github.com/aigora-de/rdf-construct/issues/320)): an error no command handled means the run did not
+do what you asked. rdf-construct prints `Error: rdf-construct flatlined` and the full traceback to
+stderr, so it stays distinguishable from a refusal, which prints only its `Error:` line. Some
+crashes are the environment rather than a bug, such as an output directory you cannot write to;
+the traceback's last line says which. `docs` is the one exception for now: malformed input is still a traceback,
+now at `2`, instead of a refusal ([#301](https://github.com/aigora-de/rdf-construct/issues/301)).
 
 ---
 

@@ -8,6 +8,7 @@ import ast
 import io
 from pathlib import Path
 from textwrap import dedent
+from unittest import mock
 
 import pytest
 from click.testing import CliRunner
@@ -342,3 +343,65 @@ class TestExitPaths:
             for site in _exit_sites(path)
         ]
         assert sites == []
+
+
+# ---------------------------------------------------------------------------
+# #320: a crash exits 2, with its traceback
+# ---------------------------------------------------------------------------
+
+
+def _profiles_raising(runner: CliRunner, effect: BaseException):
+    """Invoke ``profiles`` with its body replaced by one that raises ``effect``."""
+    with mock.patch.object(cli.commands["profiles"], "callback", side_effect=effect):
+        return runner.invoke(cli, ["profiles", str(ANIMAL)])
+
+
+class TestCrashHandler:
+    def test_crash_exits_two_with_traceback(self, runner):
+        result = _profiles_raising(runner, RuntimeError("boom"))
+        assert result.exit_code == 2
+        assert isinstance(result.exception, SystemExit)
+        assert isinstance(result.exception.__cause__, RuntimeError)
+        assert "Traceback (most recent call last)" in result.stderr
+        assert "RuntimeError: boom" in result.stderr
+        assert "rdf-construct flatlined" in result.stderr
+
+    def test_crash_writes_nothing_to_stdout(self, runner):
+        result = _profiles_raising(runner, RuntimeError("boom"))
+        assert result.stdout == ""
+
+    def test_refusal_exits_two_without_traceback(self, runner):
+        result = _profiles_raising(runner, Refusal("no"))
+        assert result.exit_code == 2
+        assert result.exception.__cause__ is None
+        assert "Traceback" not in result.stderr
+        assert result.stderr == "Error: no\n"
+
+    def test_keyboard_interrupt_is_not_caught(self, runner):
+        # Click's own main turns it into Abort: "Aborted!" at 1, no traceback.
+        result = _profiles_raising(runner, KeyboardInterrupt())
+        assert result.exit_code == 1
+        assert "Aborted!" in result.stderr
+        assert "Traceback" not in result.stderr
+
+    def test_broken_pipe_is_not_caught(self, runner):
+        # Click's own main handles EPIPE (``stats ... | head``) and exits 1, silently.
+        result = _profiles_raising(runner, BrokenPipeError(32, "Broken pipe"))
+        assert result.exit_code == 1
+        assert result.stderr == ""
+
+    @pytest.mark.parametrize(
+        ("args", "expected"), [(["--help"], 0), (["--version"], 0), (["no-such-command"], 2)]
+    )
+    def test_click_exits_keep_their_codes(self, runner, args, expected):
+        result = runner.invoke(cli, args)
+        assert result.exit_code == expected
+        assert "Traceback" not in result.stderr
+
+    def test_outside_standalone_mode_the_exception_propagates(self):
+        boom = RuntimeError("boom")
+        with (
+            mock.patch.object(cli.commands["profiles"], "callback", side_effect=boom),
+            pytest.raises(RuntimeError, match="boom"),
+        ):
+            cli.main(["profiles", str(ANIMAL)], standalone_mode=False)

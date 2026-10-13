@@ -36,13 +36,19 @@ still gate on severity.
 
 **What moved:** refusals in `order`, `uml`, `lint`, `merge`, `split`, `refactor` and
 `localise config` (1 → 2); errors in `stats` and `shacl-gen` (1 → 2); and `lint`'s findings (see
-[`lint`](#lint)). A refusal no longer prints `Aborted!`. **What did not move:** every command's
+[`lint`](#lint)). A refusal no longer prints `Aborted!`. A crash — an error no command handled —
+exited 1, Python's default, which read as "finished with findings"; it now exits 2, with the
+traceback still on stderr ([#320](https://github.com/aigora-de/rdf-construct/issues/320)). **What did not move:** every command's
 "completed with findings" code was already 1, and `diff`, `cast`, `cq-test`, `describe` and
-`puml2rdf` are unchanged. `docs` still reports malformed input as a traceback until
+`puml2rdf` are unchanged. `docs` still reports malformed input as a traceback, now at 2, until
 [#301](https://github.com/aigora-de/rdf-construct/issues/301) lands.
 
 **What to do:** anywhere a script tests for `1` to detect a rejected command line or config, test
 for `2` instead. Anywhere it tests `lint` for `2`, read the [`lint`](#lint) section.
+
+| Issue | What changed | What to do |
+|---|---|---|
+| [#320](https://github.com/aigora-de/rdf-construct/issues/320) | Every command: a crash (an error no command handled) exits **2** instead of 1, with `Error: rdf-construct flatlined: …` and the traceback on stderr. Exit 1 now always means the run finished with something to report. | If a script treats 1 as "findings, carry on", a crash now fails it instead, which is the intent. A script that tests for non-zero is unaffected. |
 
 ### Default output directories
 

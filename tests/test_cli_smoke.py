@@ -89,21 +89,20 @@ TMP = "@tmp/"
 def assert_no_crash(result: Result) -> None:
     """Fail if the command ended in an exception that no code path handled.
 
-    Call this **before** any assertion on the exit code. Under #286, an uncaught exception
-    exits 1, which also means "finished, with findings". So "exit 1" is never evidence that a
-    run completed.
+    Call this **before** any assertion on the exit code. Under #286, a crash exits 2, which is
+    also what a refusal exits. So "exit 2" alone never says whether the command refused its
+    input or broke.
 
-    **Today**, a crash is an exception that is not ``SystemExit``. ``Refusal`` (a
-    ``click.ClickException``), usage errors and every deliberate exit reach ``CliRunner`` as
-    ``SystemExit``, and anything else is uncaught.
+    **A crash** is an exception that no code path handled. Since #320 (P3a), the ``cli`` group's
+    top-level handler turns one into ``SystemExit(2)``, the same type and code as a refusal, and
+    keeps it distinguishable in two ways: the ``SystemExit`` is raised ``from`` the original
+    exception, and the traceback goes to stderr. This helper reads the ``__cause__``. A
+    ``Refusal`` (a ``click.ClickException``), usage errors and every deliberate exit reach
+    ``CliRunner`` as a ``SystemExit`` with no cause. An exception that is not ``SystemExit`` at
+    all means the handler was bypassed, and it is a crash too.
 
-    **The contract #320 (P3a) has to keep.** #320 adds one top-level handler that turns an
-    uncaught exception into exit 2, which is the same code as a refusal. After it lands, the
-    check above sees ``SystemExit(2)`` for a crash and goes blind. So a crash must stay
-    distinguishable from a refusal: the handler keeps the original exception reachable (chained
-    as ``__cause__`` or ``__context__`` of the ``SystemExit``, or on an attribute), or prints
-    its traceback to stderr. Whichever it chooses, this helper is the one place that changes to
-    look for it. Nothing else in this module may decide what counts as a crash.
+    This helper is the one place that decides what counts as a crash. Nothing else in this
+    module may.
 
     **A known limit (#325).** ``diff``, ``shacl-gen``, ``cq-test``, ``stats`` and ``describe``
     wrap most of their body in ``except Exception`` and exit 2. A crash inside one of them
@@ -116,7 +115,9 @@ def assert_no_crash(result: Result) -> None:
         result: The ``CliRunner`` result to check.
     """
     exc = result.exception
-    if exc is not None and not isinstance(exc, SystemExit):
+    if isinstance(exc, SystemExit):
+        exc = exc.__cause__
+    if exc is not None:
         raise AssertionError(
             f"crashed with {type(exc).__name__}: {exc}\n\n--- output ---\n{result.output}"
         )
