@@ -13,6 +13,9 @@ Four tables:
 - **Malformed input:** unparseable Turtle, YAML and PlantUML, each of which should be refused
   (2). Most of the crashes live here, and each is marked ``xfail(strict=True)`` against its
   issue.
+
+Every refused row, in either table, also asserts that the refusal **wrote nothing** (#286, #266):
+see ``assert_wrote_nothing``.
 - **The realistic tier:** every command over each pinned IES ontology in ``tests/fixtures/ies/``
   (#317). Nothing in a well-formed file should be refused, so the code must be 0 or 1.
 
@@ -20,6 +23,7 @@ Known crashes are ``xfail(strict=True, reason="#N")``. The fix that makes one pa
 remove its marker, so the list cannot go quietly stale.
 """
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -108,8 +112,9 @@ def assert_no_crash(result: Result) -> None:
     wrap most of their body in ``except Exception`` and exit 2. A crash inside one of them
     reaches this helper as a deliberate ``SystemExit(2)``, and it cannot be seen as a crash.
     Their clean and IES rows still fail on the exit code, because 2 is not 0 or 1, but a
-    refused row passes. The fix is to narrow those handlers, not to match exception names in
-    stderr.
+    refused row passes. ``assert_wrote_nothing`` does not close that gap: a crash that is
+    swallowed before anything was written passes it too. The fix is to narrow those handlers,
+    not to match exception names in stderr.
 
     Args:
         result: The ``CliRunner`` result to check.
@@ -121,6 +126,45 @@ def assert_no_crash(result: Result) -> None:
         raise AssertionError(
             f"crashed with {type(exc).__name__}: {exc}\n\n--- output ---\n{result.output}"
         )
+
+
+def snapshot(argv: list[str], tmp_path: Path) -> dict[str, str]:
+    """Record every file and directory a command could write to, with a hash of each file.
+
+    That is everything under ``tmp_path``, which is also the working directory, and every entry
+    directly in the directory of each existing absolute path argument. Relative arguments are
+    skipped, because a command name such as ``docs`` would otherwise match a directory. The second catches a command that
+    writes beside its input, as ``cast``, ``shacl-gen`` and ``refactor deprecate`` do by default.
+
+    Args:
+        argv: The resolved arguments.
+        tmp_path: The test's temporary directory.
+
+    Returns:
+        A map from each path to the SHA-256 of its contents, or ``"dir"`` for a directory.
+    """
+    roots = [path for path in map(Path, argv) if path.is_absolute() and path.exists()]
+    entries = list(tmp_path.rglob("*"))
+    for directory in {path.parent for path in roots if tmp_path not in path.parents}:
+        entries.extend(directory.iterdir())
+    return {
+        str(entry): hashlib.sha256(entry.read_bytes()).hexdigest() if entry.is_file() else "dir"
+        for entry in entries
+    }
+
+
+def assert_wrote_nothing(before: dict[str, str], after: dict[str, str]) -> None:
+    """Fail if a refused command created, changed or deleted anything (#286, #266).
+
+    The #286 convention says that 2 means "the command did not do it". A refusal that leaves a
+    partial file behind did part of it. Call this after ``assert_no_crash``.
+
+    Args:
+        before: ``snapshot`` taken before the command ran.
+        after: ``snapshot`` taken after it ran.
+    """
+    changed = sorted(set(before.items()) ^ set(after.items()))
+    assert not changed, f"a refusal wrote to disk: {sorted({path for path, _ in changed})}"
 
 
 def _command_paths(group: click.Group, prefix: str = "") -> set[str]:
@@ -400,9 +444,12 @@ def test_every_command_has_a_three_state_row():
 def test_three_states(row: Row, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     for name in row.existing:
         (tmp_path / name).write_text("")
+    before = snapshot(_resolve(row.argv, tmp_path), tmp_path)
     result = _invoke(row.argv, tmp_path, monkeypatch)
     assert_no_crash(result)
     assert result.exit_code == STATE_CODE[row.state], result.output
+    if row.state == "refused":
+        assert_wrote_nothing(before, snapshot(_resolve(row.argv, tmp_path), tmp_path))
 
 
 # ---------------------------------------------------------------------------
@@ -553,9 +600,11 @@ MALFORMED = [
 
 @pytest.mark.parametrize("row", MALFORMED)
 def test_malformed_input_is_refused(row: Row, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    before = snapshot(_resolve(row.argv, tmp_path), tmp_path)
     result = _invoke(row.argv, tmp_path, monkeypatch)
     assert_no_crash(result)
     assert result.exit_code == STATE_CODE["refused"], result.output
+    assert_wrote_nothing(before, snapshot(_resolve(row.argv, tmp_path), tmp_path))
 
 
 # ---------------------------------------------------------------------------
