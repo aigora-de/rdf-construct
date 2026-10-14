@@ -9,7 +9,8 @@ back from disk. Each command's claim is declared in :data:`CONTRACTS`.
 empty when the contract holds. Nothing here prints, exits or raises because a contract failed.
 That decision belongs to the caller: a test asserts the list is empty, and the opt-in
 ``--verify`` flag (#308) will map a non-empty list to exit 1. The only exception raised is
-``ValueError``, when a caller passes the wrong number of graphs for a contract.
+``ValueError``, when a caller passes the wrong number of graphs for a contract, or an argument the
+contract does not take.
 
 **What a contract can see.** Graphs are compared as RDF, using ``rdflib.compare``, so blank-node
 labels never matter and two parses of the same file are the same graph. That cuts both ways:
@@ -17,16 +18,25 @@ labels never matter and two parses of the same file are the same graph. That cut
 - **Order is invisible.** Every ordering of a graph is isomorphic to every other, so
   ``ISOMORPHIC`` cannot catch ``order`` sorting wrongly (#195). Ordering has its own tests.
 - **Prefixes, comments and layout are invisible.** Only triples count.
+- **Literals are compared as terms, not values.** ``"01"^^xsd:integer`` and ``"1"^^xsd:integer``
+  are different literals. RDF isomorphism is defined on terms, so a serialiser that normalises a
+  lexical form has changed the graph, and is reported.
+- **Named graphs are invisible.** Every contract compares :class:`~rdflib.Graph` objects, so a
+  triple moved from one named graph to another, or a graph name that is lost, cannot be seen. No
+  command carries named graphs end to end today: ``cast`` refuses a quad source unless
+  ``--allow-flatten`` is given. A command that does will need a dataset-level contract.
 - **Blank nodes are matched by their structure.** Under ``SUPERSET``, a blank node that gains or
   loses a triple in the output no longer matches its source. Its triples then read as missing,
-  which is a loud failure and never a silent pass.
+  which is a loud failure and never a silent pass. The other side of this: two blank nodes with
+  identical structure are indistinguishable, so ``SUPERSET`` cannot tell one copy of a closure
+  from two. ``ISOMORPHIC`` and ``UNION_ISOMORPHIC`` can.
 
 **Using it in a fix's regression test.** Run the command, read its output back, and assert that
 the contract for that command holds::
 
     from rdflib import Graph
 
-    from rdf_construct.core.verify import CONTRACTS, check_contract
+    from rdf_construct.core.verify import CONTRACTS, check_contract, describe
 
     def test_split_union_is_the_source(tmp_path):
         result = CliRunner().invoke(cli, ["split", SRC, "--by-namespace", "-o", str(tmp_path)])
@@ -37,7 +47,7 @@ the contract for that command holds::
             inputs=[Graph().parse(SRC)],
             outputs=modules,
         )
-        assert discrepancies == [], discrepancies
+        assert not discrepancies, describe(discrepancies)
 
 ``tests/test_post_write.py`` holds one such test per contract. Each failing one is marked
 ``xfail(strict=True)`` against its issue. The fix that makes it pass removes the marker.
@@ -47,6 +57,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from rdflib import Graph
@@ -98,6 +109,29 @@ class Discrepancy:
     missing_count: int = 0
     extra_count: int = 0
 
+    def __str__(self) -> str:
+        """Return the message, then each sampled triple in N-Triples form."""
+        lines = [f"{self.contract.value}: {self.message}"]
+        lines += [f"  - {' '.join(term.n3() for term in t)}" for t in self.missing]
+        if self.missing_count > len(self.missing):
+            lines.append(f"  - ... and {self.missing_count - len(self.missing)} more missing")
+        lines += [f"  + {' '.join(term.n3() for term in t)}" for t in self.extra]
+        if self.extra_count > len(self.extra):
+            lines.append(f"  + ... and {self.extra_count - len(self.extra)} more extra")
+        return "\n".join(lines)
+
+
+def describe(discrepancies: Iterable[Discrepancy]) -> str:
+    """Render discrepancies for an assertion message, one block per discrepancy.
+
+    Args:
+        discrepancies: What a checker returned.
+
+    Returns:
+        The rendered text, or an empty string when there are none.
+    """
+    return "\n".join(str(found) for found in discrepancies)
+
 
 @dataclass(frozen=True)
 class CommandContract:
@@ -119,56 +153,58 @@ class CommandContract:
 
 #: The contract each command claims. Commands that are not listed claim nothing that this module
 #: can check.
-CONTRACTS: Mapping[str, CommandContract] = {
-    entry.command: entry
-    for entry in (
-        CommandContract(
-            "order",
-            Contract.ISOMORPHIC,
-            note=(
-                "Lossless profiles only: those with `unclaimed: emit`, or with nothing left "
-                "unclaimed. A profile that drops subjects rewrites the header (#90)."
+CONTRACTS: Mapping[str, CommandContract] = MappingProxyType(
+    {
+        entry.command: entry
+        for entry in (
+            CommandContract(
+                "order",
+                Contract.ISOMORPHIC,
+                note=(
+                    "Lossless profiles only: those with `unclaimed: emit`, or with nothing left "
+                    "unclaimed. A profile that drops subjects rewrites the header (#90)."
+                ),
             ),
-        ),
-        CommandContract("cast", Contract.ISOMORPHIC),
-        CommandContract(
-            "refactor rename",
-            Contract.TRIPLE_COUNT,
-            note="Renaming onto an IRI that is already in use merges two entities (#185).",
-        ),
-        CommandContract(
-            "refactor deprecate",
-            Contract.SUPERSET,
-            ambiguous=True,
-            note=(
-                "#266 states 'the same triple count', but deprecating adds owl:deprecated, "
-                "dcterms:isReplacedBy and a comment, so the count rises by design. Only 'every "
-                "input triple survives' is checked here."
+            CommandContract("cast", Contract.ISOMORPHIC),
+            CommandContract(
+                "refactor rename",
+                Contract.TRIPLE_COUNT,
+                note="Renaming onto an IRI that is already in use merges two entities (#185).",
             ),
-        ),
-        CommandContract("split", Contract.UNION_ISOMORPHIC),
-        CommandContract(
-            "merge",
-            Contract.SUPERSET,
-            note="The losing values of the conflicts the merge reports as resolved are excluded.",
-        ),
-        CommandContract(
-            "docs",
-            Contract.COUNTS_AGREE,
-            note="Entities selected = pages written = index entries = search index entries.",
-        ),
-        CommandContract(
-            "localise merge",
-            Contract.ISOMORPHIC,
-            note="Merging an unedited `localise extract` back gives the source.",
-        ),
-        CommandContract(
-            "shacl-gen",
-            Contract.COUNTS_AGREE,
-            note="One sh:NodeShape per selected class.",
-        ),
-    )
-}
+            CommandContract(
+                "refactor deprecate",
+                Contract.SUPERSET,
+                ambiguous=True,
+                note=(
+                    "#266 states 'the same triple count', but deprecating adds owl:deprecated, "
+                    "dcterms:isReplacedBy and a comment, so the count rises by design. Only 'every "
+                    "input triple survives' is checked here."
+                ),
+            ),
+            CommandContract("split", Contract.UNION_ISOMORPHIC),
+            CommandContract(
+                "merge",
+                Contract.SUPERSET,
+                note="The losing values of the conflicts the merge reports as resolved are excluded.",
+            ),
+            CommandContract(
+                "docs",
+                Contract.COUNTS_AGREE,
+                note="Entities selected = pages written = index entries = search index entries.",
+            ),
+            CommandContract(
+                "localise merge",
+                Contract.ISOMORPHIC,
+                note="Merging an unedited `localise extract` back gives the source.",
+            ),
+            CommandContract(
+                "shacl-gen",
+                Contract.COUNTS_AGREE,
+                note="One sh:NodeShape per selected class.",
+            ),
+        )
+    }
+)
 
 
 def _sample(triples: Iterable[Triple]) -> tuple[Triple, ...]:
@@ -344,9 +380,14 @@ def check_contract(
         ValueError: If the arguments do not fit the contract. That is a mistake in the caller,
             never a finding about the output.
     """
+    excluded = tuple(excluded)
+    if excluded and contract is not Contract.SUPERSET:
+        raise ValueError(f"{contract.name} takes no excluded triples")
+    if counts is not None and contract is not Contract.COUNTS_AGREE:
+        raise ValueError(f"{contract.name} takes no counts")
     if contract is Contract.COUNTS_AGREE:
-        if counts is None:
-            raise ValueError("COUNTS_AGREE needs counts")
+        if counts is None or inputs or outputs:
+            raise ValueError("COUNTS_AGREE takes counts and no graphs")
         return check_counts_agree(counts)
     if contract is Contract.SUPERSET:
         if not inputs or len(outputs) != 1:

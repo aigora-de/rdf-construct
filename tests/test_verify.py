@@ -18,6 +18,7 @@ from rdf_construct.core.verify import (
     check_superset,
     check_triple_count,
     check_union_isomorphic,
+    describe,
 )
 from tests.test_cli_smoke import EXPECTED_COMMANDS
 
@@ -204,10 +205,49 @@ class TestCheckContract:
         with pytest.raises(ValueError):
             check_contract(Contract.COUNTS_AGREE)
 
+    def test_an_argument_the_contract_ignores_is_a_caller_error(self):
+        """Excluded triples passed to ISOMORPHIC would otherwise be dropped in silence."""
+        label = (EX.Building, RDFS.label, Literal("Building", lang="en"))
+        with pytest.raises(ValueError):
+            check_contract(
+                Contract.ISOMORPHIC, inputs=[_source()], outputs=[_source()], excluded=[label]
+            )
+        with pytest.raises(ValueError):
+            check_contract(
+                Contract.ISOMORPHIC, inputs=[_source()], outputs=[_source()], counts={"a": 1}
+            )
+        with pytest.raises(ValueError):
+            check_contract(Contract.COUNTS_AGREE, inputs=[_source()], counts={"a": 1})
+
+
+class TestDescribe:
+    def test_names_the_contract_and_each_sampled_triple(self):
+        actual = _source()
+        actual.remove((EX.Building, RDFS.label, None))
+        text = describe(check_isomorphic(_source(), actual))
+        assert text.startswith("isomorphic: ")
+        assert (
+            '  - <http://example.org/ont#Building> <http://www.w3.org/2000/01/rdf-schema#label> "Building"@en'
+            in text
+        )
+
+    def test_says_how_many_were_not_sampled(self):
+        expected = Graph()
+        for i in range(SAMPLE_SIZE + 5):
+            expected.add((EX[f"C{i}"], RDF.type, OWL.Class))
+        assert "... and 5 more missing" in describe(check_isomorphic(expected, Graph()))
+
+    def test_nothing_found_is_empty(self):
+        assert describe([]) == ""
+
 
 class TestContracts:
     def test_every_contract_names_a_real_command(self):
         assert set(CONTRACTS) <= EXPECTED_COMMANDS
+
+    def test_the_table_is_read_only(self):
+        with pytest.raises(TypeError):
+            CONTRACTS["order"] = CONTRACTS["cast"]  # type: ignore[index]
 
     def test_keys_match_entries(self):
         assert all(name == entry.command for name, entry in CONTRACTS.items())

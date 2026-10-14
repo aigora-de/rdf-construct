@@ -24,7 +24,7 @@ from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import RDF, RDFS, SH
 
 from rdf_construct.cli import cli
-from rdf_construct.core.verify import CONTRACTS, Discrepancy, Triple, check_contract
+from rdf_construct.core.verify import CONTRACTS, Triple, check_contract, describe
 from rdf_construct.core.vocab import CLASS_TYPES
 from rdf_construct.docs import extract_all
 from tests.test_cli_smoke import assert_no_crash
@@ -53,22 +53,23 @@ def _parse(path: Path, fmt: str | None = None) -> Graph:
     return Graph().parse(path, format=fmt)
 
 
-def _check(
+def _assert_holds(
     command: str,
     *,
     inputs: Sequence[Graph] = (),
     outputs: Sequence[Graph] = (),
     excluded: Iterable[Triple] = (),
     counts: Mapping[str, int] | None = None,
-) -> list[Discrepancy]:
-    """Check ``command``'s declared contract, so a test never names the contract itself."""
-    return check_contract(
+) -> None:
+    """Assert ``command``'s declared contract holds, so a test never names the contract itself."""
+    found = check_contract(
         CONTRACTS[command].contract,
         inputs=inputs,
         outputs=outputs,
         excluded=excluded,
         counts=counts,
     )
+    assert not found, describe(found)
 
 
 # ---------------------------------------------------------------------------
@@ -81,8 +82,7 @@ def _check(
 def test_cast_is_isomorphic(source: Path, fmt: str, tmp_path, monkeypatch):
     _run(tmp_path, monkeypatch, "cast", source, "-f", fmt, "-o", tmp_path / "out")
     [written] = (tmp_path / "out").iterdir()
-    found = _check("cast", inputs=[_parse(source)], outputs=[_parse(written, fmt)])
-    assert found == []
+    _assert_holds("cast", inputs=[_parse(source)], outputs=[_parse(written, fmt)])
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +106,7 @@ def test_cast_is_isomorphic(source: Path, fmt: str, tmp_path, monkeypatch):
 def test_order_lossless_profile_is_isomorphic(source, config, profile, tmp_path, monkeypatch):
     _run(tmp_path, monkeypatch, "order", source, config, "-p", profile, "-o", tmp_path / "out")
     [written] = (tmp_path / "out").glob("*.ttl")
-    assert _check("order", inputs=[_parse(source)], outputs=[_parse(written)]) == []
+    _assert_holds("order", inputs=[_parse(source)], outputs=[_parse(written)])
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +120,7 @@ def test_localise_round_trip_is_isomorphic(source: Path, tmp_path, monkeypatch):
     merged = tmp_path / "merged.ttl"
     _run(tmp_path, monkeypatch, "localise", "extract", source, "-l", "de", "-o", strings)
     _run(tmp_path, monkeypatch, "localise", "merge", source, strings, "-o", merged)
-    assert _check("localise merge", inputs=[_parse(source)], outputs=[_parse(merged)]) == []
+    _assert_holds("localise merge", inputs=[_parse(source)], outputs=[_parse(merged)])
 
 
 # ---------------------------------------------------------------------------
@@ -158,8 +158,7 @@ RENAMES = [
 def test_refactor_rename_keeps_the_triple_count(source, args, tmp_path, monkeypatch):
     out = tmp_path / "renamed.ttl"
     _run(tmp_path, monkeypatch, "refactor", "rename", source, *args, "-o", out)
-    found = _check("refactor rename", inputs=[_parse(source)], outputs=[_parse(out)])
-    assert found == []
+    _assert_holds("refactor rename", inputs=[_parse(source)], outputs=[_parse(out)])
 
 
 def test_refactor_deprecate_keeps_every_input_triple(tmp_path, monkeypatch):
@@ -168,8 +167,7 @@ def test_refactor_deprecate_keeps_every_input_triple(tmp_path, monkeypatch):
     out = tmp_path / "deprecated.ttl"
     config = EXAMPLES / "refactor" / "deprecations.yml"
     _run(tmp_path, monkeypatch, "refactor", "deprecate", source, "-c", config, "-o", out)
-    found = _check("refactor deprecate", inputs=[_parse(source)], outputs=[_parse(out)])
-    assert found == []
+    _assert_holds("refactor deprecate", inputs=[_parse(source)], outputs=[_parse(out)])
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +197,7 @@ def test_split_union_is_isomorphic(source: Path, tmp_path, monkeypatch):
     out = tmp_path / "modules"
     _run(tmp_path, monkeypatch, "split", source, "--by-namespace", "-o", out)
     modules = [_parse(path) for path in sorted(out.glob("*.ttl"))]
-    assert _check("split", inputs=[_parse(source)], outputs=modules) == []
+    _assert_holds("split", inputs=[_parse(source)], outputs=modules)
 
 
 # ---------------------------------------------------------------------------
@@ -228,17 +226,16 @@ def _merge(tmp_path: Path, monkeypatch, sources: list[Path]) -> Graph:
 def test_merge_keeps_every_source_triple(tmp_path, monkeypatch):
     sources = [EXAMPLES / "merge" / "merge_core.ttl", EXAMPLES / "merge" / "merge_extension.ttl"]
     merged = _merge(tmp_path, monkeypatch, sources)
-    assert _check("merge", inputs=[_parse(s) for s in sources], outputs=[merged]) == []
+    _assert_holds("merge", inputs=[_parse(s) for s in sources], outputs=[merged])
 
 
 @pytest.mark.xfail(strict=True, reason="#169")
 def test_merge_drops_the_losers_of_resolved_conflicts(tmp_path, monkeypatch):
     sources = [EXAMPLES / "merge" / "merge_core.ttl", EXAMPLES / "merge" / "merge_conflicting.ttl"]
     merged = _merge(tmp_path, monkeypatch, sources)
-    found = _check(
+    _assert_holds(
         "merge", inputs=[_parse(s) for s in sources], outputs=[merged], excluded=MERGE_LOSERS
     )
-    assert found == []
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +246,8 @@ DOCS_PAGE_DIRS = ("classes", "properties", "instances", "shapes", "concepts")
 
 
 def _selected_entities(source: Path, no_instances: bool) -> int:
+    # The tool's own extractor, so this contract checks that the artefacts agree with each other.
+    # An entity the extractor never sees is invisible here; the taxonomy tests own that.
     entities = extract_all(_parse(source))
     total = (
         len(entities.classes)
@@ -280,7 +279,7 @@ def test_docs_html_counts_agree(no_instances: bool, tmp_path, monkeypatch):
         "pages written": _pages(out, ".html"),
         "search index entries": len(search),
     }
-    assert _check("docs", counts=counts) == []
+    _assert_holds("docs", counts=counts)
 
 
 INDEX_LISTS = (
@@ -312,7 +311,7 @@ def test_docs_json_counts_agree(no_instances: bool, tmp_path, monkeypatch):
         "index entries": sum(len(index[name]) for name in INDEX_LISTS),
         "index statistics": sum(index["statistics"][name] for name in INDEX_LISTS),
     }
-    assert _check("docs", counts=counts) == []
+    _assert_holds("docs", counts=counts)
 
 
 # ---------------------------------------------------------------------------
@@ -361,4 +360,4 @@ def test_shacl_gen_one_shape_per_selected_class(source, args, selected, tmp_path
         "node shapes": len(set(shapes.subjects(RDF.type, SH.NodeShape))),
         "selected classes targeted": len(classes & targeted),
     }
-    assert _check("shacl-gen", counts=counts) == []
+    _assert_holds("shacl-gen", counts=counts)
