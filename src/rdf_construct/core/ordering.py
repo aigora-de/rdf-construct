@@ -1,5 +1,6 @@
 """Ordering and sorting logic for RDF subjects."""
 
+import heapq
 from typing import Optional
 
 from rdflib import Graph, URIRef, RDF, RDFS
@@ -58,27 +59,40 @@ def topo_sort_subset(graph: Graph, nodes: set, edge_predicate: URIRef) -> list:
 
     adj, indeg = build_adjacency(graph, nodes, edge_predicate)
 
+    # Compute each sort key once: normalizeUri is uncached and dominated the
+    # quadratic version of this sort (#300).
+    key = {n: qname_sort_key(graph, n) for n in nodes}
+
+    # The ready set is a heap of (key, seq, node). The insertion counter breaks
+    # ties on key exactly as the previous stable re-sort + pop(0) did (earliest
+    # ready first), and means two terms are never compared directly.
+    ready: list[tuple[str, int, URIRef]] = []
+    seq = 0
+
     # Start with nodes that have no incoming edges
-    zero = [n for n, d in indeg.items() if d == 0]
-    zero.sort(key=lambda t: qname_sort_key(graph, t))
+    for n in sorted((n for n, d in indeg.items() if d == 0), key=key.__getitem__):
+        ready.append((key[n], seq, n))
+        seq += 1
+    heapq.heapify(ready)
 
     out: list = []
 
-    while zero:
-        u = zero.pop(0)
+    while ready:
+        _, _, u = heapq.heappop(ready)
         out.append(u)
 
         # Process children in alphabetical order
-        for v in sorted(adj[u], key=lambda t: qname_sort_key(graph, t)):
+        for v in sorted(adj[u], key=key.__getitem__):
             indeg[v] -= 1
             if indeg[v] == 0:
-                zero.append(v)
-                zero.sort(key=lambda t: qname_sort_key(graph, t))
+                heapq.heappush(ready, (key[v], seq, v))
+                seq += 1
 
     # Handle any remaining nodes (cycles or disconnected components)
     if len(out) < len(nodes):
-        remaining = [n for n in nodes if n not in out]
-        remaining.sort(key=lambda t: qname_sort_key(graph, t))
+        emitted = set(out)
+        remaining = [n for n in nodes if n not in emitted]
+        remaining.sort(key=key.__getitem__)
         out.extend(remaining)
 
     return out
