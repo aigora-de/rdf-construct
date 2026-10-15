@@ -45,6 +45,7 @@ if TYPE_CHECKING:
 
 FIXTURES = Path(__file__).parent / "fixtures" / "determinism"
 MERGE = EXAMPLES / "merge"
+IES_SMALL = Path(__file__).parent / "fixtures" / "ies" / "ies-env-building-classification.ttl"
 OWL_FULL = str(EXAMPLES / "describe" / "owl_full_example.ttl")
 
 # A leading "@out" makes an argument a path under the case's constant output directory.
@@ -160,6 +161,16 @@ def test_stats_most_connected_ignores_statement_order(tmp_path: Path) -> None:
     """Four classes tie on references, and ``Most Connected`` names whichever was read first."""
     out = tmp_path / "out"
     outputs = distinct_outputs_by_statement_order(FIXTURES / "stats_tie.ttl", ["stats", INPUT], out)
+    assert_one_output(outputs)
+
+
+@pytest.mark.xfail(strict=True, reason="#335")
+def test_docs_relation_lists_ignore_statement_order(tmp_path: Path) -> None:
+    """Each class's subclasses, superclasses and so on are listed in the order the input gave."""
+    out = tmp_path / "out"
+    outputs = distinct_outputs_by_statement_order(
+        IES_SMALL, ["docs", INPUT, "-f", "json", "-o", out], out
+    )
     assert_one_output(outputs)
 
 
