@@ -3266,3 +3266,22 @@ class TestMarkdownLinkResolution:
         assert page.exists()
         assert ".html)" not in page.read_text()
         assert broken_markdown_links(output_dir) == []
+# ---------------------------------------------------------------------------
+# Repository documentation link guard -- issue #274
+# ---------------------------------------------------------------------------
+
+
+class TestRepositoryDocsLinks:
+    """The checked-in ``docs/`` tree must have no dead relative links.
+
+    ``broken_markdown_links`` already walks a root directory for file and
+    anchor links, so pointing it at the repository's own documentation
+    catches a broken cross-reference the moment it lands, the same way
+    the generated-output guards catch one in the renderer (#87, #113).
+    """
+
+    def test_no_broken_links_in_repo_docs(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        docs = repo_root / "docs"
+        assert docs.is_dir(), "docs/ directory not found at the repository root"
+        assert broken_markdown_links(docs) == []
