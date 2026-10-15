@@ -80,6 +80,12 @@ change, and what to do about it, is listed command by command in the
   defect, and 16 of 17 shipped example ontologies failed the linter on it.
 
 ### Fixed
+- **`sort: topological` no longer turns alphabetical on inferred graphs** (#339).
+  RDFS entailment materialises `C rdfs:subClassOf C` for every class (`rdfs10`)
+  and `P rdfs:subPropertyOf P` for every property (`rdfs6`). Each self-loop was
+  treated as a cycle, so the term and everything beneath it fell out of the
+  sort and was emitted alphabetically. A self-loop is a tautology, not a cycle,
+  and is now ignored. Graphs without self-loops order exactly as before.
 - **`sort: topological` is no longer quadratic** (#300). Each sort key is computed
   once and the ready set is a heap, so 6,000 classes sort in 0.11 s instead of
   6.0 s (3,000: 2.4 s → 0.05 s). The order produced is unchanged.

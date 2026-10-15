@@ -15,6 +15,7 @@ def build_adjacency(
     """Build adjacency list and indegree map for topological sorting.
 
     Creates parent->children adjacency representation within the given node set.
+    A self-loop (``C rdfs:subClassOf C``) is ignored: it is a tautology, not a cycle.
 
     Args:
         graph: RDF graph containing the relationships
@@ -32,7 +33,9 @@ def build_adjacency(
 
     for n in nodes:
         for parent in graph.objects(n, edge_predicate):
-            if parent in nodes:
+            # RDFS entailment (rdfs10, rdfs6) materialises n ⊑ n for every term;
+            # as an edge it would keep n and its subtree out of the sort (#339).
+            if parent in nodes and parent != n:
                 adj[parent].add(n)  # parent before child
                 indeg[n] += 1
 

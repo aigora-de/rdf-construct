@@ -337,6 +337,9 @@ triple is lost and the run exits 0.
 classes are equivalent. What is true is narrower: there is no parent-before-child order over a set
 of mutually subsuming classes, so `order` falls back to alphabetical for those terms.
 
+A term that is its own subclass or subproperty — `C rdfs:subClassOf C`, which RDFS inference adds
+for every class — is a tautology, not a cycle. It is ignored, and the term is ordered normally.
+
 If you did not intend the cycle, `rdf-construct lint` reports it. `order` does not currently say
 anything about it (issue #250).
 
