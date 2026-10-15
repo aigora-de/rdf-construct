@@ -17,7 +17,11 @@ the worktree's code.
 - ``distinct_outputs`` varies the **hash seed**. It runs one invocation under each of ``SEEDS``.
 - ``distinct_outputs_by_statement_order`` varies the **input's statement order**. It writes the
   same triples in two orders to the same path and runs the invocation over each. #141 is this
-  kind: the same graph, a different answer.
+  kind: the same graph, a different answer. Two orders are a sample of the possible orders,
+  not all of them, and the input is N-Triples, so it carries no prefix bindings and no named
+  graphs. **An output that cites a source position differs by construction.** ``lint``'s
+  ``file:line`` moves with the statement, so a command that reports line numbers is not a
+  candidate for this entry point.
 
 Both return the set of distinct ``Output``s. A deterministic command yields exactly one, and
 ``assert_one_output`` says so with a message that names what differed.
@@ -107,9 +111,11 @@ def distinct_outputs(
     Args:
         argv: The arguments after ``rdf-construct``. Paths should be absolute. Any output path
             should be ``out_dir`` or lie under it.
-        out_dir: An absolute directory, the same for every seed. It is deleted and recreated
-            before each run and is the run's working directory, so a file the command writes
-            there by default is compared too.
+        out_dir: An absolute directory that the test owns, such as ``tmp_path / "out"``, the
+            same for every seed. It is deleted and recreated before each run and is the run's
+            working directory, so a file the command writes there by default is compared too.
+            Never pass ``tmp_path`` itself: the statement-order entry point writes its input
+            to ``out_dir``'s parent.
         seeds: The hash seeds, one process each.
         expect_exit: The exit code every run must return: 0, or 1 for a command that reports
             findings (#286).
@@ -141,8 +147,9 @@ def distinct_outputs_by_statement_order(
     """Run one invocation over the same triples in two statement orders.
 
     ``source`` is parsed and written as N-Triples twice, its lines sorted and then reversed,
-    to one path beside ``out_dir`` (so a command that prints its input's path prints the same
-    one). Each order runs once, under the first of ``SEEDS``, so only the order differs.
+    to one path in ``out_dir``'s parent (so a command that prints its input's path prints the
+    same one). Each order runs once, under the first of ``SEEDS``, so only the order differs.
+    A dataset's named graphs are flattened into one graph by the parse.
 
     Args:
         source: The RDF file whose triples are reordered.
