@@ -80,6 +80,9 @@ change, and what to do about it, is listed command by command in the
   defect, and 16 of 17 shipped example ontologies failed the linter on it.
 
 ### Fixed
+- **`sort: topological` is no longer quadratic** (#300). Each sort key is computed
+  once and the ready set is a heap, so 6,000 classes sort in 0.11 s instead of
+  6.0 s (3,000: 2.4 s → 0.05 s). The order produced is unchanged.
 - **`python -m rdf_construct` now runs the CLI** (#200). `__main__.py` was
   empty, so the module form exited 0 having done nothing. It now behaves exactly
   like the `rdf-construct` script, and its usage line names `rdf-construct`.
