@@ -134,7 +134,9 @@ def _reference_topo_sort(graph: Graph, nodes: set, edge_predicate: URIRef) -> li
     """The quadratic implementation #300 replaced, kept verbatim as the oracle.
 
     The fix promises the same order, not just a valid one, so the tests compare
-    against this rather than only checking parents precede children.
+    against this rather than only checking parents precede children. It shares
+    the live ``build_adjacency``, so it no longer models the self-loop bug; #339's
+    tests below pin that divergence instead.
     """
     if not nodes:
         return []
@@ -328,3 +330,85 @@ def test_topo_sort_equal_keys_break_ties_as_before():
     expected = [first, second, URIRef("a"), BNode("a"), BNode("b"), URIRef("b")]
     assert _reference_topo_sort(g, nodes, RDFS.subClassOf) == expected
     assert topo_sort_subset(g, nodes, RDFS.subClassOf) == expected
+
+
+# ---------------------------------------------------------------------------
+# #339: a self-loop is a tautology, not a cycle
+# ---------------------------------------------------------------------------
+
+
+def _rdfs_closed_chain(edge: URIRef) -> tuple[Graph, list[URIRef]]:
+    """Zoo above Mammal above Aardvark, closed as an RDFS reasoner would leave it.
+
+    The hierarchy reverses the alphabet, so alphabetical order is visibly wrong
+    under every seed: the asserted edges, their transitive closure (rdfs11/rdfs5)
+    and a self-loop on every term (rdfs10/rdfs6).
+    """
+    ex = "http://example.org/test#"
+    g = Graph()
+    g.bind("ex", ex)
+    zoo, mammal, aardvark = (URIRef(ex + n) for n in ("Zoo", "Mammal", "Aardvark"))
+    g.add((mammal, edge, zoo))
+    g.add((aardvark, edge, mammal))
+    g.add((aardvark, edge, zoo))
+    for t in (zoo, mammal, aardvark):
+        g.add((t, edge, t))
+    return g, [zoo, mammal, aardvark]
+
+
+def test_self_loops_do_not_drop_classes_out_of_the_sort():
+    """The #339 reproducer: an inferred class chain still sorts parent first."""
+    g, expected = _rdfs_closed_chain(RDFS.subClassOf)
+    assert topo_sort_subset(g, set(expected), RDFS.subClassOf) == expected
+    assert sort_subjects(g, set(expected), "topological") == expected
+
+
+def test_self_loops_do_not_drop_properties_out_of_the_sort():
+    """The same through rdfs:subPropertyOf, on the path order takes for properties."""
+    g, expected = _rdfs_closed_chain(RDFS.subPropertyOf)
+    for p in expected:
+        g.add((p, RDF.type, OWL.ObjectProperty))
+    assert sort_subjects(g, set(expected), "topological_then_alpha") == expected
+
+
+def test_self_loops_sort_as_though_absent():
+    """Two thousand classes, two hundred self-loops: the order of the graph without them."""
+    g, nodes = _generated_hierarchy(
+        2000, max_parents=3, cycles=25, components=4, seed=339, self_loops=200
+    )
+    stripped = Graph()
+    stripped.namespace_manager = g.namespace_manager
+    for s, p, o in g:
+        if not (p == RDFS.subClassOf and s == o):
+            stripped.add((s, p, o))
+    assert len(stripped) == len(g) - 200
+    assert topo_sort_subset(g, nodes, RDFS.subClassOf) == topo_sort_subset(
+        stripped, nodes, RDFS.subClassOf
+    )
+
+
+def test_self_loop_keeps_its_subtree_in_topological_order():
+    """Only the root carries a self-loop; its descendants must not fall to alphabetical."""
+    g = Graph()
+    ex = "http://example.org/test#"
+    g.bind("ex", ex)
+    z, m, a = (URIRef(ex + n) for n in ("Z", "M", "A"))
+    g.add((z, RDFS.subClassOf, z))
+    g.add((m, RDFS.subClassOf, z))
+    g.add((a, RDFS.subClassOf, m))
+    assert topo_sort_subset(g, {z, m, a}, RDFS.subClassOf) == [z, m, a]
+
+
+def test_self_loop_inside_a_real_cycle_is_still_a_cycle():
+    """Ignoring the self-loop must not hide a genuine cycle: Z ⊑ M ⊑ Z stays in the remainder."""
+    g = Graph()
+    ex = "http://example.org/test#"
+    g.bind("ex", ex)
+    b, m, z = (URIRef(ex + n) for n in ("B", "M", "Z"))
+    g.add((z, RDFS.subClassOf, m))
+    g.add((m, RDFS.subClassOf, z))
+    g.add((z, RDFS.subClassOf, z))
+    g.add((b, RDFS.subClassOf, z))
+    # B hangs below the cycle, so it cannot become ready either; all three follow
+    # in key order, as #250 currently defines the remainder.
+    assert topo_sort_subset(g, {b, m, z}, RDFS.subClassOf) == [b, m, z]
