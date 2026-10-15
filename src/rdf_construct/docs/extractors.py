@@ -466,7 +466,12 @@ def get_label(graph: Graph, uri: URIRef, lang: str | None = "en") -> str | None:
         for obj in graph.objects(uri, pred):
             if isinstance(obj, Literal):
                 if lang is None or obj.language == lang or obj.language is None:
-                    return str(obj)
+                    label = str(obj)
+                    # A label with no non-whitespace content renders as an
+                    # invisible link, so treat it as absent and keep looking.
+                    # The qname fallback then handles it like an empty label.
+                    if label.strip():
+                        return label
     # Fallback: try any language
     if lang is not None:
         return get_label(graph, uri, lang=None)
