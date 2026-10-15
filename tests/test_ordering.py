@@ -178,13 +178,14 @@ def _assert_same_as_reference(
 
 
 def _generated_hierarchy(
-    n: int, *, max_parents: int, cycles: int, components: int, seed: int
+    n: int, *, max_parents: int, cycles: int, components: int, seed: int, self_loops: int = 0
 ) -> tuple[Graph, set]:
     """A seeded random class hierarchy over n classes.
 
     Each class picks up to ``max_parents`` parents among earlier classes of its
     own component (some pick none, so there are several roots); ``cycles`` extra
-    subClassOf edges are then added at random, which close cycles.
+    subClassOf edges are then added at random, which close cycles. ``self_loops``
+    classes get ``C rdfs:subClassOf C``, as RDFS entailment (rdfs10) materialises.
     """
     rng = random.Random(seed)
     g = Graph()
@@ -199,18 +200,27 @@ def _generated_hierarchy(
     for _ in range(cycles):
         a, b = rng.sample(classes, 2)
         g.add((a, RDFS.subClassOf, b))
+    for c in rng.sample(classes, self_loops):
+        g.add((c, RDFS.subClassOf, c))
     return g, set(classes)
 
 
 @pytest.mark.parametrize(
-    "max_parents,cycles,components",
-    [(1, 0, 1), (3, 0, 1), (3, 25, 1), (1, 0, 4), (3, 25, 4)],
-    ids=["single-parent", "multi-parent", "cycles", "components", "all"],
+    "max_parents,cycles,components,self_loops",
+    [(1, 0, 1, 0), (3, 0, 1, 0), (3, 25, 1, 0), (1, 0, 4, 0), (3, 0, 1, 20), (3, 25, 4, 20)],
+    ids=["single-parent", "multi-parent", "cycles", "components", "self-loops", "all"],
 )
-def test_topo_sort_matches_reference_on_generated_hierarchies(max_parents, cycles, components):
+def test_topo_sort_matches_reference_on_generated_hierarchies(
+    max_parents, cycles, components, self_loops
+):
     """Two thousand classes: same order as the old implementation (#300)."""
     g, nodes = _generated_hierarchy(
-        2000, max_parents=max_parents, cycles=cycles, components=components, seed=300
+        2000,
+        max_parents=max_parents,
+        cycles=cycles,
+        components=components,
+        seed=300,
+        self_loops=self_loops,
     )
     assert topo_sort_subset(g, nodes, RDFS.subClassOf) == _reference_topo_sort(
         g, nodes, RDFS.subClassOf
