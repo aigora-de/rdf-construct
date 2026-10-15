@@ -393,4 +393,4 @@ change, and what to do about it, is in the [v0.7.0 migration note](MIGRATION_v0.
 
 ## Archive
 
-Previous documentation versions are preserved in [docs/archive/](archive/) for reference.
+Previous documentation versions are preserved in `docs/archive/` for reference.
