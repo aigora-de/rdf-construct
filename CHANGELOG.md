@@ -80,6 +80,9 @@ change, and what to do about it, is listed command by command in the
   defect, and 16 of 17 shipped example ontologies failed the linter on it.
 
 ### Fixed
+- **`python -m rdf_construct` now runs the CLI** (#200). `__main__.py` was
+  empty, so the module form exited 0 having done nothing. It now behaves exactly
+  like the `rdf-construct` script, and its usage line names `rdf-construct`.
 - **`puml2rdf` no longer doubles the class count for packaged diagrams** (#154).
   Each class is stored under both `name` and `qualified_name` for relationship
   lookup; the summary now counts distinct URIs so it matches the parse line.

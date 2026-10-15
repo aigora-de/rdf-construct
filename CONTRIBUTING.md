@@ -102,6 +102,10 @@ def example_function(graph: Graph, subjects: set[URIRef]) -> list[URIRef]:
 - A fix for output that misrepresents its input asserts the command's contract with
   `rdf_construct.core.verify`; its module docstring has the worked example, and
   `tests/test_post_write.py` the xfail marker your fix removes
+- A fix for output that differs between runs proves it with `tests/determinism.py`, which runs
+  the command in separate processes under six `PYTHONHASHSEED` values, or over two statement
+  orders. An in-process test passes on the broken code. Its module docstring has the worked
+  example, and `tests/test_determinism.py` the xfail marker your fix removes
 
 ### Commits
 
