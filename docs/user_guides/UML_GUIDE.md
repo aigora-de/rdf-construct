@@ -887,7 +887,7 @@ contexts:
 
 - **[Getting Started](GETTING_STARTED.md)**: Quick start guide
 - **[CLI Reference](CLI_REFERENCE.md)**: All commands
-- **[Examples](examples/)**: Sample ontologies and configs
+- **[Examples](../../examples/)**: Sample ontologies and configs
 
 ## Questions?
 
