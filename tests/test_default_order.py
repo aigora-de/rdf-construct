@@ -9,14 +9,17 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from unittest import mock
 
 import pytest
 from rdflib import RDFS, BNode, Graph, Namespace, URIRef
+from rdflib.collection import Collection
 from rdflib.compare import isomorphic
 
 from rdf_construct.core import (
     IncompleteSubjectOrderError,
     check_subject_order_complete,
+    default_order,
     default_subject_order,
     serialise_turtle,
     serialise_turtle_str,
@@ -107,6 +110,25 @@ class TestSections:
         (different,) = graph.subjects(None, owl.AllDifferent)
         (disjoint,) = graph.subjects(None, owl.AllDisjointClasses)
         assert order.index(different) < order.index(disjoint)
+
+    def test_only_root_blank_nodes_are_keyed(self) -> None:
+        """A key walks its node's closure, so keying every node of a long list is quadratic.
+
+        Three ``owl:AllDifferent`` roots over one 200-member list each: three keys, not 603.
+        """
+        owl = Namespace("http://www.w3.org/2002/07/owl#")
+        g = Graph()
+        members = [EX[f"i{i}"] for i in range(200)]
+        for _ in range(3):
+            root, head = BNode(), BNode()
+            Collection(g, head, members)
+            g.add((root, owl.distinctMembers, head))
+        with mock.patch.object(
+            default_order, "_bnode_content_key", wraps=default_order._bnode_content_key
+        ) as key:
+            order = default_subject_order(g)
+        assert key.call_count == 3
+        assert set(order) == set(g.subjects())
 
 
 class TestHierarchyPrinciple:

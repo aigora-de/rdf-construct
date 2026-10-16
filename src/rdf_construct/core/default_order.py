@@ -106,12 +106,14 @@ def default_subject_order(graph: Graph) -> list[Node]:
     place(bnode_closure(graph, ordered))
 
     # What is left is reachable from no named subject. Its roots are the blank nodes nothing
-    # left references; a remainder with no root is a cycle, placed by the same key.
+    # left references; a remainder no root reaches is a cycle, placed by the same key. Only
+    # what is still unplaced is keyed: a key walks its node's closure, so keying every node
+    # of a root's list would be quadratic in the list's length.
     remaining = {s for s in graph.subjects() if isinstance(s, BNode) and s not in seen}
     referenced = {o for s in remaining for o in graph.objects(s) if o in remaining}
-    roots = remaining - referenced
-    for start in (roots, remaining):
-        for root in sorted(start, key=lambda b: _bnode_content_key(graph, b)):
+    for start in (remaining - referenced, remaining):
+        unplaced = [b for b in start if b not in seen]
+        for root in sorted(unplaced, key=lambda b: _bnode_content_key(graph, b)):
             if root not in seen:
                 place([root])
                 place(bnode_closure(graph, [root]))
