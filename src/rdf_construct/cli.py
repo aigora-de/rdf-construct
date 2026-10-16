@@ -902,7 +902,7 @@ def contexts(config: Path):
 
 
 @cli.command()
-@click.argument("sources", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
+@click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
 @click.option(
     "--level",
     "-l",
@@ -1013,6 +1013,9 @@ def lint(
       # List available rules
       rdf-construct lint --list-rules
     """
+    if init_config and list_rules_flag:
+        raise Refusal("--init and --list-rules cannot be combined; run them separately.")
+
     # Handle --init flag
     if init_config:
         from .lint import create_default_config

@@ -263,8 +263,8 @@ THREE_STATES = [
     _row(
         Row("lint", "clean", ("lint", "--format", "json", CLEAN_LINT)), xfail="#201", label="json"
     ),
-    _row(Row("lint", "clean", ("lint", "--list-rules")), xfail="#202", label="list-rules"),
-    _row(Row("lint", "clean", ("lint", "--init")), xfail="#202", label="init"),
+    _row(Row("lint", "clean", ("lint", "--list-rules")), label="list-rules"),
+    _row(Row("lint", "clean", ("lint", "--init")), label="init"),
     _row(Row("diff", "clean", ("diff", ANIMAL, ANIMAL))),
     _row(Row("diff", "findings", ("diff", ANIMAL, SIMPLE))),
     _row(Row("diff", "refused", ("diff", ANIMAL, "@tmp/missing.ttl"))),
