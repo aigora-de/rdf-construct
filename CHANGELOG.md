@@ -80,6 +80,15 @@ change, and what to do about it, is listed command by command in the
   defect, and 16 of 17 shipped example ontologies failed the linter on it.
 
 ### Fixed
+- **An inline blank node with several objects for one predicate is valid
+  Turtle again** (#343). `order` wrote the predicate again before every object
+  after the comma, and the grammar expects another object there, so rdflib
+  refused the file the command had just written. A restriction carrying two
+  comments reproduced it, and so did every RDFS- or OWL-RL-closed graph, where
+  entailment gives each blank node `a rdfs:Resource` beside its own type. The
+  predicate is now written once and the objects follow as a comma-separated
+  list, as the top-level writer already did. Inline blocks with one object per
+  predicate are unchanged.
 - **`sort: topological` no longer turns alphabetical on inferred graphs** (#339).
   RDFS entailment materialises `C rdfs:subClassOf C` for every class (`rdfs10`)
   and `P rdfs:subPropertyOf P` for every property (`rdfs6`). Each self-loop was

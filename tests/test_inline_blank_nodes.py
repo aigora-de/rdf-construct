@@ -353,6 +353,40 @@ class TestInlineBnodeRoundTrip:
             g_orig, g_rt
         ), f"Round-trip produced a non-isomorphic graph.\nOutput was:\n{content}"
 
+    def test_round_trip_several_objects_one_predicate(self, tmp_path) -> None:
+        """An inline bnode with two objects for one predicate round-trips (#343).
+
+        An RDFS closure gives every blank node ``a rdfs:Resource`` alongside its
+        own type, and an inline node with two languages carries two comments.
+        The predicate must be written once with a comma-separated object list;
+        repeating the predicate after the ``,`` is not Turtle, and rdflib
+        refuses to read the file back.
+        """
+        source = """
+            @prefix ex: <http://example.org/ont#> .
+            @prefix owl: <http://www.w3.org/2002/07/owl#> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+            ex:Thing ex:hasRestriction [
+                a owl:Restriction , rdfs:Resource ;
+                rdfs:comment "first note" , "second note" ;
+                rdfs:label "one label" ;
+            ] .
+        """
+        g_orig = _parse(source)
+        content = _serialise(g_orig, [EX.Thing], tmp_path)
+
+        # The predicate is written once; the objects follow as a list.
+        assert content.count("rdfs:comment") == 1, (
+            "rdfs:comment was repeated before each object instead of written "
+            f"once with a comma-separated object list.\nOutput was:\n{content}"
+        )
+
+        g_rt = _parse(content)
+        assert isomorphic(
+            g_orig, g_rt
+        ), f"Round-trip produced a non-isomorphic graph.\nOutput was:\n{content}"
+
 
 # ---------------------------------------------------------------------------
 # Predicate ordering inside inline blank nodes

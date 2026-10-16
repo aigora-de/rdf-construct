@@ -217,7 +217,10 @@ def _format_inline_bnode(
             terminator = "" if is_last_pred else " ;"
             block_lines.append(f"{inner_pad}{pred_str} {obj_str}{terminator}")
         else:
-            # Multiple objects for the same predicate.
+            # Multiple objects for the same predicate: write the predicate once,
+            # then each object on its own line, matching the top-level writer.
+            obj_pad = inner_pad + "    "
+            block_lines.append(f"{inner_pad}{pred_str}")
             for j, obj in enumerate(objects_sorted):
                 if isinstance(obj, BNode) and obj in inline_bnodes:
                     obj_str = _format_inline_bnode(
@@ -227,10 +230,10 @@ def _format_inline_bnode(
                     obj_str = format_term(graph, obj)
                 is_last_obj = j == len(objects_sorted) - 1
                 if not is_last_obj:
-                    block_lines.append(f"{inner_pad}{pred_str} {obj_str} ,")
+                    block_lines.append(f"{obj_pad}{obj_str} ,")
                 else:
                     terminator = "" if is_last_pred else " ;"
-                    block_lines.append(f"{inner_pad}{pred_str} {obj_str}{terminator}")
+                    block_lines.append(f"{obj_pad}{obj_str}{terminator}")
 
     block_lines.append(f"{close_pad}]")
     return "\n".join(block_lines)
