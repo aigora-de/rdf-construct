@@ -177,7 +177,9 @@ class PumlToRdfConverter:
                     ns_uri += "#"
                 ns = Namespace(ns_uri)
                 self._namespaces[pkg.name] = ns
-                self._graph.bind(pkg.name, ns)
+                # override=False: never clobber owl/rdfs/xsd or another
+                # package's prefix; rdflib derives a free one instead.
+                self._graph.bind(self._bindable_prefix(pkg.name), ns, override=False)
                 prefixes.discard(pkg.name)  # Don't auto-generate
 
         # Auto-generate namespaces for remaining prefixes
@@ -186,7 +188,32 @@ class PumlToRdfConverter:
             ns_uri = f"{base}/{prefix}#"
             ns = Namespace(ns_uri)
             self._namespaces[prefix] = ns
-            self._graph.bind(prefix, ns)
+            self._graph.bind(self._bindable_prefix(prefix), ns, override=False)
+
+    def _bindable_prefix(self, name: str) -> str:
+        """Return a Turtle prefix that is legal to bind, derived from *name*.
+
+        A package name may be a URI — ``package "http://x#" { … }`` names the
+        namespace with no alias — and a URI is not a legal ``PN_PREFIX``, so
+        binding it verbatim writes a ``@prefix`` line no parser can read back
+        (#150). A legal name is kept as the author wrote it; anything else is
+        shortened by :meth:`_generate_prefix`, which was written for this and
+        was never called.
+
+        Args:
+            name: Package name or class-package key, possibly a URI.
+
+        Returns:
+            A non-empty prefix matching ``[A-Za-z_][A-Za-z0-9._-]*``.
+        """
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9._-]*", name) and not name.endswith("."):
+            return name
+        generated = self._generate_prefix(name)
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9._-]*", generated):
+            return generated
+        # _generate_prefix keeps digits it finds anywhere, so "2nd" is not yet
+        # a legal PN_PREFIX; anchor it.
+        return f"ns{generated}"
 
     def _generate_prefix(self, name: str) -> str:
         """Generate a namespace prefix from a package name.
