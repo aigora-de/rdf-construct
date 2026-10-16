@@ -132,10 +132,9 @@ Nothing has landed yet.
 
 ## `puml2rdf`
 
-Nothing has landed yet.
-
 | Issue | What changed | What to do |
 |---|---|---|
+| [#150](https://github.com/aigora-de/rdf-construct/issues/150) | `package "http://example.org/x#" as pfx` now means "namespace URI `http://example.org/x#`, prefix `pfx`", as the guide documents. It was read the other way round: the URI became the package name, `pfx` was discarded, and the whole URI was bound as a `@prefix`, so the output could not be parsed by any tool — at exit 0, with a success message. `package "URI" { … }` with no alias now binds a shortened prefix (the URI's last segment) instead of the URI. | Re-run the conversion. The previous output was unreadable, so there is nothing to diff against: classes now land in the declared namespace under the alias (`bld:Building` in the guide's example). A diagram that relied on the whole URI appearing as a prefix name was relying on a file nothing could read. |
 
 ## `cq-test`
 

@@ -154,7 +154,12 @@ class TestPlantUMLParser:
         assert rel.label == "hasFloor"
 
     def test_parse_package(self):
-        """Test parsing package declaration."""
+        """`package "URI" as pfx` is a namespace URI plus a prefix alias (#150).
+
+        The guide leads with this form, and reads the `as` clause as the
+        prefix. Read the other way round, the whole URI becomes the package
+        name and is later bound as a Turtle prefix, which no parser accepts.
+        """
         content = """
         @startuml
         package "http://example.org/building#" as bld {
@@ -169,7 +174,12 @@ class TestPlantUMLParser:
         assert len(result.model.packages) == 1
 
         pkg = result.model.packages[0]
-        assert pkg.name == "http://example.org/building#"
+        assert pkg.name == "bld"
+        assert pkg.namespace_uri == "http://example.org/building#"
+
+        building = result.model.get_class("Building")
+        assert building is not None
+        assert building.package == "bld"
 
     def test_parse_class_in_package(self):
         """Test that classes track their containing package."""
@@ -641,3 +651,98 @@ class TestPuml2rdfCliSummary:
         assert "Found: 3 classes" in result.output
         assert "Classes: 3," in result.output
         assert "Classes: 6," not in result.output
+
+
+# ==============================================================================
+# Package namespace tests (#150)
+# ==============================================================================
+
+
+class TestPackageNamespaces:
+    """`package "URI" as pfx` writes Turtle that reads back, under the alias.
+
+    The worked example in PUML2RDF_GUIDE.md uses this form. Before #150 the
+    parser read the `as` clause the wrong way round, the converter bound the
+    whole URI as a Turtle prefix, and the command reported success at exit 0
+    on a file rdflib refuses to parse.
+    """
+
+    GUIDE_EXAMPLE = dedent(
+        """
+        @startuml
+        title Building Ontology
+
+        package "http://example.org/building#" as bld {
+          class Building {
+            floorArea : decimal
+            constructionYear : gYear
+          }
+          class Floor {
+            level : integer
+          }
+        }
+
+        Building "1" --> "*" Floor : hasFloor
+        @enduml
+        """
+    )
+
+    def _convert(self, tmp_path: Path, content: str) -> tuple[Graph, str]:
+        """Run the CLI over *content* and read the output back as Turtle."""
+        puml = tmp_path / "diagram.puml"
+        puml.write_text(content, encoding="utf-8")
+        output = tmp_path / "diagram.ttl"
+        result = CliRunner().invoke(cli, ["puml2rdf", str(puml), "-o", str(output)])
+
+        assert result.exit_code == 0, result.output
+        text = output.read_text(encoding="utf-8")
+        return Graph().parse(data=text, format="turtle"), text
+
+    def test_guide_example_is_re_parsable(self, tmp_path: Path) -> None:
+        """The guide's worked example round-trips: exit 0 and a readable file."""
+        graph, _text = self._convert(tmp_path, self.GUIDE_EXAMPLE)
+
+        bld = Namespace("http://example.org/building#")
+        assert (bld.Building, RDF.type, OWL.Class) in graph
+        assert (bld.Floor, RDF.type, OWL.Class) in graph
+        assert (bld.hasFloor, RDF.type, OWL.ObjectProperty) in graph
+        assert (bld.floorArea, RDFS.domain, bld.Building) in graph
+
+    def test_guide_example_binds_the_alias_as_prefix(self, tmp_path: Path) -> None:
+        """The alias is the Turtle prefix, as the guide's output shows."""
+        _graph, text = self._convert(tmp_path, self.GUIDE_EXAMPLE)
+
+        assert "@prefix bld: <http://example.org/building#>" in text
+        assert "bld:Building" in text
+
+    def test_uri_package_without_alias_derives_a_prefix(self, tmp_path: Path) -> None:
+        """`package "URI" { … }` names the namespace and still binds a legal prefix."""
+        content = dedent(
+            """
+            @startuml
+            package "http://example.org/building#" {
+              class Building
+            }
+            @enduml
+            """
+        )
+        _graph, text = self._convert(tmp_path, content)
+
+        assert "@prefix building: <http://example.org/building#>" in text
+        assert "building:Building" in text
+
+    def test_simple_package_is_unchanged(self, tmp_path: Path) -> None:
+        """`package core { … }` still generates its namespace from the name."""
+        content = dedent(
+            """
+            @startuml
+            package core {
+              class Entity
+            }
+            @enduml
+            """
+        )
+        graph, _text = self._convert(tmp_path, content)
+
+        core = Namespace("http://example.org/ontology/core#")
+        assert (core.Entity, RDF.type, OWL.Class) in graph

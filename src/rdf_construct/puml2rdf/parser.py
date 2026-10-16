@@ -250,23 +250,55 @@ class PlantUMLParser:
 
         for match in self.PACKAGE_PATTERN.finditer(content):
             name = match.group(1) or match.group(2)  # Quoted or unquoted
-            namespace_uri = match.group(3)  # From 'as' clause
             stereotype = match.group(4)
 
-            # If namespace looks like a URI, use it; otherwise treat as prefix
-            if namespace_uri and not namespace_uri.startswith("http"):
-                # It's a prefix alias like 'bld', not a full URI
-                namespace_uri = None
+            package_name, namespace_uri = self._package_identity(name, match.group(3))
 
             packages.append(
                 PumlPackage(
-                    name=name,
+                    name=package_name,
                     namespace_uri=namespace_uri,
                     stereotype=stereotype,
                 )
             )
 
         return packages
+
+    @staticmethod
+    def _looks_like_uri(value: str) -> bool:
+        """Return True when *value* is a URI rather than a name or alias."""
+        return value.startswith("http") or "://" in value
+
+    @classmethod
+    def _package_identity(cls, name: str, alias: str | None) -> tuple[str, str | None]:
+        """Interpret a package declaration as (package name, namespace URI).
+
+        The guide leads with ``package "http://example.org/x#" as pfx``: the
+        quoted string is the namespace URI and the alias is the prefix
+        (#150). Read the other way round, the URI becomes the package name,
+        the alias is discarded, and the converter binds the whole URI as a
+        Turtle prefix. The reverse spelling, ``package Name as URI``, keeps
+        the name and takes the URI from the alias. A URI with no alias at all
+        still names the namespace; the converter derives a prefix from it.
+
+        Args:
+            name: The quoted or unquoted package name.
+            alias: The value of the optional ``as`` clause, or None.
+
+        Returns:
+            The package name (the key classes are filed under) and the
+            namespace URI the package declares, if any.
+        """
+        if alias is None:
+            # `package "http://x#" { … }`: the name is the namespace itself.
+            return name, name if cls._looks_like_uri(name) else None
+        if cls._looks_like_uri(alias):
+            # `package Name as http://x#` — the alias carries the URI.
+            return name, alias
+        if cls._looks_like_uri(name):
+            # `package "http://x#" as pfx` — the guide's form.
+            return alias, name
+        return name, None
 
     def _parse_classes(self, content: str) -> list[PumlClass]:
         """Extract class definitions from content."""
@@ -516,18 +548,17 @@ class PlantUMLParser:
     def _build_package_map(self, content: str) -> list[tuple[int, int, str]]:
         """Build a map of character positions to package names.
 
+        The package name is the same one :meth:`_parse_packages` records, so a
+        class inside ``package "URI" as pfx`` is filed under ``pfx`` and not
+        under the URI (#150).
+
         Returns a list of (start, end, package_name) tuples.
         """
         package_map = []
 
-        # Find all package blocks with their content
-        pattern = re.compile(
-            r'package\s+(?:"([^"]+)"|(\S+))' r"(?:\s+as\s+\S+)?" r"(?:\s*<<\w+>>)?" r"\s*\{",
-            re.MULTILINE,
-        )
-
-        for match in pattern.finditer(content):
-            package_name = match.group(1) or match.group(2)
+        for match in self.PACKAGE_PATTERN.finditer(content):
+            name = match.group(1) or match.group(2)
+            package_name, _namespace_uri = self._package_identity(name, match.group(3))
             start = match.end()
 
             # Find matching closing brace

@@ -80,6 +80,15 @@ change, and what to do about it, is listed command by command in the
   defect, and 16 of 17 shipped example ontologies failed the linter on it.
 
 ### Fixed
+- **`puml2rdf` reads `package "URI" as pfx` as the guide documents** (#150).
+  The quoted string is the namespace URI and the alias is the prefix. The
+  `as` clause was read the other way round: the URI became the package name,
+  the alias was discarded, and the whole URI was bound as a `@prefix` — a
+  line no parser accepts — at exit 0, with a success message and a triple
+  count. `package "URI" { … }` with no alias now derives its prefix from the
+  URI's last segment instead of binding the URI itself. Diagrams using
+  either form change output; see the
+  [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#puml2rdf).
 - **`sort: topological` no longer turns alphabetical on inferred graphs** (#339).
   RDFS entailment materialises `C rdfs:subClassOf C` for every class (`rdfs10`)
   and `P rdfs:subPropertyOf P` for every property (`rdfs6`). Each self-loop was
