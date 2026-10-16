@@ -61,7 +61,9 @@ change, and what to do about it, is listed command by command in the
   `core.default_order.default_subject_order()` places the ontology header,
   then classes, object, datatype, annotation and other properties, then
   individuals, so superclasses come before subclasses and superproperties
-  before subproperties. A punned term is placed once, a property of no
+  before subproperties. Both ends of an `rdfs:subClassOf` arc count as classes,
+  declared or not, so an imported parent still comes first. A punned term is
+  placed once, a property of no
   inferable kind goes to other properties, and a subject no section claims is
   still written. `check_subject_order_complete()` raises if a subject list
   would lose triples, and `serialise_turtle_str()` returns the Turtle that

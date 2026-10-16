@@ -146,6 +146,42 @@ class TestHierarchyPrinciple:
         late = [(c, p) for c, p in pairs if position[p] > position[c]]
         assert late == []
 
+    def test_untyped_subclass_of_terms_are_classes(self) -> None:
+        """rdfs:subClassOf's domain and range are rdfs:Class, declared or not.
+
+        An imported parent and an untyped pair would otherwise land after their subclasses, in
+        the individuals and the unclaimed tail. A parent with no triples is not a subject at all.
+        """
+        g = Graph().parse(
+            format="turtle",
+            data="""
+            @prefix ex: <http://example.org/order#> .
+            @prefix owl: <http://www.w3.org/2002/07/owl#> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+            ex:Bird a owl:Class ; rdfs:subClassOf ex:Zebra .
+            ex:Zebra a ex:ImportedThing ; rdfs:subClassOf ex:Elsewhere .
+            ex:Ant rdfs:subClassOf ex:Yak .
+            ex:Yak rdfs:label "yak" .
+            ex:aardvark a ex:Zebra .
+            """,
+        )
+        order = default_subject_order(g)
+        assert order == [EX.Yak, EX.Ant, EX.Zebra, EX.Bird, EX.aardvark]
+
+    @pytest.mark.parametrize(
+        "source", sorted((REPO / "tests" / "fixtures" / "ies").glob("*.ttl")), ids=lambda p: p.stem
+    )
+    def test_every_superclass_first_in_ies(self, source: Path) -> None:
+        """ies-env-building subclasses ies-common terms it never declares as classes."""
+        g = Graph().parse(source)
+        position = {s: i for i, s in enumerate(default_subject_order(g))}
+        late = [
+            (child, parent)
+            for child, parent in g.subject_objects(RDFS.subClassOf)
+            if child != parent and parent in position and position[parent] > position[child]
+        ]
+        assert late == []
+
     def test_annotation_hierarchy_is_sorted_over_subproperty_of(self, order: list) -> None:
         """#245: a characteristic-only edge choice sorts this section over rdfs:subClassOf."""
         assert order.index(EX.note) < order.index(EX.editorialNote)

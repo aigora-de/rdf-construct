@@ -8,7 +8,10 @@ superproperties before subproperties.
 The sections, each subject placed once by the first that claims it (punning):
 
 1. the ``owl:Ontology`` header;
-2. classes, topologically over ``rdfs:subClassOf``;
+2. classes, topologically over ``rdfs:subClassOf``. A class is a term of a class type, or
+   either end of an ``rdfs:subClassOf`` arc: the property's domain and range are
+   ``rdfs:Class``, so an untyped ``X rdfs:subClassOf Y`` makes both classes. This is wider
+   than ``order``'s ``classes`` selector, which sees declared types only;
 3. object, datatype, annotation and *other* properties, each topologically over
    ``rdfs:subPropertyOf``. *Other* is a property of no inferable kind — declared only
    ``rdf:Property``, ``owl:FunctionalProperty`` or ``owl:DeprecatedProperty`` — whose kind is
@@ -97,6 +100,8 @@ def default_subject_order(graph: Graph) -> list[Node]:
 
     for selector_key, edge in _HIERARCHY_SECTIONS:
         members = unseen_named(select_subjects(graph, selector_key, {}))
+        if selector_key == "classes":
+            members |= unseen_named(_subclass_terms(graph))
         place(topo_sort_subset(graph, members, edge))
 
     place(alpha(unseen_named(graph.subjects(RDF.type, None))))
@@ -164,6 +169,20 @@ def check_subject_order_complete(graph: Graph, subjects: list[Node]) -> None:
             f"{len(duplicates)} subject(s) listed more than once: {_examples(graph, duplicates)}"
         )
     raise IncompleteSubjectOrderError("; ".join(problems))
+
+
+def _subclass_terms(graph: Graph) -> set[Node]:
+    """Both ends of every ``rdfs:subClassOf`` arc that has triples to write, typed or not.
+
+    An imported parent or an untyped ``X rdfs:subClassOf Y`` declares no class type, so the
+    ``classes`` selector misses it, and it would land among the individuals after its subclasses.
+    """
+    terms: set[Node] = set()
+    for child, parent in graph.subject_objects(RDFS.subClassOf):
+        terms.add(child)
+        if (parent, None, None) in graph:
+            terms.add(parent)
+    return terms
 
 
 def _examples(graph: Graph, nodes: list[Node]) -> str:
