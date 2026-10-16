@@ -90,8 +90,16 @@ change, and what to do about it, is listed command by command in the
   mapping moved out of the engine: `LintSummary.exit_code` is removed.
 - **`orphan-class` defaults to `warning`** (#302). A root class is not a
   defect, and 16 of 17 shipped example ontologies failed the linter on it.
+- **`lint --init --list-rules` is refused** (#202). The two cannot be
+  combined. Previously `--init` ran and the rule listing was silently dropped.
+  It now exits 2. Run them separately.
 
 ### Fixed
+- **`lint --list-rules` and `lint --init` run without a source** (#202). Both
+  are documented as standalone, but `SOURCES` was required, so Click refused
+  them with "Missing argument" unless a file was passed, which they then
+  ignored. A source given alongside either is still ignored. A bare `lint`
+  still exits 2, now with "No source files specified."
 - **`sort: topological` no longer turns alphabetical on inferred graphs** (#339).
   RDFS entailment materialises `C rdfs:subClassOf C` for every class (`rdfs10`)
   and `P rdfs:subPropertyOf P` for every property (`rdfs6`). Each self-loop was
