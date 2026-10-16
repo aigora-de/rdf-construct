@@ -60,7 +60,8 @@ is silently incorrect:
 - **Respect `rdfs:subClassOf` and `rdfs:subPropertyOf`** when sorting topologically — and define
   the behaviour when they form a cycle.
 - **rdflib's built-in serialisers always sort alphabetically.** This is the whole reason the
-  project exists; never delegate ordered output to them.
+  project exists; never delegate *Turtle* output to them — every Turtle file the tool writes
+  goes through `core/serialiser.py`. Non-Turtle formats are rdflib's by necessity.
 - **British English everywhere** — ontologies, documentation, code identifiers, CLI help
   (`colour`, `organisation`, `serialise`, `localise`).
 
