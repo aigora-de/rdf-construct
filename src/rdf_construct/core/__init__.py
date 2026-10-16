@@ -27,7 +27,13 @@ from .serialiser import (
     bnode_closure,
     collect_used_namespaces,
     serialise_turtle,
+    serialise_turtle_str,
     build_section_graph,
+)
+from .default_order import (
+    IncompleteSubjectOrderError,
+    check_subject_order_complete,
+    default_subject_order,
 )
 from .utils import (
     expand_curie,
@@ -75,7 +81,12 @@ __all__ = [
     "bnode_closure",
     "collect_used_namespaces",
     "serialise_turtle",
+    "serialise_turtle_str",
     "build_section_graph",
+    # Default ordering
+    "default_subject_order",
+    "check_subject_order_complete",
+    "IncompleteSubjectOrderError",
     # Utils
     "expand_curie",
     "extract_prefix_map",
