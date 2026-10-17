@@ -76,18 +76,32 @@ def collect_used_namespaces(
     return used_ns
 
 
-def collect_inline_bnodes(graph: Graph) -> set[BNode]:
+def collect_inline_bnodes(graph: Graph, subjects_ordered: list | None = None) -> set[BNode]:
     """Identify blank nodes eligible for inline ``[ \u2026 ]`` serialisation.
 
-    A blank node is eligible if both conditions hold:
+    A blank node is eligible if all three conditions hold:
 
     1. It appears as the object of **exactly one** triple in the graph
        (a single incoming arc).
     2. It is **not** the subject of an ``rdf:type rdf:Statement`` triple
        (reification stubs must remain as top-level blocks).
+    3. It is **reachable from a subject that is written at the top level**,
+       following either eligible blank nodes or top-level blank-node blocks.
+       Without this condition a cycle of blank nodes each referenced once
+       (\u2014 each member's only referrer is another member, so conditions 1
+       and 2 hold for all of them) is skipped at the top level and never
+       reached from a written subject: every member's triples vanish (#341).
+       A member of such an unreachable cycle is therefore *not* inlined \u2014
+       it is written as a top-level ``_:label`` block, which breaks the
+       cycle once while every other member stays inline.
 
     Args:
         graph: RDF graph to inspect.
+        subjects_ordered: The subjects the serialiser will write, in order.
+            Reachability (condition 3) is measured from the ones that are not
+            themselves inlined, since those are the blocks an inline
+            ``[ \u2026 ]`` hangs from. When omitted, every subject in the graph
+            counts as written.
 
     Returns:
         Set of :class:`~rdflib.BNode` instances that should be rendered
@@ -109,7 +123,96 @@ def collect_inline_bnodes(graph: Graph) -> set[BNode]:
     }
     candidates -= reification_subjects
 
-    return candidates
+    # Condition 3: only a blank node reachable from a written top-level
+    # block can actually be rendered inline there.
+    if subjects_ordered is None:
+        order_source = list(dict.fromkeys(graph.subjects()))
+    else:
+        order_source = list(dict.fromkeys(subjects_ordered))
+    subjects_set = set(order_source)
+
+    inline: set[BNode] = set()
+    # Candidates forced to the top level because nothing written reaches
+    # them: they become the blocks that break an unreachable cycle.
+    promoted: set[BNode] = set()
+    visited: set[BNode] = set()
+
+    def _walk(seeds) -> None:
+        """Mark reachable candidates inline, walking from written blocks."""
+        queue = list(seeds)
+        while queue:
+            s = queue.pop(0)
+            if s in visited:
+                continue
+            visited.add(s)
+            for o in graph.objects(s, None):
+                if not isinstance(o, BNode) or o in promoted:
+                    continue
+                if o in candidates:
+                    inline.add(o)
+                    queue.append(o)
+                elif o in subjects_set:
+                    # A non-candidate bnode: written as a top-level block
+                    # (if listed), so its own inline blocks render from it.
+                    queue.append(o)
+
+    # The roots: subjects that are never inlined \u2014 named subjects, plus
+    # any non-candidate blank-node block in the subject list.
+    _walk(s for s in order_source if not (isinstance(s, BNode) and s in candidates))
+
+    # Whatever the walk did not reach cannot be inlined: no written block
+    # hangs it. Resolve the remainder by following each blank node's unique
+    # referrer \u2014 a node renders where its referrer renders, so only the end
+    # of a chain whose referrer is never written, and one member of each
+    # cycle, need a top-level block of their own (#341).
+    referrer: dict[BNode, Node] = {}
+    for s, _p, o in graph:
+        if isinstance(o, BNode) and o in candidates:
+            referrer[o] = s  # exactly one incoming arc \u2192 a unique referrer
+
+    order_index = {s: i for i, s in enumerate(order_source)}
+    for s in order_source:
+        if not (isinstance(s, BNode) and s in candidates) or s in inline or s in promoted:
+            continue
+        # Follow the referrer chain to where it ends.
+        path: list[BNode] = []
+        on_path: set[BNode] = set()
+        cur = s
+        while True:
+            if cur in promoted or cur in inline:
+                # The chain reaches a block that renders; so does the path.
+                inline.update(path)
+                break
+            if cur in on_path:
+                # A cycle: break it once, at its earliest-listed member.
+                cycle = path[path.index(cur) :]
+                pick = min(cycle, key=lambda b: order_index[b])
+                promoted.add(pick)
+                inline.update(b for b in path if b != pick)
+                break
+            path.append(cur)
+            on_path.add(cur)
+            ref = referrer.get(cur)
+            if ref is None or ref not in subjects_set:
+                # Nothing that renders references this one: it needs its own
+                # top-level block, and the path renders inside it.
+                promoted.add(cur)
+                inline.update(path[:-1])
+                break
+            if (
+                isinstance(ref, BNode)
+                and ref in candidates
+                and ref not in inline
+                and ref not in promoted
+            ):
+                cur = ref
+                continue
+            # The referrer renders (named subject or top-level blank-node
+            # block), so everything on the path renders inside it.
+            inline.update(path)
+            break
+
+    return inline
 
 
 def format_term(graph: Graph, term, use_prefixes: bool = True) -> str:
@@ -277,6 +380,10 @@ def serialise_turtle_str(
     using Turtle's anonymous ``[ \u2026 ]`` inline syntax, preserving authorial
     intent and improving readability.  Blank nodes referenced by more than
     one triple, or that are reification stubs, remain as top-level subjects.
+    So does a blank node that only a cycle of blank nodes references (#341):
+    inlining every member of such a cycle would skip every member at the
+    top level and reach none, dropping their triples. One member is written
+    as a top-level ``_:label`` instead, breaking the cycle once.
 
     Formatting features:
     - Prefixes sorted alphabetically at top (used namespaces only)
@@ -299,8 +406,11 @@ def serialise_turtle_str(
     """
     lines = []
 
-    # Pre-pass: identify blank nodes to be rendered inline.
-    inline_bnodes = collect_inline_bnodes(graph)
+    # Pre-pass: identify blank nodes to be rendered inline. A blank node is
+    # inlined only where a written block actually reaches it, so a cycle of
+    # blank nodes each referenced once is written at the top level instead
+    # of being skipped everywhere and lost (#341).
+    inline_bnodes = collect_inline_bnodes(graph, subjects_ordered)
 
     # Write prefixes — only those actually used in the graph.
     # Turtle requires the @prefix directive with a trailing ' .' (not SPARQL PREFIX).
