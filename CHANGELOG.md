@@ -93,8 +93,21 @@ change, and what to do about it, is listed command by command in the
 - **`lint --init --list-rules` is refused** (#202). The two cannot be
   combined. Previously `--init` ran and the rule listing was silently dropped.
   It now exits 2. Run them separately.
+- **`localise extract -c` honours the flags given alongside it** (#160).
+  `--properties`, `--source-language`, `--missing-only` and
+  `--include-deprecated` were silently discarded whenever a config file was
+  passed. An option given on the command line now overrides the config file,
+  and the config file overrides the option's default.
 
 ### Fixed
+- **Config keys are no longer overwritten by the defaults of flags you did not
+  pass** (#206, #225, #251). Click supplies an option's default whenever the
+  flag is absent, and `lint`, `shacl-gen` and `docs` copied those defaults over
+  the loaded config, so the keys did nothing. A flag is now applied only when it
+  was given, even at its default value. Fixed: `lint`'s `level:`, including in
+  an auto-discovered `.rdf-lint.yml`; `shacl-gen`'s `level:` and
+  `default_severity:`; and `docs`' `output_dir`, `format`, `single_page` and the
+  four `include_*` keys, which a config could not turn off.
 - **`lint --list-rules` and `lint --init` run without a source** (#202). Both
   are documented as standalone, but `SOURCES` was required, so Click refused
   them with "Missing argument" unless a file was passed, which they then

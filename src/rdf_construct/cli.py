@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import IO, Any
 
 import click
+from click.core import ParameterSource
 import yaml
 from rdflib import BNode, Graph, RDF, URIRef
 from rdflib.namespace import OWL
@@ -170,6 +171,37 @@ class Refusal(click.ClickException):
         click.secho(f"Error: {self.format_message()}", file=file, fg="red", err=True)
         if self.accepted is not None:
             click.echo(f"Accepted: {', '.join(self.accepted) or '(none)'}", file=file, err=True)
+
+
+def flag_given(name: str) -> bool:
+    """Whether the user supplied the current command's option ``name``.
+
+    The precedence decided on #160: an option given on the command line overrides the
+    config file, and the config file overrides the option's default. Click fills in a
+    default whenever a flag is absent, so a command that copies its options over a loaded
+    config must apply each one only when this is true. Testing the value instead cannot
+    tell ``--level standard`` from no ``--level`` at all.
+
+    Given means the value came from the command line, the environment or a prompt. A
+    default, including one from Click's ``default_map``, is not given: an explicit config
+    file outranks both. Like ``Refusal``, this is defined here in the CLI layer, because
+    only a command knows where its values came from.
+
+    Args:
+        name: The option's parameter name, as the command function receives it
+            (``output_format``, not ``--format``).
+
+    Returns:
+        True if the value was supplied rather than defaulted.
+
+    Raises:
+        LookupError: The current command has no parameter called ``name``. A misspelt
+            name would otherwise read as "not given" and the guard would never fire.
+    """
+    source = click.get_current_context().get_parameter_source(name)
+    if source is None:
+        raise LookupError(f"The current command has no parameter named {name!r}.")
+    return source not in (ParameterSource.DEFAULT, ParameterSource.DEFAULT_MAP)
 
 
 class CrashHandlingGroup(click.Group):
@@ -1088,7 +1120,8 @@ def lint(
             lint_config = LintConfig()
 
     # Apply CLI overrides
-    lint_config.level = level
+    if flag_given("level"):
+        lint_config.level = level
 
     if enable:
         lint_config.enabled_rules = set(enable)
@@ -1401,13 +1434,20 @@ def docs(
         doc_config = DocsConfig()
 
     # Apply CLI overrides
-    doc_config.output_dir = output
-    doc_config.format = "markdown" if output_format == "md" else output_format
-    doc_config.single_page = single_page
-    doc_config.include_search = not no_search
-    doc_config.include_instances = not no_instances
-    doc_config.include_shapes = not no_shapes
-    doc_config.include_skos = not no_skos
+    if flag_given("output"):
+        doc_config.output_dir = output
+    if flag_given("output_format"):
+        doc_config.format = "markdown" if output_format == "md" else output_format
+    if flag_given("single_page"):
+        doc_config.single_page = single_page
+    if flag_given("no_search"):
+        doc_config.include_search = not no_search
+    if flag_given("no_instances"):
+        doc_config.include_instances = not no_instances
+    if flag_given("no_shapes"):
+        doc_config.include_shapes = not no_shapes
+    if flag_given("no_skos"):
+        doc_config.include_skos = not no_skos
 
     if template:
         doc_config.template_dir = template
@@ -1636,7 +1676,8 @@ def shacl_gen(
             shacl_config = ShaclConfig()
 
         # Apply CLI overrides
-        shacl_config.level = StrictnessLevel(level.lower())
+        if flag_given("level"):
+            shacl_config.level = StrictnessLevel(level.lower())
 
         if classes:
             shacl_config.target_classes = [c.strip() for c in classes.split(",")]
@@ -1644,7 +1685,8 @@ def shacl_gen(
         if closed:
             shacl_config.closed = True
 
-        shacl_config.default_severity = Severity(default_severity.lower())
+        if flag_given("default_severity"):
+            shacl_config.default_severity = Severity(default_severity.lower())
 
         if no_labels:
             shacl_config.include_labels = False
@@ -3628,6 +3670,18 @@ def localise_extract(
         config = load_localise_config(config_file)
         extract_config = config.extract
         extract_config.target_language = target_language
+
+        # Apply CLI overrides
+        if flag_given("source_language"):
+            extract_config.source_language = source_language
+        if properties:
+            extract_config.properties = [
+                _expand_localise_property(p.strip()) for p in properties.split(",")
+            ]
+        if flag_given("include_deprecated"):
+            extract_config.include_deprecated = include_deprecated
+        if flag_given("missing_only"):
+            extract_config.missing_only = missing_only
     else:
         # Build config from CLI args
         prop_list = None
