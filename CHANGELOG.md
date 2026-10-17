@@ -100,6 +100,24 @@ change, and what to do about it, is listed command by command in the
   and the config file overrides the option's default.
 
 ### Fixed
+- **`refactor` resolves CURIEs, against the source's own prefixes** (#182).
+  `--from ex:Buiding --to ex:Building`, the form `--help` documents, renamed
+  nothing and exited 0, and a CURIE in `--to` or `--replaced-by` was written
+  into the graph as the IRI `<ex:Building>`. `--from`, `--to`, `--entity`,
+  `--replaced-by` and a config file's entities now resolve against the
+  prefixes the file declares, plus `rdf`, `rdfs`, `owl`, `xsd` and `xml`, never
+  against rdflib's built-in table. A file's own `org:` is no longer read as the
+  W3C Organization ontology, and is written back as `org:`, not `org1:`. A
+  prefix no source binds, or one that two sources bind differently, is refused
+  at exit 2 before anything is written. Write a URN as `<urn:…>`.
+- **A namespace rename stops at the namespace boundary** (#184).
+  `refactor rename --from-namespace`, `merge`'s `namespace_remap` and data
+  migration matched by string prefix, so moving `http://example.org/ont` also
+  rewrote `http://example.org/ontology#` as `http://example.org/NEWology#`. A
+  namespace ending in `#` or `/` now matches as given. One without a delimiter
+  matches only where the next character is `#` or `/`, or where the IRI ends.
+  `merge` now also moves the prefix binding of every namespace it remaps, not
+  only a binding that equals the remapped namespace exactly.
 - **Config keys are no longer overwritten by the defaults of flags you did not
   pass** (#206, #225, #251). Click supplies an option's default whenever the
   flag is absent, and `lint`, `shacl-gen` and `docs` copied those defaults over

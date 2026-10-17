@@ -36,10 +36,14 @@ from .default_order import (
     default_subject_order,
 )
 from .utils import (
+    CurieError,
     expand_curie,
     extract_prefix_map,
+    in_namespace,
     qname_sort_key,
+    rebase_iri,
     rebind_prefixes,
+    resolve_curie,
 )
 from .formats import (
     FormatInfo,
@@ -88,10 +92,14 @@ __all__ = [
     "check_subject_order_complete",
     "IncompleteSubjectOrderError",
     # Utils
+    "CurieError",
     "expand_curie",
     "extract_prefix_map",
+    "in_namespace",
     "qname_sort_key",
+    "rebase_iri",
     "rebind_prefixes",
+    "resolve_curie",
     # Formats
     "FormatInfo",
     "FORMAT_REGISTRY",

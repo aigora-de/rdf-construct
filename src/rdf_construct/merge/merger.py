@@ -15,6 +15,7 @@ from typing import TextIO
 from rdflib import Graph, URIRef, Namespace
 from rdflib.namespace import RDF, RDFS, OWL
 
+from rdf_construct.core.utils import rebase_iri
 from rdf_construct.merge.config import (
     MergeConfig,
     SourceConfig,
@@ -187,11 +188,14 @@ class OntologyMerger:
 
         new_graph = Graph()
 
-        # Copy namespace bindings
+        # Copy namespace bindings, moving each one the same way as the IRIs in it
         for prefix, ns in graph.namespace_manager.namespaces():
             ns_str = str(ns)
-            if ns_str in remappings:
-                new_graph.bind(prefix, Namespace(remappings[ns_str]))
+            for old_ns, new_ns in remappings.items():
+                rebased = rebase_iri(ns_str, old_ns, new_ns)
+                if rebased is not None:
+                    new_graph.bind(prefix, Namespace(rebased))
+                    break
             else:
                 new_graph.bind(prefix, ns)
 
@@ -216,8 +220,9 @@ class OntologyMerger:
         """
         uri_str = str(uri)
         for old_ns, new_ns in remappings.items():
-            if uri_str.startswith(old_ns):
-                return URIRef(uri_str.replace(old_ns, new_ns, 1))
+            rebased = rebase_iri(uri_str, old_ns, new_ns)
+            if rebased is not None:
+                return URIRef(rebased)
         return uri
 
     def _resolve_conflicts(self, conflicts: list[Conflict], result: MergeResult) -> None:

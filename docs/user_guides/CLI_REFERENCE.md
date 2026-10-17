@@ -863,10 +863,20 @@ rdf-construct refactor rename SOURCES [OPTIONS]
 - `SOURCES`: One or more RDF files to process (.ttl, .rdf, .owl)
 
 **Options**:
-- `--from URI`: Single URI to rename
-- `--to URI`: New URI for single rename
-- `--from-namespace NS`: Old namespace prefix for bulk rename
-- `--to-namespace NS`: New namespace prefix for bulk rename
+- `--from URI`: Single URI or CURIE to rename
+- `--to URI`: New URI or CURIE for single rename
+- `--from-namespace NS`: Old namespace for bulk rename, matched at a `#` or `/` boundary
+- `--to-namespace NS`: New namespace for bulk rename
+
+A CURIE such as `ex:Building` resolves against the prefixes the source file declares, plus
+`rdf`, `rdfs`, `owl`, `xsd` and `xml`, and never against rdflib's built-in prefix table. A
+prefix that no source binds is refused at exit 2, before anything is written, and so is a CURIE
+that two sources bind to different namespaces. Write an IRI that has no `://` in angle brackets:
+`<urn:isbn:0451450523>`. The same rule applies to `entities` in a configuration file.
+
+A namespace that ends in `#` or `/` matches as given. Without one, the match must end at a `#`
+or `/`: `http://example.org/ont` takes `…/ont#One`, `…/ont/extra#Three` and the IRI `…/ont`
+itself, but not `…/ontology#Two`. Give `http://example.org/ont#` to move that one namespace only.
 - `-c, --config PATH`: YAML configuration file with rename mappings
 - `-o, --output PATH`: Output file (single source) or directory (multiple sources)
 - `--migrate-data PATH`: Data file(s) to migrate (can specify multiple)
@@ -951,8 +961,8 @@ rdf-construct refactor deprecate SOURCES [OPTIONS]
 - `SOURCES`: One or more RDF files to process (.ttl, .rdf, .owl)
 
 **Options**:
-- `--entity URI`: URI of entity to deprecate
-- `--replaced-by URI`: URI of replacement entity (adds dcterms:isReplacedBy)
+- `--entity URI`: URI or CURIE of entity to deprecate
+- `--replaced-by URI`: URI or CURIE of replacement entity (adds dcterms:isReplacedBy)
 - `-m, --message TEXT`: Deprecation message (added to rdfs:comment)
 - `--version VERSION`: Version when deprecated (included in message)
 - `-c, --config PATH`: YAML configuration file with deprecation specs
