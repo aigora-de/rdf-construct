@@ -114,8 +114,9 @@ change, and what to do about it, is listed command by command in the
   `refactor rename --from-namespace`, `merge`'s `namespace_remap` and data
   migration matched by string prefix, so moving `http://example.org/ont` also
   rewrote `http://example.org/ontology#` as `http://example.org/NEWology#`. A
-  namespace ending in `#` or `/` now matches as given. One without a delimiter
-  matches only where the next character is `#` or `/`, or where the IRI ends.
+  namespace ending in `#`, `/` or `:` now matches as given. One without a
+  delimiter matches only where the next character is `#`, `/` or `:`, or where
+  the IRI ends.
   `merge` now also moves the prefix binding of every namespace it remaps, not
   only a binding that equals the remapped namespace exactly.
 - **Config keys are no longer overwritten by the defaults of flags you did not

@@ -124,6 +124,12 @@ class TestNamespaceBoundary:
         assert in_namespace("http://example.org/ontology#Two", "http://example.org/")
         assert in_namespace("http://example.org/a/b/c", "http://example.org/")
 
+    @pytest.mark.parametrize("namespace", ["urn:old:", "urn:old"])
+    def test_colon_is_a_delimiter_for_urn_namespaces(self, namespace: str) -> None:
+        assert in_namespace("urn:old:A", namespace)
+        assert not in_namespace("urn:older:C", namespace)
+        assert rebase_iri("urn:old:A", namespace, namespace.replace("old", "new")) == "urn:new:A"
+
     def test_empty_namespace_matches_nothing(self) -> None:
         assert not in_namespace("http://example.org/ont#One", "")
 

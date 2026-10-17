@@ -865,18 +865,8 @@ rdf-construct refactor rename SOURCES [OPTIONS]
 **Options**:
 - `--from URI`: Single URI or CURIE to rename
 - `--to URI`: New URI or CURIE for single rename
-- `--from-namespace NS`: Old namespace for bulk rename, matched at a `#` or `/` boundary
+- `--from-namespace NS`: Old namespace for bulk rename, matched at a `#`, `/` or `:` boundary
 - `--to-namespace NS`: New namespace for bulk rename
-
-A CURIE such as `ex:Building` resolves against the prefixes the source file declares, plus
-`rdf`, `rdfs`, `owl`, `xsd` and `xml`, and never against rdflib's built-in prefix table. A
-prefix that no source binds is refused at exit 2, before anything is written, and so is a CURIE
-that two sources bind to different namespaces. Write an IRI that has no `://` in angle brackets:
-`<urn:isbn:0451450523>`. The same rule applies to `entities` in a configuration file.
-
-A namespace that ends in `#` or `/` matches as given. Without one, the match must end at a `#`
-or `/`: `http://example.org/ont` takes `…/ont#One`, `…/ont/extra#Three` and the IRI `…/ont`
-itself, but not `…/ontology#Two`. Give `http://example.org/ont#` to move that one namespace only.
 - `-c, --config PATH`: YAML configuration file with rename mappings
 - `-o, --output PATH`: Output file (single source) or directory (multiple sources)
 - `--migrate-data PATH`: Data file(s) to migrate (can specify multiple)
@@ -884,6 +874,17 @@ itself, but not `…/ontology#Two`. Give `http://example.org/ont#` to move that 
 - `--dry-run`: Preview changes without writing files
 - `--no-colour`: Disable coloured output
 - `--init`: Generate a template rename configuration file
+
+A CURIE such as `ex:Building` resolves against the prefixes the source file declares, plus
+`rdf`, `rdfs`, `owl`, `xsd` and `xml`, and never against rdflib's built-in prefix table. A
+prefix that no source binds is refused at exit 2, before anything is written, and so is a CURIE
+that two sources bind to different namespaces. Write an IRI that has no `://` in angle brackets:
+`<urn:isbn:0451450523>`. The same rule applies to `entities` in a configuration file.
+
+A namespace that ends in `#`, `/` or `:` matches as given. Without one, the match must end at a
+`#`, `/` or `:`: `http://example.org/ont` takes `…/ont#One`, `…/ont/extra#Three` and the IRI
+`…/ont` itself, but not `…/ontology#Two`; `urn:old:` takes `urn:old:A` but not `urn:older:C`.
+Give `http://example.org/ont#` to move that one namespace only.
 
 **Examples**:
 

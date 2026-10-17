@@ -953,6 +953,32 @@ class TestCurieResolutionCLI:
 class TestNamespaceBoundaryCLI:
     """``--from-namespace`` matches at a namespace boundary (#184)."""
 
+    @pytest.mark.parametrize("from_ns", ["urn:old:", "urn:old"])
+    def test_urn_namespace(self, tmp_path, from_ns):
+        src = tmp_path / "urn.ttl"
+        src.write_text("<urn:old:A> a <urn:old:B> .\n<urn:older:C> a <urn:old:B> .\n")
+        out = tmp_path / "out.ttl"
+        to_ns = from_ns.replace("old", "new")
+        result, _, _ = _run(
+            [
+                "refactor",
+                "rename",
+                str(src),
+                "--from-namespace",
+                from_ns,
+                "--to-namespace",
+                to_ns,
+                "-o",
+                str(out),
+            ],
+            tmp_path,
+        )
+        assert result.exit_code == 0, result.output
+        g = Graph().parse(out)
+        assert (URIRef("urn:new:A"), RDF.type, URIRef("urn:new:B")) in g
+        assert (URIRef("urn:older:C"), RDF.type, URIRef("urn:new:B")) in g
+        assert len(g) == 2
+
     @pytest.mark.parametrize(
         ("from_ns", "to_ns", "moved", "kept"),
         [

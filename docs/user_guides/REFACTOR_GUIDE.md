@@ -41,7 +41,7 @@ rdf-construct refactor rename ontology.ttl \
 |--------|-------------|
 | `--from URI` | Single URI or CURIE to rename |
 | `--to URI` | New URI or CURIE for single rename |
-| `--from-namespace NS` | Old namespace for bulk rename, matched at a `#` or `/` boundary |
+| `--from-namespace NS` | Old namespace for bulk rename, matched at a `#`, `/` or `:` boundary |
 | `--to-namespace NS` | New namespace for bulk rename |
 | `-c, --config FILE` | YAML configuration file |
 | `-o, --output PATH` | Output file or directory |
@@ -80,8 +80,10 @@ A bare `urn:isbn:0451450523` reads as a CURIE whose `urn:` prefix is missing.
 | `http://example.org/ont#` | moved | kept | kept | kept |
 | `http://example.org/` | moved | moved | moved | moved |
 
-A namespace that ends in `#` or `/` matches everything that starts with it. One without a
-delimiter matches only where the next character is `#` or `/`, or where the IRI ends.
+A namespace that ends in `#`, `/` or `:` matches everything that starts with it. One without a
+delimiter matches only where the next character is `#`, `/` or `:`, or where the IRI ends. So
+URN-style namespaces work either way: `urn:old:` and `urn:old` both move `urn:old:A`, and neither
+moves `urn:older:C`.
 
 ### With Data Migration
 

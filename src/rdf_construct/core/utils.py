@@ -120,15 +120,19 @@ def resolve_curie(prefixes: Mapping[str, str], text: str) -> URIRef:
     raise CurieError(text, None, prefixes)
 
 
+_NAMESPACE_DELIMITERS = ("#", "/", ":")
+
+
 def in_namespace(iri: str, namespace: str) -> bool:
     """Whether an IRI falls within a namespace, matched at a boundary.
 
-    A namespace ending in ``#`` or ``/`` already names its boundary, so it matches as a plain
-    prefix: ``http://example.org/`` takes the whole subtree. Otherwise the match must end where
-    the namespace does, or at a following ``#`` or ``/``. So ``http://example.org/ont`` takes
-    ``…/ont`` itself (typically the ontology IRI), ``…/ont#One`` and ``…/ont/extra#Three``, but
-    not ``…/ontology#Two``. To name one namespace exactly, give it with its delimiter
-    (``…/ont#``).
+    The delimiters are ``#``, ``/`` and ``:``, the last for URN- and ``tag:``-style
+    namespaces. A namespace ending in a delimiter already names its boundary, so it matches as a
+    plain prefix: ``http://example.org/`` takes the whole subtree, and ``urn:old:`` takes
+    ``urn:old:A`` but not ``urn:older:C``. Otherwise the match must end where the namespace does,
+    or at a following delimiter. So ``http://example.org/ont`` takes ``…/ont`` itself
+    (typically the ontology IRI), ``…/ont#One`` and ``…/ont/extra#Three``, but not
+    ``…/ontology#Two``. To name one namespace exactly, give it with its delimiter (``…/ont#``).
 
     Args:
         iri: The IRI to test.
@@ -139,10 +143,10 @@ def in_namespace(iri: str, namespace: str) -> bool:
     """
     if not namespace or not iri.startswith(namespace):
         return False
-    if namespace.endswith(("#", "/")):
+    if namespace.endswith(_NAMESPACE_DELIMITERS):
         return True
     rest = iri[len(namespace) :]
-    return rest == "" or rest.startswith(("#", "/"))
+    return rest == "" or rest.startswith(_NAMESPACE_DELIMITERS)
 
 
 def rebase_iri(iri: str, old_namespace: str, new_namespace: str) -> str | None:

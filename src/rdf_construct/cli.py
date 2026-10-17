@@ -3086,7 +3086,7 @@ def _load_refactor_sources(paths: list[Path]) -> list[tuple[Path, Graph]]:
 )
 @click.option(
     "--from-namespace",
-    help="Old namespace for bulk rename, matched at a # or / boundary.",
+    help="Old namespace for bulk rename, matched at a #, / or : boundary.",
 )
 @click.option(
     "--to-namespace",

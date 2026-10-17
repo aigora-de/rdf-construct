@@ -176,7 +176,7 @@ Nothing has landed yet.
 | Issue | What changed | What to do |
 |---|---|---|
 | [#286](https://github.com/aigora-de/rdf-construct/issues/286) | A refusal exits **2** instead of 1: no sources, a config that will not load (including malformed YAML, which was a traceback), `--init` over an existing file. | If a script tests for exit 1 to catch a rejected invocation, test for 2. |
-| [#184](https://github.com/aigora-de/rdf-construct/issues/184) | `namespace_remap` matches at a namespace boundary. A key without a trailing `#` or `/` no longer catches a sibling that shares its spelling (`…/ont` no longer moves `…/ontology#`). A prefix binding now moves with its namespace even when it does not equal the key exactly (`"http://old/": …` also moves `@prefix x: <http://old/core#>`). | If you relied on the substring match, add a key for each namespace you meant to move. |
+| [#184](https://github.com/aigora-de/rdf-construct/issues/184) | `namespace_remap` matches at a namespace boundary. A key without a trailing `#`, `/` or `:` no longer catches a sibling that shares its spelling (`…/ont` no longer moves `…/ontology#`). A prefix binding now moves with its namespace even when it does not equal the key exactly (`"http://old/": …` also moves `@prefix x: <http://old/core#>`). | If you relied on the substring match, add a key for each namespace you meant to move. |
 
 ## `split`
 
