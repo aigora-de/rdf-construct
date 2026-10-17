@@ -1533,6 +1533,10 @@ def docs(
             raise Refusal(f"Template directory {template_dir} has no html/{entry}.")
 
     for path in (doc_config.output_dir, *doc_config.output_dir.parents):
+        if path.is_symlink() and not path.exists():
+            raise Refusal(
+                f"Cannot write to {doc_config.output_dir}: {path} is a broken symbolic link."
+            )
         if path.exists():
             if not path.is_dir():
                 raise Refusal(

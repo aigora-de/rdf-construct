@@ -3416,3 +3416,10 @@ class TestCLIRefusals:
         blocker.write_text("")
         output = self._refused([str(ANIMAL), "-o", str(blocker)], tmp_path)
         assert f"{blocker} is a file, not a directory" in output
+
+    def test_output_that_is_a_broken_symlink_is_refused(self, tmp_path):
+        """``exists()`` is false for a dangling link, but ``mkdir`` still cannot create it."""
+        link = tmp_path / "dangling"
+        link.symlink_to(tmp_path / "nowhere")
+        output = self._refused([str(ANIMAL), "-o", str(link)], tmp_path)
+        assert f"{link} is a broken symbolic link" in output
