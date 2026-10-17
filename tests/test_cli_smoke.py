@@ -482,11 +482,7 @@ MALFORMED = [
     _row(Row("contexts", "refused", ("contexts", MALFORMED_YAML)), xfail="#318", label="yaml"),
     _row(Row("lint", "refused", ("lint", MALFORMED_TTL)), xfail="#322", label="ttl"),
     _row(Row("diff", "refused", ("diff", MALFORMED_TTL, ANIMAL)), label="ttl"),
-    _row(
-        Row("docs", "refused", ("docs", MALFORMED_TTL, "-o", "@tmp/docs")),
-        xfail="#301",
-        label="ttl",
-    ),
+    _row(Row("docs", "refused", ("docs", MALFORMED_TTL, "-o", "@tmp/docs")), label="ttl"),
     _row(
         Row("shacl-gen", "refused", ("shacl-gen", MALFORMED_TTL, "-o", "@tmp/shapes.ttl")),
         label="ttl",

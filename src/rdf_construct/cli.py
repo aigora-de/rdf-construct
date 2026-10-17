@@ -206,6 +206,34 @@ def flag_given(name: str) -> bool:
     return source not in (ParameterSource.DEFAULT, ParameterSource.DEFAULT_MAP)
 
 
+def parse_into(graph: Graph, source: Path, rdf_format: str) -> None:
+    """Parse one source into ``graph``, or refuse it (#301).
+
+    rdflib raises a different exception for each format's syntax error (``BadSyntax``,
+    ``SAXParseException``, ``JSONDecodeError`` and more) and they share no base class, so the
+    ``except`` is broad. It wraps the one ``parse`` call and nothing else, so a crash anywhere
+    after it still reaches the top-level handler (#325).
+
+    The message names the file and the format it was read as, then rdflib's own text, which
+    carries the line and an excerpt pointing at the column. Defined here, beside ``Refusal``,
+    so ``split`` (#180), ``order`` (#249), ``uml`` (#321) and ``lint`` (#322) can share one
+    wording when they gain a parse refusal.
+
+    Args:
+        graph: The graph to parse into. Several sources may be merged into one.
+        source: The file to parse.
+        rdf_format: The rdflib format name to parse it as.
+
+    Raises:
+        Refusal: The source could not be parsed as ``rdf_format``.
+    """
+    try:
+        graph.parse(str(source), format=rdf_format)
+    except Exception as exc:
+        detail = str(exc) or type(exc).__name__
+        raise Refusal(f"Could not parse {source} as {rdf_format}: {detail}") from exc
+
+
 class CrashHandlingGroup(click.Group):
     """The top-level group: an exception no command handled exits 2, with its traceback (#320).
 
@@ -1307,7 +1335,9 @@ def diff(
 
 
 @cli.command()
-@click.argument("sources", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
+@click.argument(
+    "sources", nargs=-1, required=True, type=click.Path(exists=True, dir_okay=False, path_type=Path)
+)
 @click.option(
     "--output",
     "-o",
@@ -1326,13 +1356,13 @@ def diff(
 @click.option(
     "--config",
     "-C",
-    type=click.Path(exists=True, path_type=Path),
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
     help="Path to configuration YAML file",
 )
 @click.option(
     "--template",
     "-t",
-    type=click.Path(exists=True, path_type=Path),
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
     help="Path to custom template directory",
 )
 @click.option(
@@ -1431,7 +1461,10 @@ def docs(
 
     # Load or create configuration
     if config:
-        doc_config = load_docs_config(config)
+        try:
+            doc_config = load_docs_config(config)
+        except (OSError, yaml.YAMLError, ValueError) as e:
+            raise Refusal(f"Could not read config {config}: {e}") from e
     else:
         doc_config = DocsConfig()
 
@@ -1490,6 +1523,27 @@ def docs(
         if any(t in types for t in ("concepts", "concept_schemes", "skos")):
             doc_config.include_skos = False
 
+    # Refuse what would fail before anything is written (#301). The generator creates the
+    # output directory, so every check, the parse included, comes before it runs: a refusal
+    # leaves no directory behind for a later run to mistake for its own (#261).
+    template_dir = doc_config.template_dir
+    if doc_config.format.lower() == "html" and template_dir and template_dir.exists():
+        entry = "single_page.html.jinja" if doc_config.single_page else "index.html.jinja"
+        if not (template_dir / "html" / entry).is_file():
+            raise Refusal(f"Template directory {template_dir} has no html/{entry}.")
+
+    for path in (doc_config.output_dir, *doc_config.output_dir.parents):
+        if path.is_symlink() and not path.exists():
+            raise Refusal(
+                f"Cannot write to {doc_config.output_dir}: {path} is a broken symbolic link."
+            )
+        if path.exists():
+            if not path.is_dir():
+                raise Refusal(
+                    f"Cannot write to {doc_config.output_dir}: {path} is a file, not a directory."
+                )
+            break
+
     # Load RDF sources
     click.echo(f"Loading {len(sources)} source file(s)...")
     graph = Graph()
@@ -1513,7 +1567,7 @@ def docs(
         }
         rdf_format = format_map.get(suffix, "turtle")
 
-        graph.parse(str(source), format=rdf_format)
+        parse_into(graph, source, rdf_format)
 
     click.echo(f"  Total: {len(graph)} triples")
     click.echo()
