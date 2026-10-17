@@ -59,13 +59,28 @@ directory has already moved; see [`order`](#order).
 
 ### Command-line flags versus configuration files
 
-Not landed yet. A flag will override the configuration file only when you actually pass it; today
-a command-line default can silently overwrite a value the configuration file sets:
-[#160](https://github.com/aigora-de/rdf-construct/issues/160),
-[#206](https://github.com/aigora-de/rdf-construct/issues/206),
-[#225](https://github.com/aigora-de/rdf-construct/issues/225),
-[#251](https://github.com/aigora-de/rdf-construct/issues/251) and
-[#291](https://github.com/aigora-de/rdf-construct/issues/291) (PR group P9).
+An option given on the command line overrides the configuration file, and the configuration file
+overrides the option's default. Previously an option's default could silently overwrite a value
+the configuration file set, because the flag only had to be absent, and `localise extract -c` went
+the other way, discarding flags that were given. An option counts as given whenever you pass it,
+even at its default value: `--level standard` overrides a file that says `level: strict`.
+
+**What moved:** `lint`'s `level:` ([#206](https://github.com/aigora-de/rdf-construct/issues/206)),
+seven `docs` keys ([#251](https://github.com/aigora-de/rdf-construct/issues/251)) and
+`localise extract`'s flags alongside `-c`
+([#160](https://github.com/aigora-de/rdf-construct/issues/160)) each have a row in their command's
+section. In `shacl-gen` ([#225](https://github.com/aigora-de/rdf-construct/issues/225)), `level:` in
+a configuration file now takes effect, so a file that says `level: strict` produces the
+strict-only constraints, such as `sh:in` from `owl:oneOf`. `default_severity:` now reaches the
+generator, which does not emit it yet
+([#223](https://github.com/aigora-de/rdf-construct/issues/223)). **Not landed yet:** `split`'s
+`unmatched:` ([#291](https://github.com/aigora-de/rdf-construct/issues/291)) comes with
+[#176](https://github.com/aigora-de/rdf-construct/issues/176) (PR group P18), because `split -c`
+does not run until then ([#175](https://github.com/aigora-de/rdf-construct/issues/175)).
+
+**What to do:** read the configuration files your commands load, including any `.rdf-lint.yml`
+that `lint` finds without `-c`. A key that has never had an effect now does: remove it, or pass
+the flag, if it says something you do not mean.
 
 ## `cast`
 
@@ -110,6 +125,7 @@ Nothing has landed yet.
 | [#286](https://github.com/aigora-de/rdf-construct/issues/286) | Python API: `LintSummary.exit_code` is removed. The engine reports severities, and the CLI decides the exit code. | Read `total_errors`, `total_warnings` and `total_info` instead. |
 | [#302](https://github.com/aigora-de/rdf-construct/issues/302) | `orphan-class` defaults to `warning`, not `error`. A root class is not a defect. A run whose only errors were `orphan-class` now exits **0**. | To keep it as an error, set `severity: {orphan-class: error}` in `.rdf-lint.yml`, or use `--level strict`. |
 | [#202](https://github.com/aigora-de/rdf-construct/issues/202) | `--init` and `--list-rules` together are refused with exit **2**. Previously `--init` ran alone and exited 0, and the rule listing was silently dropped. Both flags now run without a source. | Run `lint --init` and `lint --list-rules` as separate commands. |
+| [#206](https://github.com/aigora-de/rdf-construct/issues/206) | `level:` in a config file takes effect, including a `.rdf-lint.yml` found without `-c`. Previously `--level`'s default, `standard`, always overwrote it. A file that says `level: strict` turns warnings into errors, so a run that exited **0** can now exit **1**. | Check any `.rdf-lint.yml` in the current directory or its parents. To keep the previous result, remove `level:` or pass `--level standard`. |
 
 ## `diff`
 
@@ -120,10 +136,9 @@ Nothing has landed yet.
 
 ## `docs`
 
-Nothing has landed yet.
-
 | Issue | What changed | What to do |
 |---|---|---|
+| [#251](https://github.com/aigora-de/rdf-construct/issues/251) | Seven config keys take effect when their flag is not given: `output_dir`, `format`, `single_page`, `include_search`, `include_instances`, `include_shapes` and `include_skos`. Previously the flags' defaults overwrote them, so a config's `output_dir:` was ignored in favour of `docs/`, and `include_*: false` was forced back to true. Output can now land in another directory, in another format, and without the files the config excludes. | If a script reads the output from `docs/` while its config names another `output_dir`, read it from there or pass `-o docs`. Remove any key you do not mean. |
 
 ## `shacl-gen`
 
@@ -186,3 +201,4 @@ Covers `localise extract`, `merge`, `report`, `init` and `config`; each row name
 | Issue | What changed | What to do |
 |---|---|---|
 | [#286](https://github.com/aigora-de/rdf-construct/issues/286) | `config`: `--init` over an existing `localise.yml` exits **2** instead of 1. | If a script tests for exit 1 to catch a rejected invocation, test for 2. |
+| [#160](https://github.com/aigora-de/rdf-construct/issues/160) | `extract`: options given on the command line override the config file. Previously `-c` silently discarded `--properties`, `--source-language`, `--missing-only` and `--include-deprecated`. `--source-language` in particular meant the wrong source strings were extracted and recorded as though they were right. | If you pass any of these flags with `-c`, the output now follows the flags. Re-extract any translation file made that way with `--source-language`: its source strings, and the language it records, are those of the config file, not the flag. |

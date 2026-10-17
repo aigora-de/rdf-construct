@@ -174,6 +174,9 @@ The linter automatically searches for configuration files in this order:
 3. `.rdf-lint.yaml` in current directory
 4. Parent directories (up to filesystem root)
 
+An option given on the command line overrides the config file, and the config file overrides the
+option's default: a `.rdf-lint.yml` that says `level: strict` applies unless you pass `--level`.
+
 ## Output Formats
 
 ### Text Output (default)
