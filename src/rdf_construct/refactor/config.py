@@ -6,13 +6,64 @@ Defines configuration structures for:
 - Data migration settings
 """
 
-from dataclasses import dataclass, field
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
 from rdflib import Graph, URIRef
+
+from rdf_construct.core.utils import CurieError, rebase_iri, resolve_curie
+
+
+class AmbiguousCurieError(ValueError):
+    """A CURIE that resolves to different IRIs in different source files."""
+
+
+def resolve_term(text: str, sources: Sequence[tuple[Path, Mapping[str, str]]]) -> URIRef:
+    """Resolve a CURIE or IRI against the prefixes of every source file.
+
+    A CURIE means the same entity in every file that binds its prefix. A file that does not
+    bind the prefix is not a disagreement; files that bind it to different namespaces are.
+
+    Args:
+        text: A CURIE, a bracketed IRI or a full IRI.
+        sources: Each source file with its prefix map (see `resolve_curie` for the binding rule).
+
+    Returns:
+        The resolved IRI.
+
+    Raises:
+        CurieError: If no source binds the prefix.
+        AmbiguousCurieError: If sources bind the prefix to different namespaces.
+    """
+    resolved: dict[URIRef, list[Path]] = {}
+    first_error: CurieError | None = None
+    bound: set[str] = set()
+    for path, prefixes in sources:
+        bound.update(prefixes)
+        try:
+            iri = resolve_curie(prefixes, text)
+        except CurieError as e:
+            first_error = first_error or e
+            continue
+        resolved.setdefault(iri, []).append(path)
+
+    if not resolved:
+        if first_error is None:
+            raise CurieError(text, None, bound)
+        raise CurieError(text, first_error.prefix, bound)
+    if len(resolved) > 1:
+        readings = "; ".join(
+            f"<{iri}> in {', '.join(str(p) for p in paths)}" for iri, paths in resolved.items()
+        )
+        raise AmbiguousCurieError(
+            f"{text!r} means different IRIs in different sources: {readings}. "
+            f"Give the full IRI, or process the files separately."
+        )
+    return next(iter(resolved))
 
 
 @dataclass
@@ -77,8 +128,8 @@ class RenameConfig:
             for uri in all_uris:
                 uri_str = str(uri)
                 for old_ns, new_ns in self.namespaces.items():
-                    if uri_str.startswith(old_ns):
-                        new_uri_str = uri_str.replace(old_ns, new_ns, 1)
+                    new_uri_str = rebase_iri(uri_str, old_ns, new_ns)
+                    if new_uri_str is not None:
                         mappings[uri] = RenameMapping(
                             from_uri=uri,
                             to_uri=URIRef(new_uri_str),
@@ -96,6 +147,25 @@ class RenameConfig:
             )
 
         return list(mappings.values())
+
+    def resolved(self, sources: Sequence[tuple[Path, Mapping[str, str]]]) -> "RenameConfig":
+        """Return a copy whose entity renames are full IRIs on both sides.
+
+        Args:
+            sources: Each source file with its prefix map, as `resolve_term` takes.
+
+        Returns:
+            A new RenameConfig. Namespace mappings are copied unchanged.
+
+        Raises:
+            CurieError: If a CURIE's prefix is bound by no source.
+            AmbiguousCurieError: If sources bind a CURIE's prefix differently.
+        """
+        entities = {
+            str(resolve_term(old, sources)): str(resolve_term(new, sources))
+            for old, new in self.entities.items()
+        }
+        return RenameConfig(namespaces=dict(self.namespaces), entities=entities)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "RenameConfig":
@@ -128,6 +198,27 @@ class DeprecationSpec:
     replaced_by: str | None = None
     message: str | None = None
     version: str | None = None
+
+    def resolved(self, sources: Sequence[tuple[Path, Mapping[str, str]]]) -> "DeprecationSpec":
+        """Return a copy whose entity and replacement are full IRIs.
+
+        Args:
+            sources: Each source file with its prefix map, as `resolve_term` takes.
+
+        Returns:
+            A new DeprecationSpec.
+
+        Raises:
+            CurieError: If a CURIE's prefix is bound by no source.
+            AmbiguousCurieError: If sources bind a CURIE's prefix differently.
+        """
+        return replace(
+            self,
+            entity=str(resolve_term(self.entity, sources)),
+            replaced_by=(
+                str(resolve_term(self.replaced_by, sources)) if self.replaced_by else None
+            ),
+        )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "DeprecationSpec":

@@ -156,6 +156,10 @@ sources:
       "http://old.example.org/": "http://example.org/"
 ```
 
+A key ending in `#`, `/` or `:` matches every IRI that starts with it. A key without one matches
+only at a namespace boundary: `http://example.org/ont` remaps `…/ont#One` and `…/ont/extra#Three`, but
+not `…/ontology#Two`. Prefix bindings move with the namespaces they name.
+
 #### Preferred Prefixes
 
 Standardise prefix bindings in output:

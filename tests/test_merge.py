@@ -674,5 +674,76 @@ class TestMergeIntegration:
         assert (old_thing, RDF.type, OWL.Class) not in result.merged_graph
 
 
+FAMILY = dedent(
+    """
+    @prefix owl: <http://www.w3.org/2002/07/owl#> .
+    @prefix a: <http://example.org/ont#> .
+    @prefix b: <http://example.org/ontology#> .
+    @prefix c: <http://example.org/ont/extra#> .
+
+    a:One a owl:Class .
+    b:Two a owl:Class .
+    c:Three a owl:Class .
+    """
+).strip()
+
+
+class TestNamespaceBoundary:
+    """``namespace_remap`` matches at a namespace boundary, not by substring (#184)."""
+
+    @pytest.mark.parametrize(
+        ("old_ns", "new_ns", "expected"),
+        [
+            (
+                "http://example.org/ont",
+                "http://example.org/NEW",
+                {
+                    "a": "http://example.org/NEW#",
+                    "b": "http://example.org/ontology#",
+                    "c": "http://example.org/NEW/extra#",
+                },
+            ),
+            (
+                "http://example.org/ont#",
+                "http://example.org/NEW#",
+                {
+                    "a": "http://example.org/NEW#",
+                    "b": "http://example.org/ontology#",
+                    "c": "http://example.org/ont/extra#",
+                },
+            ),
+        ],
+    )
+    def test_merge_remap_leaves_sibling_namespace(self, temp_dir, old_ns, new_ns, expected):
+        path = temp_dir / "family.ttl"
+        path.write_text(FAMILY)
+        config = MergeConfig(
+            sources=[SourceConfig(path=path, priority=1, namespace_remap={old_ns: new_ns})],
+            output=None,
+        )
+        result = OntologyMerger(config).merge()
+        assert result.success
+
+        merged = result.merged_graph
+        bindings = {p: str(ns) for p, ns in merged.namespaces()}
+        local = {"a": "One", "b": "Two", "c": "Three"}
+        for prefix, ns in expected.items():
+            assert bindings[prefix] == ns
+            assert (URIRef(ns + local[prefix]), RDF.type, OWL.Class) in merged
+        assert len(merged) == 3
+
+    def test_migrator_namespace_map_leaves_sibling_namespace(self):
+        data = Graph().parse(data=FAMILY, format="turtle")
+        uri_map = DataMigrator().build_uri_map_from_namespaces(
+            data, {"http://example.org/ont": "http://example.org/NEW"}
+        )
+        assert uri_map == {
+            URIRef("http://example.org/ont#One"): URIRef("http://example.org/NEW#One"),
+            URIRef("http://example.org/ont/extra#Three"): URIRef(
+                "http://example.org/NEW/extra#Three"
+            ),
+        }
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

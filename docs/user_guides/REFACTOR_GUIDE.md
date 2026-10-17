@@ -39,10 +39,10 @@ rdf-construct refactor rename ontology.ttl \
 
 | Option | Description |
 |--------|-------------|
-| `--from URI` | Single URI to rename |
-| `--to URI` | New URI for single rename |
-| `--from-namespace NS` | Old namespace prefix for bulk rename |
-| `--to-namespace NS` | New namespace prefix for bulk rename |
+| `--from URI` | Single URI or CURIE to rename |
+| `--to URI` | New URI or CURIE for single rename |
+| `--from-namespace NS` | Old namespace for bulk rename, matched at a `#`, `/` or `:` boundary |
+| `--to-namespace NS` | New namespace for bulk rename |
 | `-c, --config FILE` | YAML configuration file |
 | `-o, --output PATH` | Output file or directory |
 | `--migrate-data FILE` | Data files to migrate (repeatable) |
@@ -54,7 +54,36 @@ rdf-construct refactor rename ontology.ttl \
 
 1. **Subject, predicate, and object positions** are all renamed
 2. **Literals are NOT modified** - text mentioning old URIs in comments is preserved
-3. **Namespace bindings** are updated to reflect new namespaces
+3. **Namespace bindings** are updated to reflect new namespaces, and the source's own prefixes
+   are written back as declared (`org:` stays `org:`)
+
+### CURIEs and Namespace Boundaries
+
+`--from`, `--to`, `--entity`, `--replaced-by` and the entity keys and values in a configuration
+file all accept a CURIE. A CURIE resolves against the prefixes the source file declares, plus
+`rdf`, `rdfs`, `owl`, `xsd` and `xml`. It never uses rdflib's built-in prefix table, so a file
+that declares its own `org:` gets its own `org:`, not the W3C Organization ontology.
+
+A prefix is refused at exit 2, before anything is written, when:
+
+- no source declares it (`ex:Building` in a file without `@prefix ex:`), or
+- two sources declare it with different namespaces.
+
+To give an IRI without `://`, such as a URN, write it in angle brackets: `<urn:isbn:0451450523>`.
+A bare `urn:isbn:0451450523` reads as a CURIE whose `urn:` prefix is missing.
+
+`--from-namespace` matches at a namespace boundary:
+
+| `--from-namespace` | `…/ont#One` | `…/ont/extra#Three` | `…/ont` (the IRI itself) | `…/ontology#Two` |
+|---|---|---|---|---|
+| `http://example.org/ont` | moved | moved | moved | kept |
+| `http://example.org/ont#` | moved | kept | kept | kept |
+| `http://example.org/` | moved | moved | moved | moved |
+
+A namespace that ends in `#`, `/` or `:` matches everything that starts with it. One without a
+delimiter matches only where the next character is `#`, `/` or `:`, or where the IRI ends. So
+URN-style namespaces work either way: `urn:old:` and `urn:old` both move `urn:old:A`, and neither
+moves `urn:older:C`.
 
 ### With Data Migration
 

@@ -176,6 +176,7 @@ Nothing has landed yet.
 | Issue | What changed | What to do |
 |---|---|---|
 | [#286](https://github.com/aigora-de/rdf-construct/issues/286) | A refusal exits **2** instead of 1: no sources, a config that will not load (including malformed YAML, which was a traceback), `--init` over an existing file. | If a script tests for exit 1 to catch a rejected invocation, test for 2. |
+| [#184](https://github.com/aigora-de/rdf-construct/issues/184) | `namespace_remap` matches at a namespace boundary. A key without a trailing `#`, `/` or `:` no longer catches a sibling that shares its spelling (`…/ont` no longer moves `…/ontology#`). A prefix binding now moves with its namespace even when it does not equal the key exactly (`"http://old/": …` also moves `@prefix x: <http://old/core#>`). | If you relied on the substring match, add a key for each namespace you meant to move. |
 
 ## `split`
 
@@ -191,6 +192,9 @@ Covers `refactor rename` and `refactor deprecate`; each row names its subcommand
 |---|---|---|
 | [#286](https://github.com/aigora-de/rdf-construct/issues/286) | `rename`: a refusal exits **2** instead of 1: unpaired `--from`/`--to` or `--from-namespace`/`--to-namespace`, nothing to rename, a config that will not load (including malformed YAML), `--init` over an existing file. `--help` no longer documents an exit 1, which no path produced ([#183](https://github.com/aigora-de/rdf-construct/issues/183)). | If a script tests for exit 1 to catch a rejected invocation, test for 2. |
 | [#286](https://github.com/aigora-de/rdf-construct/issues/286) | `deprecate`: a refusal exits **2** instead of 1: no `--entity`, nothing to deprecate, a config that will not load (including malformed YAML), `--init` over an existing file. "Entity not found" still exits 1. | If a script tests for exit 1 to catch a rejected invocation, test for 2. |
+| [#182](https://github.com/aigora-de/rdf-construct/issues/182) | `rename` and `deprecate`: a CURIE in `--from`, `--to`, `--entity`, `--replaced-by` or a config file's entities now resolves against the source's own prefixes, plus `rdf`, `rdfs`, `owl`, `xsd` and `xml`. It used to rename nothing (`--from`) or be written as the IRI `<ex:…>` (`--to`, `--replaced-by`). A prefix no source binds, or one that two sources bind differently, is refused at exit **2** before anything is written. A bare `urn:…` is read as a CURIE. | Check output you produced with a CURIE: it may contain `<ex:…>` IRIs. Write a URN as `<urn:…>`. |
+| [#182](https://github.com/aigora-de/rdf-construct/issues/182) | `rename` and `deprecate`: a source prefix that collides with one of rdflib's built-in prefixes (`org`, `dc`, `foaf`, `skos`, `time`, `geo`, `prov` and others) is written back as declared, not renamed (`org1:` → `org:`). `--migrate-data` output is not yet covered ([#358](https://github.com/aigora-de/rdf-construct/issues/358)). | None; expect a one-time diff in the `@prefix` lines and every CURIE using them. |
+| [#184](https://github.com/aigora-de/rdf-construct/issues/184) | `rename`: `--from-namespace` and a config file's `namespaces` match at a namespace boundary. `…/ont` moves `…/ont#One`, `…/ont/extra#Three` and `…/ont` itself, and no longer moves `…/ontology#Two`. `…/ont#` moves only that namespace. | If you relied on the substring match, rename each namespace you meant to move. |
 
 ## `localise`
 

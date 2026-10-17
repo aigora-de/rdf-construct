@@ -31,6 +31,7 @@ from rdf_construct.core import (
     serialise_turtle,
     sort_subjects,
     expand_curie,
+    CurieError,
 )
 from rdf_construct.core.formats import (
     CAST_FORMAT_CHOICES,
@@ -123,6 +124,7 @@ from rdf_construct.refactor import (
     rename_files,
     deprecate_file,
 )
+from rdf_construct.refactor.config import AmbiguousCurieError
 from rdf_construct.merge import DataMigrator
 
 from rdf_construct.localise import (
@@ -3039,6 +3041,31 @@ def refactor():
     pass
 
 
+def _load_refactor_sources(paths: list[Path]) -> list[tuple[Path, Graph]]:
+    """Parse each refactor source, keeping the prefixes the file declares.
+
+    ``bind_namespaces="core"`` pre-binds only rdf, rdfs, owl, xsd and xml, so a source's own
+    ``org:`` stays ``org:`` rather than yielding to rdflib's built-in table, both when a CURIE
+    is resolved against it and when it is written back out (#182).
+
+    Args:
+        paths: Source files.
+
+    Returns:
+        Each path with its parsed graph.
+    """
+    graphs = []
+    for source_path in paths:
+        graph = Graph(bind_namespaces="core")
+        try:
+            graph.parse(source_path.as_posix())
+        except Exception as e:
+            click.secho(f"\u2717 Failed to parse {source_path}: {e}", fg="red", err=True)
+            raise SystemExit(2)
+        graphs.append((source_path, graph))
+    return graphs
+
+
 @refactor.command("rename")
 @click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
 @click.option(
@@ -3050,16 +3077,16 @@ def refactor():
 @click.option(
     "--from",
     "from_uri",
-    help="Single URI to rename (use with --to).",
+    help="URI or CURIE to rename (use with --to). A CURIE uses the source's own prefixes.",
 )
 @click.option(
     "--to",
     "to_uri",
-    help="New URI for single rename (use with --from).",
+    help="New URI or CURIE for single rename (use with --from).",
 )
 @click.option(
     "--from-namespace",
-    help="Old namespace prefix for bulk rename.",
+    help="Old namespace for bulk rename, matched at a #, / or : boundary.",
 )
 @click.option(
     "--to-namespace",
@@ -3219,7 +3246,6 @@ def refactor_rename(
             rename_config.namespaces[from_namespace] = to_namespace
 
         if from_uri and to_uri:
-            # Expand CURIEs if needed
             rename_config.entities[from_uri] = to_uri
 
         config = RefactorConfig(
@@ -3237,20 +3263,22 @@ def refactor_rename(
             "or provide a config file."
         )
 
+    # Load every source before writing anything, so that a CURIE is resolved once, against
+    # the prefixes the files declare, and refused before any output exists (#182).
+    graphs = _load_refactor_sources(config.source_files)
+    try:
+        config.rename = config.rename.resolved(
+            [(path, extract_prefix_map(graph)) for path, graph in graphs]
+        )
+    except (CurieError, AmbiguousCurieError) as e:
+        raise Refusal(str(e)) from e
+
     # Execute rename
     formatter = RefactorTextFormatter(use_colour=not no_colour)
     renamer = OntologyRenamer()
 
-    for source_path in config.source_files:
+    for source_path, graph in graphs:
         click.echo(f"\nProcessing: {source_path}")
-
-        # Load source graph
-        graph = Graph()
-        try:
-            graph.parse(source_path.as_posix())
-        except Exception as e:
-            click.secho(f"\u2717 Failed to parse: {e}", fg="red", err=True)
-            raise SystemExit(2)
 
         # Build mappings for preview
         mappings = config.rename.build_mappings(graph)
@@ -3344,11 +3372,11 @@ def refactor_rename(
 )
 @click.option(
     "--entity",
-    help="URI of entity to deprecate.",
+    help="URI or CURIE of entity to deprecate.",
 )
 @click.option(
     "--replaced-by",
-    help="URI of replacement entity (adds dcterms:isReplacedBy).",
+    help="URI or CURIE of replacement entity (adds dcterms:isReplacedBy).",
 )
 @click.option(
     "--message",
@@ -3499,24 +3527,25 @@ def refactor_deprecate(
     if not config.deprecations:
         raise Refusal("No deprecations specified. Use --entity or provide a config file.")
 
+    # Load every source before writing anything, so that a CURIE is resolved once, against
+    # the prefixes the files declare, and refused before any output exists (#182).
+    graphs = _load_refactor_sources(config.source_files)
+    prefixes = [(path, extract_prefix_map(graph)) for path, graph in graphs]
+    try:
+        config.deprecations = [spec.resolved(prefixes) for spec in config.deprecations]
+    except (CurieError, AmbiguousCurieError) as e:
+        raise Refusal(str(e)) from e
+
     # Execute deprecation
     formatter = RefactorTextFormatter(use_colour=not no_colour)
     deprecator = OntologyDeprecator()
 
-    for source_path in config.source_files:
+    for source_path, graph in graphs:
         click.echo(f"\nProcessing: {source_path}")
-
-        # Load source graph
-        graph = Graph()
-        try:
-            graph.parse(source_path.as_posix())
-        except Exception as e:
-            click.secho(f"\u2717 Failed to parse: {e}", fg="red", err=True)
-            raise SystemExit(2)
 
         if dry_run:
             # Perform dry run to get entity info
-            temp_graph = Graph()
+            temp_graph = Graph(bind_namespaces="core")
             for triple in graph:
                 temp_graph.add(triple)
 
