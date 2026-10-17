@@ -100,6 +100,16 @@ change, and what to do about it, is listed command by command in the
   and the config file overrides the option's default.
 
 ### Fixed
+- **`docs` refuses what it cannot use, with a message instead of a traceback**
+  (#301). A source that does not parse, in any format, a directory given as a
+  source, a malformed `-C` config, a `--template` directory without the HTML
+  entry template the run starts from (`html/index.html.jinja`, or
+  `html/single_page.html.jinja` with `--single-page`), and an `-o` that is, or
+  sits under, a file now exit 2 with a message naming the file. A parse failure
+  carries rdflib's line and excerpt. The exit code was already 2, but it came
+  from the crash handler, with a traceback that read as a bug. Every check runs
+  before anything is written, so a refused run no longer leaves an empty output
+  directory behind, as a bad `--template` did.
 - **`refactor` resolves CURIEs, against the source's own prefixes** (#182).
   `--from ex:Buiding --to ex:Building`, the form `--help` documents, renamed
   nothing and exited 0, and a CURIE in `--to` or `--replaced-by` was written

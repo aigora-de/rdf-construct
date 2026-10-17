@@ -40,8 +40,9 @@ still gate on severity.
 exited 1, Python's default, which read as "finished with findings"; it now exits 2, with the
 traceback still on stderr ([#320](https://github.com/aigora-de/rdf-construct/issues/320)). **What did not move:** every command's
 "completed with findings" code was already 1, and `diff`, `cast`, `cq-test`, `describe` and
-`puml2rdf` are unchanged. `docs` still reports malformed input as a traceback, now at 2, until
-[#301](https://github.com/aigora-de/rdf-construct/issues/301) lands.
+`puml2rdf` are unchanged. `docs` exits 2 on malformed input, as every crash does since #320, but
+now as a refusal with a message rather than a traceback
+([#301](https://github.com/aigora-de/rdf-construct/issues/301)).
 
 **What to do:** anywhere a script tests for `1` to detect a rejected command line or config, test
 for `2` instead. Anywhere it tests `lint` for `2`, read the [`lint`](#lint) section.
