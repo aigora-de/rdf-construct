@@ -68,12 +68,9 @@ even at its default value: `--level standard` overrides a file that says `level:
 **What moved:** `lint`'s `level:` ([#206](https://github.com/aigora-de/rdf-construct/issues/206)),
 seven `docs` keys ([#251](https://github.com/aigora-de/rdf-construct/issues/251)) and
 `localise extract`'s flags alongside `-c`
-([#160](https://github.com/aigora-de/rdf-construct/issues/160)) each have a row in their command's
-section. In `shacl-gen` ([#225](https://github.com/aigora-de/rdf-construct/issues/225)), `level:` in
-a configuration file now takes effect, so a file that says `level: strict` produces the
-strict-only constraints, such as `sh:in` from `owl:oneOf`. `default_severity:` now reaches the
-generator, which does not emit it yet
-([#223](https://github.com/aigora-de/rdf-construct/issues/223)). **Not landed yet:** `split`'s
+([#160](https://github.com/aigora-de/rdf-construct/issues/160)) and `shacl-gen`'s `level:`
+([#225](https://github.com/aigora-de/rdf-construct/issues/225)) each have a row in their command's
+section. **Not landed yet:** `split`'s
 `unmatched:` ([#291](https://github.com/aigora-de/rdf-construct/issues/291)) comes with
 [#176](https://github.com/aigora-de/rdf-construct/issues/176) (PR group P18), because `split -c`
 does not run until then ([#175](https://github.com/aigora-de/rdf-construct/issues/175)).
@@ -145,6 +142,7 @@ Nothing has landed yet.
 | Issue | What changed | What to do |
 |---|---|---|
 | [#286](https://github.com/aigora-de/rdf-construct/issues/286) | Errors (a missing file, a configuration that will not load, a failed generation) exit **2** instead of 1. | Test for 2. |
+| [#225](https://github.com/aigora-de/rdf-construct/issues/225) | `level:` in a `--config` file takes effect. Previously `--level`'s default, `standard`, always overwrote it. A file that says `level: strict` now gets strict shapes: `sh:in` from `owl:oneOf`, and, where it also says `closed: true`, `sh:closed`, which neither key produced before. A closed shape rejects any property it does not declare. **Data that conformed to the shapes can stop conforming.** `default_severity:` now reaches the generator too, but nothing emits `sh:severity` yet ([#223](https://github.com/aigora-de/rdf-construct/issues/223)), so validation still reports every constraint as a violation. | If your config says `level: strict` and you were relying on the standard shapes, remove `level:` or pass `--level standard`. Re-validate data against shapes regenerated from such a config. |
 
 ## `puml2rdf`
 
