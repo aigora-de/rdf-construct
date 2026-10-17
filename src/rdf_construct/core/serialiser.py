@@ -6,6 +6,7 @@ the exact subject order provided.
 """
 
 from pathlib import Path
+from typing import Any
 
 from rdflib import BNode, Graph, URIRef, Literal, RDF
 from rdflib.namespace import RDFS, OWL, XSD
@@ -345,7 +346,29 @@ def serialise_turtle(
     output_path: Path | str,
     predicate_order: PredicateOrderConfig | None = None,
 ) -> None:
-    """Serialise RDF graph to Turtle format with preserved subject ordering.
+    """Serialise RDF graph to a Turtle file with preserved subject ordering.
+
+    Writes exactly the text ``serialise_turtle_str()`` returns, as UTF-8. See that
+    function for the formatting rules.
+
+    Args:
+        graph: RDF graph to serialise
+        subjects_ordered: List of subjects in desired output order
+        output_path: Path to write Turtle file to
+        predicate_order: Optional predicate ordering configuration
+    """
+    output_path = Path(output_path)
+    output_path.write_text(
+        serialise_turtle_str(graph, subjects_ordered, predicate_order), encoding="utf-8"
+    )
+
+
+def serialise_turtle_str(
+    graph: Graph,
+    subjects_ordered: list[Any],
+    predicate_order: PredicateOrderConfig | None = None,
+) -> str:
+    """Serialise RDF graph to a Turtle string with preserved subject ordering.
 
     This custom serialiser respects the exact order of subjects provided,
     unlike rdflib's built-in serialisers which always sort alphabetically.
@@ -373,9 +396,13 @@ def serialise_turtle(
 
     Args:
         graph: RDF graph to serialise
-        subjects_ordered: List of subjects in desired output order
-        output_path: Path to write Turtle file to
+        subjects_ordered: List of subjects in desired output order. A subject
+            missing from it is not written; ``check_subject_order_complete()``
+            in ``core.default_order`` guards a list built for a whole graph.
         predicate_order: Optional predicate ordering configuration
+
+    Returns:
+        The Turtle document. ``serialise_turtle()`` writes these exact bytes.
     """
     lines = []
 
@@ -458,9 +485,7 @@ def serialise_turtle(
 
         lines.append("")  # Blank line after each subject
 
-    # Write to file
-    output_path = Path(output_path)
-    output_path.write_text("\n".join(lines), encoding="utf-8")
+    return "\n".join(lines)
 
 
 def _order_subject_predicates(
