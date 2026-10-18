@@ -395,6 +395,7 @@ rdf-construct split SOURCE [OPTIONS]
 | Option | Description | Default |
 |--------|-------------|---------|
 | `-o, --output PATH` | Output directory for modules | `modules/` |
+| `--overwrite` | Write into `modules/` even if it holds files `split` did not write. Deletes nothing. | `False` |
 | `-c, --config PATH` | YAML configuration file | - |
 | `--by-namespace` | Auto-detect modules from namespaces | `False` |
 | `--migrate-data PATH` | Data file(s) to split (repeatable) | - |
@@ -413,6 +414,27 @@ rdf-construct split SOURCE [OPTIONS]
 | 0 | Split successful |
 | 1 | Split successful, unmatched entities in common module |
 | 2 | Input refused or run failed (invalid options or config, file not found, parse error) |
+
+### When `modules/` already holds other files
+
+Without `-o`, `split` writes into `modules/` only if the directory is new, empty, or was written by
+`split` before. Every run that writes leaves a small `.rdf-construct` file there, naming the
+command and the version, and that marker is how a later run knows the directory is its own. A
+directory holding anything else is refused at exit 2 before the source is parsed, and nothing is
+written ([#261](https://github.com/aigora-de/rdf-construct/issues/261)):
+
+```
+Error: modules/ already holds files that rdf-construct split did not write (core.ttl). Leaving it untouched. Pass -o <dir> to write somewhere else, or --overwrite to write into modules/ anyway.
+```
+
+`--overwrite` writes there anyway and marks the directory, so it is needed once. It deletes
+nothing: `core.ttl` stays. An explicit `-o` is never refused. Files an operating system leaves in
+any folder (`.DS_Store`, `Thumbs.db`, `desktop.ini`, `.directory`) and a `.gitkeep` do not count.
+A directory a v0.6.0 run wrote has no marker, so the first v0.7.0 run into it is refused.
+
+`--dry-run` is refused the same way, so a preview never promises a run that would refuse. Until
+[#291](https://github.com/aigora-de/rdf-construct/issues/291) is fixed, a `-c` config's
+`output_dir` is ignored, so only `-o` names the directory.
 
 ### Splitting Strategies
 

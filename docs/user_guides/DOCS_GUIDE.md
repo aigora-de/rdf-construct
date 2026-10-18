@@ -15,6 +15,28 @@ poetry run rdf-construct docs ontology.ttl --format markdown
 poetry run rdf-construct docs ontology.ttl -o api-docs/
 ```
 
+Most repositories already have a `docs/` of their own, so without `-o` the command refuses to write
+into one it did not create. See [When `docs/` already holds other files](#when-docs-already-holds-other-files).
+
+### When `docs/` already holds other files
+
+Without `-o`, `docs` writes into `docs/` only if the directory is new, empty, or was written by
+`docs` before. Every run that writes leaves a small `.rdf-construct` file there, naming the
+command and the version, and that marker is how a later run knows the directory is its own. A
+directory holding anything else is refused at exit 2 before the source is parsed, and nothing is
+written ([#261](https://github.com/aigora-de/rdf-construct/issues/261)):
+
+```
+Error: docs/ already holds files that rdf-construct docs did not write (index.md). Leaving it untouched. Pass -o <dir> to write somewhere else, or --overwrite to write into docs/ anyway.
+```
+
+`--overwrite` writes there anyway and marks the directory, so it is needed once. It deletes
+nothing: `index.md` stays. An explicit `-o` is never refused. Files an operating system leaves in
+any folder (`.DS_Store`, `Thumbs.db`, `desktop.ini`, `.directory`) and a `.gitkeep` do not count.
+A directory a v0.6.0 run wrote has no marker, so the first v0.7.0 run into it is refused.
+
+A config file's `output_dir` names the directory as `-o` does, so it is never refused either.
+
 ## Output Formats
 
 ### HTML
@@ -492,6 +514,7 @@ rdf-construct docs [OPTIONS] SOURCES...
 |--------|-------------|
 | `SOURCES` | One or more RDF files (Turtle, RDF/XML, etc.) |
 | `-o, --output PATH` | Output directory (default: `docs/`) |
+| `--overwrite` | Write into the default output directory even if it holds files this command did not write. Deletes nothing. |
 | `-f, --format FORMAT` | Output format: `html`, `markdown`, `json` |
 | `-C, --config PATH` | Configuration YAML file |
 | `-t, --template PATH` | Custom template directory |

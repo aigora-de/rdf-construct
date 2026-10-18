@@ -39,6 +39,7 @@ from rdf_construct.core.formats import (
     infer_format as infer_rdf_format,
     normalise_format,
 )
+from rdf_construct.core.outdir import foreign_entries, mark_output_dir
 
 from rdf_construct.cast import CastConverter
 
@@ -232,6 +233,52 @@ def parse_into(graph: Graph, source: Path, rdf_format: str) -> None:
     except Exception as exc:
         detail = str(exc) or type(exc).__name__
         raise Refusal(f"Could not parse {source} as {rdf_format}: {detail}") from exc
+
+
+def check_default_output_dir(
+    path: Path, param_name: str, command: str, *, overwrite: bool, named: bool = False
+) -> None:
+    """Refuse to write into a default output directory that holds someone else's files (#261).
+
+    Only a directory that came from the option's default is checked. A path from the command
+    line, the environment, a ``default_map`` or a config file is one the user named, and an
+    explicit path never refuses. So the test is ``ParameterSource.DEFAULT`` alone, not
+    ``flag_given``, which counts a ``default_map`` value as not given.
+
+    Call it before anything is parsed or written. What counts as someone else's is decided by
+    ``core.outdir.foreign_entries``.
+
+    Args:
+        path: The output directory the command will write to.
+        param_name: The output option's parameter name, as the command function receives it.
+        command: The command's name, as its marker records it.
+        overwrite: Whether ``--overwrite`` was given.
+        named: Whether something other than the option named the directory, such as a config
+            file's ``output_dir``.
+
+    Raises:
+        Refusal: The directory exists, is not empty, and holds no marker from ``command``.
+        LookupError: The current command has no parameter called ``param_name``.
+    """
+    source = click.get_current_context().get_parameter_source(param_name)
+    if source is None:
+        raise LookupError(f"The current command has no parameter named {param_name!r}.")
+    if named or overwrite or source is not ParameterSource.DEFAULT:
+        return
+
+    entries = foreign_entries(path, command)
+    if not entries:
+        return
+
+    shown = [f"{entry.name}/" if entry.is_dir() else entry.name for entry in entries[:5]]
+    if len(entries) > 5:
+        shown.append(f"and {len(entries) - 5} more")
+    raise Refusal(
+        f"{path}/ already holds files that rdf-construct {command} did not write "
+        f"({', '.join(shown)}). "
+        f"Leaving it untouched. Pass -o <dir> to write somewhere else, "
+        f"or --overwrite to write into {path}/ anyway."
+    )
 
 
 class CrashHandlingGroup(click.Group):
@@ -583,7 +630,15 @@ def _warn_unclaimed(
     default="ordered",
     help="Output directory (default: ordered)",
 )
-def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path):
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    help=(
+        "Write into the default output directory even if it holds files "
+        "this command did not write"
+    ),
+)
+def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, overwrite: bool):
     """Reorder RDF Turtle files according to semantic profiles.
 
     SOURCE: Input RDF Turtle file (.ttl)
@@ -626,6 +681,8 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path):
         }
     except ValueError as exc:
         raise Refusal(str(exc)) from exc
+
+    check_default_output_dir(outdir, "outdir", "order", overwrite=overwrite)
 
     # Create output directory
     outdir.mkdir(parents=True, exist_ok=True)
@@ -723,6 +780,7 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path):
 
         # Serialise with predicate ordering
         out_file = outdir / f"{source.stem}-{prof_name}.ttl"
+        mark_output_dir(outdir, "order")
         serialise_turtle(out_graph, ordered_subjects, out_file, predicate_order)
         click.secho(f"  \u2713 {out_file}", fg="green")
 
@@ -773,6 +831,14 @@ def profiles(config: Path):
     help="Output directory (default: diagrams)",
 )
 @click.option(
+    "--overwrite",
+    is_flag=True,
+    help=(
+        "Write into the default output directory even if it holds files "
+        "this command did not write"
+    ),
+)
+@click.option(
     "--style-config",
     type=click.Path(exists=True, path_type=Path),
     help="Path to style configuration YAML (e.g., examples/uml_styles.yml)",
@@ -792,7 +858,16 @@ def profiles(config: Path):
     help="Rendering mode: 'default' (custom stereotypes) or 'odm' (OMG ODM RDF Profile compliant)",
 )
 def uml(
-    sources, config, context, outdir, style_config, style, layout_config, layout, rendering_mode
+    sources,
+    config,
+    context,
+    outdir,
+    overwrite,
+    style_config,
+    style,
+    layout_config,
+    layout,
+    rendering_mode,
 ):
     """Generate UML class diagrams from RDF ontologies.
 
@@ -864,6 +939,8 @@ def uml(
                 accepted=uml_config.list_contexts(),
             )
 
+    check_default_output_dir(outdir, "outdir", "uml", overwrite=overwrite)
+
     # Create output directory
     # ToDo - handle exceptions properly
     outdir = Path(outdir)
@@ -914,6 +991,7 @@ def uml(
             out_file = outdir / f"{primary_source.stem}-{ctx_name}.puml"
 
         # Render with optional style and layout
+        mark_output_dir(outdir, "uml")
         if rendering_mode == "odm":
             render_odm_plantuml(graph, entities, out_file, style_scheme, layout_cfg)
         else:
@@ -1346,6 +1424,14 @@ def diff(
     help="Output directory (default: docs)",
 )
 @click.option(
+    "--overwrite",
+    is_flag=True,
+    help=(
+        "Write into the default output directory even if it holds files "
+        "this command did not write"
+    ),
+)
+@click.option(
     "--format",
     "-f",
     "output_format",
@@ -1413,6 +1499,7 @@ def diff(
 def docs(
     sources: tuple[Path, ...],
     output: Path,
+    overwrite: bool,
     output_format: str,
     config: Path | None,
     template: Path | None,
@@ -1543,6 +1630,16 @@ def docs(
                     f"Cannot write to {doc_config.output_dir}: {path} is a file, not a directory."
                 )
             break
+
+    # A config's output_dir names the directory as surely as -o does. DocsConfig keeps no
+    # record of which keys it was given, so read the key from the file itself.
+    config_named_output = False
+    if config:
+        config_data = yaml.safe_load(config.read_text())
+        config_named_output = isinstance(config_data, dict) and "output_dir" in config_data
+    check_default_output_dir(
+        doc_config.output_dir, "output", "docs", overwrite=overwrite, named=config_named_output
+    )
 
     # Load RDF sources
     click.echo(f"Loading {len(sources)} source file(s)...")
@@ -2805,6 +2902,14 @@ def merge(
     help="Output directory for split modules (default: modules/)",
 )
 @click.option(
+    "--overwrite",
+    is_flag=True,
+    help=(
+        "Write into the default output directory even if it holds files "
+        "this command did not write"
+    ),
+)
+@click.option(
     "--config",
     "-c",
     "config_file",
@@ -2862,6 +2967,7 @@ def merge(
 def split(
     source: Path,
     output_dir: Path,
+    overwrite: bool,
     config_file: Path | None,
     by_namespace: bool,
     migrate_data: tuple[Path, ...],
@@ -2917,6 +3023,9 @@ def split(
     # Validate we have a source
     if not source:
         raise Refusal("SOURCE is required.")
+
+    # A config's output_dir is overridden by -o's default until #291, so only -o can name it.
+    check_default_output_dir(output_dir, "output_dir", "split", overwrite=overwrite)
 
     # Handle --by-namespace mode
     if by_namespace:
