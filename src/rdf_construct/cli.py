@@ -20,6 +20,8 @@ from rdflib.term import Node
 from rdf_construct import __version__
 from rdf_construct.core import (
     OrderingConfig,
+    Stamp,
+    WAS_DERIVED_FROM,
     bnode_closure,
     build_section_graph,
     extract_prefix_map,
@@ -32,6 +34,8 @@ from rdf_construct.core import (
     sort_subjects,
     expand_curie,
     CurieError,
+    missing_triples,
+    stamp_extract,
 )
 from rdf_construct.core.formats import (
     CAST_FORMAT_CHOICES,
@@ -620,6 +624,51 @@ def _warn_unclaimed(
         )
 
 
+def _report_stamps(graph: Graph, out_graph: Graph, stamps: list[Stamp], header_kept: bool) -> None:
+    """Say that a profile wrote an extract, and what its header now claims (#90).
+
+    Printed whatever the ``unclaimed`` policy: ``ignore`` silences the report of what was
+    dropped, not a change to what the written file says about itself.
+
+    Args:
+        graph: RDF graph being ordered
+        out_graph: The stamped graph about to be written
+        stamps: What ``stamp_extract`` did to each header
+        header_kept: False if the profile omits the header
+    """
+    total = len(graph)
+    kept = total - missing_triples(graph, out_graph)
+    lead = f"  \u25c7 extract: {kept} of {total} source triples written."
+
+    def label(term: Node) -> str:
+        return _term_label(out_graph, term) if isinstance(term, URIRef) else "an anonymous ontology"
+
+    def changes(stamp: Stamp) -> list[str]:
+        lines = [f"owl:versionIRI {_term_label(out_graph, v)} removed" for v in stamp.removed]
+        lines += [
+            f"prov:wasDerivedFrom {_term_label(out_graph, t)} added" for t in stamp.derived_from
+        ]
+        return lines or ["nothing names the source: not stamped"]
+
+    if not stamps:
+        reason = (
+            "No owl:Ontology in the source"
+            if header_kept
+            else "The profile omits the header (header: false)"
+        )
+        click.secho(f"{lead} {reason}: nothing stamped.", fg="cyan")
+    elif len(stamps) == 1:
+        click.secho(f"{lead} Stamped {label(stamps[0].ontology)}:", fg="cyan")
+        for line in changes(stamps[0]):
+            click.secho(f"      {line}", fg="cyan")
+    else:
+        click.secho(f"{lead} Stamped {len(stamps)} ontology headers:", fg="cyan")
+        for stamp in stamps:
+            click.secho(f"      {label(stamp.ontology)}", fg="cyan")
+            for line in changes(stamp):
+                click.secho(f"          {line}", fg="cyan")
+
+
 @cli.command()
 @click.argument("source", type=click.Path(exists=True, path_type=Path))
 @click.argument("config", type=click.Path(exists=True, path_type=Path))
@@ -678,12 +727,15 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
                 accepted=ordering_config.list_profiles(),
             )
 
-    # Resolve the unclaimed-subject policies before writing anything: a typo in one
-    # profile should not surface only after the earlier profiles have been written.
+    # Resolve the unclaimed-subject and header policies before writing anything: a typo in
+    # one profile should not surface only after the earlier profiles have been written.
     try:
         unclaimed_policies = {
             prof_name: ordering_config.get_unclaimed_policy(prof_name)
             for prof_name in profiles_to_gen
+        }
+        header_policies = {
+            prof_name: ordering_config.get_header_policy(prof_name) for prof_name in profiles_to_gen
         }
     except ValueError as exc:
         raise Refusal(str(exc)) from exc
@@ -706,6 +758,16 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
 
         ordered_subjects: list = []
         seen: set = set()
+
+        # The header is not a section's to lose (#90): without a header section it still
+        # leads the file, and a profile omits it only by saying `header: false`. An omitted
+        # header is dropped deliberately, so it is never reported as unclaimed.
+        if not header_policies[prof_name]:
+            seen.update(graph.subjects(RDF.type, OWL.Ontology))
+        elif not prof.has_header_section:
+            for s in graph.subjects(RDF.type, OWL.Ontology):
+                ordered_subjects.append(s)
+                seen.add(s)
 
         # Process each section
         for sec in prof.sections:
@@ -775,6 +837,19 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
 
         # Build output graph
         out_graph = build_section_graph(graph, ordered_subjects)
+
+        # A run that dropped anything wrote an extract, not the source, so its header may not
+        # claim the source's version (#90). Measured on the graph about to be written, not on
+        # the profile's options: a `warn` profile that loses triples is an extract too.
+        if missing_triples(graph, out_graph):
+            stamps = stamp_extract(graph, out_graph)
+            stamped = [st.ontology for st in stamps if st.derived_from]
+            if stamped and WAS_DERIVED_FROM not in seen:
+                # The stamp's declaration sits with the header it annotates.
+                at = max(ordered_subjects.index(o) for o in stamped) + 1
+                ordered_subjects.insert(at, WAS_DERIVED_FROM)
+                seen.add(WAS_DERIVED_FROM)
+            _report_stamps(graph, out_graph, stamps, header_policies[prof_name])
 
         # Rebind prefixes if configured
         if ordering_config.defaults.get("preserve_prefix_order", True):

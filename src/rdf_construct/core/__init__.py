@@ -3,6 +3,7 @@
 from .ordering import sort_subjects, topo_sort_subset, sort_with_roots
 from .profile import (
     DEFAULT_UNCLAIMED_POLICY,
+    HEADER_SECTION,
     UNCLAIMED_POLICIES,
     OrderingConfig,
     OrderingProfile,
@@ -29,6 +30,15 @@ from .serialiser import (
     serialise_turtle,
     serialise_turtle_str,
     build_section_graph,
+)
+from .provenance import (
+    WAS_DERIVED_FROM,
+    Stamp,
+    derivation_targets,
+    missing_triples,
+    stamp_derivation,
+    stamp_extract,
+    strip_version_iri,
 )
 from .default_order import (
     IncompleteSubjectOrderError,
@@ -68,6 +78,7 @@ __all__ = [
     "load_yaml",
     "UNCLAIMED_POLICIES",
     "DEFAULT_UNCLAIMED_POLICY",
+    "HEADER_SECTION",
     # Selector
     "select_subjects",
     "is_known_selector",
@@ -87,6 +98,14 @@ __all__ = [
     "serialise_turtle",
     "serialise_turtle_str",
     "build_section_graph",
+    # Provenance
+    "WAS_DERIVED_FROM",
+    "Stamp",
+    "derivation_targets",
+    "missing_triples",
+    "stamp_derivation",
+    "stamp_extract",
+    "strip_version_iri",
     # Default ordering
     "default_subject_order",
     "check_subject_order_complete",
