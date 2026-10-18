@@ -23,7 +23,8 @@ output directory when it already holds files they did not write**, which they
 previously overwrote in silence. Pass `-o` to name the directory, or
 `--overwrite` to write there; either way the directory is marked and later runs
 proceed. An explicit `-o` is unaffected. The marker is a small `.rdf-construct`
-file; commit it, ignore it or publish it as you would the output. See
+file. Treat it as part of the output: if you commit the output, commit the
+marker, or a fresh checkout will be refused. See
 [Default output directories](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#default-output-directories)
 in the migration note.
 

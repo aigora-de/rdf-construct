@@ -56,8 +56,9 @@ for `2` instead. Anywhere it tests `lint` for `2`, read the [`lint`](#lint) sect
 `docs`, `uml`, `split` and `order` now refuse to write into their default output directory when
 it already holds files they did not write, which they previously overwrote in silence. Pass `-o`
 to name the directory, or `--overwrite` to write there; either way the directory is marked and
-later runs proceed. An explicit `-o` is unaffected. The marker is a small `.rdf-construct` file;
-commit it, ignore it or publish it as you would the output ([#261](https://github.com/aigora-de/rdf-construct/issues/261)).
+later runs proceed. An explicit `-o` is unaffected. The marker is a small `.rdf-construct` file.
+Treat it as part of the output: if you commit the output, commit the marker, or a fresh checkout
+will be refused ([#261](https://github.com/aigora-de/rdf-construct/issues/261)).
 
 The default directories are unchanged: `docs/`, `diagrams/`, `modules/` and `ordered/` (`order`'s
 moved in [#128](https://github.com/aigora-de/rdf-construct/issues/128); see [`order`](#order)).
