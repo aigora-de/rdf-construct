@@ -162,8 +162,9 @@ class TestWhatCountsAsForeign:
         mark_output_dir(out, other)
         (out / "something.txt").write_text("")
 
-        assert_refused(case, case.args(), tmp_path)
+        result = assert_refused(case, case.args(), tmp_path)
         assert read_marker(out) == other
+        assert f"{OUTPUT_MARKER} from {other}" in result.output
 
     def test_overwrite_with_explicit_output_is_accepted(self, case: Case, tmp_path: Path) -> None:
         out = foreign_dir(case, tmp_path)
@@ -179,6 +180,15 @@ class TestWhatCountsAsForeign:
 
         assert_wrote(run(case.args(), default_map=default_map))
         assert read_marker(out) == case.command
+
+
+def test_a_malformed_marker_is_named_as_unreadable(tmp_path: Path) -> None:
+    out = tmp_path / "docs"
+    out.mkdir()
+    (out / OUTPUT_MARKER).write_text("not a marker\n")
+
+    result = assert_refused(CASES[0], CASES[0].args(), tmp_path)
+    assert f"{OUTPUT_MARKER}, unreadable" in result.output
 
 
 class TestDocsConfig:

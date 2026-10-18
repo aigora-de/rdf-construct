@@ -81,6 +81,9 @@ class DocsGenerator:
     def generate(self, graph: Graph) -> GenerationResult:
         """Generate documentation from an RDF graph.
 
+        The output directory is marked as ``docs``'s own with a ``.rdf-construct`` file, written
+        just before the first page (#261, see ``rdf_construct.core.outdir``).
+
         Args:
             graph: RDF graph to generate documentation from.
 

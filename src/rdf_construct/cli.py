@@ -39,7 +39,7 @@ from rdf_construct.core.formats import (
     infer_format as infer_rdf_format,
     normalise_format,
 )
-from rdf_construct.core.outdir import foreign_entries, mark_output_dir
+from rdf_construct.core.outdir import OUTPUT_MARKER, foreign_entries, mark_output_dir, read_marker
 
 from rdf_construct.cast import CastConverter
 
@@ -270,7 +270,13 @@ def check_default_output_dir(
     if not entries:
         return
 
-    shown = [f"{entry.name}/" if entry.is_dir() else entry.name for entry in entries[:5]]
+    def label(entry: Path) -> str:
+        if entry.name == OUTPUT_MARKER:
+            owner = read_marker(path)
+            return f"{entry.name} from {owner}" if owner else f"{entry.name}, unreadable"
+        return f"{entry.name}/" if entry.is_dir() else entry.name
+
+    shown = [label(entry) for entry in entries[:5]]
     if len(entries) > 5:
         shown.append(f"and {len(entries) - 5} more")
     raise Refusal(

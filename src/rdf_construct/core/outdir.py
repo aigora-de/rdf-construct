@@ -51,23 +51,6 @@ IGNORED_ENTRIES: frozenset[str] = frozenset(
 """Entries that never make a directory count as non-empty, matched by exact name."""
 
 
-class ForeignOutputDirError(Exception):
-    """An output directory holds entries that the command did not write.
-
-    For library callers that want to refuse the same way the CLI does. The CLI raises its own
-    ``Refusal`` instead, so that the exit code is decided in one place.
-
-    Args:
-        path: The output directory.
-        entries: What :func:`foreign_entries` found in it.
-    """
-
-    def __init__(self, path: Path, entries: list[Path]) -> None:
-        super().__init__(f"{path} holds {len(entries)} entries this command did not write.")
-        self.path = path
-        self.entries = entries
-
-
 def read_marker(path: Path) -> str | None:
     """Return the command named by the marker in ``path``.
 

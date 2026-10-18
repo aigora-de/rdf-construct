@@ -831,6 +831,10 @@ class OntologySplitter:
     def write_modules(self, result: SplitResult) -> None:
         """Write module files to disk.
 
+        The output directory is marked as ``split``'s own with a ``.rdf-construct`` file, written
+        just before the first module (#261, see ``rdf_construct.core.outdir``). A dry run writes
+        nothing, the marker included.
+
         Args:
             result: SplitResult with module graphs.
         """

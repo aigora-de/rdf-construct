@@ -16,7 +16,6 @@ from rdf_construct import __version__
 from rdf_construct.core.outdir import (
     IGNORED_ENTRIES,
     OUTPUT_MARKER,
-    ForeignOutputDirError,
     foreign_entries,
     mark_output_dir,
     read_marker,
@@ -156,11 +155,3 @@ class TestMarkOutputDir:
 
     def test_no_marker_reads_as_none(self, tmp_path: Path) -> None:
         assert read_marker(tmp_path) is None
-
-
-def test_foreign_output_dir_error_carries_what_it_found(tmp_path: Path) -> None:
-    entries = [tmp_path / "index.md"]
-    error = ForeignOutputDirError(tmp_path, entries)
-    assert error.path == tmp_path
-    assert error.entries == entries
-    assert str(tmp_path) in str(error)
