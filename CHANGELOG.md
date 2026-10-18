@@ -18,6 +18,16 @@ in the migration note.
 directory is now `ordered/` instead of `src/ontology/`. Pass `-o src/ontology`
 to keep the previous location.
 
+**`docs`, `uml`, `split` and `order` now refuse to write into their default
+output directory when it already holds files they did not write**, which they
+previously overwrote in silence. Pass `-o` to name the directory, or
+`--overwrite` to write there; either way the directory is marked and later runs
+proceed. An explicit `-o` is unaffected. The marker is a small `.rdf-construct`
+file. Treat it as part of the output: if you commit the output, commit the
+marker, or a fresh checkout will be refused. See
+[Default output directories](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#default-output-directories)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
@@ -69,8 +79,26 @@ change, and what to do about it, is listed command by command in the
   would lose triples, and `serialise_turtle_str()` returns the Turtle that
   `serialise_turtle()` writes. This is groundwork: no command uses it yet, so
   no output changes.
+- **`--overwrite` on `docs`, `uml`, `split` and `order`** (#261). It writes
+  into a default output directory that holds files the command did not write,
+  and marks it. It deletes nothing, and with an explicit `-o` it has no effect.
+- **`core.outdir`, the one place that knows what an output collision is**
+  (#261). `foreign_entries()` lists what in a directory a command did not
+  write, ignoring the files operating systems leave in any folder (`.DS_Store`,
+  `Thumbs.db`, `desktop.ini`, `.directory`) and `.gitkeep`;
+  `mark_output_dir()` writes the `.rdf-construct` marker, which names the
+  command and the version. `cast`'s overwrite warning (#191) will call the same
+  check.
 
 ### Changed
+- **A default output directory the tool has not marked is refused** (#261).
+  Without `-o`, `docs`, `uml`, `split` and `order` exit 2 before parsing the
+  source when `docs/`, `diagrams/`, `modules/` or `ordered/` holds anything but
+  that command's `.rdf-construct` marker and operating-system clutter. The
+  message lists up to five of the entries and the two ways on. Every run that
+  writes marks its directory just before its first output file, so a re-run
+  proceeds, and a run refused before then marks nothing. `split --dry-run`
+  refuses the same way. `docs` counts a config file's `output_dir` as named.
 - **`order` defaults `-o/--outdir` to `ordered/`, not `src/ontology/`** (#128).
   `src/` is a Python packaging convention that says nothing about ordered RDF,
   and the old default silently created a two-level tree wherever the command

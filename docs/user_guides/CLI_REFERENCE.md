@@ -116,6 +116,7 @@ rdf-construct order SOURCE CONFIG [OPTIONS]
 **Options**:
 - `-p, --profile NAME`: Profile(s) to generate (can specify multiple, default: all)
 - `-o, --outdir PATH`: Output directory (default: `ordered`)
+- `--overwrite`: Write into the default output directory even if it holds files this command did not write. Deletes nothing.
 
 **Examples**:
 
@@ -166,6 +167,7 @@ rdf-construct uml SOURCE [SOURCE...] -C CONFIG [OPTIONS]
 **Options**:
 - `-c, --context NAME`: Generate specific context(s) (can specify multiple)
 - `-o, --outdir PATH`: Output directory (default: `diagrams`)
+- `--overwrite`: Write into the default output directory even if it holds files this command did not write. Deletes nothing.
 - `--style-config PATH`: Path to style configuration YAML
 - `-s, --style NAME`: Style scheme name to use
 - `--layout-config PATH`: Path to layout configuration YAML
@@ -232,6 +234,7 @@ rdf-construct docs SOURCE [OPTIONS]
 
 **Options**:
 - `-o, --output PATH`: Output directory (default: `docs`)
+- `--overwrite`: Write into the default output directory even if it holds files this command did not write. Deletes nothing.
 - `-f, --format FORMAT`: Output format: `html`, `markdown`, `md`, `json` (default: html)
 - `-C, --config PATH`: YAML configuration file
 - `-t, --template PATH`: Path to custom Jinja2 templates directory
@@ -738,6 +741,7 @@ rdf-construct split SOURCE [OPTIONS]
 
 **Options**:
 - `-o, --output PATH`: Output directory for modules (default: `modules/`)
+- `--overwrite`: Write into the default output directory even if it holds files this command did not write. Deletes nothing.
 - `-c, --config PATH`: YAML configuration file
 - `--by-namespace`: Auto-detect modules from namespaces
 - `--migrate-data PATH`: Data file(s) to split by instance type (can specify multiple)

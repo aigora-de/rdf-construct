@@ -17,6 +17,8 @@ import yaml
 from rdflib import Graph, URIRef, Namespace
 from rdflib.namespace import RDF, RDFS, OWL
 
+from rdf_construct.core.outdir import mark_output_dir
+
 
 def select_classes(graph: Graph) -> set[URIRef]:
     """Select all class entities from a graph.
@@ -829,14 +831,19 @@ class OntologySplitter:
     def write_modules(self, result: SplitResult) -> None:
         """Write module files to disk.
 
+        The output directory is marked as ``split``'s own with a ``.rdf-construct`` file, written
+        just before the first module (#261, see ``rdf_construct.core.outdir``). A dry run writes
+        nothing, the marker included.
+
         Args:
             result: SplitResult with module graphs.
         """
         if self.config.dry_run:
             return
 
-        # Ensure output directory exists
+        # Ensure output directory exists, and mark it as split's own before the first file (#261)
         self.config.output_dir.mkdir(parents=True, exist_ok=True)
+        mark_output_dir(self.config.output_dir, "split")
 
         # Write module files
         for module in self.config.modules:

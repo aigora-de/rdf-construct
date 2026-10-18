@@ -53,10 +53,30 @@ for `2` instead. Anywhere it tests `lint` for `2`, read the [`lint`](#lint) sect
 
 ### Default output directories
 
-Not landed yet. How `docs`, `uml`, `split` and `order` treat a default output directory that
-already holds something else:
-[#261](https://github.com/aigora-de/rdf-construct/issues/261) (PR group P12). `order`'s default
-directory has already moved; see [`order`](#order).
+`docs`, `uml`, `split` and `order` now refuse to write into their default output directory when
+it already holds files they did not write, which they previously overwrote in silence. Pass `-o`
+to name the directory, or `--overwrite` to write there; either way the directory is marked and
+later runs proceed. An explicit `-o` is unaffected. The marker is a small `.rdf-construct` file.
+Treat it as part of the output: if you commit the output, commit the marker, or a fresh checkout
+will be refused ([#261](https://github.com/aigora-de/rdf-construct/issues/261)).
+
+The default directories are unchanged: `docs/`, `diagrams/`, `modules/` and `ordered/` (`order`'s
+moved in [#128](https://github.com/aigora-de/rdf-construct/issues/128); see [`order`](#order)).
+
+- **When it refuses:** the `-o` option was not given, the directory exists, and it holds anything
+  other than this command's marker and the files an operating system leaves in any folder
+  (`.DS_Store`, `Thumbs.db`, `desktop.ini`, `.directory` and the like) or a `.gitkeep`. The run
+  exits **2** before the source is parsed or anything is written, and the message lists some of what it found.
+- **Once it has written, it proceeds:** every run that writes leaves `.rdf-construct` in the
+  directory, naming the command and the version. Another command's marker counts as someone
+  else's: `docs`'s marker in `ordered/` does not let `order` in.
+- **A config file's `output_dir` counts as named**, for `docs`. `split -c` does not read
+  `output_dir` from its config yet ([#291](https://github.com/aigora-de/rdf-construct/issues/291)).
+- **`--overwrite` deletes nothing.** Files the run does not write stay where they are.
+
+**What to do:** a directory a v0.6.0 run wrote has no marker, so the first v0.7.0 run into it
+refuses. If the directory holds only the tool's output, run once with `--overwrite`. If it holds
+anything else, pass `-o` with a directory of its own.
 
 ### Command-line flags versus configuration files
 
@@ -94,6 +114,7 @@ Nothing has landed yet.
 | [#128](https://github.com/aigora-de/rdf-construct/issues/128) | Without `-o/--outdir`, output is written to `ordered/` instead of `src/ontology/`. An explicit `-o` is unaffected. | Pass `-o src/ontology` to keep the previous location, or point whatever reads the output at `ordered/`. See the [Order Guide](user_guides/ORDER_GUIDE.md). |
 | [#286](https://github.com/aigora-de/rdf-construct/issues/286) | A refusal exits **2** instead of 1: an unknown `-p/--profile`, or an invalid `unclaimed:` policy. | If a script tests for exit 1 to catch a rejected invocation, test for 2. |
 | [#339](https://github.com/aigora-de/rdf-construct/issues/339) | `sort: topological` ignores a term that is its own subclass or subproperty (`C rdfs:subClassOf C`, which RDFS inference adds for every class and property). Before, each such term and everything beneath it came out alphabetical, so an inferred graph was effectively unsorted. Graphs without such triples are unchanged. | Nothing, unless you compare against `order` output previously generated from an inferred graph: expect a one-off reorder into hierarchical order. |
+| [#261](https://github.com/aigora-de/rdf-construct/issues/261) | Without `-o`, the default directory `ordered/` is refused at exit **2** when it holds files `order` did not write, before the source is parsed or anything is written. New `--overwrite` writes there anyway. Every run that writes leaves a `.rdf-construct` marker in its directory, so later runs proceed. | If `ordered/` holds only output from an earlier run, run once with `--overwrite`. Otherwise pass `-o`. |
 
 ## `profiles`
 
@@ -107,6 +128,7 @@ Nothing has landed yet.
 | Issue | What changed | What to do |
 |---|---|---|
 | [#286](https://github.com/aigora-de/rdf-construct/issues/286) | A refusal exits **2** instead of 1: an unknown `-c/--context`, `-s/--style` or `-l/--layout`. The list of accepted names now goes to stderr. | If a script tests for exit 1 to catch a rejected invocation, test for 2. |
+| [#261](https://github.com/aigora-de/rdf-construct/issues/261) | Without `-o`, the default directory `diagrams/` is refused at exit **2** when it holds files `uml` did not write, before the source is parsed or anything is written. New `--overwrite` writes there anyway. Every run that writes leaves a `.rdf-construct` marker in its directory, so later runs proceed. | If `diagrams/` holds only output from an earlier run, run once with `--overwrite`. Otherwise pass `-o`. |
 
 ## `contexts`
 
@@ -137,6 +159,7 @@ Nothing has landed yet.
 | Issue | What changed | What to do |
 |---|---|---|
 | [#251](https://github.com/aigora-de/rdf-construct/issues/251) | Seven config keys take effect when their flag is not given: `output_dir`, `format`, `single_page`, `include_search`, `include_instances`, `include_shapes` and `include_skos`. Previously the flags' defaults overwrote them, so a config's `output_dir:` was ignored in favour of `docs/`, and `include_*: false` was forced back to true. Output can now land in another directory, in another format, and without the files the config excludes. A relative `output_dir` is resolved against the directory you run the command from, not the config file's. | If a script reads the output from `docs/` while its config names another `output_dir`, read it from there or pass `-o docs`. Remove any key you do not mean. |
+| [#261](https://github.com/aigora-de/rdf-construct/issues/261) | Without `-o`, the default directory `docs/` is refused at exit **2** when it holds files `docs` did not write, before the source is parsed or anything is written. A config file's `output_dir` counts as named. New `--overwrite` writes there anyway. Every run that writes leaves a `.rdf-construct` marker in its directory, so later runs proceed. | If `docs/` holds only output from an earlier run, run once with `--overwrite`. Otherwise pass `-o`. |
 
 ## `shacl-gen`
 
@@ -184,6 +207,7 @@ Nothing has landed yet.
 | Issue | What changed | What to do |
 |---|---|---|
 | [#286](https://github.com/aigora-de/rdf-construct/issues/286) | A refusal exits **2** instead of 1: neither `--by-namespace` nor `--config`, a config that will not load (including malformed YAML, which was a traceback), `--init` over an existing file. | If a script tests for exit 1 to catch a rejected invocation, test for 2. |
+| [#261](https://github.com/aigora-de/rdf-construct/issues/261) | Without `-o`, the default directory `modules/` is refused at exit **2** when it holds files `split` did not write, before the source is parsed or anything is written. `--dry-run` refuses the same way. New `--overwrite` writes there anyway. Every run that writes leaves a `.rdf-construct` marker in its directory, so later runs proceed. | If `modules/` holds only output from an earlier run, run once with `--overwrite`. Otherwise pass `-o`. |
 
 ## `refactor`
 
