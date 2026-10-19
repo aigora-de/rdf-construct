@@ -37,6 +37,15 @@ unaffected. See
 [`order`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#order)
 in the migration note.
 
+**A `lint` gate that passed can now fail, because it now checks what it
+claimed to.** A misspelt rule name in `--enable` or `--disable`, or a rule
+selection that leaves nothing to run, is refused with exit 2; before, `lint`
+ran no rules and reported the file clean at exit 0. `--level relaxed` now runs
+every rule, so a relaxed run under `--fail-on info` reports four more kinds of
+finding. See
+[`lint`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#lint)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
@@ -165,6 +174,28 @@ change, and what to do about it, is listed command by command in the
 - **`lint --init --list-rules` is refused** (#202). The two cannot be
   combined. Previously `--init` ran and the rule listing was silently dropped.
   It now exits 2. Run them separately.
+- **`lint` refuses an unknown rule name in `--enable` or `--disable`** (#203).
+  Either exits 2 with the list of available rules, the same message a config
+  file's `enable:`, `disable:` and `severity:` already gave; one validator now
+  serves all five. Before, a typo in `--enable` ran no rules and reported the
+  file clean at exit 0, and a typo in `--disable` left the rule running. From
+  Python, `LintConfig.get_effective_rules()` raises `ValueError` for an
+  unknown name in `enabled_rules`, `disabled_rules` or `severity_overrides`.
+- **`lint` refuses a rule selection that leaves no rule to run** (#293).
+  `--enable X --disable X`, `--disable` naming every rule, or a config's
+  `disable:` covering every rule a CLI `--enable` names, now exits 2 before any
+  file is read. The message names what was enabled and what was disabled, and,
+  when a config was loaded, that `--enable` replaces its `enable:` list while
+  `--disable` adds to its `disable:` list. From Python, `get_effective_rules()`,
+  `LintEngine.lint_file()` and `lint_graph()` raise `ValueError`.
+- **`--level relaxed` demotes and never deselects** (#208). Relaxed reports
+  warnings as info; it no longer drops the four rules whose default severity is
+  info (`redundant-subclass`, `property-no-domain`, `property-no-range`,
+  `inconsistent-naming`). Every rule runs at every level, so a `severity:`
+  override on one of them is now honoured under relaxed too. On
+  `examples/lint/example_lint_problematic.ttl`, relaxed goes from 5 errors,
+  0 warnings, 9 info to 5 errors, 0 warnings, 14 info. Use `--disable` to run
+  fewer checks.
 - **`localise extract -c` honours the flags given alongside it** (#160).
   `--properties`, `--source-language`, `--missing-only` and
   `--include-deprecated` were silently discarded whenever a config file was

@@ -299,6 +299,120 @@ class TestLintExitCode:
 
 
 # ---------------------------------------------------------------------------
+# lint: a rule selection it cannot honour is refused (#203, #293, #208)
+# ---------------------------------------------------------------------------
+
+PROBLEMATIC = EXAMPLES / "lint" / "example_lint_problematic.ttl"
+INFO_RULES = [
+    "redundant-subclass",
+    "property-no-domain",
+    "property-no-range",
+    "inconsistent-naming",
+]
+
+
+class TestLintRuleSelection:
+    @pytest.fixture(autouse=True)
+    def _no_found_config(self, tmp_path, monkeypatch):
+        # Keep a stray .rdf-lint.yml above the cwd out of the run
+        monkeypatch.chdir(tmp_path)
+
+    def _refused(self, result) -> str:
+        assert result.exit_code == 2
+        assert "Scanning" not in result.output
+        assert "Found" not in result.output
+        return result.stderr
+
+    def test_enable_typo_refused(self, runner):
+        result = runner.invoke(cli, ["lint", "--enable", "orpahn-class", str(PROBLEMATIC)])
+        stderr = self._refused(result)
+        assert "Unknown rule 'orpahn-class' in --enable." in stderr
+        assert "Available rules:" in stderr and "orphan-class" in stderr
+
+    def test_disable_typo_refused(self, runner):
+        result = runner.invoke(cli, ["lint", "--disable", "orpahn-class", str(PROBLEMATIC)])
+        stderr = self._refused(result)
+        assert "Unknown rule 'orpahn-class' in --disable." in stderr
+
+    def test_enable_and_disable_same_rule_refused(self, runner):
+        result = runner.invoke(
+            cli,
+            ["lint", "--enable", "orphan-class", "--disable", "orphan-class", str(PROBLEMATIC)],
+        )
+        stderr = self._refused(result)
+        assert "No lint rules left to run" in stderr
+        assert "enabled orphan-class; disabled orphan-class" in stderr
+        assert "--enable replaces" not in stderr  # no config, no hint
+
+    def test_disable_every_rule_refused(self, runner):
+        args = ["lint", str(PROBLEMATIC)]
+        for rule_id in get_all_rules():
+            args += ["--disable", rule_id]
+        stderr = self._refused(runner.invoke(cli, args))
+        assert "No lint rules left to run: enabled all rules;" in stderr
+
+    def test_config_disable_with_cli_enable_refused(self, runner, tmp_path):
+        config = tmp_path / "lint.yml"
+        config.write_text("disable:\n  - orphan-class\n  - missing-comment\n")
+        result = runner.invoke(
+            cli, ["lint", "-c", str(config), "--enable", "orphan-class", str(PROBLEMATIC)]
+        )
+        stderr = self._refused(result)
+        assert "enabled orphan-class; disabled missing-comment, orphan-class" in stderr
+        assert f"--enable replaces the enable: list in {config}" in stderr
+        assert "--disable adds to its disable: list" in stderr
+
+    def test_found_config_hint_names_it(self, runner, tmp_path):
+        (tmp_path / ".rdf-lint.yml").write_text("disable:\n  - orphan-class\n")
+        result = runner.invoke(cli, ["lint", "--enable", "orphan-class", str(PROBLEMATIC)])
+        stderr = self._refused(result)
+        assert "--enable replaces the enable: list in" in stderr
+        assert ".rdf-lint.yml" in stderr
+
+    def test_config_severity_typo_refused(self, runner, tmp_path):
+        config = tmp_path / "lint.yml"
+        config.write_text("severity:\n  orpahn-class: warning\n")
+        result = runner.invoke(cli, ["lint", "-c", str(config), str(PROBLEMATIC)])
+        assert result.exit_code == 2
+        assert "Unknown rule 'orpahn-class' in 'severity' section" in result.stderr
+
+    def test_refusal_does_not_depend_on_the_source(self, runner, tmp_path):
+        broken = tmp_path / "broken.ttl"
+        broken.write_text("this is not turtle .\n")
+        result = runner.invoke(
+            cli, ["lint", "--enable", "orphan-class", "--disable", "orphan-class", str(broken)]
+        )
+        assert "No lint rules left to run" in self._refused(result)
+
+    def test_list_rules_ignores_selection(self, runner):
+        result = runner.invoke(cli, ["lint", "--list-rules", "--enable", "orpahn-class"])
+        assert result.exit_code == 0
+        assert "orphan-class" in result.output
+
+    def test_relaxed_runs_an_enabled_info_rule(self, runner):
+        args = ["lint", "--level", "relaxed", "--enable", "property-no-domain", str(PROBLEMATIC)]
+        result = runner.invoke(cli, args)
+        assert "info[property-no-domain]" in result.output
+        assert result.exit_code == 0
+        assert runner.invoke(cli, args + ["--fail-on", "info"]).exit_code == 1
+
+    @pytest.mark.parametrize("via_config", [False, True])
+    def test_relaxed_runs_every_info_rule(self, runner, tmp_path, via_config):
+        if via_config:
+            config = tmp_path / "lint.yml"
+            config.write_text("level: relaxed\n")
+            args = ["lint", "-c", str(config), str(PROBLEMATIC)]
+        else:
+            args = ["lint", "--level", "relaxed", str(PROBLEMATIC)]
+        result = runner.invoke(cli, args)
+        for rule_id in INFO_RULES:
+            assert f"info[{rule_id}]" in result.output
+        assert "warning[" not in result.output
+        assert "Found 5 errors, 0 warnings, 14 info in 1 file" in result.output
+        assert result.exit_code == 1
+
+
+# ---------------------------------------------------------------------------
 # #302: orphan-class defaults to warning
 # ---------------------------------------------------------------------------
 

@@ -67,6 +67,7 @@ from rdf_construct.lint import (
     list_rules,
     get_all_rules,
 )
+from rdf_construct.lint.engine import check_rule_ids
 
 LINT_LEVELS = ["strict", "standard", "relaxed"]
 LINT_FORMATS = ["text", "json"]
@@ -1298,11 +1299,13 @@ def lint(
         raise Refusal("No source files specified.")
 
     lint_config: LintConfig
+    config_used: Path | None = None
 
     if config:
         # Load from specified config file
         try:
             lint_config = load_lint_config(config)
+            config_used = config
             click.echo(f"Using config: {config}")
         except (FileNotFoundError, ValueError) as e:
             raise Refusal(f"Could not load config {config}: {e}") from e
@@ -1312,6 +1315,7 @@ def lint(
         if found_config:
             try:
                 lint_config = load_lint_config(found_config)
+                config_used = found_config
                 click.echo(f"Using config: {found_config}")
             except (FileNotFoundError, ValueError) as e:
                 raise Refusal(f"Could not load config {found_config}: {e}") from e
@@ -1322,10 +1326,28 @@ def lint(
     if flag_given("level"):
         lint_config.level = level
 
+    try:
+        check_rule_ids(enable, "--enable")
+        check_rule_ids(disable, "--disable")
+    except ValueError as e:
+        raise Refusal(str(e)) from e
+
     if enable:
         lint_config.enabled_rules = set(enable)
     if disable:
         lint_config.disabled_rules.update(disable)
+
+    # Refuse an empty selection before any file is read (#293)
+    try:
+        lint_config.get_effective_rules()
+    except ValueError as e:
+        message = str(e)
+        if config_used is not None and (enable or disable):
+            message += (
+                f"\n--enable replaces the enable: list in {config_used}; "
+                "--disable adds to its disable: list."
+            )
+        raise Refusal(message) from e
 
     # Create engine and run
     engine = LintEngine(lint_config)

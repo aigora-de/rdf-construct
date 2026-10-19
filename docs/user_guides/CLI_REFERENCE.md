@@ -544,11 +544,13 @@ rdf-construct lint SOURCE [SOURCE...] [OPTIONS]
 - `SOURCE`: One or more RDF files to check
 
 **Options**:
-- `-l, --level LEVEL`: Strictness level: `strict`, `standard`, `relaxed` (default: standard)
+- `-l, --level LEVEL`: Strictness level: `strict`, `standard`, `relaxed` (default: standard). Changes
+  severities only; every rule runs at every level
 - `-f, --format FORMAT`: Output format: `text`, `json` (default: text)
 - `-c, --config PATH`: Path to `.rdf-lint.yml` configuration file
 - `-e, --enable RULE`: Enable specific rules (can use multiple times)
-- `-d, --disable RULE`: Disable specific rules (can use multiple times)
+- `-d, --disable RULE`: Disable specific rules (can use multiple times). An unknown rule name, or a
+  selection that leaves no rule to run, is refused with exit 2
 - `--no-colour`: Disable coloured output
 - `--list-rules`: List available rules and exit
 - `--init`: Generate a default `.rdf-lint.yml` config file and exit
