@@ -24,7 +24,7 @@ rdf-construct lint ontology.ttl --format json
 |------|---------|
 | 0 | No findings at or above `--fail-on` |
 | 1 | Findings at or above `--fail-on` |
-| 2 | Input refused or run failed (invalid options or config, file not found, parse error) |
+| 2 | Input refused or run failed (invalid options or config, an unknown rule name, a selection that leaves no rule to run, file not found, parse error) |
 
 `--fail-on` sets the lowest severity that counts: `error` (the default), `warning`, `info` or
 `never`. With the default, a run with only warnings exits 0.
@@ -65,7 +65,9 @@ rdf-construct lint ontology.ttl --level strict
 
 ### Relaxed
 
-Downgrades warnings to info and skips info-level rules. Useful for early development.
+Downgrades warnings to info. Every rule still runs: relaxed changes how findings are reported, not
+which checks are made, so the output is quieter but no shorter. To run fewer checks,
+[disable them](#enabling-and-disabling-rules).
 
 ```bash
 rdf-construct lint ontology.ttl --level relaxed
@@ -113,6 +115,27 @@ rdf-construct lint ontology.ttl --disable inconsistent-naming
 # Combine both
 rdf-construct lint ontology.ttl --enable orphan-class --disable dangling-reference
 ```
+
+Every rule name is checked. An unknown name in `--enable` or `--disable` is refused with exit 2 and
+the list of available rules, as it already was in a config file:
+
+```bash
+rdf-construct lint ontology.ttl --enable orpahn-class
+# Error: Unknown rule 'orpahn-class' in --enable. Available rules: circular-subclass, ...
+```
+
+A selection that leaves no rule to run is refused too, because a run with no rules would report
+every file clean:
+
+```bash
+rdf-construct lint ontology.ttl --enable orphan-class --disable orphan-class
+# Error: No lint rules left to run: enabled orphan-class; disabled orphan-class. A run with no
+# rules would report every file clean.
+```
+
+On the command line, `--enable` **replaces** a config file's `enable:` list, while `--disable` **adds
+to** its `disable:` list. A config that disables a rule, plus an `--enable` naming only that rule,
+leaves nothing to run; the refusal says so. `--level` never changes which rules run.
 
 ### From Configuration File
 
@@ -312,7 +335,7 @@ Available lint rules:
 ### Typical Development Workflow
 
 ```bash
-# During development - relaxed mode
+# During development - relaxed mode (warnings reported as info; every rule still runs)
 rdf-construct lint ontology.ttl --level relaxed
 
 # Before committing - standard mode
@@ -352,15 +375,44 @@ rdf-construct lint ontology.ttl \
 
 ### "Unknown rule" Error
 
-Check available rules with `--list-rules`. Rule names are case-sensitive and use hyphens.
+An unknown name in `--enable`, `--disable`, or a config's `enable:`, `disable:` or `severity:` is
+refused, and the message lists the available rules. Check them with `--list-rules`. Rule names are
+case-sensitive and use hyphens.
+
+### "No lint rules left to run" Error
+
+Your `--enable`, `--disable` and config settings together select no rule at all. The message names
+what was enabled and what was disabled. Remember that `--enable` on the command line replaces the
+config's `enable:` list but `--disable` adds to its `disable:` list.
 
 ### Many False Positives
 
-Consider:
+To run fewer checks, disable the rules that do not apply to your ontology:
 
-1. Using `--level relaxed` during early development
-2. Disabling specific rules in config
-3. Checking if your ontology imports external definitions that aren't loaded
+1. Disable them in `.rdf-lint.yml` (`disable:`), so every run in the project agrees, or for a
+   single run with `--disable`
+2. Lower a rule's severity under `severity:` if you still want to see its findings without them
+   failing your gate
+3. Check whether your ontology imports external definitions that aren't loaded
+
+`--level relaxed` makes the output quieter, not shorter: warnings are reported as info, but every
+rule still runs and every finding is still listed.
+
+Before v0.7.0, relaxed also skipped the four rules whose default severity is info. To get that run
+back, disable them alongside it:
+
+```yaml
+level: relaxed
+disable: [redundant-subclass, property-no-domain, property-no-range, inconsistent-naming]
+```
+
+or for a single run:
+
+```bash
+rdf-construct lint ontology.ttl --level relaxed \
+  --disable redundant-subclass --disable property-no-domain \
+  --disable property-no-range --disable inconsistent-naming
+```
 
 ### External References Flagged as Dangling
 
