@@ -162,7 +162,8 @@ CONTRACTS: Mapping[str, CommandContract] = MappingProxyType(
                 Contract.ISOMORPHIC,
                 note=(
                     "Lossless profiles only: those with `unclaimed: emit`, or with nothing left "
-                    "unclaimed. A profile that drops subjects rewrites the header (#90)."
+                    "unclaimed. A profile that drops subjects writes a derived extract, with its "
+                    "header's owl:versionIRI replaced by prov:wasDerivedFrom (#90)."
                 ),
             ),
             CommandContract("cast", Contract.ISOMORPHIC),

@@ -28,6 +28,15 @@ marker, or a fresh checkout will be refused. See
 [Default output directories](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#default-output-directories)
 in the migration note.
 
+**If you publish extracts from a filtering `order` profile, their header
+changes.** Any run that writes fewer of the source's triples than it read now
+drops the source's `owl:versionIRI` and adds `prov:wasDerivedFrom` naming the
+source, whatever the profile's `unclaimed:` policy. The ontology IRI,
+`owl:versionInfo` and `owl:imports` stay. Profiles that lose nothing are
+unaffected. See
+[`order`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#order)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
@@ -89,6 +98,18 @@ change, and what to do about it, is listed command by command in the
   `mark_output_dir()` writes the `.rdf-construct` marker, which names the
   command and the version. `cast`'s overwrite warning (#191) will call the same
   check.
+- **`core.provenance`, what a derived artefact may claim about itself** (#90).
+  `derivation_targets()` names a source by its `owl:versionIRI`, else its
+  ontology IRI; `strip_version_iri()` removes only that triple; and
+  `stamp_derivation()` adds `prov:wasDerivedFrom`, declares it an
+  `owl:AnnotationProperty` unless the graph already gives it a property type,
+  and binds `prov:`. `order` composes them through
+  `stamp_extract()`, with `missing_triples()` as the trigger. `split` (#178) and
+  `merge` (#171) will call the same functions.
+- **`header: false` on an `order` profile, or in `defaults:`** (#90), the one
+  way to leave the ontology header out. Combined with a `header` section in the
+  same profile, or given anything but `true` or `false`, it is refused at exit 2
+  before anything is written.
 
 ### Changed
 - **A default output directory the tool has not marked is refused** (#261).
@@ -105,6 +126,29 @@ change, and what to do about it, is listed command by command in the
   happened to be run. `ordered/` names what it holds, matching `uml` →
   `diagrams/`, `docs` → `docs/` and `split` → `modules/`. An explicit `-o` is
   unaffected, and `-o src/ontology` restores the previous behaviour.
+- **A filtering `order` profile writes an extract that says it is one** (#90).
+  When the written graph is missing any of the source's triples, each ontology
+  header keeps its IRI, `owl:versionInfo` and `owl:imports`, loses
+  `owl:versionIRI`, and gains `prov:wasDerivedFrom` naming the source's version
+  IRI, or its ontology IRI when it has none. The trigger is what was written,
+  not the `unclaimed:` policy, so `warn` profiles are stamped too, and the run
+  prints a `◇ extract:` line under every policy. Previously the extract claimed
+  to be the release it was cut from. A source's own description of
+  `prov:wasDerivedFrom` follows the header unless a section claims it, so an
+  extract keeps PROV-O's `owl:ObjectProperty` type where the source states it,
+  and an extract run back through the same profile is written unchanged.
+- **The ontology header is no longer a section's to lose** (#90). A profile
+  without a `header` section writes the header first. Before, it was written
+  partway down the file by an `individuals` section, reported as unclaimed under
+  `warn`, or dropped in silence under `ignore`. A `header` section still places
+  it wherever it stands.
+- **`order` sections no longer claim a blank node that a named term
+  references** (#280). The `owl:unionOf` behind a property's range is a blank
+  node typed `owl:Class`, and a `classes` section claimed it, so a profile that
+  dropped the property wrote the union as a free-standing `_:n…` class with a
+  fresh label on every run. It now goes with its property. A blank node no
+  named term references, such as an `owl:AllDisjointClasses`, is still claimed.
+  `select_subjects()` applies this for every selector and every caller.
 - **One exit-code convention across every command** (#286): 0 the command did
   what you asked, 1 it finished and has something to report, 2 it did not do it.
   The 30 `click.Abort()` refusals in `order`, `uml`, `lint`, `merge`, `split`,
@@ -128,6 +172,12 @@ change, and what to do about it, is listed command by command in the
   and the config file overrides the option's default.
 
 ### Fixed
+- **`uml` no longer draws an anonymous class expression as a class** (#280).
+  A context with `selector: classes` drew the `owl:unionOf` behind a property's
+  range as a box named after a fresh blank-node label, with the range arrow
+  pointing at it. The box is gone. That range is not drawn at all, because `uml`
+  has no notation for a class expression. None of the shipped examples contains
+  one.
 - **`docs` refuses what it cannot use, with a message instead of a traceback**
   (#301). A source that does not parse, in any format, a directory given as a
   source, a malformed `-C` config, a `--template` directory without the HTML

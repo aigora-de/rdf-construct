@@ -5,8 +5,9 @@ subprocesses, so this module measures before it adds: a command gets a case when
 one, or when it is a regression guard (``docs`` for #107, ``stats`` for #284).
 
 A case that fails today is ``xfail(strict=True)`` against the issue that explains it, and the fix
-for that issue removes the marker. ``order`` has no case yet. It is pinned after #280, so that the
-case pins the corrected behaviour (#264).
+for that issue removes the marker. ``order``'s case is a filtering profile that wrote a detached
+``_:n…`` stub, with a fresh label every run, until #280 was fixed, so it pins the corrected behaviour
+(#264).
 """
 
 from __future__ import annotations
@@ -47,6 +48,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "determinism"
 MERGE = EXAMPLES / "merge"
 IES_SMALL = Path(__file__).parent / "fixtures" / "ies" / "ies-env-building-classification.ttl"
 OWL_FULL = str(EXAMPLES / "describe" / "owl_full_example.ttl")
+PROVENANCE = Path(__file__).parent / "fixtures" / "provenance"
 
 # A leading "@out" makes an argument a path under the case's constant output directory.
 OUT = "@out"
@@ -108,6 +110,16 @@ CASES = [
         label="refactor-rename",
     ),
     _case("localise", "merge", ANIMAL, TRANSLATIONS, "-o", f"{OUT}/l.ttl", label="localise-merge"),
+    _case(
+        "order",
+        str(PROVENANCE / "derived.ttl"),
+        str(PROVENANCE / "derived.yml"),
+        "-p",
+        "classes_ignore",
+        "-o",
+        OUT,
+        label="order-filtering",
+    ),
     # Failing today, each against its issue.
     _case("cast", ANIMAL, "-f", "nt", xfail="#190", label="cast-nt"),
     _case(

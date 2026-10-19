@@ -159,8 +159,16 @@ Three keys are read on a section, plus one special section name:
 | `sort` | `qname_alpha` | `alpha`/`qname_alpha`, or `topological`/`topological_then_alpha` |
 | `roots` | none | CURIEs whose branches are emitted first, in the order listed |
 
-`header: {}` is a section name with a fixed meaning: it claims the `owl:Ontology` subjects, so the
-ontology's own metadata leads the file. It takes no keys.
+`header: {}` is a section name with a fixed meaning: it places the `owl:Ontology` subjects, the
+ontology's own metadata, wherever the section stands. It takes no keys.
+
+The header is not a section's to lose. A profile with no `header` section still writes it, first.
+To leave it out, say so: `header: false` on the profile, or in `defaults:` for every profile in the
+file. A profile's own `header` section outranks a `defaults:` value of `false`. Setting
+`header: false` on a profile that also has a `header` section is refused at exit 2 before anything is
+written, as is any value other than `true` or `false`. A profile that leaves the header out has
+dropped triples, so its output is an extract (see
+[An extract says what it came from](#an-extract-says-what-it-came-from)).
 
 The section's *name* is free text and appears nowhere in the output — it is a label for you, and the
 default value of `select`. Writing `- classes: {sort: alpha}` and `- classes: {select: classes,
@@ -288,11 +296,15 @@ Constructing profile: schema-only
       lib:NatureJournal  (lib:Journal, owl:NamedIndividual)
     add a section with `select: individuals`,
     or set `unclaimed: emit` to keep them, or `unclaimed: ignore` if this profile filters deliberately.
+  ◇ extract: 49 of 57 source triples written. Stamped <http://example.org/library>:
+      owl:versionIRI <http://example.org/library/1.0.0> removed
+      prov:wasDerivedFrom <http://example.org/library/1.0.0> added
   ✓ ordered/library-schema-only.ttl
 ```
 
 The exit code stays 0 — the output is valid and the loss was reported, so a warning is the honest
-answer rather than a failure.
+answer rather than a failure. The `◇` lines are about the file's identity, not the loss: see
+[An extract says what it came from](#an-extract-says-what-it-came-from).
 
 This policy exists because of issue #84, where a shipped example dropped 68 triples of an ontology
 at exit 0 with nothing said. The distinction it makes is between a **partial ontology**, which is
@@ -305,8 +317,8 @@ Blank-node closure is **unconditional and separate from the `unclaimed` policy**
 no identity a section could select them by — they belong to the description of whatever references
 them — so every blank node reachable from a claimed subject is pulled in whatever the policy says.
 
-This matters more than it sounds. `classes-only` is an extract that keeps 24 of 57 triples and drops
-`lib:publishes` entirely, yet:
+This matters more than it sounds. `classes-only` is an extract that keeps 23 of the source's 57
+triples and drops `lib:publishes` entirely, yet:
 
 ```turtle
 lib:Journal
@@ -324,6 +336,83 @@ lib:Journal
 The restriction survives whole. Without this, an extract could reduce `rdfs:subClassOf [ … ]` to
 `rdfs:subClassOf [ ]` — replacing a real axiom with the tautology `Journal ⊑ ⊤`, which asserts
 something the source never said.
+
+The same rule works in the other direction: **a section never claims a blank node that a named term
+references.** An `owl:unionOf` used as a property's range is a blank node typed `owl:Class`, but it
+belongs to the property. If the profile keeps the property, the union is written inline under it. If
+it drops the property, the union goes too, rather than surviving as a free-standing `_:n…` class that
+nothing references (issue #280). A blank node that *no* named term references is an axiom in its own
+right, an `owl:AllDisjointClasses` for instance, and a section claims it like any other subject:
+`individuals` does, so a lossless profile keeps it.
+
+### An extract says what it came from
+
+A profile that writes fewer of the source's triples than it read has written an **extract**, not the
+ontology. That is decided from what the run wrote, whatever the `unclaimed` policy says: a `warn`
+profile that drops subjects writes an extract as surely as an `ignore` one. An extract keeps its
+source's ontology IRI but may not claim to be its source's release, so its header changes in two
+ways, and the run says so:
+
+```bash
+rdf-construct order examples/order/library.ttl examples/order/ordering.yml -p classes-only
+```
+
+```
+Loading examples/order/library.ttl...
+Constructing profile: classes-only
+  ◇ extract: 23 of 57 source triples written. Stamped <http://example.org/library>:
+      owl:versionIRI <http://example.org/library/1.0.0> removed
+      prov:wasDerivedFrom <http://example.org/library/1.0.0> added
+  ✓ ordered/library-classes-only.ttl
+
+Constructed 1 profile(s) in ordered/
+```
+
+```turtle
+<http://example.org/library>
+    a owl:Ontology ;
+    owl:versionInfo "1.0.0" ;
+    prov:wasDerivedFrom <http://example.org/library/1.0.0> ;
+    rdfs:comment "Worked example for the rdf-construct ordering guide."@en ;
+    rdfs:label "Library Ontology"@en .
+
+prov:wasDerivedFrom
+    a owl:AnnotationProperty .
+```
+
+- **`owl:versionIRI` is removed.** It identifies one particular version of an ontology, these exact
+  axioms, and an extract is not that version. Two files carrying the same version IRI with different
+  content contradict each other.
+- **`prov:wasDerivedFrom` is added**, naming the source's version IRI, or its ontology IRI when it
+  has none. It is an annotation, so it changes no entailment, and it is declared as an
+  `owl:AnnotationProperty` right after the header, because an undeclared one would take the file out
+  of OWL 2 DL. A source with several `owl:Ontology` headers gets the same treatment for each: every
+  header keeps its own IRI and names its own version.
+- **With no `owl:versionIRI`, the stamp names the extract's own IRI.** The extract keeps its source's
+  ontology IRI, so `<…> prov:wasDerivedFrom <…>` points at itself. It still tells a reader the file
+  is an extract, but not which version it was cut from, so the run says so:
+  `prov:wasDerivedFrom <http://example.org/s> added: the source has no owl:versionIRI, so it names
+  the ontology's own IRI`.
+- **If the source describes `prov:wasDerivedFrom`, that description is written instead**, right
+  after the header unless a section claims it. PROV-O itself declares the property an
+  `owl:ObjectProperty`, and a property typed both ways is outside OWL 2 DL, so the extract keeps the
+  source's type and adds no `owl:AnnotationProperty` of its own. It also means an extract run back
+  through the same profile loses nothing, and is written unchanged and unstamped. `order` does not
+  resolve `owl:imports`, so it cannot see PROV-O's type when it arrives only through an import (see
+  the table below).
+- **Everything else stays**: the ontology IRI, `owl:versionInfo`, labels, comments, and every
+  `owl:imports`. An extract may no longer need all of its source's imports, and may now need the
+  source itself for what it dropped. Working out which is beyond `order`, which keeps the imports
+  as they were.
+
+**`unclaimed: ignore` does not silence this.** `ignore` silences the report of what was dropped. It
+does not silence a change to what the written file says about itself, so the `◇` lines are printed
+under every policy. A profile that loses nothing (every shipped profile except `schema-only` and
+`classes-only` here) is the source reordered: its header is copied unchanged and nothing is printed.
+
+A source with no `owl:Ontology` has no identity to claim, so nothing is stamped and the run says
+`No owl:Ontology in the source: nothing stamped.` A profile that sets `header: false` says
+`The profile omits the header (header: false): nothing stamped.`
 
 ## Prefixes
 
@@ -369,17 +458,15 @@ anything about it (issue #250).
 - **It does not rewrite terms.** No IRI, literal, language tag or datatype is changed. Use
   `refactor` to rename and `localise` to manage language tags.
 - **It does not change serialisation format.** Turtle in, Turtle out. Use `cast` to convert.
-- **It does not give an extract its own identity.** A filtering profile's output keeps the source's
-  `owl:Ontology` header verbatim — the same IRI, the same `owl:versionIRI`, the same
-  `owl:imports` — while containing only part of the ontology. `ordered/library-classes-only.ttl`
-  declares itself to be `<http://example.org/library>` version `1.0.0`, exactly as the full file
-  does.
-
-  Under the open-world assumption nothing it asserts is false, which is why this is easy to miss.
-  But load it alongside the real 1.0.0 and nothing distinguishes them, and its surviving
-  `owl:Restriction` refers to `lib:publishes`, which the extract no longer declares. **This is an
-  open design question — issue #90 — not settled behaviour.** If you publish extracts, give them
-  their own identity yourself for now.
+- **It does not give an extract an identity of its own.** An extract keeps its source's ontology
+  IRI, loses the source's `owl:versionIRI` and says what it was derived from (see
+  [An extract says what it came from](#an-extract-says-what-it-came-from)), but `order` mints no new
+  IRI for it and does not decide which `owl:imports` it still needs. If you publish extracts under
+  their own names, use `split`, which gives each module an identity, or name them yourself.
+- **It does not check that an extract is still self-contained.** `classes-only`'s surviving
+  `owl:Restriction` refers to `lib:publishes`, which the extract no longer declares, so the extract is
+  outside OWL 2 DL even though the source was not. `prov:wasDerivedFrom` tells a reader where to look
+  for the missing declaration; nothing reports it yet (#281, in the table below).
 
 ## The founding invariant
 
@@ -410,6 +497,8 @@ it is still growing three releases from now, that is the signal, not the table.
 | [#247](https://github.com/aigora-de/rdf-construct/issues/247) | A `selectors:` value beginning `FILTER` is matched by prefix only; the expression is never parsed, and such a selector claims every individual regardless of what it says. |
 | [#245](https://github.com/aigora-de/rdf-construct/issues/245) / [#262](https://github.com/aigora-de/rdf-construct/issues/262) | A section containing **only** properties declared by an OWL characteristic is sorted over `rdfs:subClassOf` rather than `rdfs:subPropertyOf`, so its hierarchy is ignored; and such terms are given the individuals' `predicate_order` specification. A mixed section, like the ones in this guide, is unaffected. |
 | [#246](https://github.com/aigora-de/rdf-construct/issues/246) | `predicate_order` entries must be written as bare CURIEs. Full IRIs and `<bracketed IRIs>` are silently dropped, though `roots:` accepts all three forms. |
+| [#369](https://github.com/aigora-de/rdf-construct/issues/369) | An extract whose source imports PROV-O, rather than describing `prov:wasDerivedFrom` itself, declares the property an `owl:AnnotationProperty`, while PROV-O declares it an `owl:ObjectProperty`. Loaded together with its imports, the extract is outside OWL 2 DL. `order` does not resolve imports, so it cannot tell. |
+| [#281](https://github.com/aigora-de/rdf-construct/issues/281) | A filtering profile can drop the declaration of a term that a surviving axiom still uses (`classes-only` drops `lib:publishes` while `lib:Journal`'s restriction refers to it), taking the extract out of OWL 2 DL with no message. |
 | [#244](https://github.com/aigora-de/rdf-construct/issues/244) | `examples/order/basic_ordering.py` does not run. Use the [programmatic snippet below](#programmatic-use) instead. |
 
 [#264](https://github.com/aigora-de/rdf-construct/issues/264) tracks all of these, with the order
