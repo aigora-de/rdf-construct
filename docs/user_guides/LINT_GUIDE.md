@@ -398,6 +398,22 @@ To run fewer checks, disable the rules that do not apply to your ontology:
 `--level relaxed` makes the output quieter, not shorter: warnings are reported as info, but every
 rule still runs and every finding is still listed.
 
+Before v0.7.0, relaxed also skipped the four rules whose default severity is info. To get that run
+back, disable them alongside it:
+
+```yaml
+level: relaxed
+disable: [redundant-subclass, property-no-domain, property-no-range, inconsistent-naming]
+```
+
+or for a single run:
+
+```bash
+rdf-construct lint ontology.ttl --level relaxed \
+  --disable redundant-subclass --disable property-no-domain \
+  --disable property-no-range --disable inconsistent-naming
+```
+
 ### External References Flagged as Dangling
 
 The linter only checks entities within the loaded files. If your ontology imports external definitions:

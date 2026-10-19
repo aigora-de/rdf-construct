@@ -369,6 +369,26 @@ class TestLintRuleSelection:
         assert "--enable replaces the enable: list in" in stderr
         assert ".rdf-lint.yml" in stderr
 
+    def test_no_hint_when_config_selects_nothing(self, runner, tmp_path):
+        config = tmp_path / "lint.yml"
+        config.write_text("level: strict\n")
+        result = runner.invoke(
+            cli,
+            [
+                "lint",
+                "-c",
+                str(config),
+                "--enable",
+                "orphan-class",
+                "--disable",
+                "orphan-class",
+                str(PROBLEMATIC),
+            ],
+        )
+        stderr = self._refused(result)
+        assert "No lint rules left to run" in stderr
+        assert "--enable replaces" not in stderr
+
     def test_config_severity_typo_refused(self, runner, tmp_path):
         config = tmp_path / "lint.yml"
         config.write_text("severity:\n  orpahn-class: warning\n")
@@ -409,6 +429,14 @@ class TestLintRuleSelection:
             assert f"info[{rule_id}]" in result.output
         assert "warning[" not in result.output
         assert "Found 5 errors, 0 warnings, 14 info in 1 file" in result.output
+        assert result.exit_code == 1
+
+    def test_guide_recipe_restores_previous_relaxed(self, runner, tmp_path):
+        # LINT_GUIDE's "Many False Positives" recipe gives pre-v0.7.0 relaxed's counts
+        config = tmp_path / "lint.yml"
+        config.write_text(f"level: relaxed\ndisable: [{', '.join(INFO_RULES)}]\n")
+        result = runner.invoke(cli, ["lint", "-c", str(config), str(PROBLEMATIC)])
+        assert "Found 5 errors, 0 warnings, 9 info in 1 file" in result.output
         assert result.exit_code == 1
 
 

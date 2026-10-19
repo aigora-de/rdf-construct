@@ -1332,6 +1332,9 @@ def lint(
     except ValueError as e:
         raise Refusal(str(e)) from e
 
+    # Whether the loaded config selects rules itself, before the flags overwrite it
+    config_selects = bool(lint_config.enabled_rules or lint_config.disabled_rules)
+
     if enable:
         lint_config.enabled_rules = set(enable)
     if disable:
@@ -1342,7 +1345,7 @@ def lint(
         lint_config.get_effective_rules()
     except ValueError as e:
         message = str(e)
-        if config_used is not None and (enable or disable):
+        if config_used is not None and config_selects and (enable or disable):
             message += (
                 f"\n--enable replaces the enable: list in {config_used}; "
                 "--disable adds to its disable: list."
