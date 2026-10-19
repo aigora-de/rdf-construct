@@ -645,9 +645,11 @@ def _report_stamps(graph: Graph, out_graph: Graph, stamps: list[Stamp], header_k
 
     def changes(stamp: Stamp) -> list[str]:
         lines = [f"owl:versionIRI {_term_label(out_graph, v)} removed" for v in stamp.removed]
-        lines += [
-            f"prov:wasDerivedFrom {_term_label(out_graph, t)} added" for t in stamp.derived_from
-        ]
+        for target in stamp.derived_from:
+            done = "added" if target in stamp.added else "already present"
+            if target == stamp.ontology:
+                done += ": the source has no owl:versionIRI, so it names the ontology's own IRI"
+            lines.append(f"prov:wasDerivedFrom {_term_label(out_graph, target)} {done}")
         return lines or ["nothing names the source: not stamped"]
 
     if not stamps:
@@ -810,6 +812,14 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
                 if s not in seen:
                     ordered_subjects.append(s)
                     seen.add(s)
+
+        # The stamp's property travels with the header it annotates (#90), as the source
+        # describes it: a stamped extract read back through the same profile then loses
+        # nothing, and a source that types it otherwise keeps that type.
+        headers = [s for s in ordered_subjects if (s, RDF.type, OWL.Ontology) in graph]
+        if headers and WAS_DERIVED_FROM not in seen and (WAS_DERIVED_FROM, None, None) in graph:
+            ordered_subjects.insert(ordered_subjects.index(headers[-1]) + 1, WAS_DERIVED_FROM)
+            seen.add(WAS_DERIVED_FROM)
 
         # Blank nodes carry no identity a section could select them by — they belong
         # to the description of whatever references them. Pull in the ones reachable

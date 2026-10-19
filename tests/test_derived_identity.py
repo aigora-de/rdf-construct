@@ -212,8 +212,11 @@ class TestDerivationTarget:
         graph = _parse(_written(tmp_path / "out", source, "classes_ignore"))
         ontology = URIRef("http://example.org/s")
         assert list(graph.objects(ontology, PROV.wasDerivedFrom)) == [ontology]
-        assert "      prov:wasDerivedFrom <http://example.org/s> added\n" in result.stdout
-        assert "owl:versionIRI" not in result.stdout
+        assert (
+            "      prov:wasDerivedFrom <http://example.org/s> added: the source has no "
+            "owl:versionIRI, so it names the ontology's own IRI\n"
+        ) in result.stdout
+        assert "removed" not in result.stdout
 
     def test_each_of_several_headers_names_its_own_version(self, tmp_path: Path) -> None:
         source = self._source(
@@ -270,6 +273,72 @@ class TestDerivationTarget:
         assert not list(graph.objects(None, PROV.wasDerivedFrom))
         assert "Stamped an anonymous ontology:" in result.stdout
         assert "nothing names the source: not stamped" in result.stdout
+
+
+class TestTheStampsOwnProperty:
+    """``prov:wasDerivedFrom``'s own description travels with the header (#367's panel)."""
+
+    def test_a_rerun_through_the_same_profile_is_a_fixed_point(self, tmp_path: Path) -> None:
+        """No section claims the stamp's declaration, so this re-stamped before."""
+        assert _order(SOURCE, CONFIG, tmp_path / "once", "classes_ignore").exit_code == 0
+        once = _written(tmp_path / "once", SOURCE, "classes_ignore")
+        result = _order(once, CONFIG, tmp_path / "twice", "classes_ignore")
+        assert result.exit_code == 0
+        assert "◇" not in result.output
+        twice = _written(tmp_path / "twice", once, "classes_ignore")
+        assert twice.read_bytes() == once.read_bytes()
+
+    def test_a_source_typing_it_otherwise_keeps_that_type(self, tmp_path: Path) -> None:
+        """PROV-O declares it an object property: typing it both ways leaves OWL 2 DL."""
+        path = tmp_path / "src.ttl"
+        path.write_text(
+            dedent(
+                """
+                @prefix owl: <http://www.w3.org/2002/07/owl#> .
+                @prefix prov: <http://www.w3.org/ns/prov#> .
+                @prefix ex: <http://example.org/s#> .
+                <http://example.org/s> a owl:Ontology ; owl:versionIRI <http://example.org/s/1> .
+                prov:wasDerivedFrom a owl:ObjectProperty .
+                ex:A a owl:Class .
+                ex:p a owl:ObjectProperty .
+                """
+            ),
+            encoding="utf-8",
+        )
+        result = _order(path, CONFIG, tmp_path / "out", "classes_ignore")
+        assert result.exit_code == 0
+        written = _written(tmp_path / "out", path, "classes_ignore")
+        graph = _parse(written)
+        assert set(graph.objects(PROV.wasDerivedFrom, RDF.type)) == {OWL.ObjectProperty}
+        assert list(graph.objects(URIRef("http://example.org/s"), PROV.wasDerivedFrom)) == [
+            URIRef("http://example.org/s/1")
+        ]
+        subjects = _subject_order(written.read_text(encoding="utf-8"))
+        assert subjects[:2] == ["<http://example.org/s>", "prov:wasDerivedFrom"]
+
+    def test_a_target_already_named_is_not_reported_as_added(self, tmp_path: Path) -> None:
+        path = tmp_path / "src.ttl"
+        path.write_text(
+            dedent(
+                """
+                @prefix owl: <http://www.w3.org/2002/07/owl#> .
+                @prefix prov: <http://www.w3.org/ns/prov#> .
+                @prefix ex: <http://example.org/s#> .
+                <http://example.org/s> a owl:Ontology ;
+                    prov:wasDerivedFrom <http://example.org/s> .
+                ex:A a owl:Class .
+                ex:p a owl:ObjectProperty .
+                """
+            ),
+            encoding="utf-8",
+        )
+        result = _order(path, CONFIG, tmp_path / "out", "classes_ignore")
+        assert result.exit_code == 0
+        assert (
+            "      prov:wasDerivedFrom <http://example.org/s> already present: the source has no "
+            "owl:versionIRI, so it names the ontology's own IRI\n"
+        ) in result.stdout
+        assert " added" not in result.stdout
 
 
 # -- #90: the header is not a section's to lose --

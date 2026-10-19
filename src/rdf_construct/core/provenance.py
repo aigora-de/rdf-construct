@@ -15,7 +15,9 @@ the same answer:
 ``prov:wasDerivedFrom`` rather than ``dcterms:source``, because ``docs`` already reads
 ``dcterms:source`` as metadata an author wrote. The property is declared as an
 ``owl:AnnotationProperty`` wherever it is used: an undeclared annotation property is itself
-outside OWL 2 DL.
+outside OWL 2 DL. Not where the graph already gives it another property type, though: PROV-O
+itself declares it an ``owl:ObjectProperty``, and an IRI typed as both is outside OWL 2 DL too.
+A graph that leaves that declaration to an ``owl:imports`` is beyond what this module can see.
 
 **Who uses what.** ``order`` (#90) keeps the ontology IRI and calls :func:`stamp_extract`, which
 composes the three for every header in an extract. ``split`` (#178) names each module by its own
@@ -41,6 +43,8 @@ from typing import TYPE_CHECKING
 from rdflib import RDF, Graph, URIRef
 from rdflib.namespace import OWL, PROV
 
+from .vocab import ALL_PROPERTY_TYPES
+
 if TYPE_CHECKING:
     from rdflib.term import Node
 
@@ -64,13 +68,15 @@ class Stamp:
     Attributes:
         ontology: The header's subject. Its IRI is unchanged.
         removed: The ``owl:versionIRI`` values removed from it, sorted.
-        derived_from: The ``prov:wasDerivedFrom`` targets added to it, sorted. Empty when nothing
+        derived_from: The ``prov:wasDerivedFrom`` targets it now names, sorted. Empty when nothing
             names the source: a blank-node header with no version IRI.
+        added: Those of ``derived_from`` the header did not already carry.
     """
 
     ontology: Node
     removed: tuple[Node, ...]
     derived_from: tuple[URIRef, ...]
+    added: tuple[URIRef, ...]
 
 
 def derivation_targets(source: Graph, ontology: Node) -> list[URIRef]:
@@ -107,26 +113,32 @@ def strip_version_iri(graph: Graph, ontology: Node) -> list[Node]:
     return removed
 
 
-def stamp_derivation(graph: Graph, subject: Node, targets: list[URIRef]) -> None:
+def stamp_derivation(graph: Graph, subject: Node, targets: list[URIRef]) -> list[URIRef]:
     """Record that ``subject`` was derived from each of ``targets``.
 
     Adds one ``prov:wasDerivedFrom`` per target, declares ``prov:wasDerivedFrom`` an
-    ``owl:AnnotationProperty``, and binds the ``prov:`` prefix. A graph that already binds the
-    PROV-O namespace keeps its own prefix for it, and one that binds ``prov:`` to something else
-    keeps that binding: rdflib then picks another prefix for PROV-O. Does nothing when
-    ``targets`` is empty.
+    ``owl:AnnotationProperty`` unless ``graph`` already gives it a property type, and binds the
+    ``prov:`` prefix. A graph that already binds the PROV-O namespace keeps its own prefix for
+    it, and one that binds ``prov:`` to something else keeps that binding: rdflib then picks
+    another prefix for PROV-O. Does nothing when ``targets`` is empty.
 
     Args:
         graph: The derived graph, changed in place.
         subject: The derived artefact's ontology subject.
         targets: What it was derived from, normally from :func:`derivation_targets`.
+
+    Returns:
+        The targets ``subject`` did not already name, in the order given.
     """
     if not targets:
-        return
-    for target in targets:
+        return []
+    added = [t for t in targets if (subject, WAS_DERIVED_FROM, t) not in graph]
+    for target in added:
         graph.add((subject, WAS_DERIVED_FROM, target))
-    graph.add((WAS_DERIVED_FROM, RDF.type, OWL.AnnotationProperty))
+    if not any(t in ALL_PROPERTY_TYPES for t in graph.objects(WAS_DERIVED_FROM, RDF.type)):
+        graph.add((WAS_DERIVED_FROM, RDF.type, OWL.AnnotationProperty))
     graph.namespace_manager.bind(PROV_PREFIX, PROV, override=False, replace=False)
+    return added
 
 
 def missing_triples(source: Graph, written: Graph) -> int:
@@ -164,6 +176,6 @@ def stamp_extract(source: Graph, extract: Graph) -> list[Stamp]:
     for ontology in sorted(set(extract.subjects(RDF.type, ONTOLOGY)), key=str):
         targets = derivation_targets(source, ontology)
         removed = strip_version_iri(extract, ontology)
-        stamp_derivation(extract, ontology, targets)
-        stamps.append(Stamp(ontology, tuple(removed), tuple(targets)))
+        added = stamp_derivation(extract, ontology, targets)
+        stamps.append(Stamp(ontology, tuple(removed), tuple(targets), tuple(added)))
     return stamps

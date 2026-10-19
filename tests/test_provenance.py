@@ -125,6 +125,19 @@ class TestStampDerivation:
         stamp_derivation(graph, A, [A_V1])
         assert dict(graph.namespace_manager.namespaces())["prov"] == other
 
+    def test_keeps_a_property_type_the_graph_already_has(self) -> None:
+        """PROV-O's own type for it: declaring it an annotation too would leave OWL 2 DL."""
+        graph = Graph()
+        graph.add((PROV.wasDerivedFrom, RDF.type, OWL.ObjectProperty))
+        stamp_derivation(graph, A, [A_V1])
+        assert set(graph.objects(PROV.wasDerivedFrom, RDF.type)) == {OWL.ObjectProperty}
+
+    def test_returns_only_what_it_added(self) -> None:
+        graph = Graph()
+        graph.add((A, PROV.wasDerivedFrom, A_V1))
+        assert stamp_derivation(graph, A, [A_V1, A_V2]) == [A_V2]
+        assert set(graph.objects(A, PROV.wasDerivedFrom)) == {A_V1, A_V2}
+
     def test_no_targets_changes_nothing(self) -> None:
         graph = _header(Graph(bind_namespaces="none"), A)
         before = set(graph)
@@ -169,7 +182,7 @@ class TestStampExtract:
         for triple in source:
             extract.add(triple)
         stamps = stamp_extract(source, extract)
-        assert stamps == [Stamp(A, (A_V1,), (A_V1,))]
+        assert stamps == [Stamp(A, (A_V1,), (A_V1,), (A_V1,))]
         assert set(extract) == (set(source) - {(A, OWL.versionIRI, A_V1)}) | {
             (A, PROV.wasDerivedFrom, A_V1),
             (PROV.wasDerivedFrom, RDF.type, OWL.AnnotationProperty),
@@ -181,7 +194,7 @@ class TestStampExtract:
         for triple in source:
             extract.add(triple)
         stamps = stamp_extract(source, extract)
-        assert stamps == [Stamp(A, (A_V1,), (A_V1,)), Stamp(B, (), (B,))]
+        assert stamps == [Stamp(A, (A_V1,), (A_V1,), (A_V1,)), Stamp(B, (), (B,), (B,))]
 
     def test_an_extract_with_no_header_gets_no_stamp(self) -> None:
         source = Graph()

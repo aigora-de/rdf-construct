@@ -388,6 +388,18 @@ prov:wasDerivedFrom
   `owl:AnnotationProperty` right after the header, because an undeclared one would take the file out
   of OWL 2 DL. A source with several `owl:Ontology` headers gets the same treatment for each: every
   header keeps its own IRI and names its own version.
+- **With no `owl:versionIRI`, the stamp names the extract's own IRI.** The extract keeps its source's
+  ontology IRI, so `<…> prov:wasDerivedFrom <…>` points at itself. It still tells a reader the file
+  is an extract, but not which version it was cut from, so the run says so:
+  `prov:wasDerivedFrom <http://example.org/s> added: the source has no owl:versionIRI, so it names
+  the ontology's own IRI`.
+- **If the source describes `prov:wasDerivedFrom`, that description is written instead**, right
+  after the header unless a section claims it. PROV-O itself declares the property an
+  `owl:ObjectProperty`, and a property typed both ways is outside OWL 2 DL, so the extract keeps the
+  source's type and adds no `owl:AnnotationProperty` of its own. It also means an extract run back
+  through the same profile loses nothing, and is written unchanged and unstamped. `order` does not
+  resolve `owl:imports`, so it cannot see PROV-O's type when it arrives only through an import (see
+  the table below).
 - **Everything else stays**: the ontology IRI, `owl:versionInfo`, labels, comments, and every
   `owl:imports`. An extract may no longer need all of its source's imports, and may now need the
   source itself for what it dropped. Working out which is beyond `order`, which keeps the imports
@@ -485,6 +497,7 @@ it is still growing three releases from now, that is the signal, not the table.
 | [#247](https://github.com/aigora-de/rdf-construct/issues/247) | A `selectors:` value beginning `FILTER` is matched by prefix only; the expression is never parsed, and such a selector claims every individual regardless of what it says. |
 | [#245](https://github.com/aigora-de/rdf-construct/issues/245) / [#262](https://github.com/aigora-de/rdf-construct/issues/262) | A section containing **only** properties declared by an OWL characteristic is sorted over `rdfs:subClassOf` rather than `rdfs:subPropertyOf`, so its hierarchy is ignored; and such terms are given the individuals' `predicate_order` specification. A mixed section, like the ones in this guide, is unaffected. |
 | [#246](https://github.com/aigora-de/rdf-construct/issues/246) | `predicate_order` entries must be written as bare CURIEs. Full IRIs and `<bracketed IRIs>` are silently dropped, though `roots:` accepts all three forms. |
+| [#369](https://github.com/aigora-de/rdf-construct/issues/369) | An extract whose source imports PROV-O, rather than describing `prov:wasDerivedFrom` itself, declares the property an `owl:AnnotationProperty`, while PROV-O declares it an `owl:ObjectProperty`. Loaded together with its imports, the extract is outside OWL 2 DL. `order` does not resolve imports, so it cannot tell. |
 | [#281](https://github.com/aigora-de/rdf-construct/issues/281) | A filtering profile can drop the declaration of a term that a surviving axiom still uses (`classes-only` drops `lib:publishes` while `lib:Journal`'s restriction refers to it), taking the extract out of OWL 2 DL with no message. |
 | [#244](https://github.com/aigora-de/rdf-construct/issues/244) | `examples/order/basic_ordering.py` does not run. Use the [programmatic snippet below](#programmatic-use) instead. |
 

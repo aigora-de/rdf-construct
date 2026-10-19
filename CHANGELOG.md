@@ -102,7 +102,8 @@ change, and what to do about it, is listed command by command in the
   `derivation_targets()` names a source by its `owl:versionIRI`, else its
   ontology IRI; `strip_version_iri()` removes only that triple; and
   `stamp_derivation()` adds `prov:wasDerivedFrom`, declares it an
-  `owl:AnnotationProperty` and binds `prov:`. `order` composes them through
+  `owl:AnnotationProperty` unless the graph already gives it a property type,
+  and binds `prov:`. `order` composes them through
   `stamp_extract()`, with `missing_triples()` as the trigger. `split` (#178) and
   `merge` (#171) will call the same functions.
 - **`header: false` on an `order` profile, or in `defaults:`** (#90), the one
@@ -132,7 +133,10 @@ change, and what to do about it, is listed command by command in the
   IRI, or its ontology IRI when it has none. The trigger is what was written,
   not the `unclaimed:` policy, so `warn` profiles are stamped too, and the run
   prints a `◇ extract:` line under every policy. Previously the extract claimed
-  to be the release it was cut from.
+  to be the release it was cut from. A source's own description of
+  `prov:wasDerivedFrom` follows the header unless a section claims it, so an
+  extract keeps PROV-O's `owl:ObjectProperty` type where the source states it,
+  and an extract run back through the same profile is written unchanged.
 - **The ontology header is no longer a section's to lose** (#90). A profile
   without a `header` section writes the header first. Before, it was written
   partway down the file by an `individuals` section, reported as unclaimed under
