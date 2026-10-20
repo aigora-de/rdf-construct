@@ -15,6 +15,7 @@ from typing import TextIO
 from rdflib import Graph, URIRef, Namespace
 from rdflib.namespace import RDF, RDFS, OWL
 
+from rdf_construct.core.blank_nodes import label_by_content
 from rdf_construct.core.utils import rebase_iri
 from rdf_construct.merge.config import (
     MergeConfig,
@@ -166,6 +167,9 @@ class OntologyMerger:
         # Apply namespace remapping if configured
         if src_config.namespace_remap:
             graph = self._remap_namespaces(graph, src_config.namespace_remap)
+
+        # Label blank nodes by content, so a structure two sources share is one node (#170)
+        graph = label_by_content(graph)
 
         return SourceGraph(
             graph=graph,
