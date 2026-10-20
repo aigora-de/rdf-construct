@@ -17,7 +17,15 @@ information. Anything weaker is not safe:
 **Labels are derived from content, and only from content.** ``rdflib.compare`` labels relative to
 the whole graph it is given: a graph with one blank node always calls it ``_:cb0``, so canonicalising
 two files separately and taking the union fuses unrelated structures. Here each component is
-canonicalised on its own and its labels carry the component's digest.
+labelled on its own and its labels carry the component's digest.
+
+**Trees are hashed structurally.** Almost every component an ontology has is a tree: each blank
+node has at most one blank-node parent and there is no cycle. Restrictions, ``rdf:List`` chains,
+nested class expressions and reifications all are. A tree is hashed bottom-up, each node from its
+own triples and its children's hashes, in time close to linear. Only a component that is not a tree
+(a node with two blank-node parents, or a cycle) is canonicalised with ``rdflib.compare``, whose
+cost grows steeply with size: a 1,000-cell list took 11 s that way (#170's panel). The two methods
+digest under different tags, so they can never collide.
 
 **Copies within one file are kept.** The k-th copy of a component in a graph gets its own labels, so
 relabelling a graph never changes it, and the union of relabelled graphs holds each component as
@@ -25,9 +33,10 @@ many times as the graph with the most copies. Redundancy that is not an identica
 states a restriction, another states it with an extra annotation) is kept too: removing it is
 graph leaning, which is NP-hard and changes what a file says it states.
 
-**Cost.** Each component is canonicalised separately, which is cheap for the restrictions, lists and
-reifications ontologies are made of. A single very large and highly symmetric component is the
-worst case for ``rdflib.compare``.
+**The verifier uses this module too.** ``core.verify``'s ``SUPERSET`` check compares components by
+:func:`component_digest`, so a fault in the digest would pass both ``merge`` and its contract. The
+exact expectation of a merge is therefore pinned against a hand-written file with ``ISOMORPHIC``,
+which uses ``rdflib.compare`` and nothing here.
 """
 
 from __future__ import annotations
@@ -41,6 +50,9 @@ from rdflib.term import BNode, Node
 
 #: Hex digits of a component's SHA-256 digest kept in its labels: 128 bits.
 DIGEST_LENGTH = 32
+
+#: Hex digits of the path hash that tells the nodes of one tree component apart.
+PATH_LENGTH = 16
 
 
 def blank_node_components(graph: Graph) -> list[Graph]:
@@ -79,11 +91,86 @@ def blank_node_components(graph: Graph) -> list[Graph]:
     return list(components.values())
 
 
-def _canonical(component: Graph) -> tuple[str, list[tuple[Node, Node, Node]]]:
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+#: A component's digest, the place of each of its blank nodes keyed by label, and the triples
+#: those labels name.
+Labelled = tuple[str, dict[str, str], list[tuple[Node, Node, Node]]]
+
+
+def _tree_labels(component: Graph) -> Labelled | None:
+    """Digest and label a component that is a tree, or return None if it is not one.
+
+    A node's hash covers its outgoing triples, with each blank-node object replaced by that
+    child's hash, and its incoming triples from ground subjects. Siblings with the same predicate
+    and hash are identical subtrees, so the order in which they are numbered does not change the
+    graph that the labels describe.
+    """
+    children: dict[Node, list[tuple[Node, Node]]] = defaultdict(list)
+    ground_out: dict[Node, list[str]] = defaultdict(list)
+    ground_in: dict[Node, list[str]] = defaultdict(list)
+    parents: dict[Node, int] = defaultdict(int)
+    nodes: set[Node] = set()
+    for s, p, o in component:
+        if isinstance(s, BNode):
+            nodes.add(s)
+            if isinstance(o, BNode):
+                nodes.add(o)
+                children[s].append((p, o))
+                parents[o] += 1
+            else:
+                ground_out[s].append(f"{p.n3()} {o.n3()}")
+        else:
+            nodes.add(o)
+            ground_in[o].append(f"^ {s.n3()} {p.n3()}")
+
+    roots = [node for node in nodes if parents[node] == 0]
+    if len(roots) != 1 or any(count > 1 for count in parents.values()):
+        return None
+    root = roots[0]
+
+    order = [root]
+    for node in order:
+        order.extend(child for _, child in children[node])
+    if len(order) != len(nodes):
+        return None
+
+    hashes: dict[Node, str] = {}
+    for node in reversed(order):
+        items = ground_out[node] + ground_in[node]
+        items += [f"{p.n3()} #{hashes[child]}" for p, child in children[node]]
+        hashes[node] = _sha256("\n".join(sorted(items)))
+    digest = _sha256(f"tree\n{hashes[root]}")
+
+    paths: dict[str, str] = {str(root): "r"}
+    for node in order:
+        seen: dict[tuple[str, str], int] = defaultdict(int)
+        for p, child in sorted(children[node], key=lambda pc: (pc[0].n3(), hashes[pc[1]])):
+            key = (p.n3(), hashes[child])
+            index = seen[key]
+            seen[key] += 1
+            place = _sha256(f"{paths[str(node)]}\n{key[0]}\n{key[1]}\n{index}")
+            paths[str(child)] = place[:PATH_LENGTH]
+    return digest, paths, list(component)
+
+
+def _graph_labels(component: Graph) -> Labelled:
+    """Digest and label any component with ``rdflib.compare``: used for those that are not trees.
+
+    The places it returns name the nodes of the canonical copy, so its triples are that copy's.
+    """
     triples = list(to_canonical_graph(component))
     lines = sorted(" ".join(term.n3() for term in triple) for triple in triples)
-    digest = hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
-    return digest, triples
+    digest = _sha256("graph\n" + "\n".join(lines))
+    canonical = sorted({str(term) for t in triples for term in t if isinstance(term, BNode)})
+    places = {node: str(position) for position, node in enumerate(canonical)}
+    return digest, places, triples
+
+
+def _labelled(component: Graph) -> Labelled:
+    return _tree_labels(component) or _graph_labels(component)
 
 
 def component_digest(component: Graph) -> str:
@@ -93,18 +180,18 @@ def component_digest(component: Graph) -> str:
         component: One blank-node component, as :func:`blank_node_components` returns it.
 
     Returns:
-        The SHA-256 hex digest of the component's canonical N-Triples. Two components have the
-        same digest exactly when they are isomorphic.
+        A SHA-256 hex digest. Two components have the same digest exactly when they are
+        isomorphic.
     """
-    return _canonical(component)[0]
+    return _labelled(component)[0]
 
 
 def label_by_content(graph: Graph) -> Graph:
     """Return a copy of ``graph`` whose blank nodes are labelled by their component's content.
 
     The copy is isomorphic to ``graph``. Two graphs that share a component give it the same labels,
-    so their union holds it once. Labels are ``b<digest>_<k>_<i>``: the component's digest, which
-    copy of it this is within ``graph``, and the node's position within the component.
+    so their union holds it once. Labels are ``b<digest>_<k>_<node>``: the component's digest,
+    which copy of it this is within ``graph``, and the node's place within the component.
 
     Args:
         graph: The graph to relabel. It is not changed.
@@ -122,14 +209,10 @@ def label_by_content(graph: Graph) -> Graph:
 
     copies: dict[str, int] = defaultdict(int)
     for component in blank_node_components(graph):
-        digest, triples = _canonical(component)
-        copy = copies[digest]
+        digest, places, triples = _labelled(component)
+        prefix = f"b{digest[:DIGEST_LENGTH]}_{copies[digest]}_"
         copies[digest] += 1
-        nodes = sorted({str(term) for t in triples for term in t if isinstance(term, BNode)})
-        labels = {
-            node: BNode(f"b{digest[:DIGEST_LENGTH]}_{copy}_{index}")
-            for index, node in enumerate(nodes)
-        }
+        labels = {node: BNode(prefix + place) for node, place in places.items()}
         for s, p, o in triples:
             relabelled.add(
                 (

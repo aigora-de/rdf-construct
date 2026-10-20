@@ -9,6 +9,7 @@ difference from it.
 from __future__ import annotations
 
 import os
+import random
 import subprocess
 import sys
 from pathlib import Path
@@ -221,6 +222,16 @@ class TestHelpers:
         assert (EX.A, RDF.type, OWL.Class) not in component
         assert len(component) == 4
 
+    def test_identical_subtrees_under_one_node_are_both_kept(self):
+        """Two copies of one subtree inside a single tree need two sets of labels."""
+        body = (
+            "ex:A rdfs:subClassOf [ owl:intersectionOf ex:L ; "
+            "ex:part [ ex:q ex:B ; ex:r [ ex:s ex:C ] ], [ ex:q ex:B ; ex:r [ ex:s ex:C ] ] ] ."
+        )
+        source = _graph(body)
+        assert isomorphic(label_by_content(source), source)
+        assert isomorphic(_union(source, _graph(body)), source)
+
     def test_the_digest_sees_the_referring_subject(self):
         [first] = blank_node_components(_graph(f"ex:A rdfs:subClassOf {RESTRICTION} ."))
         [second] = blank_node_components(_graph(f"ex:C rdfs:subClassOf {RESTRICTION} ."))
@@ -251,3 +262,88 @@ class TestHelpers:
             for seed in ("0", "1", "42")
         }
         assert len(outputs) == 1
+
+
+class TestNotATree:
+    """Components that are not trees fall back to ``rdflib.compare``, and keep the same rule."""
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            pytest.param("_:a ex:p _:x . _:b ex:q _:x . _:x ex:r ex:B .", id="two-blank-parents"),
+            pytest.param("ex:A ex:p _:a . _:a ex:p _:b . _:b ex:p _:a .", id="cycle"),
+            pytest.param(
+                "_:b owl:sameAs _:b ; a owl:AllDisjointClasses ; owl:members ( ex:B ex:C ) .",
+                id="self-reference",
+            ),
+        ],
+    )
+    def test_merged_with_itself_it_is_written_once(self, body: str):
+        source = _graph(body)
+        union = _union(source, _graph(body))
+        assert isomorphic(union, source)
+
+    def test_a_cycle_under_another_subject_is_kept_apart(self):
+        union = _union(
+            _graph("ex:A ex:p _:a . _:a ex:p _:b . _:b ex:p _:a ."),
+            _graph("ex:C ex:p _:a . _:a ex:p _:b . _:b ex:p _:a ."),
+        )
+        assert len(_bnodes(union)) == 4
+
+    def test_a_tree_never_reaches_rdflib_compare(self, monkeypatch):
+        """Canonicalising a long list with ``rdflib.compare`` took 11 s at 1,000 cells."""
+
+        def refuse(_graph: Graph) -> Graph:
+            raise AssertionError("a tree component was canonicalised with rdflib.compare")
+
+        monkeypatch.setattr("rdf_construct.core.blank_nodes.to_canonical_graph", refuse)
+        label_by_content(Graph().parse(CORE))
+        label_by_content(_long_list(50))
+
+
+def _long_list(cells: int) -> Graph:
+    graph = Graph()
+    head: BNode = BNode()
+    graph.add((EX.U, OWL.unionOf, head))
+    for i in range(cells):
+        rest = BNode() if i < cells - 1 else RDF.nil
+        graph.add((head, RDF.first, EX[f"C{i}"]))
+        graph.add((head, RDF.rest, rest))
+        head = rest  # type: ignore[assignment]
+    return graph
+
+
+class TestCost:
+    def test_a_five_thousand_member_list_merges(self, tmp_path):
+        """#170's panel: through ``rdflib.compare`` this did not finish in ten minutes."""
+        source = tmp_path / "list.ttl"
+        _long_list(5000).serialize(source, format="nt", encoding="utf-8")
+        result, merged = _merge(tmp_path, source, source)
+        assert result.exit_code == 0, result.output
+        assert len(merged) == 10001
+
+
+def _random_tree(rng: random.Random) -> Graph:
+    graph = Graph()
+    nodes: list[BNode] = [BNode()]
+    graph.add((rng.choice([EX.A, EX.C]), rng.choice([EX.p, EX.q]), nodes[0]))
+    for _ in range(rng.randint(0, 3)):
+        child = BNode()
+        graph.add((rng.choice(nodes), rng.choice([EX.p, EX.q]), child))
+        nodes.append(child)
+    for node in nodes:
+        for _ in range(rng.randint(0, 2)):
+            graph.add((node, rng.choice([EX.p, EX.q]), rng.choice([EX.A, EX.B])))
+    return graph
+
+
+class TestTheTreeHashAgreesWithRdflib:
+    def test_equal_digests_exactly_when_isomorphic(self):
+        """Every pair from a pool of small random trees, judged by ``rdflib.compare``."""
+        rng = random.Random(170)
+        pool = [_random_tree(rng) for _ in range(80)]
+        digests = [component_digest(tree) for tree in pool]
+        for i, first in enumerate(pool):
+            for j in range(i + 1, len(pool)):
+                assert (digests[i] == digests[j]) == isomorphic(first, pool[j]), (i, j)
+        assert len(set(digests)) < len(pool), "the pool should hold some isomorphic pairs"
