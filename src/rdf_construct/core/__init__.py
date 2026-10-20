@@ -31,6 +31,7 @@ from .serialiser import (
     serialise_turtle_str,
     build_section_graph,
 )
+from .blank_nodes import blank_node_components, component_digest, label_by_content
 from .provenance import (
     WAS_DERIVED_FROM,
     Stamp,
@@ -98,6 +99,10 @@ __all__ = [
     "serialise_turtle",
     "serialise_turtle_str",
     "build_section_graph",
+    # Blank nodes
+    "blank_node_components",
+    "component_digest",
+    "label_by_content",
     # Provenance
     "WAS_DERIVED_FROM",
     "Stamp",

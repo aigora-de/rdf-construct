@@ -203,6 +203,18 @@ change, and what to do about it, is listed command by command in the
   and the config file overrides the option's default.
 
 ### Fixed
+- **`merge` writes a blank-node structure its sources share once** (#170).
+  Every restriction, `owl:unionOf` list or `owl:AllDisjointClasses` that two
+  sources both stated was written twice, because each parse gives blank nodes
+  fresh identities, and the duplicate was reported as a conflict. Merging #170's
+  reproducer with itself read 7 triples, wrote 11, and found one conflict; it
+  now writes 7 and finds none. Two structures are the same only when they are
+  identical, including the subject that refers to them. The same restriction
+  under two different classes, or a person called "Bob" known by two different
+  people, stays two. A file merged with itself, or alone, comes back unchanged,
+  even if it states something twice. The labels of blank nodes that `merge`
+  writes as `_:…` are now derived from their content, so they no longer change
+  from run to run.
 - **`uml` no longer draws an anonymous class expression as a class** (#280).
   A context with `selector: classes` drew the `owl:unionOf` behind a property's
   range as a box named after a fresh blank-node label, with the range arrow

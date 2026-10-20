@@ -46,6 +46,7 @@ if TYPE_CHECKING:
 
 FIXTURES = Path(__file__).parent / "fixtures" / "determinism"
 MERGE = EXAMPLES / "merge"
+MERGE_BLANK_NODES = Path(__file__).parent / "fixtures" / "merge" / "blank_nodes"
 IES_SMALL = Path(__file__).parent / "fixtures" / "ies" / "ies-env-building-classification.ttl"
 OWL_FULL = str(EXAMPLES / "describe" / "owl_full_example.ttl")
 PROVENANCE = Path(__file__).parent / "fixtures" / "provenance"
@@ -94,6 +95,14 @@ CASES = [
         "-o",
         f"{OUT}/merged.ttl",
         label="merge",
+    ),
+    _case(
+        "merge",
+        str(MERGE_BLANK_NODES / "core.ttl"),
+        str(MERGE_BLANK_NODES / "module.ttl"),
+        "-o",
+        f"{OUT}/merged.ttl",
+        label="merge-blank-nodes",
     ),
     _case(
         "lint", str(EXAMPLES / "lint" / "example_lint_problematic.ttl"), expect_exit=1, label="lint"

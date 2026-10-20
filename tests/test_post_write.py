@@ -229,6 +229,14 @@ def test_merge_keeps_every_source_triple(tmp_path, monkeypatch):
     _assert_holds("merge", inputs=[_parse(s) for s in sources], outputs=[merged])
 
 
+def test_merge_keeps_every_blank_node_structure(tmp_path, monkeypatch):
+    """Shared structures are written once (#170), and none of either source's is lost."""
+    blank_nodes = FIXTURES / "merge" / "blank_nodes"
+    sources = [blank_nodes / "core.ttl", blank_nodes / "module.ttl"]
+    merged = _merge(tmp_path, monkeypatch, sources)
+    _assert_holds("merge", inputs=[_parse(s) for s in sources], outputs=[merged])
+
+
 @pytest.mark.xfail(strict=True, reason="#169")
 def test_merge_drops_the_losers_of_resolved_conflicts(tmp_path, monkeypatch):
     sources = [EXAMPLES / "merge" / "merge_core.ttl", EXAMPLES / "merge" / "merge_conflicting.ttl"]

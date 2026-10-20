@@ -142,6 +142,42 @@ The Markdown report includes:
 - Auto-resolved conflicts
 - Recommendations
 
+### Blank Nodes
+
+A blank node has no identity outside the file it is in, so `merge` decides when two of them are the
+same. A blank-node structure, such as a restriction, an `owl:unionOf` list or an
+`owl:AllDisjointClasses`, that two sources state identically, referred to by the same subject and
+predicate, is written once:
+
+```turtle
+# In both core.ttl and module.ttl: the merge writes this restriction once
+ex:A rdfs:subClassOf [ a owl:Restriction ;
+        owl:onProperty ex:pA ;
+        owl:someValuesFrom ex:B ] .
+```
+
+Merging a file with itself gives the file back, with no conflicts.
+
+Everything else is kept apart:
+
+- **The same restriction under two classes** is two restrictions. Nothing says `ex:A`'s and
+  `ex:F`'s are one node.
+- **`[ foaf:name "Eve" ]` known by two different people** is two people called Eve.
+- **A structure that differs at all**, such as one carrying an `rdfs:comment` the other lacks, or
+  a list in a different order, is a different structure, and both are written.
+- **A structure stated twice in one source** is written twice, so a file merged with itself, or
+  alone, is unchanged.
+
+Blank nodes are compared after namespace remapping, so a remapped source shares its structures
+with the sources it is merged with. A blank node `merge` writes with a label (`_:b…`, used when
+more than one triple refers to it) is labelled from its content, so the label is the same on every
+run.
+
+**Not handled:** `merge` does not remove a structure that is merely implied by another. If one
+source refers to a node from two subjects and another source gives each subject its own copy, all
+three are written. Removing that kind of redundancy is a separate, much harder problem (finding a
+graph's *lean* core).
+
 ### Namespace Management
 
 #### Namespace Remapping

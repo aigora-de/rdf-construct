@@ -25,11 +25,13 @@ labels never matter and two parses of the same file are the same graph. That cut
   triple moved from one named graph to another, or a graph name that is lost, cannot be seen. No
   command carries named graphs end to end today: ``cast`` refuses a quad source unless
   ``--allow-flatten`` is given. A command that does will need a dataset-level contract.
-- **Blank nodes are matched by their structure.** Under ``SUPERSET``, a blank node that gains or
-  loses a triple in the output no longer matches its source. Its triples then read as missing,
-  which is a loud failure and never a silent pass. The other side of this: two blank nodes with
-  identical structure are indistinguishable, so ``SUPERSET`` cannot tell one copy of a closure
-  from two. ``ISOMORPHIC`` and ``UNION_ISOMORPHIC`` can.
+- **Blank nodes are matched by their structure.** Under ``SUPERSET``, each blank-node component
+  (:mod:`rdf_construct.core.blank_nodes`) is matched whole. A component that gains or loses a
+  triple in the output no longer matches its source. Its triples then read as missing, which is a
+  loud failure and never a silent pass. A component two inputs share needs to be in the output
+  only as many times as the input with the most copies has it, because a merge writes it once
+  (#170). The other side of this: ``SUPERSET`` is a lower bound, so it cannot tell one copy of a
+  component from two. ``ISOMORPHIC`` and ``UNION_ISOMORPHIC`` can.
 
 **Using it in a fix's regression test.** Run the command, read its output back, and assert that
 the contract for that command holds::
@@ -55,14 +57,17 @@ the contract for that command holds::
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from rdflib import Graph
-from rdflib.compare import graph_diff, to_canonical_graph, to_isomorphic
+from rdflib.compare import graph_diff, to_isomorphic
 from rdflib.term import BNode, Node
+
+from .blank_nodes import blank_node_components, component_digest
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -186,7 +191,10 @@ CONTRACTS: Mapping[str, CommandContract] = MappingProxyType(
             CommandContract(
                 "merge",
                 Contract.SUPERSET,
-                note="The losing values of the conflicts the merge reports as resolved are excluded.",
+                note=(
+                    "The losing values of the conflicts the merge reports as resolved are excluded. "
+                    "A blank-node component the sources share is written once (#170)."
+                ),
             ),
             CommandContract(
                 "docs",
@@ -293,8 +301,9 @@ def check_superset(
 ) -> list[Discrepancy]:
     """Check that ``output`` keeps every source triple, except ``excluded``, which it must drop.
 
-    Triples with no blank node are compared exactly. Triples with a blank node are compared
-    after canonicalising both sides. ``excluded`` must contain no blank nodes.
+    Triples with no blank node are compared exactly. Triples with a blank node are compared as
+    whole blank-node components, by content: the output must hold each component at least as many
+    times as the source that has the most copies of it. ``excluded`` must contain no blank nodes.
 
     Args:
         sources: The input graphs.
@@ -306,6 +315,7 @@ def check_superset(
         One discrepancy listing the source triples the output lacks and the excluded triples it
         still holds, or an empty list.
     """
+    sources = list(sources)
     union = Graph()
     for source in sources:
         union += source
@@ -315,13 +325,18 @@ def check_superset(
     grounded_output = {t for t in output if not _has_bnode(t)}
     missing = grounded_union - grounded_output - dropped
 
-    union_bnodes = Graph()
-    output_bnodes = Graph()
-    for graph, part in ((union, union_bnodes), (output, output_bnodes)):
-        for t in graph:
-            if _has_bnode(t):
-                part.add(t)
-    missing |= set(to_canonical_graph(union_bnodes)) - set(to_canonical_graph(output_bnodes))
+    written = Counter(component_digest(c) for c in blank_node_components(output))
+    # Keyed by digest and copy, so a copy two sources share is missing once, not twice.
+    unwritten: dict[tuple[str, int], Graph] = {}
+    for source in sources:
+        copies: Counter[str] = Counter()
+        for component in blank_node_components(source):
+            digest = component_digest(component)
+            copies[digest] += 1
+            if copies[digest] > written[digest]:
+                unwritten.setdefault((digest, copies[digest]), component)
+    for component in unwritten.values():
+        missing |= set(component)
 
     kept = dropped & grounded_output
 
