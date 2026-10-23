@@ -23,7 +23,7 @@ from collections.abc import Iterable, Mapping
 from enum import Enum
 from types import MappingProxyType
 
-from rdflib.namespace import RDFS, SKOS
+from rdflib.namespace import RDFS, SKOS, XSD
 from rdflib.term import Literal, Node, URIRef
 
 
@@ -106,12 +106,18 @@ def language_bucket(value: Node) -> str | None:
 def value_key(value: Node) -> Node:
     """Return the term `value` is compared as: itself, with any language tag folded to lower case.
 
+    In RDF 1.1 a literal with no datatype and no tag is an ``xsd:string``, but rdflib keeps
+    ``"x"`` and ``"x"^^xsd:string`` apart, so the typed form is folded to the plain one here.
+
     Args:
         value: The object of a triple.
 
     Returns:
-        A term equal for two values that differ only in the case of their language tag.
+        A term equal for two values that differ only in the case of their language tag, or only
+        in whether ``xsd:string`` is written.
     """
     if isinstance(value, Literal) and value.language:
         return Literal(str(value), lang=value.language.lower())
+    if isinstance(value, Literal) and value.datatype == XSD.string:
+        return Literal(str(value))
     return value

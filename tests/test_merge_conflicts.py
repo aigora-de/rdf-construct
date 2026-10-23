@@ -15,7 +15,7 @@ import yaml
 from click.testing import CliRunner, Result
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.compare import isomorphic
-from rdflib.namespace import RDFS, SKOS
+from rdflib.namespace import RDFS, SKOS, XSD
 
 from rdf_construct.cli import cli
 from rdf_construct.core.predicate_tiers import (
@@ -24,6 +24,7 @@ from rdf_construct.core.predicate_tiers import (
     build_tiers,
     language_bucket,
     tier_of,
+    value_key,
 )
 from rdf_construct.core.verify import check_isomorphic, describe
 from rdf_construct.merge import ConflictDetector, SourceGraph
@@ -160,6 +161,20 @@ class TestTheMiddleTier:
         assert result.exit_code == 0, result.output
         assert _detected(result) == 2
         _assert_is("tags.expected.ttl", merged)
+
+    def test_a_plain_and_an_xsd_string_literal_are_one_value(self, tmp_path):
+        result, merged, _ = _merge(
+            tmp_path, _f("strings_a.ttl"), _f("strings_b.ttl"), "--strategy", "mark_all"
+        )
+        assert result.exit_code == 1, result.output
+        assert _detected(result) == 1
+        assert "=== CONFLICT: ex:W rdfs:label ===" in (tmp_path / "merged.ttl").read_text()
+        assert "ex:S" not in (tmp_path / "merged.ttl").read_text().split("@prefix")[0]
+
+    def test_a_picked_xsd_string_conflict_removes_the_loser(self, tmp_path):
+        result, merged, _ = _merge(tmp_path, _f("strings_a.ttl"), _f("strings_b.ttl"))
+        assert result.exit_code == 0, result.output
+        assert set(merged.objects(EX.W, RDFS.label)) == {Literal("Partition", datatype=XSD.string)}
 
     def test_a_second_preflabel_is_called_malformed(self, tmp_path):
         a, b = _f("preflabel_a.ttl"), _f("preflabel_b.ttl")
@@ -326,6 +341,10 @@ class TestTheTierMap:
             Literal("x", lang="en-gb")
         )
         assert language_bucket(Literal("x")) is None
+
+    def test_the_value_key_folds_xsd_string(self):
+        assert value_key(Literal("x", datatype=XSD.string)) == value_key(Literal("x"))
+        assert value_key(Literal("1", datatype=XSD.integer)) != value_key(Literal("1"))
 
 
 class TestCost:

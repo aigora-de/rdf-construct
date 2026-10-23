@@ -99,6 +99,8 @@ rdf-construct merge tests/fixtures/merge/conflicts/multilang.ttl \
 
 Language tags are compared without regard to case (`@en-GB` and `@en-gb` are one tag), and an
 untagged literal is its own bucket. Subtags are not matched: `@en` and `@en-gb` are different tags.
+`"Building"` and `"Building"^^xsd:string` are one value, as RDF 1.1 says, so they never conflict;
+both spellings are still written to the output.
 
 The conflict types say why a second value matters:
 
