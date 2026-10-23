@@ -370,6 +370,44 @@ def test_the_ladder(
     assert _iris(source, [module], tmp_path)[module.name] == expected
 
 
+def test_a_derived_iri_the_source_already_uses_is_not_taken(tmp_path: Path) -> None:
+    """From #385's panel: ``<…/ont/>`` + ``ex`` is ``ex:ex``, a class, not a free IRI."""
+    source = tmp_path / "termclash.ttl"
+    source.write_text(
+        "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n"
+        "@prefix ex: <http://example.org/ont/> .\n"
+        "<http://example.org/ont/> a owl:Ontology .\n"
+        "ex:ex a owl:Class .\n"
+    )
+    module = ModuleDefinition(name="ex", output="ex.ttl", namespaces=["http://example.org/ont/"])
+
+    assert _iris(source, [module], tmp_path)["ex"] == (None, RUNG_NONE)
+
+
+def test_a_concept_follows_its_scheme_by_top_concept_too(tmp_path: Path) -> None:
+    """From #385's panel: skos:topConceptOf implies skos:inScheme, and hasTopConcept is its inverse."""
+    source = tmp_path / "top.ttl"
+    source.write_text(
+        "@prefix skos: <http://www.w3.org/2004/02/skos/core#> .\n"
+        "@prefix s: <http://example.org/schemes#> .\n"
+        "@prefix k: <http://example.org/k#> .\n"
+        "s:S a skos:ConceptScheme ; skos:hasTopConcept k:byHas .\n"
+        "k:byOf a skos:Concept ; skos:topConceptOf s:S .\n"
+        "k:byHas a skos:Concept .\n"
+    )
+    out = tmp_path / "modules"
+
+    assert _split(source, out).exit_code == 0
+    assert _subjects_of(_modules(out)["s.ttl"]) >= {
+        "http://example.org/k#byOf",
+        "http://example.org/k#byHas",
+    }
+
+
+def _subjects_of(graph: Graph) -> set[str]:
+    return {str(s) for s in graph.subjects() if isinstance(s, URIRef)}
+
+
 def test_a_module_with_no_iri_gets_no_header_and_cannot_be_imported(tmp_path: Path) -> None:
     out = tmp_path / "modules"
 

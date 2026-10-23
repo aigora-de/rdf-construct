@@ -730,7 +730,14 @@ class OntologySplitter:
             send(scheme, self._namespace_module(scheme), REASON_SCHEME_NO_MODULE)
 
         for concept in named(graph.subjects(RDF.type, SKOS.Concept)):
-            owners = {placed[s] for s in graph.objects(concept, SKOS.inScheme) if s in schemes}
+            # skos:topConceptOf is a sub-property of skos:inScheme, and skos:hasTopConcept its
+            # inverse, so either ties a concept to its scheme as firmly as skos:inScheme does
+            in_schemes = {
+                *graph.objects(concept, SKOS.inScheme),
+                *graph.objects(concept, SKOS.topConceptOf),
+                *graph.subjects(SKOS.hasTopConcept, concept),
+            }
+            owners = {placed[s] for s in in_schemes if s in schemes}
             if len(owners) > 1:
                 send(concept, unmatched, REASON_SCHEMES_SPLIT)
             elif owners:
@@ -1058,6 +1065,9 @@ class OntologySplitter:
            module's namespace (the longest), else the source's only ontology.
         4. None: no header.
 
+        A derived IRI (rungs 2 and 3) that the source already uses, as a term or otherwise, is
+        skipped: the header would be punned onto that term.
+
         Never ``http://example.org/<module>``.
 
         Args:
@@ -1074,7 +1084,7 @@ class OntologySplitter:
         own = {str(o).rstrip("#/") for o in self.ontologies}
         if len(namespaces) == 1:
             candidate = namespaces[0].rstrip("#/")
-            if candidate and candidate not in own:
+            if candidate and candidate not in own and not self._in_use(URIRef(candidate)):
                 if not self.ontologies:
                     return URIRef(candidate), RUNG_NAMESPACE_UNCHECKED
                 if not is_borrowed(candidate, self.ontologies):
@@ -1090,8 +1100,19 @@ class OntologySplitter:
         else:
             base = None
         if base is not None:
-            return URIRef(f"{str(base).rstrip('#/')}/{quote(name, safe='-._~')}"), RUNG_SOURCE
+            minted = URIRef(f"{str(base).rstrip('#/')}/{quote(name, safe='-._~')}")
+            if not self._in_use(minted):
+                return minted, RUNG_SOURCE
         return None, RUNG_NONE
+
+    def _in_use(self, iri: URIRef) -> bool:
+        """Whether the source uses `iri` anywhere: as a subject, a predicate or an object."""
+        graph = self.source_graph
+        if graph is None:
+            return False
+        return (
+            (iri, None, None) in graph or (None, iri, None) in graph or (None, None, iri) in graph
+        )
 
     def _get_module_file(self, module_name: str, result: SplitResult) -> str | None:
         """Get the output filename for a module.

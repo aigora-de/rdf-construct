@@ -715,6 +715,9 @@ the module with the rung that gave it (`from: …`):
    whose IRI holds the module's namespace; otherwise the source's only one.
 4. **`none`:** no header, and a warning. The run exits 1.
 
+An IRI from rung 2 or 3 that the source already uses, such as a class `ex:ex` under `ex:`, is
+skipped, so a header is never put on one of the source's terms.
+
 `ies-common.ttl`'s `ies` module, for example, is `…/ies/common/ies`: its namespace `…/ies/common/`
 is the source's own ontology IRI.
 
@@ -725,7 +728,8 @@ follows them ([#176](https://github.com/aigora-de/rdf-construct/issues/176)):
 
 - **An individual** goes to the module that holds its class (its `rdf:type`). A term that is
   both a class and an individual is placed as a class, with all its triples.
-- **A SKOS concept** goes with its concept scheme (`skos:inScheme`), and the scheme goes to the
+- **A SKOS concept** goes with its concept scheme (`skos:inScheme`, `skos:topConceptOf` or the
+  scheme's `skos:hasTopConcept`), and the scheme goes to the
   module that claims its namespace, so a scheme is never divided. A concept in no scheme goes to
   the module that claims its namespace, if there is one.
 - **A blank node** goes with whatever refers to it: `ex:Building rdfs:subClassOf [ … ]` keeps
