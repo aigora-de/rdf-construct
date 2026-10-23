@@ -214,6 +214,26 @@ change, and what to do about it, is listed command by command in the
   and the config file overrides the option's default.
 
 ### Fixed
+- **`split --by-namespace` builds modules from the namespaces the source's
+  classes and properties use** (#177). It took them from rdflib's prefix table
+  instead, so every run wrote `brick`, `doap`, `geo`, `schema` and `void`
+  modules holding one invented triple each, an empty file included. A file's
+  own `org:` came out as `org1.ttl`, because rdflib binds `org` itself. Modules
+  are now named after the prefixes the file declares. A namespace without one
+  is named after its last path segment (`…/ontology#` → `ontology.ttl`), which
+  covers N-Triples, undeclared namespaces and the empty prefix `:`. Clashing
+  names get `-2`, `-3`, …. An entity belongs to the longest namespace that
+  contains it, so with `env:` a prefix of `blg-class:`, the 185
+  `blg-class:` terms of `ies-env-building-classification.ttl` now go to
+  `blg-class.ttl`, not `env.ttl`. Module files bind the file's prefixes and
+  rdflib's core five, never `org1:`. N-Triples input, which found no module
+  and put everything in `common.ttl` at exit 1, now gets one module per
+  namespace at exit 0. In a split configuration, a prefixed name in `classes:`
+  or `properties:` now means the source's own prefix, and one the source does
+  not bind fails the split instead of matching nothing; `-c` itself still
+  crashes until #175. Placing entities
+  no longer slows with the number of modules: 10,001 modules took 41 s and now
+  take 13 s.
 - **`merge` compares sources when it looks for conflicts** (#193). It put every
   source into one index and reported any predicate with two values, so a file
   merged on its own conflicted with itself: #193's three-language reproducer
