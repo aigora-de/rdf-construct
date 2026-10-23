@@ -587,6 +587,17 @@ rdf-construct split ontology.ttl -o modules/ --by-namespace
 
 If your ontology uses distinct namespaces for different domains (e.g., `org:`, `building:`), this will automatically create separate modules.
 
+How modules are found and named:
+
+- **A module is a namespace that the source's classes and properties actually use.** A prefix you declare but never use makes no module, and neither do rdflib's built-in prefixes. An empty file gives no modules.
+- **An entity belongs to the longest declared namespace that contains it.** With `env:` bound to `…/env/` and `building:` to `…/env/building/`, `building:Door` goes to `building.ttl` and `env:Thing` to `env.ttl`. An IRI under `env:` in a path nobody declared, such as `…/env/x/Y`, stays with `env`.
+- **An entity under no declared namespace** belongs to the namespace its own IRI implies: everything up to its last `#`, `/` or `:`.
+- **A module is named after the prefix your file declares** for its namespace, as written, so `org:` gives `org.ttl` even though rdflib binds `org` to another vocabulary. The name is used for the file, the manifest `name:` and every dependency entry.
+- **Where there is no prefix,** the name comes from the namespace's last path segment: N-Triples, an undeclared namespace, or the empty prefix `:`. `http://example.org/ontology#` gives `ontology.ttl`.
+- **If two names clash, declared prefixes keep theirs.** The rest get `-2`, `-3`, … in sorted namespace order. Names are compared without case, because `Ex.ttl` and `ex.ttl` are one file on a case-insensitive filesystem.
+
+Every class and property has a namespace, so `--by-namespace` never leaves one unmatched, and it exits 0.
+
 #### Configuration-Based (Explicit)
 
 For fine-grained control, define modules in a YAML configuration:
@@ -782,16 +793,39 @@ Minor differences may occur due to:
 #### Basic Namespace Split
 
 ```bash
-rdf-construct split ies.ttl -o ies-modules/ --by-namespace
+rdf-construct split examples/split/split_monolith.ttl -o modules/ --by-namespace
 ```
 
 Output:
 ```
-ies-modules/
-├── ies.ttl
-├── common.ttl
-└── manifest.yml
+  Modules: 3
+  Total triples: 106
+
+  Module breakdown:
+    building.ttl: 5 classes, 4 properties, 43 triples (deps: ex, org)
+    ex.ttl: 3 classes, 3 properties, 26 triples
+    org.ttl: 5 classes, 3 properties, 37 triples (deps: ex)
 ```
+
+```
+modules/
+├── .rdf-construct
+├── building.ttl
+├── ex.ttl
+├── manifest.yml
+└── org.ttl
+```
+
+One module for each of the file's `ex:`, `org:` and `building:` namespaces, named after its prefix.
+
+#### Known limitations
+
+| Limitation | Issue |
+|------------|-------|
+| Only classes and properties are placed: individuals, SKOS concepts, terms declared only by an OWL characteristic, the source's ontology header and blank-node interiors are dropped | #176 |
+| Each module gets an invented `http://example.org/<module>` ontology IRI, and its `owl:imports` name output files as `file://` IRIs | #178 |
+| The order of a module's `imports` and `dependencies` (and of the `deps:` shown above) changes from run to run | #181 |
+| Module files are written in rdflib's alphabetical order, not in semantic order | #305 |
 
 #### Split with Data Migration
 

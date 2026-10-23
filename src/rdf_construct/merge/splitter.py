@@ -9,6 +9,8 @@ This module provides the OntologySplitter class that:
 - Supports data migration by instance type
 """
 
+import re
+from collections.abc import Container
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -18,6 +20,7 @@ from rdflib import Graph, URIRef, Namespace
 from rdflib.namespace import RDF, RDFS, OWL
 
 from rdf_construct.core.outdir import mark_output_dir
+from rdf_construct.core.utils import CurieError, resolve_curie
 
 
 def select_classes(graph: Graph) -> set[URIRef]:
@@ -60,6 +63,63 @@ def select_properties(graph: Graph) -> set[URIRef]:
             if isinstance(s, URIRef):
                 properties.add(s)
     return properties
+
+
+_NAMESPACE_DELIMITERS = "#/:"
+
+
+def _derived_namespace(iri: str) -> str:
+    """The namespace an IRI implies by itself: everything up to its last ``#``, ``/`` or ``:``.
+
+    Args:
+        iri: The IRI to cut.
+
+    Returns:
+        The IRI up to and including its last delimiter, or the IRI unchanged if it has none.
+    """
+    cut = max(iri.rfind(d) for d in _NAMESPACE_DELIMITERS)
+    return iri[: cut + 1] if cut >= 0 else iri
+
+
+def _claiming_namespace(iri: str, namespaces: Container[str]) -> str | None:
+    """The longest of `namespaces` that contains `iri`, matched as `core.utils.in_namespace` does.
+
+    Every namespace that can contain an IRI is the IRI itself, or the IRI cut just before or just
+    after one of its delimiters, so the candidates are looked up rather than tested one by one.
+    That keeps the claim linear in the length of the IRI whatever the number of namespaces, and
+    independent of the order they were declared in (#177).
+
+    Args:
+        iri: The IRI to place.
+        namespaces: The candidate namespaces.
+
+    Returns:
+        The longest namespace containing `iri`, or None if none does.
+    """
+    best = iri if iri in namespaces else None
+    for i, ch in enumerate(iri):
+        if ch in _NAMESPACE_DELIMITERS:
+            for candidate in (iri[: i + 1], iri[:i]):
+                if candidate in namespaces and (best is None or len(candidate) > len(best)):
+                    best = candidate
+    return best
+
+
+def _fallback_name(namespace: str) -> str:
+    """A module name for a namespace with no declared prefix: its last path segment.
+
+    ``http://example.org/ontology#`` gives ``ontology``. Characters that are unsafe in a file
+    name become ``_``.
+
+    Args:
+        namespace: The namespace IRI.
+
+    Returns:
+        A non-empty name.
+    """
+    segments = [s for s in re.split(r"[#/:]", namespace.rstrip(_NAMESPACE_DELIMITERS)) if s]
+    name = re.sub(r"[^A-Za-z0-9_.-]", "_", segments[-1] if segments else "").strip(".")
+    return name or "namespace"
 
 
 @dataclass
@@ -394,7 +454,8 @@ class OntologySplitter:
         if not self.config.source.exists():
             raise FileNotFoundError(f"Source not found: {self.config.source}")
 
-        graph = Graph()
+        # The file's own prefixes plus the core five, never rdflib's wider table (P10, #177)
+        graph = Graph(bind_namespaces="core")
 
         # Determine format from extension
         ext = self.config.source.suffix.lower()
@@ -443,6 +504,28 @@ class OntologySplitter:
         all_properties = select_properties(self.source_graph)
         all_entities = all_classes | all_properties
 
+        # The longest namespace that contains an entity claims it, whatever order the modules
+        # come in; two modules naming the same namespace leave it to the first (#177)
+        namespace_owner: dict[str, str] = {}
+        for module in self.config.modules:
+            for ns in module.namespaces:
+                namespace_owner.setdefault(ns, module.name)
+        owned: dict[str, list[URIRef]] = {}
+        for entity in all_entities:
+            ns_claim = _claiming_namespace(str(entity), namespace_owner)
+            if ns_claim is not None:
+                owned.setdefault(namespace_owner[ns_claim], []).append(entity)
+
+        # A listed CURIE whose prefix the source does not bind is refused, not matched to nothing
+        try:
+            for module in self.config.modules:
+                for curie in [*module.classes, *module.properties]:
+                    self._expand_curie(curie)
+        except CurieError as e:
+            result.success = False
+            result.error = str(e)
+            return {}
+
         # Assign entities to modules
         for module in self.config.modules:
             # By explicit class list
@@ -476,12 +559,10 @@ class OntologySplitter:
                                 result.entity_assignments[str(desc)] = module.name
 
             # By namespace
-            for ns in module.namespaces:
-                for entity in all_entities:
-                    if str(entity).startswith(ns):
-                        if str(entity) not in result.entity_assignments:
-                            assignments[module.name].add(entity)
-                            result.entity_assignments[str(entity)] = module.name
+            for entity in owned.get(module.name, []):
+                if str(entity) not in result.entity_assignments:
+                    assignments[module.name].add(entity)
+                    result.entity_assignments[str(entity)] = module.name
 
         # Find unmatched entities
         for entity in all_entities:
@@ -493,27 +574,23 @@ class OntologySplitter:
     def _expand_curie(self, curie: str) -> URIRef:
         """Expand a CURIE to a full URI using the source graph's namespace bindings.
 
+        The bindings are the source file's own prefixes plus the core five (see `_load_source`),
+        so ``org:`` means the file's ``org:``, never rdflib's.
+
         Args:
             curie: CURIE or full URI string.
 
         Returns:
             URIRef of the expanded URI.
+
+        Raises:
+            CurieError: If `curie` is a CURIE whose prefix the source does not bind.
         """
         if self.source_graph is None:
             return URIRef(curie)
 
-        # If already a full URI
-        if curie.startswith("http://") or curie.startswith("https://"):
-            return URIRef(curie)
-
-        # Try to expand as CURIE
-        if ":" in curie:
-            prefix, local = curie.split(":", 1)
-            for ns_prefix, ns_uri in self.source_graph.namespace_manager.namespaces():
-                if ns_prefix == prefix:
-                    return URIRef(str(ns_uri) + local)
-
-        return URIRef(curie)
+        prefixes = {p: str(ns) for p, ns in self.source_graph.namespace_manager.namespaces()}
+        return resolve_curie(prefixes, curie)
 
     def _get_descendants(
         self,
@@ -563,7 +640,8 @@ class OntologySplitter:
             return
 
         for module in self.config.modules:
-            module_graph = Graph()
+            # A bare Graph() would re-import rdflib's prefix table and write org1: (P10)
+            module_graph = Graph(bind_namespaces="core")
 
             # Copy namespace bindings
             for prefix, ns in self.source_graph.namespace_manager.namespaces():
@@ -597,7 +675,7 @@ class OntologySplitter:
             return
 
         # Create common module
-        common_graph = Graph()
+        common_graph = Graph(bind_namespaces="core")
 
         if self.source_graph is not None:
             # Copy namespace bindings
@@ -718,6 +796,21 @@ class OntologySplitter:
 
         return None
 
+    def _has_common_module(self, result: SplitResult) -> bool:
+        """Whether `result` holds a common module that is not also a defined module.
+
+        A namespace module may be called ``common`` too; it is then reported and written once,
+        as itself.
+
+        Args:
+            result: SplitResult.
+
+        Returns:
+            True if the common module must be reported and written separately.
+        """
+        name = self.config.unmatched.common_module
+        return name in result.modules and all(m.name != name for m in self.config.modules)
+
     def _calculate_stats(self, result: SplitResult) -> None:
         """Calculate statistics for each module.
 
@@ -733,7 +826,7 @@ class OntologySplitter:
             result.module_stats.append(stats)
 
         # Stats for common module
-        if self.config.unmatched.common_module in result.modules:
+        if self._has_common_module(result):
             graph = result.modules[self.config.unmatched.common_module]
             stats = self._calculate_module_stats(
                 self.config.unmatched.common_module,
@@ -854,7 +947,7 @@ class OntologySplitter:
                 )
 
         # Write common module
-        if self.config.unmatched.common_module in result.modules:
+        if self._has_common_module(result):
             output_path = self.config.output_dir / self.config.unmatched.common_output
             result.modules[self.config.unmatched.common_module].serialize(
                 destination=output_path.as_posix(), format="turtle"
@@ -987,7 +1080,16 @@ def split_by_namespace(
 ) -> SplitResult:
     """Convenience function to split an ontology by namespace.
 
-    Automatically detects modules from distinct namespaces in the source.
+    Automatically detects modules from the namespaces the source's classes and properties live in
+    (#177). An entity belongs to the longest namespace the file declares that contains it, or
+    otherwise to the namespace its own IRI implies, cut after its last ``#``, ``/`` or ``:``. Each
+    namespace with at least one entity is a module; an empty file gives none.
+
+    A module is named after the prefix the file declares for its namespace, read without rdflib's
+    built-in bindings. A namespace with no prefix, or only the empty prefix ``:``, is named after
+    its last path segment. Declared prefixes take their names first; where names then clash
+    (compared without case, since they become file names), the later namespaces in sorted IRI
+    order get ``-2``, ``-3``, ….
 
     Args:
         source: Path to source ontology.
@@ -997,29 +1099,37 @@ def split_by_namespace(
     Returns:
         SplitResult with split information.
     """
-    # Load source to detect namespaces
-    graph = Graph()
+    # Load source with exactly the prefixes its author declared, to name modules by
+    graph = Graph(bind_namespaces="none")
     graph.parse(source.as_posix())
 
-    # Find distinct namespaces used in the ontology
-    namespaces: dict[str, str] = {}  # namespace -> prefix
-    for prefix, ns in graph.namespace_manager.namespaces():
-        ns_str = str(ns)
-        # Skip common namespaces
-        if any(skip in ns_str for skip in ["w3.org", "purl.org", "xmlns.com"]):
-            continue
-        namespaces[ns_str] = prefix or "default"
+    declared: dict[str, str] = {}  # namespace -> prefix, "" for the empty prefix
+    for prefix, bound in graph.namespace_manager.namespaces():
+        declared[str(bound)] = prefix
+
+    # Find the distinct namespaces the ontology's entities use
+    used: set[str] = set()
+    for entity in select_classes(graph) | select_properties(graph):
+        iri = str(entity)
+        used.add(_claiming_namespace(iri, declared) or _derived_namespace(iri))
+
+    # Name them: declared prefixes first, then fallbacks, each in sorted namespace order
+    names: dict[str, str] = {}  # namespace -> module name
+    taken: set[str] = set()
+    for ns in sorted(used, key=lambda n: (not declared.get(n), n)):
+        base = declared.get(ns) or _fallback_name(ns)
+        name, suffix = base, 1
+        while name.casefold() in taken:
+            suffix += 1
+            name = f"{base}-{suffix}"
+        taken.add(name.casefold())
+        names[ns] = name
 
     # Create module definitions
-    modules = []
-    for ns, prefix in namespaces.items():
-        modules.append(
-            ModuleDefinition(
-                name=prefix,
-                output=f"{prefix}.ttl",
-                namespaces=[ns],
-            )
-        )
+    modules = [
+        ModuleDefinition(name=name, output=f"{name}.ttl", namespaces=[ns])
+        for ns, name in sorted(names.items(), key=lambda item: item[1])
+    ]
 
     config = SplitConfig(
         source=source,
