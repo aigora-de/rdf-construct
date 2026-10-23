@@ -2829,8 +2829,10 @@ def merge(
 
     \b
     Exit codes:
-      0 - Merge successful, no unresolved conflicts
-      1 - Merge successful, but unresolved conflicts marked in output
+      0 - Merged; every conflict was resolved by --strategy, or there were none
+      1 - Merged, with conflicts marked in the output for review: always for
+          rdfs:domain, rdfs:range and functional properties; for labels under
+          mark_all, or when the highest-priority sources are tied
       2 - Input refused or run failed (invalid options or config, parse error, etc.)
 
     \b

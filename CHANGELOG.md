@@ -46,6 +46,17 @@ finding. See
 [`lint`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#lint)
 in the migration note.
 
+**If you have merged ontologies with `merge` and believed a priority was
+honoured, it was not.** `--strategy` and `-p/--priority` now affect the merged
+graph; before, they changed only the console summary and the report, and every
+value from every source was written. Conflicts are now only found between
+sources, and only on predicates where a second value matters, so a multilingual
+ontology no longer conflicts with itself. A merge that leaves conflicting
+`rdfs:domain` or `rdfs:range` values for review now exits 1 under every
+strategy. See
+[`merge`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#merge)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
@@ -203,6 +214,36 @@ change, and what to do about it, is listed command by command in the
   and the config file overrides the option's default.
 
 ### Fixed
+- **`merge` compares sources when it looks for conflicts** (#193). It put every
+  source into one index and reported any predicate with two values, so a file
+  merged on its own conflicted with itself: #193's three-language reproducer
+  gave 3 conflicts, `ies-env-building.ttl` merged with itself 62, and a
+  5,000-concept vocabulary in ten languages merged with itself 10,000. All of
+  them are now 0. A conflict needs two sources whose values, merged, would
+  assert a combination no single source asserts, on a predicate whose tier
+  makes a second value a conflict. The tiers are one map in
+  `rdf_construct.core.predicate_tiers`: `rdfs:comment`, `skos:altLabel`,
+  `skos:note`, `rdfs:seeAlso` and every unlisted predicate (including
+  `rdf:type` and `rdfs:subClassOf`) are repeatable; `rdfs:label` and
+  `skos:prefLabel` conflict only within one language tag, compared without
+  case; `rdfs:domain`, `rdfs:range` and any property a source declares
+  `owl:FunctionalProperty` are load-bearing. A configuration file can move a
+  predicate between tiers with `conflicts.predicate_tiers`. The ontology header
+  is not checked until #171. Detection no longer slows quadratically with the
+  values on one subject: 20,000 labels on one subject took 118.6 s and now take
+  0.28 s.
+- **`merge` applies the resolution it reports** (#169). The losing values of a
+  per-language conflict are now removed from the output, so `priority`, `first`
+  and `last` write different graphs. `rdfs:domain`/`rdfs:range` conflicts are
+  never picked: both values are kept and marked, and the marker says that two
+  values mean their intersection instead of telling you to delete one. A
+  second `skos:prefLabel` in one tag is reported as malformed (SKOS S14), a
+  second `rdfs:label` as ambiguous. Sources tied at the highest priority are
+  not picked between: the conflict is marked and the run exits 1.
+- **`merge` refuses a predicate in `ignore_predicates` that is not an IRI**
+  (#193). `ignore_predicates: ["rdfs:label"]` silently matched nothing; a
+  prefixed name is now refused with exit 2 until `merge` resolves prefixes by
+  the project's binding rule (#357).
 - **`merge` writes a blank-node structure its sources share once** (#170).
   Every restriction, `owl:unionOf` list or `owl:AllDisjointClasses` that two
   sources both stated was written twice, because each parse gives blank nodes

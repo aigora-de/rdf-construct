@@ -16,6 +16,7 @@ from rdflib import Graph, URIRef, Namespace
 from rdflib.namespace import RDF, RDFS, OWL
 
 from rdf_construct.core.blank_nodes import label_by_content
+from rdf_construct.core.predicate_tiers import PredicateTier
 from rdf_construct.core.utils import rebase_iri
 from rdf_construct.merge.config import (
     MergeConfig,
@@ -86,7 +87,10 @@ class OntologyMerger:
             config: Merge configuration
         """
         self.config = config
-        self.detector = ConflictDetector(ignore_predicates=config.conflicts.ignore_predicates)
+        self.detector = ConflictDetector(
+            ignore_predicates=config.conflicts.ignore_predicates,
+            predicate_tiers=config.conflicts.predicate_tiers,
+        )
 
     def merge(self) -> MergeResult:
         """Execute the merge operation.
@@ -245,7 +249,9 @@ class OntologyMerger:
                 conflict.resolve_by_first()
             elif strategy == ConflictStrategy.LAST:
                 conflict.resolve_by_last()
-            # MARK_ALL leaves conflicts unresolved
+            elif conflict.tier is not PredicateTier.LOAD_BEARING:
+                conflict.unpicked = "--strategy mark_all marks every conflict"
+            # A load-bearing conflict is never resolved, under any strategy
 
             if conflict.is_resolved:
                 result.resolved_conflicts.append(conflict)
@@ -280,6 +286,11 @@ class OntologyMerger:
         for source in sources:
             for triple in source.graph:
                 merged.add(triple)
+
+        # Remove the values each resolution discarded (#169)
+        for conflict in result.resolved_conflicts:
+            for cv in conflict.discarded:
+                merged.remove((conflict.subject, conflict.predicate, cv.value))
 
         # Handle owl:imports
         merged = self._handle_imports(merged, sources)

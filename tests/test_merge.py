@@ -251,11 +251,9 @@ class TestConflictDetector:
         detector = ConflictDetector()
         conflicts = detector.detect_conflicts(sources)
 
-        # Should find conflicts for ex:Ontology rdfs:label (different values)
-        # but not for non-overlapping content
-        label_conflicts = [c for c in conflicts if str(c.predicate) == str(RDFS.label)]
-        # Both have ex:Ontology rdfs:label with different values
-        assert any("Ontology" in str(c.subject) for c in label_conflicts)
+        # The two ex:Ontology labels differ, but the header is #171's to merge, so it is left
+        # out; nothing else overlaps (#193)
+        assert conflicts == []
 
     def test_detect_label_conflict(self, core_ontology, conflicting_ontology):
         """Test detection of conflicting labels."""
@@ -339,8 +337,8 @@ class TestConflictResolution:
         conflict.resolve_by_priority()
 
         assert conflict.is_resolved
-        assert conflict.resolution is not None
-        assert str(conflict.resolution.value) == "High"
+        assert [str(cv.value) for cv in conflict.kept] == ["High"]
+        assert [str(cv.value) for cv in conflict.discarded] == ["Low"]
 
     def test_resolve_by_first(self):
         """Test first-wins resolution."""
@@ -356,7 +354,7 @@ class TestConflictResolution:
         conflict.resolve_by_first()
 
         assert conflict.is_resolved
-        assert str(conflict.resolution.value) == "First"
+        assert [str(cv.value) for cv in conflict.kept] == ["First"]
 
     def test_resolve_by_last(self):
         """Test last-wins resolution."""
@@ -372,7 +370,7 @@ class TestConflictResolution:
         conflict.resolve_by_last()
 
         assert conflict.is_resolved
-        assert str(conflict.resolution.value) == "Last"
+        assert [str(cv.value) for cv in conflict.kept] == ["Last"]
 
 
 # Merger tests
