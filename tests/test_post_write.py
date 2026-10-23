@@ -204,16 +204,14 @@ def test_split_union_is_isomorphic(source: Path, tmp_path, monkeypatch):
 # merge: every source triple, minus the losers of resolved conflicts
 # ---------------------------------------------------------------------------
 
-# The losing values of the five conflicts `merge` reports as auto-resolved for core + conflicting
-# under the default `priority` strategy, where merge_conflicting.ttl has the higher priority. They
-# are named by hand so that the test does not depend on the merger's own conflict detection
-# (#193).
+# The losing values of core + conflicting under the default `priority` strategy, where
+# merge_conflicting.ttl has the higher priority. Only the two `@en` labels are picked between:
+# `rdfs:comment` is repeatable, so both comments stay, and the `rdfs:domain` and `rdfs:range`
+# conflicts are marked with both values kept (#169). They are named by hand so that the test does
+# not depend on the merger's own conflict detection (#193).
 MERGE_LOSERS: tuple[Triple, ...] = (
-    (EXO.hasName, RDFS.domain, EXO.Building),
     (EXO.hasName, RDFS.label, Literal("has name", lang="en")),
     (EXO.Building, RDFS.label, Literal("Building", lang="en")),
-    (EXO.Building, RDFS.comment, Literal("A constructed structure.", lang="en")),
-    (EXO.hasLocation, RDFS.range, EXO.Place),
 )
 
 
@@ -237,7 +235,6 @@ def test_merge_keeps_every_blank_node_structure(tmp_path, monkeypatch):
     _assert_holds("merge", inputs=[_parse(s) for s in sources], outputs=[merged])
 
 
-@pytest.mark.xfail(strict=True, reason="#169")
 def test_merge_drops_the_losers_of_resolved_conflicts(tmp_path, monkeypatch):
     sources = [EXAMPLES / "merge" / "merge_core.ttl", EXAMPLES / "merge" / "merge_conflicting.ttl"]
     merged = _merge(tmp_path, monkeypatch, sources)

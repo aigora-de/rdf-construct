@@ -63,69 +63,159 @@ rdf-construct merge [OPTIONS] [SOURCES]...
 
 | Code | Meaning |
 |------|---------|
-| 0 | Merge successful, no unresolved conflicts |
-| 1 | Merge successful, but unresolved conflicts marked in output |
+| 0 | Merged; every conflict was resolved by `--strategy`, or there were none |
+| 1 | Merged, with conflicts marked in the output for review: always for `rdfs:domain`, `rdfs:range` and functional properties; for labels under `mark_all`, or when the highest-priority sources are tied |
 | 2 | Input refused or run failed (invalid options or config, file not found, parse error) |
 
 ### Conflict Detection
 
-The merge command detects conflicts when:
+A conflict is a place where the sources disagree **and** a second value would change what the
+merged ontology says. Two things must both be true:
 
-1. **Same subject + predicate** has different values across sources
-2. **Semantic contradictions** exist (e.g., disjoint + subclass)
+1. **The sources disagree.** For one subject and predicate (and, for labels, one language tag),
+   merging them would assert a combination of values that no single source asserts. So two values
+   from one source are never a conflict, a source that says nothing is not a disagreement, and a
+   source whose values are a subset of another's agrees with it. A file merged alone, or with
+   itself, has no conflicts.
+2. **The predicate's tier makes a second value a conflict.** Under the open-world assumption most
+   predicates take any number of values, so only the predicates below can conflict at all:
 
-#### Conflict Types
+| Tier | Predicates | A second value is | Behaviour |
+|------|------------|-------------------|-----------|
+| repeatable | `rdfs:comment`, `skos:altLabel`, `skos:note`, `rdfs:seeAlso`, `rdf:type`, `rdfs:subClassOf` and **every predicate not listed here** | another assertion | keep both, report nothing |
+| per language tag | `rdfs:label`, `skos:prefLabel` | a conflict only within one tag | `--strategy` picks, per tag |
+| load-bearing | `rdfs:domain`, `rdfs:range`, and any property a source declares `owl:FunctionalProperty` | a change of meaning | marked under every strategy, never picked |
 
-| Type | Description | Example |
-|------|-------------|---------|
-| Value Difference | Different literal values | `rdfs:label "Building"` vs `"Structure"` |
-| Type Difference | Different rdf:type declarations | `owl:Class` vs `rdfs:Class` |
-| Hierarchy Difference | Different subClassOf | `ex:A` subClassOf `ex:B` vs `ex:C` |
-| Semantic Contradiction | Logically incompatible | disjointWith + subClassOf |
+A correctly multilingual file is not a conflict:
+
+```bash
+rdf-construct merge tests/fixtures/merge/conflicts/multilang.ttl \
+    tests/fixtures/merge/conflicts/multilang.ttl -o merged.ttl --strategy mark_all
+```
+
+```
+✓ No conflicts detected
+```
+
+Language tags are compared without regard to case (`@en-GB` and `@en-gb` are one tag), and an
+untagged literal is its own bucket. Subtags are not matched: `@en` and `@en-gb` are different tags.
+`"Building"` and `"Building"^^xsd:string` are one value, as RDF 1.1 says, so they never conflict;
+both spellings are still written to the output.
+
+The conflict types say why a second value matters:
+
+| Type | Tier | Meaning |
+|------|------|---------|
+| Ambiguous | per language | Two `rdfs:label`s in one tag are legal RDF, but a reader cannot tell which is the name |
+| Malformed | per language | Two `skos:prefLabel`s in one tag break SKOS integrity condition S14 |
+| Changes meaning | load-bearing | Two `rdfs:domain` or `rdfs:range` values mean their intersection, which no source said; two values of a functional property make the ontology inconsistent (literals) or the values one individual (IRIs) |
+
+`merge` does not reason. It does not check one predicate against another (such as a class that is
+both `owl:disjointWith` and `rdfs:subClassOf` another); run a reasoner over the merged output for
+that.
+
+#### Moving a predicate between tiers
+
+The tiers can be overridden in the configuration file, by full IRI:
+
+```yaml
+conflicts:
+  ignore_predicates:            # never a conflict: the same as repeatable
+    - "http://www.w3.org/2000/01/rdf-schema#isDefinedBy"
+  predicate_tiers:
+    repeatable:   ["http://www.w3.org/2000/01/rdf-schema#label"]
+    per_language: ["http://purl.org/dc/terms/title"]
+    load_bearing: ["<http://example.org/maxOccupancy>"]
+```
+
+The configuration wins over the defaults and over a source's `owl:FunctionalProperty`
+declaration. A predicate placed in two tiers, an unknown tier name, or a prefixed name such as
+`rdfs:label` is refused with exit 2.
 
 #### Resolution Strategies
 
-**Priority (default)**: Higher priority source wins. Set priorities with `-p`:
+`--strategy` decides the per-language tier. The winner is a source: its values for that subject,
+predicate and tag are kept, and the values only the other sources assert are **removed from the
+output**. Load-bearing conflicts are never picked.
+
+| Strategy | Keeps the values of |
+|----------|---------------------|
+| `priority` (default) | the highest-priority source that asserts them; set priorities with `-p` |
+| `first` | the first source, in command-line order, that asserts them |
+| `last` | the last source that asserts them |
+| `mark_all` | nobody: every conflict is marked and every value kept |
+
+Three sources disagree on an English label and agree on the French one:
 
 ```bash
-# extension.ttl (priority 2) wins over core.ttl (priority 1)
-rdf-construct merge core.ttl extension.ttl -o merged.ttl -p 1 -p 2
+rdf-construct merge tests/fixtures/merge/conflicts/labels_a.ttl \
+    tests/fixtures/merge/conflicts/labels_b.ttl \
+    tests/fixtures/merge/conflicts/labels_c.ttl \
+    -p 1 -p 3 -p 2 --strategy priority -o merged.ttl
 ```
 
-**First / Last**: First or last source encountered wins:
-
-```bash
-rdf-construct merge a.ttl b.ttl c.ttl -o merged.ttl --strategy first
-rdf-construct merge a.ttl b.ttl c.ttl -o merged.ttl --strategy last
+```turtle
+ex:Thing a owl:Class ;
+    rdfs:label "Beta"@en,
+        "Chose"@fr ;
+    rdfs:comment "Said by a."@en,
+        "Said by b."@en,
+        "Said by c."@en .
 ```
 
-**Mark All**: Leave all conflicts unresolved for manual review:
+`first` keeps `"Alpha"@en`, `last` keeps `"Gamma"@en`, and `mark_all` keeps all three and exits 1.
+The comments are repeatable, so all three stay under every strategy.
 
-```bash
-rdf-construct merge core.ttl ext.ttl -o merged.ttl --strategy mark_all
-```
+**Tied priorities are not picked between.** When the highest-priority sources that assert a value
+disagree with each other, the conflict is marked and the run exits 1. A configuration file whose
+sources have no `priority:` gives every source priority 1, so give them different priorities, or
+use `--strategy first` or `last` to decide by order.
 
 #### Conflict Markers
 
-Unresolved conflicts are marked in the output file:
+Every conflict that was not picked is listed in a comment block at the top of the output file:
+
+```bash
+rdf-construct merge tests/fixtures/merge/conflicts/domain_range_a.ttl \
+    tests/fixtures/merge/conflicts/domain_range_b.ttl -o merged.ttl
+```
 
 ```turtle
-# === CONFLICT: ex:Building rdfs:label ===
-# Source: core.ttl (priority 1): "Building"@en
-# Source: ext.ttl (priority 2): "Structure"@en
-# Resolution: UNRESOLVED - values differ, manual review required
-# To resolve: keep one value below, delete the other and this comment block
-ex:Building a owl:Class ;
-    rdfs:label "Building"@en ;      # from core.ttl
-    rdfs:label "Structure"@en ;     # from ext.ttl - CONFLICT
-    rdfs:subClassOf ex:PhysicalObject .
+# === CONFLICT: ex:hasPart rdfs:domain ===
+# Source: tests/fixtures/merge/conflicts/domain_range_a.ttl (priority 1): http://example.org/Assembly
+# Source: tests/fixtures/merge/conflicts/domain_range_b.ttl (priority 2): http://example.org/Machine
+# Changes meaning: two rdfs:domain values mean their intersection, which no source said; both are kept.
+# Not picked under any --strategy.
+# To resolve: if every value is meant, delete this block; otherwise delete the value you do not mean, then this block.
 # === END CONFLICT ===
 ```
 
-Find conflicts with `grep`:
+The triples stay as the sources stated them, so both domains are in the file:
+
+```turtle
+ex:hasPart a owl:ObjectProperty ;
+    rdfs:domain ex:Assembly,
+        ex:Machine ;
+    rdfs:range ex:Component,
+        ex:Part .
+```
+
+A per-language conflict under `mark_all` says which kind it is:
+
+```turtle
+# === CONFLICT: ex:car skos:prefLabel ===
+# Source: tests/fixtures/merge/conflicts/preflabel_a.ttl (priority 1): "Car"@en
+# Source: tests/fixtures/merge/conflicts/preflabel_b.ttl (priority 2): "Automobile"@en
+# Malformed: SKOS allows one skos:prefLabel per language tag (S14), and the merged values tagged @en are more than one; both are kept.
+# Not picked: --strategy mark_all marks every conflict.
+# To resolve: keep one, or demote the others to skos:altLabel, then delete this block.
+# === END CONFLICT ===
+```
+
+A marker lists only the values the sources do not all share. Find conflicts with `grep`:
 
 ```bash
-grep -n "=== CONFLICT ===" merged.ttl
+grep -n "=== CONFLICT" merged.ttl
 ```
 
 #### Conflict Reports
@@ -133,14 +223,24 @@ grep -n "=== CONFLICT ===" merged.ttl
 Generate a detailed report:
 
 ```bash
-rdf-construct merge core.ttl ext.ttl -o merged.ttl --report conflicts.md
+rdf-construct merge examples/merge/merge_core.ttl examples/merge/merge_conflicting.ttl \
+    -o merged.ttl --report conflicts.md
 ```
 
 The Markdown report includes:
 - Summary statistics
-- Unresolved conflicts with details
-- Auto-resolved conflicts
+- Unresolved conflicts, with the reason each was not picked
+- Resolved conflicts, with the values kept and the values discarded (which are not in the output)
 - Recommendations
+
+#### Known limitations
+
+| Limitation | Issue |
+|------------|-------|
+| The ontology header (`owl:Ontology` subjects) is not checked: two sources' header labels are both written | #171 |
+| Predicates in the configuration must be full IRIs; prefixed names are refused rather than resolved | #357 |
+| Conflict markers come out in a different order from run to run | #173 |
+| Values are compared as written, so `"1.0"` and `"1.00"` (`xsd:decimal`) on a functional property are reported as a conflict | — |
 
 ### Blank Nodes
 
@@ -350,6 +450,9 @@ rdf-construct merge \
     -p 1 -p 2 -p 2
 ```
 
+The two extensions share priority 2, so where they disagree with each other on a label, the
+conflict is marked rather than picked.
+
 #### Generate Conflict Report
 
 ```bash
@@ -374,7 +477,7 @@ rdf-construct merge --config migrate-config.yml
 # Check for conflicts without writing
 rdf-construct merge core.ttl ext.ttl -o merged.ttl --dry-run
 
-# Exit code 0 = no conflicts, 1 = conflicts, 2 = error
+# Exit code 0 = merged, 1 = conflicts marked for review, 2 = refused or failed
 echo "Exit code: $?"
 ```
 
@@ -741,7 +844,16 @@ Shows what would be created without writing files.
 
 ### Merge: "No conflicts but labels differ"
 
-Some predicates like `rdfs:comment` may have multiple values legitimately. Use `--ignore-predicates` (in config) to skip these.
+That is usually correct. Labels in different language tags never conflict, a source whose labels
+are a subset of another's agrees with it, and the ontology header is not checked yet (#171). Any
+predicate not in the tier table, such as `dcterms:title`, is repeatable. To have one treated as a
+label, place it in a tier in the configuration file:
+
+```yaml
+conflicts:
+  predicate_tiers:
+    per_language: ["http://purl.org/dc/terms/title"]
+```
 
 ### Merge: "Parse error on source file"
 
