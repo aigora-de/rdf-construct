@@ -601,10 +601,13 @@ other subject joins one, as [Where everything else goes](#where-everything-else-
 
 **A borrowed vocabulary makes no module.** A file saved by Protégé declares the annotation
 properties it uses, such as `dcterms:title a owl:AnnotationProperty`. When the file has an
-ontology header, a namespace on a different host from every ontology IRI it declares is borrowed,
-and its declarations go to the unmatched module instead of a `dcterms.ttl` of their own
-([#383](https://github.com/aigora-de/rdf-construct/issues/383)). A file with no header gives
-nothing to judge by, so there each namespace is still a module.
+ontology header, a namespace no ontology it declares owns is borrowed, and its declarations go to
+the unmatched module instead of a `dcterms.ttl` of their own
+([#383](https://github.com/aigora-de/rdf-construct/issues/383)). An ontology owns the namespaces
+on its own host, except on a host that many publishers share (`purl.org`, `w3id.org`,
+`www.w3.org`), where it owns only those under its own IRI: `http://purl.org/myont` owns
+`http://purl.org/myont#`, not `http://purl.org/dc/terms/`. A file with no header gives nothing to
+judge by, so there each namespace is still a module.
 
 #### Configuration-Based (Explicit)
 
@@ -707,8 +710,9 @@ the module with the rung that gave it (`from: …`):
 1. **`config`:** the module's `ontology_iri:` in a config file.
 2. **`namespace`:** the module's own namespace, without its trailing `#` or `/`, when it has
    exactly one. Not when that would be the source's own ontology IRI, and not when the namespace
-   is on a different host from every ontology IRI the source declares, since it would claim
-   someone else's (GeoSPARQL's namespace would claim `<http://www.opengis.net/ont/geosparql>`). A
+   is borrowed, as [Namespace-Based](#namespace-based-auto-detect) defines it, since it would
+   claim someone else's (GeoSPARQL's namespace would claim
+   `<http://www.opengis.net/ont/geosparql>`). A
    source with no header cannot be checked, and the rung says
    `namespace, unchecked: the source declares no ontology`.
 3. **`source ontology`:** `<source ontology IRI>/<module name>`. With several headers, the one

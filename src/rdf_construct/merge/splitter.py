@@ -139,12 +139,47 @@ def _host(iri: str) -> str:
     return urlsplit(iri).netloc.lower()
 
 
+#: Hosts where many publishers each own a part of the space: a persistent-identifier service, or
+#: W3C's, whose vocabularies are separate ontologies with separate owners. On these, sharing the
+#: host says nothing about who owns a namespace (#385's panel). ``purl.obolibrary.org`` is not
+#: here: OBO terms all share ``…/obo/``, so no test by namespace can tell one ontology's from
+#: another's.
+SHARED_HOSTS: frozenset[str] = frozenset({"purl.org", "w3id.org", "www.w3.org"})
+
+
+def _owns(ontology: URIRef, namespace: str) -> bool:
+    """Whether an ontology owns a namespace: on its own host, or within its own IRI.
+
+    On an ordinary host, the whole host is the ontology's. On one of :data:`SHARED_HOSTS`, only
+    the space under the ontology's own IRI is: ``http://purl.org/myont`` owns
+    ``http://purl.org/myont#`` but not ``http://purl.org/dc/terms/``.
+    """
+    host = _host(str(ontology))
+    if host != _host(namespace):
+        return False
+    if host in SHARED_HOSTS:
+        return in_namespace(
+            _lower_authority(namespace), _lower_authority(str(ontology)).rstrip("#/")
+        )
+    return True
+
+
+def _lower_authority(iri: str) -> str:
+    """The IRI with its scheme and host lower-cased, which RFC 3986 compares without case."""
+    parts = urlsplit(iri)
+    authority = f"{parts.scheme}://{parts.netloc}"
+    if not iri.startswith(authority):
+        return iri
+    return authority.lower() + iri[len(authority) :]
+
+
 def is_borrowed(namespace: str, ontologies: list[URIRef]) -> bool:
     """Whether a namespace belongs to someone other than the source (#383, #178).
 
-    A namespace is borrowed when its host differs from the host of every ontology IRI the source
-    declares: ``dcterms:`` or GeoSPARQL's in a file whose ontology lives elsewhere. A source that
-    declares no ontology gives nothing to judge by, so nothing is borrowed.
+    A namespace is borrowed when no ontology the source declares owns it (:func:`_owns`):
+    ``dcterms:`` or GeoSPARQL's in a file whose ontology lives elsewhere, or ``dcterms:`` in one
+    that lives elsewhere on ``purl.org``. A source that declares no ontology gives nothing to
+    judge by, so nothing is borrowed.
 
     Args:
         namespace: The namespace IRI.
@@ -153,7 +188,7 @@ def is_borrowed(namespace: str, ontologies: list[URIRef]) -> bool:
     Returns:
         True if the namespace is borrowed.
     """
-    return bool(ontologies) and all(_host(namespace) != _host(str(o)) for o in ontologies)
+    return bool(ontologies) and not any(_owns(o, namespace) for o in ontologies)
 
 
 #: The reasons a subject goes to the unmatched module, as the run reports them (#176)

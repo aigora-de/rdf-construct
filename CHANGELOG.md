@@ -246,8 +246,9 @@ change, and what to do about it, is listed command by command in the
   called `http://example.org/<module>`, and its `owl:imports` named output files
   as `file://` paths on the machine that ran it. A module's IRI now comes from
   `ontology_iri:`, its own namespace, or the source ontology's IRI, and the run
-  prints which; a namespace that is the source's own IRI or on another host is
-  not used. `owl:imports` name ontology IRIs. The source's header is no longer
+  prints which; a namespace that is the source's own IRI, or that the source
+  does not own (another host, or outside its own IRI on a shared host such as
+  `purl.org`), is not used. `owl:imports` name ontology IRIs. The source's header is no longer
   lost without a trace: each module names it with `prov:wasDerivedFrom`, and
   no module copies its `owl:versionIRI`.
 - **`split -c` runs** (#175). It crashed on every invocation with

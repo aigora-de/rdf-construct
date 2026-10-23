@@ -36,6 +36,7 @@ from rdf_construct.merge.splitter import (
     OntologySplitter,
     SplitConfig,
     UnmatchedStrategy,
+    is_borrowed,
     select_classes,
     select_properties,
 )
@@ -275,6 +276,51 @@ def test_without_a_header_nothing_is_borrowed(tmp_path: Path) -> None:
         "rdfs.ttl",
         "skos.ttl",
     ]
+
+
+@pytest.mark.parametrize(
+    ("ontology", "namespace", "borrowed"),
+    [
+        # An ordinary host: the whole host is the ontology's
+        ("http://example.org/routing", "http://example.org/a#", False),
+        ("http://example.org/routing", "http://external.example/v#", True),
+        # A shared host: only the ontology's own IRI space is its own (#385's panel)
+        ("http://purl.org/myont", "http://purl.org/myont#", False),
+        ("http://purl.org/myont", "http://purl.org/dc/terms/", True),
+        ("https://w3id.org/foo", "https://w3id.org/foo/core#", False),
+        ("https://w3id.org/foo", "https://w3id.org/bar#", True),
+        ("http://www.w3.org/ns/dcat", "http://www.w3.org/ns/dcat#", False),
+        ("http://www.w3.org/ns/dcat", "http://www.w3.org/ns/prov#", True),
+        ("http://www.w3.org/ns/dcat", "http://www.w3.org/2004/02/skos/core#", True),
+        # The host is compared without case
+        ("http://PURL.org/myont", "http://purl.org/myont#", False),
+    ],
+)
+def test_borrowed_on_ordinary_and_shared_hosts(
+    ontology: str, namespace: str, borrowed: bool
+) -> None:
+    assert is_borrowed(namespace, [URIRef(ontology)]) is borrowed
+
+
+def test_a_shared_host_does_not_make_a_borrowed_vocabulary_ours(tmp_path: Path) -> None:
+    """``dcterms:`` in an ontology that also lives on purl.org would claim DCMI's IRI."""
+    source = tmp_path / "purl.ttl"
+    source.write_text(
+        "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n"
+        "@prefix dcterms: <http://purl.org/dc/terms/> .\n"
+        "@prefix my: <http://purl.org/myont#> .\n"
+        "<http://purl.org/myont> a owl:Ontology .\n"
+        "my:Thing a owl:Class .\n"
+        "dcterms:title a owl:AnnotationProperty .\n"
+    )
+    out = tmp_path / "modules"
+
+    result = _split(source, out)
+
+    assert result.exit_code == 1
+    assert sorted(_modules(out)) == ["my.ttl", "unmatched.ttl"]
+    assert "<http://purl.org/dc/terms>" not in result.output
+    assert f"    1 {REASON_BORROWED}\n" in result.output
 
 
 # ---------------------------------------------------------------------------
