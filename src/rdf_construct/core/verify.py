@@ -63,11 +63,14 @@ from enum import Enum
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from rdflib import Graph
+from rdflib import RDF, Graph
 from rdflib.compare import graph_diff, to_isomorphic
+from rdflib.namespace import OWL
 from rdflib.term import BNode, Node
 
 from .blank_nodes import blank_node_components, component_digest
+from .provenance import ONTOLOGY, WAS_DERIVED_FROM
+from .serialiser import bnode_closure
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -86,7 +89,8 @@ class Contract(Enum):
     ISOMORPHIC = "isomorphic"
     #: The output has exactly as many triples as the input.
     TRIPLE_COUNT = "triple-count"
-    #: The union of the outputs is the same graph as the input.
+    #: The union of the outputs' bodies is the same graph as the input's body: each graph with
+    #: its ontology headers set aside, since every part names itself (#178).
     UNION_ISOMORPHIC = "union-isomorphic"
     #: The output contains every triple of every input, except those it claims to drop.
     SUPERSET = "superset"
@@ -187,7 +191,16 @@ CONTRACTS: Mapping[str, CommandContract] = MappingProxyType(
                     "input triple survives' is checked here."
                 ),
             ),
-            CommandContract("split", Contract.UNION_ISOMORPHIC),
+            CommandContract(
+                "split",
+                Contract.UNION_ISOMORPHIC,
+                note=(
+                    "Headers aside: the source's header is not copied, and each module's own "
+                    "header, derivation stamp and imports are not in the source (#178). A blank "
+                    "node that subjects in two modules refer to is copied into both, and so reads "
+                    "as extra."
+                ),
+            ),
             CommandContract(
                 "merge",
                 Contract.SUPERSET,
@@ -273,11 +286,39 @@ def check_triple_count(expected: Graph, actual: Graph) -> list[Discrepancy]:
     ]
 
 
-def check_union_isomorphic(source: Graph, parts: Iterable[Graph]) -> list[Discrepancy]:
-    """Check that the union of ``parts`` is the same graph as ``source``.
+def body(graph: Graph) -> Graph:
+    """The graph without its ontology headers: what a header describes is the file, not its content.
 
-    A blank node is local to the file it was parsed from. So a blank-node closure that is copied
-    into two parts appears twice in the union, and is reported as extra.
+    Removed are the triples of every ``owl:Ontology`` subject and of the blank nodes they reach.
+    So is the ``prov:wasDerivedFrom`` declaration a derivation stamp adds
+    (``core.provenance.stamp_derivation``), when nothing but a header uses it.
+
+    Args:
+        graph: The graph.
+
+    Returns:
+        A new graph holding the rest.
+    """
+    headers = list(graph.subjects(RDF.type, ONTOLOGY))
+    dropped = set(headers) | set(bnode_closure(graph, headers))
+    stamp_only = not any(p == WAS_DERIVED_FROM and s not in dropped for s, p, _ in graph) and set(
+        graph.predicate_objects(WAS_DERIVED_FROM)
+    ) == {(RDF.type, OWL.AnnotationProperty)}
+    result = Graph()
+    for triple in graph:
+        if triple[0] in dropped or (stamp_only and triple[0] == WAS_DERIVED_FROM):
+            continue
+        result.add(triple)
+    return result
+
+
+def check_union_isomorphic(source: Graph, parts: Iterable[Graph]) -> list[Discrepancy]:
+    """Check that the union of the bodies of ``parts`` is the same graph as the body of ``source``.
+
+    Each part names itself with its own ontology header, so headers are set aside on both sides
+    (:func:`body`); everything else must be there exactly once. A blank node is local to the file
+    it was parsed from. So a blank-node closure that is copied into two parts appears twice in
+    the union, and is reported as extra.
 
     Args:
         source: The graph that was divided.
@@ -288,8 +329,8 @@ def check_union_isomorphic(source: Graph, parts: Iterable[Graph]) -> list[Discre
     """
     union = Graph()
     for part in parts:
-        union += part
-    return check_isomorphic(source, union, Contract.UNION_ISOMORPHIC)
+        union += body(part)
+    return check_isomorphic(body(source), union, Contract.UNION_ISOMORPHIC)
 
 
 def _has_bnode(triple: Triple) -> bool:

@@ -326,7 +326,6 @@ THREE_STATES = [
             "clean",
             ("split", MONOLITH, "-c", str(EXAMPLES / "split" / "split_config.yml"), "-o", "@tmp/s"),
         ),
-        xfail="#175",
         label="config",
     ),
     _row(

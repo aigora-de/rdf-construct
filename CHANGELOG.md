@@ -57,6 +57,16 @@ strategy. See
 [`merge`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#merge)
 in the migration note.
 
+**If you split with `split --by-namespace`, every module changes.** Individuals,
+SKOS concepts, characteristic-only properties and blank-node interiors are no
+longer dropped, so modules grow and an `unmatched.ttl` module (no longer
+`common.ttl`) collects what has no single home, at exit 1. Each module now has
+an honest ontology IRI, printed with the rule that gave it, instead of
+`http://example.org/<module>`, and `owl:imports` name ontology IRIs instead of
+`file://` paths. `split -c` runs for the first time. See
+[`split`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#split)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
@@ -130,8 +140,14 @@ change, and what to do about it, is listed command by command in the
   way to leave the ontology header out. Combined with a `header` section in the
   same profile, or given anything but `true` or `false`, it is refused at exit 2
   before anything is written.
+- **`ontology_iri:` on a `split` config module** (#178): the module's ontology
+  IRI, as an IRI or a CURIE of the source's prefixes.
 
 ### Changed
+- **`split`'s unmatched module is called `unmatched` by default** (#382), not
+  `common`, and a run whose unmatched module would take another module's name
+  is refused at exit 2 instead of overwriting it. `--common-name common` keeps
+  the old name.
 - **A default output directory the tool has not marked is refused** (#261).
   Without `-o`, `docs`, `uml`, `split` and `order` exit 2 before parsing the
   source when `docs/`, `diagrams/`, `modules/` or `ordered/` holds anything but
@@ -214,6 +230,32 @@ change, and what to do about it, is listed command by command in the
   and the config file overrides the option's default.
 
 ### Fixed
+- **`split` places every subject of the source** (#176). It placed only
+  classes and properties, so individuals, SKOS concepts, terms declared only by
+  an OWL characteristic such as `owl:TransitiveProperty`, and the inside of
+  every blank node were dropped at exit 0: `rdfs:subClassOf [ ]` stood where a
+  restriction had been. #176's 18-triple reproducer kept 4; a 10,202-triple
+  file lost 6,302. Now an individual goes to the module holding its class, a
+  SKOS concept with its scheme, and a blank node with whatever refers to it.
+  A borrowed vocabulary's declarations (`dcterms:title a
+  owl:AnnotationProperty`) make no module of their own in a file with an
+  ontology header (#383). Whatever has no single module goes to the unmatched
+  module, which `--unmatched` now sees on `--by-namespace` too, and the run
+  counts it by reason.
+- **`split` gives each module an honest identity** (#178). Every module was
+  called `http://example.org/<module>`, and its `owl:imports` named output files
+  as `file://` paths on the machine that ran it. A module's IRI now comes from
+  `ontology_iri:`, its own namespace, or the source ontology's IRI, and the run
+  prints which; a namespace that is the source's own IRI or on another host is
+  not used. `owl:imports` name ontology IRIs. The source's header is no longer
+  lost without a trace: each module names it with `prov:wasDerivedFrom`, and
+  no module copies its `owl:versionIRI`.
+- **`split -c` runs** (#175). It crashed on every invocation with
+  `NameError: UnmatchedStrategy`. Data split with `--migrate-data` keeps the
+  data file's own prefixes (`org:`, not `org1:`).
+- **A `split` config's `unmatched:`, `output_dir`, `dry_run` and
+  `generate_manifest` take effect** (#291). The defaults of `--unmatched` and
+  `-o` replaced them on every run.
 - **`split --by-namespace` builds modules from the namespaces the source's
   classes and properties use** (#177). It took them from rdflib's prefix table
   instead, so every run wrote `brick`, `doap`, `geo`, `schema` and `void`
@@ -230,8 +272,7 @@ change, and what to do about it, is listed command by command in the
   and put everything in `common.ttl` at exit 1, now gets one module per
   namespace at exit 0. In a split configuration, a prefixed name in `classes:`
   or `properties:` now means the source's own prefix, and one the source does
-  not bind fails the split instead of matching nothing; `-c` itself still
-  crashes until #175. A configured module's `namespaces:` now match at a
+  not bind fails the split instead of matching nothing. A configured module's `namespaces:` now match at a
   namespace boundary, as `merge`'s `namespace_remap` does since #184:
   `http://example.org/ont` takes `…/ont#Y` but no longer `…/ontology#X`.
   Placing entities

@@ -10,17 +10,23 @@ This module provides the OntologySplitter class that:
 """
 
 import re
-from collections.abc import Container
+from collections.abc import Container, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, urlsplit
 
 import yaml
-from rdflib import Graph, URIRef, Namespace
-from rdflib.namespace import RDF, RDFS, OWL
+from rdflib import BNode, Graph, URIRef, Namespace
+from rdflib.namespace import RDF, RDFS, OWL, SKOS
+from rdflib.term import Node
 
+from rdf_construct.core.blank_nodes import component_digest
 from rdf_construct.core.outdir import mark_output_dir
-from rdf_construct.core.utils import CurieError, resolve_curie
+from rdf_construct.core.provenance import WAS_DERIVED_FROM, derivation_targets, stamp_derivation
+from rdf_construct.core.serialiser import bnode_closure
+from rdf_construct.core.utils import CurieError, in_namespace, resolve_curie
+from rdf_construct.core.vocab import ALL_PROPERTY_TYPES, CLASS_TYPES
 
 
 def select_classes(graph: Graph) -> set[URIRef]:
@@ -30,15 +36,13 @@ def select_classes(graph: Graph) -> set[URIRef]:
         graph: RDF graph to select from.
 
     Returns:
-        Set of URIRefs for classes (owl:Class and rdfs:Class).
+        Set of URIRefs for classes: every subject typed by one of ``core.vocab.CLASS_TYPES``.
     """
     classes: set[URIRef] = set()
-    for s in graph.subjects(RDF.type, OWL.Class):
-        if isinstance(s, URIRef):
-            classes.add(s)
-    for s in graph.subjects(RDF.type, RDFS.Class):
-        if isinstance(s, URIRef):
-            classes.add(s)
+    for class_type in CLASS_TYPES:
+        for s in graph.subjects(RDF.type, class_type):
+            if isinstance(s, URIRef):
+                classes.add(s)
     return classes
 
 
@@ -49,16 +53,12 @@ def select_properties(graph: Graph) -> set[URIRef]:
         graph: RDF graph to select from.
 
     Returns:
-        Set of URIRefs for properties (owl:ObjectProperty, DatatypeProperty, etc.).
+        Set of URIRefs for properties: every subject typed by one of
+        ``core.vocab.ALL_PROPERTY_TYPES``, so a term declared only ``owl:TransitiveProperty`` or
+        ``owl:FunctionalProperty`` is a property too (#176).
     """
     properties: set[URIRef] = set()
-    property_types = [
-        OWL.ObjectProperty,
-        OWL.DatatypeProperty,
-        OWL.AnnotationProperty,
-        RDF.Property,
-    ]
-    for prop_type in property_types:
+    for prop_type in ALL_PROPERTY_TYPES:
         for s in graph.subjects(RDF.type, prop_type):
             if isinstance(s, URIRef):
                 properties.add(s)
@@ -122,6 +122,62 @@ def _fallback_name(namespace: str) -> str:
     return name or "namespace"
 
 
+def source_ontologies(graph: Graph) -> list[URIRef]:
+    """The ontology IRIs a source declares: its named ``owl:Ontology`` subjects, sorted.
+
+    Args:
+        graph: The source graph.
+
+    Returns:
+        The IRIs, sorted. A blank-node header has no IRI and is left out.
+    """
+    return sorted(s for s in graph.subjects(RDF.type, OWL.Ontology) if isinstance(s, URIRef))
+
+
+def _host(iri: str) -> str:
+    """The authority part of an IRI, lower-cased: ``www.w3.org`` for W3C's vocabularies."""
+    return urlsplit(iri).netloc.lower()
+
+
+def is_borrowed(namespace: str, ontologies: list[URIRef]) -> bool:
+    """Whether a namespace belongs to someone other than the source (#383, #178).
+
+    A namespace is borrowed when its host differs from the host of every ontology IRI the source
+    declares: ``dcterms:`` or GeoSPARQL's in a file whose ontology lives elsewhere. A source that
+    declares no ontology gives nothing to judge by, so nothing is borrowed.
+
+    Args:
+        namespace: The namespace IRI.
+        ontologies: The source's ontology IRIs, from :func:`source_ontologies`.
+
+    Returns:
+        True if the namespace is borrowed.
+    """
+    return bool(ontologies) and all(_host(namespace) != _host(str(o)) for o in ontologies)
+
+
+#: The reasons a subject goes to the unmatched module, as the run reports them (#176)
+REASON_NO_MODULE = "a class or property no module claims"
+REASON_BORROWED = "a borrowed vocabulary's term"
+REASON_UNTYPED = "no rdf:type"
+REASON_FOREIGN_TYPE = "typed only by classes no module holds"
+REASON_TYPE_UNMATCHED = "typed by an unmatched class"
+REASON_TYPES_SPLIT = "typed by classes in more than one module"
+REASON_SCHEME_NO_MODULE = "a concept scheme in no module's namespace"
+REASON_SCHEME_UNMATCHED = "a concept in an unmatched scheme"
+REASON_SCHEMES_SPLIT = "a concept in schemes in more than one module"
+REASON_CONCEPT_NO_MODULE = "a concept with no scheme, in no module's namespace"
+REASON_BNODE_SPLIT = "a blank-node structure naming terms of more than one module"
+REASON_BNODE_NONE = "a blank-node structure naming no module's terms"
+
+#: How a module's ontology IRI was arrived at: the four rungs of #178's ladder
+RUNG_CONFIG = "config"
+RUNG_NAMESPACE = "namespace"
+RUNG_NAMESPACE_UNCHECKED = "namespace, unchecked: the source declares no ontology"
+RUNG_SOURCE = "source ontology"
+RUNG_NONE = "none"
+
+
 @dataclass
 class ModuleDefinition:
     """Definition of a single module to extract.
@@ -134,8 +190,9 @@ class ModuleDefinition:
         properties: Explicit list of property URIs to include.
         namespaces: Namespace prefixes to include (for auto-detection).
         include_descendants: Whether to include rdfs:subClassOf/subPropertyOf descendants.
-        imports: Explicit owl:imports to add.
+        imports: Explicit owl:imports to add: ontology IRIs or CURIEs, never file names.
         auto_imports: Whether to generate imports from detected dependencies.
+        ontology_iri: The module's ontology IRI, the first rung of the ladder (#178).
     """
 
     name: str
@@ -147,6 +204,7 @@ class ModuleDefinition:
     include_descendants: bool = False
     imports: list[str] = field(default_factory=list)
     auto_imports: bool = True
+    ontology_iri: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ModuleDefinition":
@@ -169,6 +227,7 @@ class ModuleDefinition:
             include_descendants=data.get("include_descendants", False),
             imports=data.get("imports", []),
             auto_imports=data.get("auto_imports", True),
+            ontology_iri=data.get("ontology_iri"),
         )
 
 
@@ -177,14 +236,14 @@ class UnmatchedStrategy:
     """Configuration for handling entities that don't match any module.
 
     Attributes:
-        strategy: Either 'common' (put in common module) or 'error' (fail).
-        common_module: Name of the common module if strategy is 'common'.
-        common_output: Output filename for common module.
+        strategy: Either 'common' (collect them in one module) or 'error' (fail).
+        common_module: Name of the module that collects them if strategy is 'common'.
+        common_output: Output filename for that module.
     """
 
     strategy: str = "common"  # "common" or "error"
-    common_module: str = "common"
-    common_output: str = "common.ttl"
+    common_module: str = "unmatched"
+    common_output: str = "unmatched.ttl"
 
 
 @dataclass
@@ -214,6 +273,7 @@ class SplitConfig:
         split_data: Optional data splitting configuration.
         generate_manifest: Whether to generate manifest.yml.
         dry_run: If True, report what would happen without writing.
+        output_dir_named: Whether the configuration file set ``output_dir`` itself.
     """
 
     source: Path
@@ -223,6 +283,7 @@ class SplitConfig:
     split_data: SplitDataConfig | None = None
     generate_manifest: bool = True
     dry_run: bool = False
+    output_dir_named: bool = False
 
     @classmethod
     def from_yaml(cls, path: Path) -> "SplitConfig":
@@ -277,8 +338,8 @@ class SplitConfig:
         unmatched_data = split_data.get("unmatched", {})
         unmatched = UnmatchedStrategy(
             strategy=unmatched_data.get("strategy", "common"),
-            common_module=unmatched_data.get("module", "common"),
-            common_output=unmatched_data.get("output", "common.ttl"),
+            common_module=unmatched_data.get("module", "unmatched"),
+            common_output=unmatched_data.get("output", "unmatched.ttl"),
         )
 
         # Parse data splitting config
@@ -304,6 +365,7 @@ class SplitConfig:
             split_data=split_data_config,
             generate_manifest=split_data.get("generate_manifest", True),
             dry_run=split_data.get("dry_run", False),
+            output_dir_named="output_dir" in split_data,
         )
 
 
@@ -319,6 +381,8 @@ class ModuleStats:
         triples: Total triples in module.
         imports: List of owl:imports.
         dependencies: Modules this module depends on.
+        ontology_iri: The module's ontology IRI, or None if it has no header.
+        rung: Which rung of the ladder gave that IRI (#178).
     """
 
     name: str
@@ -328,6 +392,8 @@ class ModuleStats:
     triples: int = 0
     imports: list[str] = field(default_factory=list)
     dependencies: list[str] = field(default_factory=list)
+    ontology_iri: str | None = None
+    rung: str = RUNG_NONE
 
 
 @dataclass
@@ -338,21 +404,31 @@ class SplitResult:
         modules: Dictionary of module name -> Graph.
         module_stats: Statistics per module.
         entity_assignments: Mapping of entity URI -> module name.
-        unmatched_entities: Entities not assigned to any module.
+        unmatched_entities: Subjects not assigned to any module: IRIs, and a label for each
+            blank-node structure.
+        unmatched_reasons: Why each of `unmatched_entities` is unmatched.
         dependencies: Cross-module dependency graph.
         success: Whether split completed without errors.
         error: Error message if success is False.
         data_modules: Split data graphs by module (if data splitting enabled).
+        shared_blank_nodes: Blank nodes copied into more than one module, because subjects in
+            different modules refer to them.
+        warnings: What the run could not do, such as a module left without a header.
+        module_iris: Module name -> its ontology IRI (or None) and the rung that gave it.
     """
 
     modules: dict[str, Graph] = field(default_factory=dict)
     module_stats: list[ModuleStats] = field(default_factory=list)
     entity_assignments: dict[str, str] = field(default_factory=dict)
     unmatched_entities: set[str] = field(default_factory=set)
+    unmatched_reasons: dict[str, str] = field(default_factory=dict)
     dependencies: dict[str, set[str]] = field(default_factory=dict)
     success: bool = True
     error: str | None = None
     data_modules: dict[str, Graph] = field(default_factory=dict)
+    shared_blank_nodes: int = 0
+    warnings: list[str] = field(default_factory=list)
+    module_iris: dict[str, tuple[str | None, str]] = field(default_factory=dict)
 
     @property
     def total_modules(self) -> int:
@@ -370,12 +446,13 @@ class OntologySplitter:
 
     The splitter:
     1. Loads the source ontology
-    2. Assigns entities to modules based on configuration
-    3. Handles unmatched entities per strategy
-    4. Detects cross-module dependencies
-    5. Generates owl:imports declarations
-    6. Writes module files
-    7. Produces a manifest documenting the split
+    2. Assigns classes and properties to modules based on configuration
+    3. Routes every other subject: individuals by their rdf:type, SKOS concepts by their scheme
+    4. Handles unmatched subjects per strategy
+    5. Detects cross-module dependencies
+    6. Gives each module an ontology IRI, a derivation stamp and owl:imports
+    7. Writes module files
+    8. Produces a manifest documenting the split
 
     Example:
         config = SplitConfig.from_yaml(Path("split.yml"))
@@ -395,6 +472,9 @@ class OntologySplitter:
         self.config = config
         self.source_graph: Graph | None = None
         self.namespace_map: dict[str, str] = {}  # namespace -> module name
+        self.namespace_owner: dict[str, str] = {}  # namespace -> module that claims it
+        self.ontologies: list[URIRef] = []  # the source's ontology IRIs
+        self.unmatched_subjects: list[Node] = []
 
     def split(self) -> SplitResult:
         """Execute the split operation.
@@ -414,12 +494,22 @@ class OntologySplitter:
 
         # Build namespace -> module mapping (for namespace-based splitting)
         self._build_namespace_map()
+        self.ontologies = source_ontologies(self.source_graph)
 
         # Assign entities to modules
         assignments = self._assign_entities(result)
 
         if not result.success:
             return result
+
+        # Route everything that is not a class or a property (#176)
+        self._route_residue(assignments, result)
+
+        # Refuse an unmatched module that would overwrite another (#382), before anything is built
+        if result.unmatched_entities:
+            self._check_unmatched(result)
+            if not result.success:
+                return result
 
         # Create module graphs
         self._create_module_graphs(assignments, result)
@@ -428,9 +518,9 @@ class OntologySplitter:
         if result.unmatched_entities:
             self._handle_unmatched(result)
 
-        # Detect dependencies and generate imports
+        # Detect dependencies, then give each module its identity and imports (#178)
         self._detect_dependencies(result)
-        self._add_imports(result)
+        self._add_headers(result)
 
         # Calculate statistics
         self._calculate_stats(result)
@@ -510,16 +600,19 @@ class OntologySplitter:
         for module in self.config.modules:
             for ns in module.namespaces:
                 namespace_owner.setdefault(ns, module.name)
+        self.namespace_owner = namespace_owner
         owned: dict[str, list[URIRef]] = {}
         for entity in all_entities:
             ns_claim = _claiming_namespace(str(entity), namespace_owner)
             if ns_claim is not None:
                 owned.setdefault(namespace_owner[ns_claim], []).append(entity)
 
-        # A listed CURIE whose prefix the source does not bind is refused, not matched to nothing
+        # A listed CURIE whose prefix the source does not bind is refused, not matched to nothing,
+        # and so is an import or ontology IRI that is neither an IRI nor a CURIE, such as a file name
         try:
             for module in self.config.modules:
-                for curie in [*module.classes, *module.properties]:
+                iris = [*module.imports, *([module.ontology_iri] if module.ontology_iri else [])]
+                for curie in [*module.classes, *module.properties, *iris]:
                     self._expand_curie(curie)
         except CurieError as e:
             result.success = False
@@ -565,11 +658,163 @@ class OntologySplitter:
                     result.entity_assignments[str(entity)] = module.name
 
         # Find unmatched entities
-        for entity in all_entities:
+        for entity in sorted(all_entities):
             if str(entity) not in result.entity_assignments:
-                result.unmatched_entities.add(str(entity))
+                reason = (
+                    REASON_BORROWED if is_borrowed(entity, self.ontologies) else REASON_NO_MODULE
+                )
+                self._unmatch(entity, str(entity), reason, result)
 
         return assignments
+
+    def _unmatch(self, subject: Node, label: str, reason: str, result: SplitResult) -> None:
+        """Send a subject to the unmatched module, recording why.
+
+        Args:
+            subject: The subject: an IRI, or the root of a blank-node structure.
+            label: How the run names it.
+            reason: Why no module took it.
+            result: SplitResult to record it in.
+        """
+        self.unmatched_subjects.append(subject)
+        result.unmatched_entities.add(label)
+        result.unmatched_reasons[label] = reason
+
+    def _namespace_module(self, subject: URIRef) -> str | None:
+        """The module whose namespace claims `subject`, as `_assign_entities` claims entities."""
+        claim = _claiming_namespace(str(subject), self.namespace_owner)
+        return self.namespace_owner[claim] if claim is not None else None
+
+    def _route_residue(self, assignments: dict[str, set[URIRef]], result: SplitResult) -> None:
+        """Route every subject that is not a class or a property (#176).
+
+        - A concept scheme goes to the module claiming its namespace, and its concepts follow
+          ``skos:inScheme``, so the scheme is the unit. A concept in no scheme goes to the module
+          claiming its namespace, if there is one.
+        - Any other named subject goes to the module owning its ``rdf:type``: an individual.
+        - A blank-node structure no named subject refers to (``owl:AllDisjointClasses``, a
+          general class axiom) goes to the one module owning the terms it names.
+        - An ``owl:Ontology`` header goes nowhere: each module gets its own (#178).
+
+        Whatever has no single module goes to the unmatched module, with its reason.
+
+        Args:
+            assignments: Module name -> subjects, extended in place.
+            result: SplitResult with the class and property assignments so far.
+        """
+        if self.source_graph is None:
+            return
+        graph = self.source_graph
+        unmatched = None
+        placed: dict[Node, str | None] = {
+            URIRef(e): m for e, m in result.entity_assignments.items()
+        }
+        placed.update({URIRef(e): unmatched for e in result.unmatched_entities})
+        headers = set(graph.subjects(RDF.type, OWL.Ontology))
+
+        def send(subject: URIRef, module: str | None, reason: str) -> None:
+            placed[subject] = module
+            if module is None:
+                self._unmatch(subject, str(subject), reason, result)
+            else:
+                assignments[module].add(subject)
+                result.entity_assignments[str(subject)] = module
+
+        def named(subjects: Any) -> list[URIRef]:
+            return sorted(
+                {s for s in subjects if isinstance(s, URIRef) and s not in placed} - headers
+            )
+
+        schemes = named(graph.subjects(RDF.type, SKOS.ConceptScheme))
+        for scheme in schemes:
+            send(scheme, self._namespace_module(scheme), REASON_SCHEME_NO_MODULE)
+
+        for concept in named(graph.subjects(RDF.type, SKOS.Concept)):
+            owners = {placed[s] for s in graph.objects(concept, SKOS.inScheme) if s in schemes}
+            if len(owners) > 1:
+                send(concept, unmatched, REASON_SCHEMES_SPLIT)
+            elif owners:
+                send(concept, owners.pop(), REASON_SCHEME_UNMATCHED)
+            else:
+                send(concept, self._namespace_module(concept), REASON_CONCEPT_NO_MODULE)
+
+        for subject in named(graph.subjects()):
+            types = set(graph.objects(subject, RDF.type))
+            owners = {placed[t] for t in types if t in placed}
+            if len(owners) > 1:
+                send(subject, unmatched, REASON_TYPES_SPLIT)
+            elif owners:
+                send(subject, owners.pop(), REASON_TYPE_UNMATCHED)
+            else:
+                send(subject, unmatched, REASON_FOREIGN_TYPE if types else REASON_UNTYPED)
+
+        # Blank nodes no named subject reaches: roots first, then any cycle left over, each in
+        # the order of its content, since a blank node's label differs from parse to parse
+        reached = set(bnode_closure(graph, [*placed, *headers]))
+        blank = {s for s in graph.subjects() if isinstance(s, BNode)} - reached
+        referred = {o for o in graph.objects() if isinstance(o, BNode)}
+
+        def by_content(root: Node) -> str:
+            structure = Graph()
+            for node in [root, *bnode_closure(graph, [root])]:
+                for triple in graph.triples((node, None, None)):
+                    structure.add(triple)
+            return component_digest(structure)
+
+        roots = sorted(blank - referred, key=by_content) + sorted(blank & referred, key=by_content)
+        structures = 0
+        for root in roots:
+            if root in reached:
+                continue
+            nodes = [root, *bnode_closure(graph, [root])]
+            reached.update(nodes)
+            terms = {
+                term
+                for node in nodes
+                for _, _, term in graph.triples((node, None, None))
+                if isinstance(term, URIRef) and term in placed
+            }
+            owners = {placed[t] for t in terms}
+            module = owners.pop() if len(owners) == 1 else None
+            if module is not None:
+                assignments[module].add(root)  # type: ignore[arg-type]
+                continue
+            structures += 1
+            kinds = sorted(graph.qname(str(t)) for t in graph.objects(root, RDF.type))
+            label = f"blank-node structure {structures} ({', '.join(kinds) or 'untyped'})"
+            reason = REASON_BNODE_SPLIT if len(owners) > 1 else REASON_BNODE_NONE
+            self._unmatch(root, label, reason, result)
+
+    def _check_unmatched(self, result: SplitResult) -> None:
+        """Refuse an unmatched module that is not allowed, or would overwrite another (#382).
+
+        Args:
+            result: SplitResult with unmatched entities, marked as failed if refused.
+        """
+        unmatched = self.config.unmatched
+        if unmatched.strategy == "error":
+            result.success = False
+            labels = sorted(result.unmatched_entities)
+            result.error = (
+                f"Unmatched entities ({len(labels)}): "
+                + ", ".join(labels[:5])
+                + ("..." if len(labels) > 5 else "")
+            )
+            return
+
+        for module in self.config.modules:
+            if (
+                module.name.casefold() == unmatched.common_module.casefold()
+                or module.output.casefold() == unmatched.common_output.casefold()
+            ):
+                result.success = False
+                result.error = (
+                    f"The unmatched module {unmatched.common_module!r} "
+                    f"({unmatched.common_output}) would overwrite module {module.name!r} "
+                    f"({module.output}). Give the unmatched module another name with "
+                    "--common-name or unmatched: module:."
+                )
+                return
 
     def _expand_curie(self, curie: str) -> URIRef:
         """Expand a CURIE to a full URI using the source graph's namespace bindings.
@@ -647,14 +892,41 @@ class OntologySplitter:
             for prefix, ns in self.source_graph.namespace_manager.namespaces():
                 module_graph.bind(prefix, ns)
 
-            # Add triples for assigned entities
-            entities = assignments.get(module.name, set())
-            for entity in entities:
-                # All triples where entity is subject
-                for s, p, o in self.source_graph.triples((entity, None, None)):
-                    module_graph.add((s, p, o))
+            # Add triples for assigned entities, with the blank nodes they describe (#176)
+            self._copy_subjects(sorted(assignments.get(module.name, set())), module_graph)
 
             result.modules[module.name] = module_graph
+
+        self._count_shared_blank_nodes(result)
+
+    def _copy_subjects(self, subjects: Sequence[Node], graph: Graph) -> None:
+        """Copy each subject's triples into `graph`, with every blank node they reach.
+
+        A blank node belongs to the description of whatever refers to it, so a module that took
+        ``ex:Building rdfs:subClassOf [ … ]`` without the restriction's own triples would assert
+        ``Building ⊑ ⊤`` instead (#176).
+
+        Args:
+            subjects: The subjects, named or the roots of blank-node structures.
+            graph: The module graph, extended in place.
+        """
+        if self.source_graph is None:
+            return
+        for subject in [*subjects, *bnode_closure(self.source_graph, list(subjects))]:
+            for triple in self.source_graph.triples((subject, None, None)):
+                graph.add(triple)
+
+    def _count_shared_blank_nodes(self, result: SplitResult) -> None:
+        """Count the blank nodes that more than one module holds a copy of.
+
+        Args:
+            result: SplitResult with every module graph built.
+        """
+        holders: dict[Node, int] = {}
+        for graph in result.modules.values():
+            for node in {s for s in graph.subjects() if isinstance(s, BNode)}:
+                holders[node] = holders.get(node, 0) + 1
+        result.shared_blank_nodes = sum(1 for count in holders.values() if count > 1)
 
     def _handle_unmatched(self, result: SplitResult) -> None:
         """Handle entities that weren't assigned to any module.
@@ -665,15 +937,6 @@ class OntologySplitter:
         if not result.unmatched_entities:
             return
 
-        if self.config.unmatched.strategy == "error":
-            result.success = False
-            result.error = (
-                f"Unmatched entities ({len(result.unmatched_entities)}): "
-                + ", ".join(list(result.unmatched_entities)[:5])
-                + ("..." if len(result.unmatched_entities) > 5 else "")
-            )
-            return
-
         # Create common module
         common_graph = Graph(bind_namespaces="core")
 
@@ -682,16 +945,16 @@ class OntologySplitter:
             for prefix, ns in self.source_graph.namespace_manager.namespaces():
                 common_graph.bind(prefix, ns)
 
-            # Add triples for unmatched entities
-            for entity_str in result.unmatched_entities:
-                entity = URIRef(entity_str)
-                for s, p, o in self.source_graph.triples((entity, None, None)):
-                    common_graph.add((s, p, o))
+            # Add triples for unmatched subjects, with the blank nodes they describe
+            self._copy_subjects(self.unmatched_subjects, common_graph)
 
-                # Record assignment
-                result.entity_assignments[entity_str] = self.config.unmatched.common_module
+            # Record assignment
+            for subject in self.unmatched_subjects:
+                if isinstance(subject, URIRef):
+                    result.entity_assignments[str(subject)] = self.config.unmatched.common_module
 
         result.modules[self.config.unmatched.common_module] = common_graph
+        self._count_shared_blank_nodes(result)
 
     def _detect_dependencies(self, result: SplitResult) -> None:
         """Detect cross-module dependencies.
@@ -718,62 +981,117 @@ class OntologySplitter:
 
             result.dependencies[module_name] = deps
 
-    def _add_imports(self, result: SplitResult) -> None:
-        """Add owl:imports declarations to module graphs.
+    def _add_headers(self, result: SplitResult) -> None:
+        """Give each module an ontology header, a derivation stamp and its imports (#178).
+
+        The IRI comes from :meth:`_module_iri`'s ladder. The header holds ``a owl:Ontology``,
+        ``prov:wasDerivedFrom`` naming the source as ``core.provenance.derivation_targets`` names
+        it, and ``owl:imports`` naming the ontology IRIs of the modules it depends on. Nothing of
+        the source's own header is copied, ``owl:versionIRI`` included: a module is not a version
+        of the source. A module with no IRI gets no header, and cannot be imported; both are
+        reported as warnings.
 
         Args:
-            result: SplitResult with module graphs.
+            result: SplitResult with module graphs and dependencies.
         """
-        for module in self.config.modules:
-            if module.name not in result.modules:
+        if self.source_graph is None:
+            return
+        source = self.source_graph
+
+        targets = sorted(
+            {
+                t
+                for o in source.subjects(RDF.type, OWL.Ontology)
+                for t in derivation_targets(source, o)
+            }
+        )
+        # PROV-O types the stamp's property itself; a source that says so keeps saying so (P13)
+        stamp_description = list(source.triples((WAS_DERIVED_FROM, None, None)))
+
+        iris: dict[str, URIRef | None] = {}
+        for name in result.modules:
+            iri, rung = self._module_iri(name)
+            iris[name] = iri
+            result.module_iris[name] = (str(iri) if iri is not None else None, rung)
+            if iri is None:
+                result.warnings.append(
+                    f"{name}: no ontology IRI to give it, so it is written without a header. "
+                    "Set ontology_iri: for it in a config."
+                )
+
+        for name, graph in result.modules.items():
+            module = next((m for m in self.config.modules if m.name == name), None)
+            imports: list[URIRef] = []
+            if module is not None:
+                imports += [self._expand_curie(imp) for imp in module.imports]
+            if module is None or module.auto_imports:
+                for dep in sorted(result.dependencies.get(name, set())):
+                    dep_iri = iris.get(dep)
+                    if dep_iri is None:
+                        result.warnings.append(
+                            f"{name} depends on {dep}, which has no ontology IRI, "
+                            "so it cannot import it."
+                        )
+                    elif dep_iri not in imports:
+                        imports.append(dep_iri)
+
+            iri = iris[name]
+            if iri is None:
                 continue
+            graph.add((iri, RDF.type, OWL.Ontology))
+            for imp in imports:
+                graph.add((iri, OWL.imports, imp))
+            if targets:
+                for triple in stamp_description:
+                    graph.add(triple)
+                stamp_derivation(graph, iri, targets)
 
-            graph = result.modules[module.name]
+    def _module_iri(self, name: str) -> tuple[URIRef | None, str]:
+        """A module's ontology IRI and the rung of #178's ladder that gave it.
 
-            # Find or create ontology declaration
-            ontology_uri = self._get_or_create_ontology_uri(graph, module)
+        1. ``ontology_iri:`` in the module's config.
+        2. The module's own namespace, ``#`` or ``/`` stripped, when it has exactly one. Not when
+           that is the source's own ontology IRI, since a module is not the source, and not when
+           the namespace is borrowed (:func:`is_borrowed`), since it would claim someone else's.
+           A source that declares no ontology cannot be checked against, and the rung says so.
+        3. ``<source ontology IRI>/<module name>``: the source ontology whose IRI contains the
+           module's namespace (the longest), else the source's only ontology.
+        4. None: no header.
 
-            # Add explicit imports
-            for imp in module.imports:
-                graph.add((ontology_uri, OWL.imports, URIRef(imp)))
-
-            # Add auto-generated imports from dependencies
-            if module.auto_imports:
-                deps = result.dependencies.get(module.name, set())
-                for dep in deps:
-                    # Find the module definition to get its output filename
-                    dep_file = self._get_module_file(dep, result)
-                    if dep_file:
-                        graph.add((ontology_uri, OWL.imports, URIRef(dep_file)))
-
-    def _get_or_create_ontology_uri(self, graph: Graph, module: ModuleDefinition) -> URIRef:
-        """Get or create the ontology URI for a module.
+        Never ``http://example.org/<module>``.
 
         Args:
-            graph: Module graph.
-            module: Module definition.
+            name: The module's name.
 
         Returns:
-            Ontology URI.
+            The IRI, or None, and the rung.
         """
-        # Look for existing ontology declaration
-        for s in graph.subjects(RDF.type, OWL.Ontology):
-            return s
+        module = next((m for m in self.config.modules if m.name == name), None)
+        if module is not None and module.ontology_iri:
+            return self._expand_curie(module.ontology_iri), RUNG_CONFIG
 
-        # Create one based on module name
-        base_ns = None
-        for prefix, ns in graph.namespace_manager.namespaces():
-            if prefix == "":
-                base_ns = str(ns)
-                break
+        namespaces = module.namespaces if module is not None else []
+        own = {str(o).rstrip("#/") for o in self.ontologies}
+        if len(namespaces) == 1:
+            candidate = namespaces[0].rstrip("#/")
+            if candidate and candidate not in own:
+                if not self.ontologies:
+                    return URIRef(candidate), RUNG_NAMESPACE_UNCHECKED
+                if not is_borrowed(candidate, self.ontologies):
+                    return URIRef(candidate), RUNG_NAMESPACE
 
-        if base_ns:
-            ont_uri = URIRef(base_ns.rstrip("#/"))
+        containing = [
+            o for o in self.ontologies if any(in_namespace(ns, str(o)) for ns in namespaces)
+        ]
+        if containing:
+            base: URIRef | None = max(containing, key=lambda o: len(str(o)))
+        elif len(self.ontologies) == 1:
+            base = self.ontologies[0]
         else:
-            ont_uri = URIRef(f"http://example.org/{module.name}")
-
-        graph.add((ont_uri, RDF.type, OWL.Ontology))
-        return ont_uri
+            base = None
+        if base is not None:
+            return URIRef(f"{str(base).rstrip('#/')}/{quote(name, safe='-._~')}"), RUNG_SOURCE
+        return None, RUNG_NONE
 
     def _get_module_file(self, module_name: str, result: SplitResult) -> str | None:
         """Get the output filename for a module.
@@ -854,16 +1172,13 @@ class OntologySplitter:
         Returns:
             ModuleStats instance.
         """
-        # Count classes and properties
-        classes = set(graph.subjects(RDF.type, OWL.Class)) | set(
-            graph.subjects(RDF.type, RDFS.Class)
-        )
-        properties = (
-            set(graph.subjects(RDF.type, OWL.ObjectProperty))
-            | set(graph.subjects(RDF.type, OWL.DatatypeProperty))
-            | set(graph.subjects(RDF.type, OWL.AnnotationProperty))
-            | set(graph.subjects(RDF.type, RDF.Property))
-        )
+        # Count classes and properties, leaving out the derivation stamp's own declaration
+        classes = select_classes(graph)
+        properties = select_properties(graph)
+        if self.source_graph is not None and WAS_DERIVED_FROM not in select_properties(
+            self.source_graph
+        ):
+            properties.discard(WAS_DERIVED_FROM)
 
         # Get imports
         imports = [str(o) for s, p, o in graph.triples((None, OWL.imports, None))]
@@ -871,6 +1186,7 @@ class OntologySplitter:
         # Get dependencies
         deps = list(result.dependencies.get(name, set()))
 
+        iri, rung = result.module_iris.get(name, (None, RUNG_NONE))
         return ModuleStats(
             name=name,
             file=output,
@@ -879,6 +1195,8 @@ class OntologySplitter:
             triples=len(graph),
             imports=imports,
             dependencies=deps,
+            ontology_iri=iri,
+            rung=rung,
         )
 
     def _split_data(self, result: SplitResult) -> None:
@@ -892,16 +1210,18 @@ class OntologySplitter:
         if self.config.split_data is None:
             return
 
-        # Load all data files
-        data_graph = Graph()
+        # Load all data files: their own prefixes plus the core five, never rdflib's table (P10)
+        data_graph = Graph(bind_namespaces="core")
         for data_path in self.config.split_data.sources:
             if data_path.exists():
                 data_graph.parse(data_path.as_posix())
 
-        # Create data graphs per module
-        data_modules: dict[str, Graph] = {m.name: Graph() for m in self.config.modules}
+        # Create data graphs per module, bound the same way, or org: comes back as org1:
+        data_modules: dict[str, Graph] = {
+            m.name: Graph(bind_namespaces="core") for m in self.config.modules
+        }
         if self.config.unmatched.common_module in result.modules:
-            data_modules[self.config.unmatched.common_module] = Graph()
+            data_modules[self.config.unmatched.common_module] = Graph(bind_namespaces="core")
 
         # Copy namespace bindings to all data modules
         for module_name in data_modules:
@@ -953,8 +1273,8 @@ class OntologySplitter:
                 destination=output_path.as_posix(), format="turtle"
             )
 
-        # Write data modules
-        if result.data_modules and self.config.split_data:
+        # Write data modules, creating their directory only if there is data to write
+        if any(len(g) for g in result.data_modules.values()) and self.config.split_data:
             data_dir = self.config.split_data.output_dir or self.config.output_dir
             data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1077,13 +1397,17 @@ def split_by_namespace(
     source: Path,
     output_dir: Path,
     dry_run: bool = False,
+    unmatched: UnmatchedStrategy | None = None,
 ) -> SplitResult:
     """Convenience function to split an ontology by namespace.
 
-    Automatically detects modules from the namespaces the source's classes and properties live in
-    (#177). An entity belongs to the longest namespace the file declares that contains it, or
-    otherwise to the namespace its own IRI implies, cut after its last ``#``, ``/`` or ``:``. Each
-    namespace with at least one entity is a module; an empty file gives none.
+    Automatically detects modules from the namespaces the source's classes, properties and SKOS
+    concept schemes live in (#177, #176). An entity belongs to the longest namespace the file
+    declares that contains it, or otherwise to the namespace its own IRI implies, cut after its
+    last ``#``, ``/`` or ``:``. Each namespace with at least one entity is a module; an empty file
+    gives none. A borrowed namespace (:func:`is_borrowed`), such as ``dcterms:`` in a file that
+    declares a ``dcterms:title`` it uses, makes no module: its declarations go to the unmatched
+    module (#383). Everything else is routed as :meth:`OntologySplitter._route_residue` says.
 
     A module is named after the prefix the file declares for its namespace, read without rdflib's
     built-in bindings. A namespace with no prefix, or only the empty prefix ``:``, is named after
@@ -1095,6 +1419,7 @@ def split_by_namespace(
         source: Path to source ontology.
         output_dir: Directory for output modules.
         dry_run: If True, don't write files.
+        unmatched: What to do with subjects no module takes. Defaults to an ``unmatched`` module.
 
     Returns:
         SplitResult with split information.
@@ -1107,11 +1432,15 @@ def split_by_namespace(
     for prefix, bound in graph.namespace_manager.namespaces():
         declared[str(bound)] = prefix
 
-    # Find the distinct namespaces the ontology's entities use
+    # Find the distinct namespaces the ontology's entities and concept schemes use
+    ontologies = source_ontologies(graph)
+    schemes = {s for s in graph.subjects(RDF.type, SKOS.ConceptScheme) if isinstance(s, URIRef)}
     used: set[str] = set()
-    for entity in select_classes(graph) | select_properties(graph):
+    for entity in select_classes(graph) | select_properties(graph) | schemes:
         iri = str(entity)
-        used.add(_claiming_namespace(iri, declared) or _derived_namespace(iri))
+        namespace = _claiming_namespace(iri, declared) or _derived_namespace(iri)
+        if not is_borrowed(namespace, ontologies):
+            used.add(namespace)
 
     # Name them: declared prefixes first, then fallbacks, each in sorted namespace order
     names: dict[str, str] = {}  # namespace -> module name
@@ -1135,6 +1464,7 @@ def split_by_namespace(
         source=source,
         output_dir=output_dir,
         modules=modules,
+        unmatched=unmatched or UnmatchedStrategy(),
         dry_run=dry_run,
     )
 
@@ -1170,6 +1500,9 @@ split:
     - name: core
       description: "Core upper ontology concepts"
       output: core.ttl
+      # The module's ontology IRI. Without it, a module is named from its own namespace,
+      # else from the source ontology's IRI, else it gets no header
+      ontology_iri: http://example.org/ontology/core
       include:
         classes:
           - ex:Entity
@@ -1193,15 +1526,16 @@ split:
       output: building.ttl
       namespaces:
         - "http://example.org/ontology/building#"
+      # owl:imports take ontology IRIs (or CURIEs), never file names
       imports:
-        - core.ttl
+        - http://example.org/ontology/core
       auto_imports: true
 
-  # Handling for entities that don't match any module
+  # Handling for subjects that don't match any module
   unmatched:
-    strategy: common  # "common" or "error"
-    module: common
-    output: common.ttl
+    strategy: common  # "common" (collect them in one module) or "error"
+    module: unmatched
+    output: unmatched.ttl
 
   # Generate manifest file
   generate_manifest: true

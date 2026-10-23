@@ -748,8 +748,8 @@ rdf-construct split SOURCE [OPTIONS]
 - `--by-namespace`: Auto-detect modules from namespaces
 - `--migrate-data PATH`: Data file(s) to split by instance type (can specify multiple)
 - `--data-output PATH`: Output directory for split data files
-- `--unmatched STRATEGY`: Strategy for unmatched entities: `common` or `error` (default: common)
-- `--common-name NAME`: Name for common module (default: `common`)
+- `--unmatched STRATEGY`: Strategy for unmatched subjects: `common` (collect them in one module) or `error` (refuse the run) (default: common)
+- `--common-name NAME`: Name for the module that collects unmatched subjects (default: `unmatched`)
 - `--no-manifest`: Don't generate manifest.yml
 - `--dry-run`: Show what would happen without writing files
 - `--no-colour`: Disable coloured output
@@ -800,12 +800,15 @@ split:
       output: organisation.ttl
       namespaces:
         - "http://example.org/ontology/org#"
+      ontology_iri: http://example.org/ontology/org  # optional
+      imports:  # ontology IRIs or CURIEs, never file names
+        - http://example.org/ontology/core
       auto_imports: true
 
   unmatched:
     strategy: common
-    module: common
-    output: common.ttl
+    module: unmatched
+    output: unmatched.ttl
 
   generate_manifest: true
 ```
@@ -828,7 +831,7 @@ modules:
     classes: 8
     properties: 5
     triples: 67
-    imports: [core.ttl]
+    imports: [http://example.org/ontology/core]
     dependencies: [core]
 summary:
   total_modules: 2

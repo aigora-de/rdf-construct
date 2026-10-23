@@ -112,6 +112,8 @@ from rdf_construct.merge import (
     SplitConfig,
     SplitResult,
     ModuleDefinition,
+    UnmatchedStrategy,
+    SplitDataConfig,
     split_by_namespace,
     create_default_split_config,
 )
@@ -3054,12 +3056,12 @@ def merge(
     "--unmatched",
     type=click.Choice(["common", "error"], case_sensitive=False),
     default="common",
-    help="Strategy for unmatched entities (default: common)",
+    help="Strategy for unmatched subjects: collect them in one module, or fail (default: common)",
 )
 @click.option(
     "--common-name",
-    default="common",
-    help="Name for common module (default: common)",
+    default="unmatched",
+    help="Name for the module that collects unmatched subjects (default: unmatched)",
 )
 @click.option(
     "--no-manifest",
@@ -3104,8 +3106,10 @@ def split(
     \b
     Exit codes:
       0 - Split successful
-      1 - Split successful with unmatched entities in common module
-      2 - Input refused or run failed (invalid options or config, parse error, etc.)
+      1 - Split successful, with unmatched subjects in their own module or a module
+          left without an ontology header
+      2 - Input refused or run failed (invalid options or config, parse error,
+          --unmatched error with unmatched subjects, etc.)
 
     \b
     Examples:
@@ -3142,31 +3146,41 @@ def split(
     if not source:
         raise Refusal("SOURCE is required.")
 
-    # A config's output_dir is overridden by -o's default until #291, so only -o can name it.
-    check_default_output_dir(output_dir, "output_dir", "split", overwrite=overwrite)
-
     # Handle --by-namespace mode
     if by_namespace:
+        check_default_output_dir(output_dir, "output_dir", "split", overwrite=overwrite)
         click.echo(f"Splitting {source.name} by namespace...")
 
-        result = split_by_namespace(source, output_dir, dry_run=dry_run)
+        result = split_by_namespace(
+            source,
+            output_dir,
+            dry_run=dry_run,
+            unmatched=UnmatchedStrategy(
+                strategy=unmatched,
+                common_module=common_name,
+                common_output=f"{common_name}.ttl",
+            ),
+        )
 
         if not result.success:
             click.secho(f"\u2717 Split failed: {result.error}", fg="red", err=True)
             raise SystemExit(2)
 
         _display_split_result(result, output_dir, dry_run, not no_colour)
-        raise SystemExit(0 if not result.unmatched_entities else 1)
+        raise SystemExit(1 if result.unmatched_entities or result.warnings else 0)
 
     # Build configuration from file or CLI
     if config_file:
         try:
             config = SplitConfig.from_yaml(config_file)
-            # Override source and output_dir if provided
+            # The command line overrides the config, and the config overrides a default (#291)
             config.source = source
-            config.output_dir = output_dir
-            config.dry_run = dry_run
-            config.generate_manifest = not no_manifest
+            if flag_given("output_dir") or not config.output_dir_named:
+                config.output_dir = output_dir
+            if dry_run:
+                config.dry_run = True
+            if no_manifest:
+                config.generate_manifest = False
             click.echo(f"Using config: {config_file}")
         except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
             raise Refusal(f"Could not load config {config_file}: {e}") from e
@@ -3201,13 +3215,21 @@ def split(
             prefix="data_",
         )
 
-    # Override unmatched strategy if specified on CLI
-    if unmatched:
-        config.unmatched = UnmatchedStrategy(
-            strategy=unmatched,
-            common_module=common_name,
-            common_output=f"{common_name}.ttl",
-        )
+    # Override the config's unmatched strategy only with what was given (#291)
+    if flag_given("unmatched"):
+        config.unmatched.strategy = unmatched
+    if flag_given("common_name"):
+        config.unmatched.common_module = common_name
+        config.unmatched.common_output = f"{common_name}.ttl"
+
+    # A directory the config names is one the user named (#261, #291)
+    check_default_output_dir(
+        config.output_dir,
+        "output_dir",
+        "split",
+        overwrite=overwrite,
+        named=config.output_dir_named and not flag_given("output_dir"),
+    )
 
     # Execute split
     click.echo(f"Splitting {source.name}...")
@@ -3220,24 +3242,15 @@ def split(
         raise SystemExit(2)
 
     # Write output (unless dry run)
-    if not dry_run:
+    if not config.dry_run:
         splitter.write_modules(result)
         if config.generate_manifest:
             splitter.write_manifest(result)
 
-    _display_split_result(result, output_dir, dry_run, not no_colour)
+    _display_split_result(result, config.output_dir, config.dry_run, not no_colour)
 
-    # Exit code based on unmatched entities
-    if result.unmatched_entities and config.unmatched.strategy == "common":
-        click.echo()
-        click.secho(
-            f"\u26a0 {len(result.unmatched_entities)} unmatched entities placed in "
-            f"{config.unmatched.common_module} module",
-            fg="yellow",
-        )
-        raise SystemExit(1)
-    else:
-        raise SystemExit(0)
+    # Exit code: unmatched subjects, or a module that could not be given its identity, are findings
+    raise SystemExit(1 if result.unmatched_entities or result.warnings else 0)
 
 
 def _display_split_result(
@@ -3264,27 +3277,41 @@ def _display_split_result(
     click.echo(f"\n  Modules: {result.total_modules}")
     click.echo(f"  Total triples: {result.total_triples}")
 
-    # Module details
+    # Module details, each with the ontology IRI it was given and the rung that gave it (#178)
     if result.module_stats:
         click.echo("\n  Module breakdown:")
         for stats in result.module_stats:
             deps_str = ""
             if stats.dependencies:
-                deps_str = f" (deps: {', '.join(stats.dependencies)})"
+                deps_str = f" (deps: {', '.join(sorted(stats.dependencies))})"
             click.echo(
                 f"    {stats.file}: {stats.classes} classes, "
                 f"{stats.properties} properties, {stats.triples} triples{deps_str}"
             )
+            iri = f"<{stats.ontology_iri}>" if stats.ontology_iri else "no ontology IRI"
+            click.echo(f"      {iri} (from: {stats.rung})")
 
-    # Unmatched entities
+    # Unmatched subjects, counted by why no module took them (#176)
     if result.unmatched_entities:
-        click.echo(f"\n  Unmatched entities: {len(result.unmatched_entities)}")
-        # Show first few
-        sample = list(result.unmatched_entities)[:5]
-        for uri in sample:
-            click.echo(f"    - {uri}")
-        if len(result.unmatched_entities) > 5:
-            click.echo(f"    ... and {len(result.unmatched_entities) - 5} more")
+        click.echo(f"\n  Unmatched subjects: {len(result.unmatched_entities)}")
+        by_reason: dict[str, list[str]] = {}
+        for label in sorted(result.unmatched_entities):
+            by_reason.setdefault(result.unmatched_reasons.get(label, ""), []).append(label)
+        for reason, labels in sorted(by_reason.items()):
+            click.echo(f"    {len(labels)} {reason}")
+            for label in labels[:3]:
+                click.echo(f"      - {label}")
+            if len(labels) > 3:
+                click.echo(f"      ... and {len(labels) - 3} more")
+
+    if result.shared_blank_nodes:
+        click.echo(f"\n  Blank nodes copied into more than one module: {result.shared_blank_nodes}")
+
+    for warning in result.warnings:
+        if use_colour:
+            click.secho(f"\n  \u26a0 {warning}", fg="yellow")
+        else:
+            click.echo(f"\n  \u26a0 {warning}")
 
     # Output location
     if not dry_run:

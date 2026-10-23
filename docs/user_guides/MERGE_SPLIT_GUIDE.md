@@ -539,8 +539,8 @@ rdf-construct split SOURCE [OPTIONS]
 | `--by-namespace` | Auto-detect modules from namespaces | `False` |
 | `--migrate-data PATH` | Data file(s) to split (repeatable) | - |
 | `--data-output PATH` | Output directory for split data | - |
-| `--unmatched` | Strategy: `common` or `error` | `common` |
-| `--common-name` | Name for common module | `common` |
+| `--unmatched` | What to do with unmatched subjects: `common` (collect them in one module) or `error` (refuse the run) | `common` |
+| `--common-name` | Name of the module that collects unmatched subjects | `unmatched` |
 | `--no-manifest` | Don't generate manifest.yml | `False` |
 | `--dry-run` | Show what would happen without writing | `False` |
 | `--no-colour` | Disable coloured output | `False` |
@@ -551,8 +551,8 @@ rdf-construct split SOURCE [OPTIONS]
 | Code | Meaning |
 |------|---------|
 | 0 | Split successful |
-| 1 | Split successful, unmatched entities in common module |
-| 2 | Input refused or run failed (invalid options or config, file not found, parse error) |
+| 1 | Split successful, with unmatched subjects in their own module, or a module that could not be given an ontology IRI |
+| 2 | Input refused or run failed (invalid options or config, file not found, parse error, `--unmatched error` with unmatched subjects, an unmatched module whose name another module already has) |
 
 ### When `modules/` already holds other files
 
@@ -571,9 +571,9 @@ nothing: `core.ttl` stays. An explicit `-o` is never refused. Files an operating
 any folder (`.DS_Store`, `Thumbs.db`, `desktop.ini`, `.directory`) and a `.gitkeep` do not count.
 A directory a v0.6.0 run wrote has no marker, so the first v0.7.0 run into it is refused.
 
-`--dry-run` is refused the same way, so a preview never promises a run that would refuse. Until
-[#291](https://github.com/aigora-de/rdf-construct/issues/291) is fixed, a `-c` config's
-`output_dir` is ignored, so only `-o` names the directory.
+`--dry-run` is refused the same way, so a preview never promises a run that would refuse. A `-c`
+config's `output_dir` names the directory as `-o` does, so it is never refused; `-o` overrides it
+([#291](https://github.com/aigora-de/rdf-construct/issues/291)).
 
 ### Splitting Strategies
 
@@ -596,7 +596,15 @@ How modules are found and named:
 - **Where there is no prefix,** the name comes from the namespace's last path segment: N-Triples, an undeclared namespace, or the empty prefix `:`. `http://example.org/ontology#` gives `ontology.ttl`.
 - **If two names clash, declared prefixes keep theirs.** The rest get `-2`, `-3`, … in sorted namespace order. Names are compared without case, because `Ex.ttl` and `ex.ttl` are one file on a case-insensitive filesystem.
 
-Every class and property has a namespace, so `--by-namespace` never leaves one unmatched, and it exits 0.
+A SKOS concept scheme makes a module for its namespace too. Nothing else makes a module: every
+other subject joins one, as [Where everything else goes](#where-everything-else-goes) describes.
+
+**A borrowed vocabulary makes no module.** A file saved by Protégé declares the annotation
+properties it uses, such as `dcterms:title a owl:AnnotationProperty`. When the file has an
+ontology header, a namespace on a different host from every ontology IRI it declares is borrowed,
+and its declarations go to the unmatched module instead of a `dcterms.ttl` of their own
+([#383](https://github.com/aigora-de/rdf-construct/issues/383)). A file with no header gives
+nothing to judge by, so there each namespace is still a module.
 
 #### Configuration-Based (Explicit)
 
@@ -612,6 +620,7 @@ split:
     - name: core
       description: "Core upper ontology concepts"
       output: core.ttl
+      ontology_iri: http://example.org/ontology/core  # see Module Identity
       include:
         classes:
           - ex:Entity
@@ -629,20 +638,20 @@ split:
       namespaces:
         - "http://example.org/ontology/org#"
 
-    # With explicit imports
+    # With explicit imports: ontology IRIs or CURIEs, never file names
     - name: building
       output: building.ttl
       namespaces:
         - "http://example.org/ontology/building#"
       imports:
-        - core.ttl
+        - http://example.org/ontology/core
       auto_imports: true
 
-  # Handle entities that don't match any module
+  # Handle subjects that don't match any module
   unmatched:
     strategy: common  # or "error"
-    module: common
-    output: common.ttl
+    module: unmatched
+    output: unmatched.ttl
 
   generate_manifest: true
 ```
@@ -662,38 +671,117 @@ modules:
 
 ### Dependency Tracking
 
-The splitter automatically detects cross-module dependencies (when one module references entities from another) and can generate `owl:imports` declarations:
+The splitter detects cross-module dependencies (when one module refers to entities from another,
+as an object) and writes `owl:imports` naming the **ontology IRI** of each module depended on. From
+`rdf-construct split examples/split/split_monolith.ttl -o modules/ --by-namespace`, `org.ttl`
+begins:
 
 ```turtle
-# In organisation.ttl
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
-
 <http://example.org/ontology/org> a owl:Ontology ;
-    owl:imports <core.ttl> .
-
-org:Organisation a owl:Class ;
-    rdfs:subClassOf ex:Entity .  # Reference to core module
+    owl:imports <http://example.org/ontology> .
 ```
+
+`<http://example.org/ontology>` is `ex.ttl`'s ontology IRI. An import names an ontology, never a
+file, so the modules can be moved or published together; resolving an IRI to a local file is a
+job for your tools' catalogue. A module with no ontology IRI cannot be imported, and the run
+warns, naming it.
 
 Control imports with:
 
 - `auto_imports: true` — Generate imports from detected dependencies (default)
 - `auto_imports: false` — No automatic imports
-- `imports: [core.ttl]` — Explicit import list
+- `imports: [http://example.org/ontology/core]` — Explicit imports, as IRIs or CURIEs. A file
+  name such as `core.ttl` is refused with exit 2.
+
+### Module Identity
+
+Each module is an ontology of its own, so it gets its own header. Nothing of the source's header
+is copied, `owl:versionIRI` included, because a module is not a version of the source. Each
+module's header says where it came from with `prov:wasDerivedFrom`, naming the source's version
+IRI (or its ontology IRI), as `order` does for an extract
+([#178](https://github.com/aigora-de/rdf-construct/issues/178)).
+
+A module's ontology IRI comes from the first of these that applies, and the run prints it under
+the module with the rung that gave it (`from: …`):
+
+1. **`config`:** the module's `ontology_iri:` in a config file.
+2. **`namespace`:** the module's own namespace, without its trailing `#` or `/`, when it has
+   exactly one. Not when that would be the source's own ontology IRI, and not when the namespace
+   is on a different host from every ontology IRI the source declares, since it would claim
+   someone else's (GeoSPARQL's namespace would claim `<http://www.opengis.net/ont/geosparql>`). A
+   source with no header cannot be checked, and the rung says
+   `namespace, unchecked: the source declares no ontology`.
+3. **`source ontology`:** `<source ontology IRI>/<module name>`. With several headers, the one
+   whose IRI holds the module's namespace; otherwise the source's only one.
+4. **`none`:** no header, and a warning. The run exits 1.
+
+`ies-common.ttl`'s `ies` module, for example, is `…/ies/common/ies`: its namespace `…/ies/common/`
+is the source's own ontology IRI.
+
+### Where Everything Else Goes
+
+Classes and properties are placed by the module definitions. Every other subject in the source
+follows them ([#176](https://github.com/aigora-de/rdf-construct/issues/176)):
+
+- **An individual** goes to the module that holds its class (its `rdf:type`). A term that is
+  both a class and an individual is placed as a class, with all its triples.
+- **A SKOS concept** goes with its concept scheme (`skos:inScheme`), and the scheme goes to the
+  module that claims its namespace, so a scheme is never divided. A concept in no scheme goes to
+  the module that claims its namespace, if there is one.
+- **A blank node** goes with whatever refers to it: `ex:Building rdfs:subClassOf [ … ]` keeps
+  its restriction. One that two modules' subjects refer to is copied into both, and the run
+  counts it. A blank node nothing refers to, such as an `owl:AllDisjointClasses`, goes to the
+  module whose terms it names.
+- **The source's ontology header** goes to no module (see [Module Identity](#module-identity)).
 
 ### Unmatched Entities
 
-Entities that don't match any module definition are handled according to strategy:
+A subject with no single module to go to is unmatched. The run counts unmatched subjects by
+reason, from what it wrote. From `tests/fixtures/split/residue/routing.ttl`, a fixture with one
+of each:
 
-**Common module (default):**
+```
+  Unmatched subjects: 10
+    2 a blank-node structure naming terms of more than one module
+      - blank-node structure 1 (owl:AllDisjointClasses)
+      - blank-node structure 2 (owl:Restriction)
+    1 a borrowed vocabulary's term
+      - http://external.example/v#Borrowed
+    1 a concept in schemes in more than one module
+      - http://example.org/k#split
+    1 a concept with no scheme, in no module's namespace
+      - http://example.org/k#loose
+    1 no rdf:type
+      - http://example.org/a#untyped
+    1 typed by an unmatched class
+      - http://example.org/a#ofBorrowed
+    1 typed by classes in more than one module
+      - http://example.org/a#twoTypes
+    2 typed only by classes no module holds
+      - http://example.org/a#foreign
+      - http://example.org/a#onlyThing
+
+  Blank nodes copied into more than one module: 1
+```
+
+What happens to them depends on the strategy, set with `--unmatched` or in the config. An
+option given on the command line overrides the config
+([#291](https://github.com/aigora-de/rdf-construct/issues/291)).
+
+**Collect them in one module (default):** the run exits 1.
 ```yaml
 unmatched:
   strategy: common
-  module: common
-  output: common.ttl
+  module: unmatched
+  output: unmatched.ttl
 ```
 
-**Error (fail if unmatched):**
+The module is called `unmatched` unless you name it with `--common-name` or `module:`. If
+another module already has that name, compared without case, the run is refused with exit 2
+before anything is written: a namespace whose prefix is `unmatched:` needs
+`--common-name` ([#382](https://github.com/aigora-de/rdf-construct/issues/382)).
+
+**Error (refuse if any are unmatched):** the run exits 2 and writes nothing.
 ```yaml
 unmatched:
   strategy: error
@@ -720,7 +808,7 @@ modules:
     classes: 8
     properties: 5
     triples: 67
-    imports: [core.ttl]
+    imports: [http://example.org/ontology/core]
     dependencies: [core]
 
 summary:
@@ -783,8 +871,10 @@ rdf-construct merge modules/*.ttl -o reconstructed.ttl
 rdf-construct diff large.ttl reconstructed.ttl
 ```
 
-Minor differences may occur due to:
-- Added `owl:imports` declarations
+Expected differences:
+- The source's ontology header is not in any module, and each module has its own header
+  (`owl:Ontology`, `owl:imports`, `prov:wasDerivedFrom`)
+- A blank node that two modules refer to is in both
 - Namespace binding order
 - Blank node identifiers
 
@@ -803,8 +893,11 @@ Output:
 
   Module breakdown:
     building.ttl: 5 classes, 4 properties, 43 triples (deps: ex, org)
+      <http://example.org/ontology/building> (from: namespace, unchecked: the source declares no ontology)
     ex.ttl: 3 classes, 3 properties, 26 triples
+      <http://example.org/ontology> (from: namespace, unchecked: the source declares no ontology)
     org.ttl: 5 classes, 3 properties, 37 triples (deps: ex)
+      <http://example.org/ontology/org> (from: namespace, unchecked: the source declares no ontology)
 ```
 
 ```
@@ -822,8 +915,8 @@ One module for each of the file's `ex:`, `org:` and `building:` namespaces, name
 
 | Limitation | Issue |
 |------------|-------|
-| Only classes and properties are placed: individuals, SKOS concepts, terms declared only by an OWL characteristic, the source's ontology header and blank-node interiors are dropped | #176 |
-| Each module gets an invented `http://example.org/<module>` ontology IRI, and its `owl:imports` name output files as `file://` IRIs | #178 |
+| A module that uses another's annotation property as a predicate does not import it: only objects count as dependencies | #383 |
+| `--no-manifest`, `--migrate-data` and `--data-output` have no effect with `--by-namespace` | #179 |
 | The order of a module's `imports` and `dependencies` (and of the `deps:` shown above) changes from run to run | #181 |
 | Module files are written in rdflib's alphabetical order, not in semantic order | #305 |
 
@@ -900,13 +993,13 @@ Consider:
 - Breaking large merges into smaller steps
 - Using configuration file for fine-grained control
 
-### Split: "Unmatched entities in common module"
+### Split: "Unmatched subjects"
 
-Some entities don't match any module definition. Either:
-- Add them to a module's class/property list
-- Include their namespace in a module
-- Accept them in the common module
-- Use `--unmatched error` to identify what's missing
+Some subjects have no single module to go to; the run lists each reason. Either:
+- Add classes and properties to a module's class/property list, or include their namespace
+- Declare the classes your individuals use, in the file being split
+- Accept them in the unmatched module
+- Use `--unmatched error` to refuse a split that leaves anything unmatched
 
 ### Split: "Too many cross-module dependencies"
 
@@ -914,4 +1007,6 @@ Consider reorganising modules or accepting some coupling. Use the manifest's dep
 
 ### Split: "Missing triples after split"
 
-Ensure all entity types (classes, properties, individuals) are covered. The split only includes triples where the subject is an assigned entity.
+Only the source's ontology header is left out on purpose: each module has its own. Every other
+triple is in a module, the unmatched module included. A blank node two modules refer to is in
+both.
