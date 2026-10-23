@@ -181,10 +181,10 @@ Nothing has landed yet.
 
 ## `cq-test`
 
-Nothing has landed yet.
-
 | Issue | What changed | What to do |
 |---|---|---|
+| [#134](https://github.com/aigora-de/rdf-construct/issues/134) | A competency question pairing an ASK query with `has_results`, `no_results` or `count` is now reported as an error. These were never evaluated against the ASK's answer: `has_results` and `count: 1` always passed, `no_results` and `count: 0` always failed. `min_results` and `max_results` are refused the same way, and so are `results` and `contains`, which already errored with `TypeError: 'bool' object is not iterable`. The question's status is `ERROR`, its JUnit element is `<error type="InvalidExpectation">`, the run exits **2**, and the other questions still run. | Use `expect: true` or `expect: false`. A question that has been passing this way has been checking nothing. |
+| [#134](https://github.com/aigora-de/rdf-construct/issues/134) | Python API: an `Expectation` subclass declares the query forms it can be checked against in `query_forms`. The default is SELECT, CONSTRUCT and DESCRIBE, so your own subclass is refused on an ASK unless it says otherwise. `CQTestResult` gains `error_type`: `QueryError` or `InvalidExpectation`. | For a subclass that checks ASK answers, set `query_forms = frozenset({"ASK", ...})` on it, and give it a `key` property if `describe()` does not read as its `expect:` spelling. |
 
 ## `stats`
 
