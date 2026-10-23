@@ -10,6 +10,7 @@ This module provides the OntologySplitter class that:
 """
 
 import re
+from collections.abc import Container
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -80,7 +81,7 @@ def _derived_namespace(iri: str) -> str:
     return iri[: cut + 1] if cut >= 0 else iri
 
 
-def _claiming_namespace(iri: str, namespaces: set[str] | dict[str, Any]) -> str | None:
+def _claiming_namespace(iri: str, namespaces: Container[str]) -> str | None:
     """The longest of `namespaces` that contains `iri`, matched as `core.utils.in_namespace` does.
 
     Every namespace that can contain an IRI is the IRI itself, or the IRI cut just before or just

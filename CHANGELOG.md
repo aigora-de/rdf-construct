@@ -231,7 +231,10 @@ change, and what to do about it, is listed command by command in the
   namespace at exit 0. In a split configuration, a prefixed name in `classes:`
   or `properties:` now means the source's own prefix, and one the source does
   not bind fails the split instead of matching nothing; `-c` itself still
-  crashes until #175. Placing entities
+  crashes until #175. A configured module's `namespaces:` now match at a
+  namespace boundary, as `merge`'s `namespace_remap` does since #184:
+  `http://example.org/ont` takes `…/ont#Y` but no longer `…/ontology#X`.
+  Placing entities
   no longer slows with the number of modules: 10,001 modules took 41 s and now
   take 13 s.
 - **`merge` compares sources when it looks for conflicts** (#193). It put every
