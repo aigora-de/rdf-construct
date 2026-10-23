@@ -178,22 +178,12 @@ def test_refactor_deprecate_keeps_every_input_triple(tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     "source",
     [
-        # Nothing is lost, but every module gains a fabricated header and file:// imports.
-        pytest.param(
-            EXAMPLES / "split" / "split_monolith.ttl",
-            id="monolith",
-            marks=pytest.mark.xfail(strict=True, reason="#178"),
-        ),
-        # Individuals, the header and blank-node interiors are lost (#176), and headers are
-        # fabricated (#178).
-        pytest.param(
-            IES_SMALL,
-            id="ies",
-            marks=pytest.mark.xfail(strict=True, reason="#176, #178"),
-        ),
+        pytest.param(EXAMPLES / "split" / "split_monolith.ttl", id="monolith"),
+        pytest.param(IES_SMALL, id="ies"),
     ],
 )
 def test_split_union_is_isomorphic(source: Path, tmp_path, monkeypatch):
+    """Headers aside (see ``CONTRACTS``): ``tests/test_split_residue.py`` checks each module's own."""
     out = tmp_path / "modules"
     _run(tmp_path, monkeypatch, "split", source, "--by-namespace", "-o", out)
     modules = [_parse(path) for path in sorted(out.glob("*.ttl"))]

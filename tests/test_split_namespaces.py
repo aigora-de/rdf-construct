@@ -14,10 +14,10 @@ import pytest
 import yaml
 from click.testing import CliRunner
 from rdflib import Graph, URIRef
-from rdflib.namespace import OWL, RDF
 
 from rdf_construct.cli import cli
 from rdf_construct.core.utils import in_namespace
+from rdf_construct.core.verify import body
 from rdf_construct.merge.splitter import (
     ModuleDefinition,
     OntologySplitter,
@@ -41,10 +41,9 @@ def _split(source: Path, out: Path) -> int:
 
 
 def _subjects(module: Path) -> set[str]:
-    """The named subjects a module holds, less its own owl:Ontology header (#178's)."""
-    graph = Graph().parse(module)
-    headers = set(graph.subjects(RDF.type, OWL.Ontology))
-    return {str(s) for s in graph.subjects() if isinstance(s, URIRef) and s not in headers}
+    """The named subjects a module holds, less its own header and stamp declaration (#178's)."""
+    graph = body(Graph().parse(module))
+    return {str(s) for s in graph.subjects() if isinstance(s, URIRef)}
 
 
 def _prefixes(module: Path) -> set[str]:
@@ -79,24 +78,28 @@ def test_ies_classification_terms_go_to_their_own_module(tmp_path: Path) -> None
     source = IES / "ies-env-building-classification.ttl"
     out = tmp_path / "modules"
 
-    assert _split(source, out) == 0
+    # Three individuals are typed by classes only ies-env-building.ttl declares (#176)
+    assert _split(source, out) == 1
 
     graph = Graph(bind_namespaces="none").parse(source)
     routed = {str(e) for e in select_classes(graph) | select_properties(graph)}
-    assert len(routed) == 185  # the other four of its 189 subjects are #176's
-    assert sorted(p.name for p in out.glob("*.ttl")) == ["blg-class.ttl"]
+    assert len(routed) == 185  # of its 189 subjects; the header goes to no module (#178)
+    assert sorted(p.name for p in out.glob("*.ttl")) == ["blg-class.ttl", "unmatched.ttl"]
     assert _subjects(out / "blg-class.ttl") == routed
+    assert len(_subjects(out / "unmatched.ttl")) == 3
 
 
 def test_ies_nested_namespaces_each_get_their_own_module(tmp_path: Path) -> None:
     source = IES / "ies-env-building.ttl"
     out = tmp_path / "modules"
 
-    assert _split(source, out) == 0
+    # Five subjects describe ies:common terms the file does not declare (#176)
+    assert _split(source, out) == 1
 
     building = "http://informationexchangestandard.org/ont/ies/env/building/"
     written = {p.name: _subjects(p) for p in out.glob("*.ttl")}
-    assert sorted(written) == ["building.ttl", "env.ttl"]
+    assert sorted(written) == ["building.ttl", "env.ttl", "unmatched.ttl"]
+    assert len(written.pop("unmatched.ttl")) == 5
     assert all(written.values())
     assert all(in_namespace(s, building) for s in written["building.ttl"])
     assert not any(in_namespace(s, building) for s in written["env.ttl"])
