@@ -263,8 +263,8 @@ THREE_STATES = [
     _row(
         Row("lint", "clean", ("lint", "--format", "json", CLEAN_LINT)), xfail="#201", label="json"
     ),
-    _row(Row("lint", "clean", ("lint", "--list-rules")), xfail="#202", label="list-rules"),
-    _row(Row("lint", "clean", ("lint", "--init")), xfail="#202", label="init"),
+    _row(Row("lint", "clean", ("lint", "--list-rules")), label="list-rules"),
+    _row(Row("lint", "clean", ("lint", "--init")), label="init"),
     _row(Row("diff", "clean", ("diff", ANIMAL, ANIMAL))),
     _row(Row("diff", "findings", ("diff", ANIMAL, SIMPLE))),
     _row(Row("diff", "refused", ("diff", ANIMAL, "@tmp/missing.ttl"))),
@@ -285,6 +285,10 @@ THREE_STATES = [
     ),
     _row(Row("cq-test", "findings", ("cq-test", ANIMAL, str(SMOKE / "cq_failing.yml")))),
     _row(Row("cq-test", "refused", ("cq-test", ANIMAL, MALFORMED_YAML))),
+    _row(
+        Row("cq-test", "refused", ("cq-test", ANIMAL, str(SMOKE / "cq_ask_count.yml"))),
+        label="ask-count",
+    ),
     _row(Row("stats", "clean", ("stats", ANIMAL))),
     _row(Row("stats", "refused", ("stats", "--compare", ANIMAL))),
     _row(Row("describe", "clean", ("describe", ANIMAL))),
@@ -326,7 +330,6 @@ THREE_STATES = [
             "clean",
             ("split", MONOLITH, "-c", str(EXAMPLES / "split" / "split_config.yml"), "-o", "@tmp/s"),
         ),
-        xfail="#175",
         label="config",
     ),
     _row(
@@ -482,11 +485,7 @@ MALFORMED = [
     _row(Row("contexts", "refused", ("contexts", MALFORMED_YAML)), xfail="#318", label="yaml"),
     _row(Row("lint", "refused", ("lint", MALFORMED_TTL)), xfail="#322", label="ttl"),
     _row(Row("diff", "refused", ("diff", MALFORMED_TTL, ANIMAL)), label="ttl"),
-    _row(
-        Row("docs", "refused", ("docs", MALFORMED_TTL, "-o", "@tmp/docs")),
-        xfail="#301",
-        label="ttl",
-    ),
+    _row(Row("docs", "refused", ("docs", MALFORMED_TTL, "-o", "@tmp/docs")), label="ttl"),
     _row(
         Row("shacl-gen", "refused", ("shacl-gen", MALFORMED_TTL, "-o", "@tmp/shapes.ttl")),
         label="ttl",
@@ -680,4 +679,8 @@ IES_INVOCATIONS = [
 def test_ies_tier_completes(argv: tuple[str, ...], tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     result = _invoke(argv, tmp_path, monkeypatch)
     assert_no_crash(result)
-    assert result.exit_code in (STATE_CODE["clean"], STATE_CODE["findings"]), result.output
+    if argv[0] == "diff":
+        # A file compared with itself is identical, blank nodes included (#143)
+        assert result.exit_code == STATE_CODE["clean"], result.output
+    else:
+        assert result.exit_code in (STATE_CODE["clean"], STATE_CODE["findings"]), result.output

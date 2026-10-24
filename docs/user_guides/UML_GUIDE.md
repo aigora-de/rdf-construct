@@ -35,6 +35,23 @@ poetry run rdf-construct uml ontology.ttl config.yml \
   --layout-config layouts.yml --layout hierarchy
 ```
 
+### When `diagrams/` already holds other files
+
+Without `-o`, `uml` writes into `diagrams/` only if the directory is new, empty, or was written by
+`uml` before. Every run that writes leaves a small `.rdf-construct` file there, naming the
+command and the version, and that marker is how a later run knows the directory is its own. A
+directory holding anything else is refused at exit 2 before the source is parsed, and nothing is
+written ([#261](https://github.com/aigora-de/rdf-construct/issues/261)):
+
+```
+Error: diagrams/ already holds files that rdf-construct uml did not write (overview.puml). Leaving it untouched. Pass -o <dir> to write somewhere else, or --overwrite to write into diagrams/ anyway.
+```
+
+`--overwrite` writes there anyway and marks the directory, so it is needed once. It deletes
+nothing: `overview.puml` stays. An explicit `-o` is never refused. Files an operating system leaves in
+any folder (`.DS_Store`, `Thumbs.db`, `desktop.ini`, `.directory`) and a `.gitkeep` do not count.
+A directory a v0.6.0 run wrote has no marker, so the first v0.7.0 run into it is refused.
+
 ### List Contexts
 
 ```bash
@@ -887,7 +904,7 @@ contexts:
 
 - **[Getting Started](GETTING_STARTED.md)**: Quick start guide
 - **[CLI Reference](CLI_REFERENCE.md)**: All commands
-- **[Examples](examples/)**: Sample ontologies and configs
+- **[Examples](../../examples/)**: Sample ontologies and configs
 
 ## Questions?
 

@@ -154,6 +154,36 @@ class TestSuperset:
         [found] = check_superset([_source()], output)
         assert found.missing_count > 0
 
+    def test_a_structure_two_sources_share_is_needed_once(self):
+        """``merge`` writes a shared restriction once (#170), and that keeps every source triple."""
+        assert check_superset([_source(), _source()], _source()) == []
+
+    def test_each_copy_within_one_source_is_needed(self):
+        doubled = _source()
+        restriction = BNode()
+        doubled.add((EX.Building, RDFS.subClassOf, restriction))
+        doubled.add((restriction, RDF.type, OWL.Restriction))
+        doubled.add((restriction, OWL.onProperty, EX.hasFloor))
+        doubled.add((restriction, OWL.someValuesFrom, EX.Floor))
+        [found] = check_superset([doubled, _source()], _source())
+        assert found.missing_count == 4
+
+    def test_a_structure_that_gained_a_triple_no_longer_matches(self):
+        output = Graph()
+        for t in _source():
+            output.add(t)
+            if t[1] == OWL.onProperty:
+                output.add((t[0], RDFS.comment, Literal("added")))
+        [found] = check_superset([_source()], output)
+        assert found.missing_count == 4
+
+    def test_the_same_structure_under_another_subject_does_not_count(self):
+        output = Graph()
+        for s, p, o in _source():
+            output.add((EX.Room if s == EX.Building and p == RDFS.subClassOf else s, p, o))
+        [found] = check_superset([_source()], output)
+        assert found.missing_count == 4
+
 
 class TestCountsAgree:
     def test_equal_counts_hold(self):

@@ -55,6 +55,7 @@ src/rdf_construct/
 │   ├── change_types.py
 │   ├── comparator.py
 │   ├── filters.py
+│   ├── structures.py
 │   └── formatters/
 │       ├── __init__.py
 │       ├── text.py
@@ -405,14 +406,20 @@ Semantic comparison of RDF graphs, identifying meaningful changes while ignoring
 - `TripleChange` dataclass - single triple change
 - `EntityChange` dataclass - changes to one entity
 - `GraphDiff` dataclass - complete diff result
+- `UncomparedStructure` dataclass - a blank-node structure too large to compare
 - `categorise_predicate()` - classify predicates semantically
 
 **`diff/comparator.py`**
-- `compare_graphs()` - core comparison using set operations
+- `compare_graphs()` - core comparison using set operations, on blank nodes labelled by content
 - `compare_files()` - convenience wrapper for file paths
+- `NON_TREE_LIMIT` - the largest non-tree blank-node structure compared
 - `_determine_entity_type()` - classify entities
 - `_get_label()` - extract human-readable labels
 - `_get_superclasses()` - find class hierarchy
+
+**`diff/structures.py`**
+- `describe_structures()` - attribute changed blank-node structures to their named owners
+- Writes each structure as one line of Turtle, never as a parser's label
 
 **`diff/filters.py`**
 - `filter_diff()` - filter diff results by type/entity
@@ -771,8 +778,9 @@ Located in `core/serialiser.py`, function `serialise_turtle()`:
 
 ### Semantic Diff
 Located in `diff/comparator.py`, function `compare_graphs()`:
+- Labels blank nodes by content (`core/blank_nodes.py`), so a shared structure is the same in both
 - Uses set operations on triples: `added = new - old`, `removed = old - new`
-- Groups changes by subject
+- Groups changes by subject; a blank-node structure goes to the named subject it belongs to
 - Classifies entities as added/removed/modified
 - Ignores cosmetic changes (order, prefixes, whitespace)
 

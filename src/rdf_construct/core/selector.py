@@ -1,8 +1,9 @@
 """Subject selection logic for RDF graphs."""
 
-from rdflib import RDF, Graph
+from rdflib import RDF, BNode, Graph
 from rdflib.term import Node, URIRef
 
+from .serialiser import bnode_closure
 from .vocab import (
     ANNOTATION_PROPERTY_TYPES,
     CLASS_TYPES,
@@ -83,6 +84,29 @@ def _subjects_of_types(graph: Graph, types: frozenset[URIRef]) -> set[Node]:
     return subjects
 
 
+def _without_owned_bnodes(graph: Graph, subjects: set[Node]) -> set[Node]:
+    """Drop the blank nodes that belong to the description of a named subject.
+
+    A blank node reachable from a named subject has no identity a profile could select it by:
+    ``bnode_closure`` brings it in with whatever references it, and selecting it on its own
+    writes it detached — an ``owl:unionOf`` range as a free-standing ``_:n…`` class (#280). A
+    blank node nothing named reaches is different: an ``owl:AllDisjointClasses`` or
+    ``owl:AllDifferent`` is an axiom in its own right, and only a selector can claim it.
+
+    Args:
+        graph: RDF graph the subjects were selected from
+        subjects: The selection
+
+    Returns:
+        The selection without blank nodes reachable from a named subject
+    """
+    if not any(isinstance(s, BNode) for s in subjects):
+        return subjects
+    named = [s for s in set(graph.subjects()) if not isinstance(s, BNode)]
+    owned = set(bnode_closure(graph, named))
+    return {s for s in subjects if s not in owned}
+
+
 def select_subjects(graph: Graph, selector_key: str, selectors: dict[str, str]) -> set:
     """Select subjects from a graph based on selector criteria.
 
@@ -109,8 +133,13 @@ def select_subjects(graph: Graph, selector_key: str, selectors: dict[str, str]) 
         selector_key: Key identifying the selection type
         selectors: Dictionary of selector definitions
 
+    No selector returns a blank node reachable from a named subject: it belongs to that
+    subject's description (#280). A blank node nothing named reaches, such as an
+    ``owl:AllDisjointClasses`` axiom, is selected like any other subject.
+
     Returns:
-        Set of URIRefs matching the selection criteria
+        Set of subjects matching the selection criteria: URIRefs, and the blank nodes no
+        named subject reaches
 
     Raises:
         UnknownSelectorError: If the key names neither a built-in selector
@@ -178,4 +207,4 @@ def select_subjects(graph: Graph, selector_key: str, selectors: dict[str, str]) 
             f"Defined in this config: {defined}"
         )
 
-    return subjects
+    return _without_owned_bnodes(graph, subjects)

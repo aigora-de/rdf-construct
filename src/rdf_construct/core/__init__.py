@@ -3,6 +3,7 @@
 from .ordering import sort_subjects, topo_sort_subset, sort_with_roots
 from .profile import (
     DEFAULT_UNCLAIMED_POLICY,
+    HEADER_SECTION,
     UNCLAIMED_POLICIES,
     OrderingConfig,
     OrderingProfile,
@@ -27,13 +28,33 @@ from .serialiser import (
     bnode_closure,
     collect_used_namespaces,
     serialise_turtle,
+    serialise_turtle_str,
     build_section_graph,
 )
+from .blank_nodes import blank_node_components, component_digest, label_by_content
+from .provenance import (
+    WAS_DERIVED_FROM,
+    Stamp,
+    derivation_targets,
+    missing_triples,
+    stamp_derivation,
+    stamp_extract,
+    strip_version_iri,
+)
+from .default_order import (
+    IncompleteSubjectOrderError,
+    check_subject_order_complete,
+    default_subject_order,
+)
 from .utils import (
+    CurieError,
     expand_curie,
     extract_prefix_map,
+    in_namespace,
     qname_sort_key,
+    rebase_iri,
     rebind_prefixes,
+    resolve_curie,
 )
 from .formats import (
     FormatInfo,
@@ -58,6 +79,7 @@ __all__ = [
     "load_yaml",
     "UNCLAIMED_POLICIES",
     "DEFAULT_UNCLAIMED_POLICY",
+    "HEADER_SECTION",
     # Selector
     "select_subjects",
     "is_known_selector",
@@ -75,12 +97,33 @@ __all__ = [
     "bnode_closure",
     "collect_used_namespaces",
     "serialise_turtle",
+    "serialise_turtle_str",
     "build_section_graph",
+    # Blank nodes
+    "blank_node_components",
+    "component_digest",
+    "label_by_content",
+    # Provenance
+    "WAS_DERIVED_FROM",
+    "Stamp",
+    "derivation_targets",
+    "missing_triples",
+    "stamp_derivation",
+    "stamp_extract",
+    "strip_version_iri",
+    # Default ordering
+    "default_subject_order",
+    "check_subject_order_complete",
+    "IncompleteSubjectOrderError",
     # Utils
+    "CurieError",
     "expand_curie",
     "extract_prefix_map",
+    "in_namespace",
     "qname_sort_key",
+    "rebase_iri",
     "rebind_prefixes",
+    "resolve_curie",
     # Formats
     "FormatInfo",
     "FORMAT_REGISTRY",

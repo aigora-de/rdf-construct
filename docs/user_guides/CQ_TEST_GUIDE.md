@@ -66,12 +66,30 @@ questions:
 | `name` | No | Human-readable name (defaults to id) |
 | `description` | No | Longer description of what's being tested |
 | `tags` | No | List of tags for filtering |
-| `query` | Yes | SPARQL query (ASK or SELECT) |
+| `query` | Yes | SPARQL query (ASK, SELECT, CONSTRUCT or DESCRIBE) |
 | `expect` | Yes | Expected result (see Expectation Types) |
 | `skip` | No | Set to `true` to skip this test |
 | `skip_reason` | No | Reason for skipping |
 
 ## Expectation Types
+
+An ASK query answers true or false; it has no results to count or bind, so it takes only
+`expect: true` or `expect: false`. Any other expectation on an ASK is reported as that question's
+`ERROR`, and the run exits 2. The other questions still run. Likewise, `results` and `contains`
+match variable bindings, so they take only a SELECT.
+
+| Expectation | ASK | SELECT | CONSTRUCT, DESCRIBE |
+|-------------|-----|--------|---------------------|
+| `true` / `false` | the ASK's answer | `true` = at least one row | `true` = at least one triple |
+| `has_results` / `no_results` | `ERROR` | rows | triples |
+| `count`, `min_results`, `max_results` | `ERROR` | rows | triples |
+| `results`, `contains` | `ERROR` | row bindings | `ERROR`: triples have no variable bindings |
+
+A CONSTRUCT result is a graph, so its count is of distinct triples, not of solutions: a template
+that writes the same triple for three solutions counts 1, and a solution that leaves a template
+variable unbound writes no triple. What DESCRIBE returns is left to the implementation by SPARQL;
+rdflib returns the resource's own triples and follows its blank nodes, so `DESCRIBE ex:A` on a
+class with one `owl:Restriction` counts the restriction's triples too.
 
 ### Boolean (ASK Queries)
 
@@ -231,7 +249,7 @@ The command returns meaningful exit codes for CI integration:
 |------|---------|
 | 0 | All tests passed |
 | 1 | One or more tests failed |
-| 2 | Error occurred (file not found, parse error, etc.) |
+| 2 | Error occurred (file not found, parse error, a question whose query fails or whose expectation does not fit its query form, etc.) |
 
 ## Output Formats
 

@@ -116,6 +116,7 @@ rdf-construct order SOURCE CONFIG [OPTIONS]
 **Options**:
 - `-p, --profile NAME`: Profile(s) to generate (can specify multiple, default: all)
 - `-o, --outdir PATH`: Output directory (default: `ordered`)
+- `--overwrite`: Write into the default output directory even if it holds files this command did not write. Deletes nothing.
 
 **Examples**:
 
@@ -166,6 +167,7 @@ rdf-construct uml SOURCE [SOURCE...] -C CONFIG [OPTIONS]
 **Options**:
 - `-c, --context NAME`: Generate specific context(s) (can specify multiple)
 - `-o, --outdir PATH`: Output directory (default: `diagrams`)
+- `--overwrite`: Write into the default output directory even if it holds files this command did not write. Deletes nothing.
 - `--style-config PATH`: Path to style configuration YAML
 - `-s, --style NAME`: Style scheme name to use
 - `--layout-config PATH`: Path to layout configuration YAML
@@ -232,6 +234,7 @@ rdf-construct docs SOURCE [OPTIONS]
 
 **Options**:
 - `-o, --output PATH`: Output directory (default: `docs`)
+- `--overwrite`: Write into the default output directory even if it holds files this command did not write. Deletes nothing.
 - `-f, --format FORMAT`: Output format: `html`, `markdown`, `md`, `json` (default: html)
 - `-C, --config PATH`: YAML configuration file
 - `-t, --template PATH`: Path to custom Jinja2 templates directory
@@ -541,11 +544,13 @@ rdf-construct lint SOURCE [SOURCE...] [OPTIONS]
 - `SOURCE`: One or more RDF files to check
 
 **Options**:
-- `-l, --level LEVEL`: Strictness level: `strict`, `standard`, `relaxed` (default: standard)
+- `-l, --level LEVEL`: Strictness level: `strict`, `standard`, `relaxed` (default: standard). Changes
+  severities only; every rule runs at every level
 - `-f, --format FORMAT`: Output format: `text`, `json` (default: text)
 - `-c, --config PATH`: Path to `.rdf-lint.yml` configuration file
 - `-e, --enable RULE`: Enable specific rules (can use multiple times)
-- `-d, --disable RULE`: Disable specific rules (can use multiple times)
+- `-d, --disable RULE`: Disable specific rules (can use multiple times). An unknown rule name, or a
+  selection that leaves no rule to run, is refused with exit 2
 - `--no-colour`: Disable coloured output
 - `--list-rules`: List available rules and exit
 - `--init`: Generate a default `.rdf-lint.yml` config file and exit
@@ -738,12 +743,13 @@ rdf-construct split SOURCE [OPTIONS]
 
 **Options**:
 - `-o, --output PATH`: Output directory for modules (default: `modules/`)
+- `--overwrite`: Write into the default output directory even if it holds files this command did not write. Deletes nothing.
 - `-c, --config PATH`: YAML configuration file
 - `--by-namespace`: Auto-detect modules from namespaces
 - `--migrate-data PATH`: Data file(s) to split by instance type (can specify multiple)
 - `--data-output PATH`: Output directory for split data files
-- `--unmatched STRATEGY`: Strategy for unmatched entities: `common` or `error` (default: common)
-- `--common-name NAME`: Name for common module (default: `common`)
+- `--unmatched STRATEGY`: Strategy for unmatched subjects: `common` (collect them in one module) or `error` (refuse the run) (default: common)
+- `--common-name NAME`: Name for the module that collects unmatched subjects (default: `unmatched`)
 - `--no-manifest`: Don't generate manifest.yml
 - `--dry-run`: Show what would happen without writing files
 - `--no-colour`: Disable coloured output
@@ -794,12 +800,15 @@ split:
       output: organisation.ttl
       namespaces:
         - "http://example.org/ontology/org#"
+      ontology_iri: http://example.org/ontology/org  # optional
+      imports:  # ontology IRIs or CURIEs, never file names
+        - http://example.org/ontology/core
       auto_imports: true
 
   unmatched:
     strategy: common
-    module: common
-    output: common.ttl
+    module: unmatched
+    output: unmatched.ttl
 
   generate_manifest: true
 ```
@@ -822,7 +831,7 @@ modules:
     classes: 8
     properties: 5
     triples: 67
-    imports: [core.ttl]
+    imports: [http://example.org/ontology/core]
     dependencies: [core]
 summary:
   total_modules: 2
@@ -863,10 +872,10 @@ rdf-construct refactor rename SOURCES [OPTIONS]
 - `SOURCES`: One or more RDF files to process (.ttl, .rdf, .owl)
 
 **Options**:
-- `--from URI`: Single URI to rename
-- `--to URI`: New URI for single rename
-- `--from-namespace NS`: Old namespace prefix for bulk rename
-- `--to-namespace NS`: New namespace prefix for bulk rename
+- `--from URI`: Single URI or CURIE to rename
+- `--to URI`: New URI or CURIE for single rename
+- `--from-namespace NS`: Old namespace for bulk rename, matched at a `#`, `/` or `:` boundary
+- `--to-namespace NS`: New namespace for bulk rename
 - `-c, --config PATH`: YAML configuration file with rename mappings
 - `-o, --output PATH`: Output file (single source) or directory (multiple sources)
 - `--migrate-data PATH`: Data file(s) to migrate (can specify multiple)
@@ -874,6 +883,17 @@ rdf-construct refactor rename SOURCES [OPTIONS]
 - `--dry-run`: Preview changes without writing files
 - `--no-colour`: Disable coloured output
 - `--init`: Generate a template rename configuration file
+
+A CURIE such as `ex:Building` resolves against the prefixes the source file declares, plus
+`rdf`, `rdfs`, `owl`, `xsd` and `xml`, and never against rdflib's built-in prefix table. A
+prefix that no source binds is refused at exit 2, before anything is written, and so is a CURIE
+that two sources bind to different namespaces. Write an IRI that has no `://` in angle brackets:
+`<urn:isbn:0451450523>`. The same rule applies to `entities` in a configuration file.
+
+A namespace that ends in `#`, `/` or `:` matches as given. Without one, the match must end at a
+`#`, `/` or `:`: `http://example.org/ont` takes `…/ont#One`, `…/ont/extra#Three` and the IRI
+`…/ont` itself, but not `…/ontology#Two`; `urn:old:` takes `urn:old:A` but not `urn:older:C`.
+Give `http://example.org/ont#` to move that one namespace only.
 
 **Examples**:
 
@@ -951,8 +971,8 @@ rdf-construct refactor deprecate SOURCES [OPTIONS]
 - `SOURCES`: One or more RDF files to process (.ttl, .rdf, .owl)
 
 **Options**:
-- `--entity URI`: URI of entity to deprecate
-- `--replaced-by URI`: URI of replacement entity (adds dcterms:isReplacedBy)
+- `--entity URI`: URI or CURIE of entity to deprecate
+- `--replaced-by URI`: URI or CURIE of replacement entity (adds dcterms:isReplacedBy)
 - `-m, --message TEXT`: Deprecation message (added to rdfs:comment)
 - `--version VERSION`: Version when deprecated (included in message)
 - `-c, --config PATH`: YAML configuration file with deprecation specs

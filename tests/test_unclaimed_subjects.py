@@ -20,7 +20,7 @@ from textwrap import dedent
 import pytest
 from click.testing import CliRunner
 from rdflib import RDF, BNode, Graph, Literal, Namespace
-from rdflib.namespace import OWL, RDFS
+from rdflib.namespace import OWL, PROV, RDFS
 
 from rdf_construct.cli import cli
 from rdf_construct.core import OrderingConfig, bnode_closure
@@ -185,17 +185,29 @@ class TestShippedExamplesRoundTrip:
         assert "claimed by no section" not in result.output
 
     def test_compact_filters_deliberately_and_silently(self, tmp_path: Path) -> None:
-        """`compact` is header-and-classes by design and declares `unclaimed: ignore`."""
+        """`compact` is header-and-classes by design and declares `unclaimed: ignore`.
+
+        Silent about the loss, but not about the identity: since #90 the extract is stamped
+        as derived from its source, and the run says so.
+        """
         source = EXAMPLES / "animal_ontology.ttl"
         result = _order(source, EXAMPLES / "order" / "test_profile.yml", tmp_path, "-p", "compact")
         assert result.exit_code == 0
         assert "claimed by no section" not in result.output
+        assert "◇ extract:" in result.output
 
         base = Graph()
         base.parse(source)
         ordered = Graph()
         ordered.parse(tmp_path / f"{source.stem}-compact.ttl")
         assert len(ordered) < len(base)
+
+        [ontology] = base.subjects(RDF.type, OWL.Ontology)
+        assert (ontology, PROV.wasDerivedFrom, ontology) in ordered
+        assert {t for t in ordered if t not in base} == {
+            (ontology, PROV.wasDerivedFrom, ontology),
+            (PROV.wasDerivedFrom, RDF.type, OWL.AnnotationProperty),
+        }
 
 
 # -- Blank-node closure --
