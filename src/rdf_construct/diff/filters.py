@@ -116,7 +116,6 @@ def filter_diff(
         added_structures=diff.added_structures,
         removed_structures=diff.removed_structures,
         uncompared=diff.uncompared,
-        blank_node_warning=diff.blank_node_warning,
     )
 
 

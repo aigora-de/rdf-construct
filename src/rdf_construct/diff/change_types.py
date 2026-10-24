@@ -159,7 +159,6 @@ class GraphDiff:
             as Turtle.
         removed_structures: The same, removed.
         uncompared: Blank-node structures too large to compare.
-        blank_node_warning: True if there are blank-node changes that cannot be described.
     """
 
     old_path: str
@@ -170,7 +169,15 @@ class GraphDiff:
     added_structures: list[str] = field(default_factory=list)
     removed_structures: list[str] = field(default_factory=list)
     uncompared: list[UncomparedStructure] = field(default_factory=list)
-    blank_node_warning: bool = False
+
+    @property
+    def blank_node_warning(self) -> bool:
+        """True if a blank-node structure was not compared, so its changes are not known.
+
+        Derived from :attr:`uncompared`, which holds what the notes say, so the two cannot
+        disagree.
+        """
+        return bool(self.uncompared)
 
     @property
     def is_identical(self) -> bool:
@@ -185,17 +192,13 @@ class GraphDiff:
             and not self.added_structures
             and not self.removed_structures
             and not self.uncompared
-            and not self.blank_node_warning
         )
 
     @property
     def notes(self) -> list[str]:
         """What a reader must be told before any verdict: the changes that cannot be described."""
         # A file compared with itself would say the same thing twice
-        notes = list(dict.fromkeys(structure.describe() for structure in self.uncompared))
-        if self.blank_node_warning and not notes:
-            notes.append("There are blank-node changes that could not be described.")
-        return notes
+        return list(dict.fromkeys(structure.describe() for structure in self.uncompared))
 
     @property
     def summary(self) -> dict[str, int]:

@@ -506,7 +506,6 @@ class TestTooLargeToCompare:
             old_path="old.ttl",
             new_path="new.ttl",
             uncompared=[UncomparedStructure("old.ttl", 600, NON_TREE_LIMIT, "ex:U owl:unionOf")],
-            blank_node_warning=True,
         )
         monkeypatch.setattr(GraphDiff, "is_identical", property(lambda self: True))
 
@@ -514,12 +513,19 @@ class TestTooLargeToCompare:
 
         assert "was not compared" in lines[2]
 
-    def test_a_warning_alone_is_never_identical(self) -> None:
-        diff = GraphDiff(old_path="old.ttl", new_path="new.ttl", blank_node_warning=True)
+    def test_the_warning_is_derived_from_what_was_not_compared(self) -> None:
+        """One source of truth: the flag cannot be set without saying what it is about."""
+        clean = GraphDiff(old_path="old.ttl", new_path="new.ttl")
+        skipped = GraphDiff(
+            old_path="old.ttl",
+            new_path="new.ttl",
+            uncompared=[UncomparedStructure("old.ttl", 600, NON_TREE_LIMIT)],
+        )
 
-        assert not diff.is_identical
-        assert diff.notes == ["There are blank-node changes that could not be described."]
-        assert "could not be described" in format_diff(diff, "text").splitlines()[2]
+        assert not clean.blank_node_warning and clean.is_identical
+        assert skipped.blank_node_warning and not skipped.is_identical
+        with pytest.raises(TypeError):
+            GraphDiff(old_path="old.ttl", new_path="new.ttl", blank_node_warning=True)  # type: ignore[call-arg]
 
 
 # -- The rest of the command keeps working with structures --

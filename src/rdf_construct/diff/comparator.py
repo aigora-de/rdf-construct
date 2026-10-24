@@ -197,7 +197,6 @@ def compare_graphs(
         added_structures=sorted(ownerless["added"]),
         removed_structures=sorted(ownerless["removed"]),
         uncompared=old_uncompared + new_uncompared,
-        blank_node_warning=bool(old_uncompared or new_uncompared),
     )
 
 

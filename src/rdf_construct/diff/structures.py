@@ -33,6 +33,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from typing import NamedTuple, TypeAlias
 
 from rdflib import RDF, Graph, URIRef
 from rdflib.namespace import OWL
@@ -45,6 +46,20 @@ from rdf_construct.core.serialiser import format_term
 OWNER_PREDICATES = (OWL.annotatedSource, RDF.subject, OWL.sourceIndividual)
 
 Triple = tuple[Node, Node, Node]
+
+
+class _Text(NamedTuple):
+    """Finished text in the renderer's token stream.
+
+    A plain ``str`` cannot mark it: rdflib's ``BNode`` and ``URIRef`` are ``str`` subclasses, so
+    ``isinstance(token, str)`` would not tell text from a node still to be written.
+    """
+
+    text: str
+
+
+#: A token is finished text, or a blank node still to be written.
+_Token: TypeAlias = "_Text | Node"
 
 
 @dataclass
@@ -151,48 +166,56 @@ class _Renderer:
         """Write a node's predicate-object list, for a statement with the node as its subject."""
         return self._render(self._body(node))
 
-    def _render(self, tokens: list[Node | tuple[str]]) -> str:
-        # A token is text, as a 1-tuple, or a blank node still to be written.
+    def _render(self, tokens: list[_Token]) -> str:
+        """Write a sequence of tokens, expanding each blank node in place.
+
+        This keeps its own stack instead of recursing, for two reasons. A chain of cells that is
+        not a well-formed list nests one ``[ … ]`` inside the next, so recursion would pass
+        Python's limit of about 1,000 frames on a long one. And building each node's text from its
+        children's would copy the inner text at every level, which is quadratic in the depth. Here
+        each node pushes its parts back **in reverse**, so they come off the stack in writing
+        order, and every piece of text is appended exactly once.
+        """
         parts: list[str] = []
         stack = list(reversed(tokens))
         while stack:
             token = stack.pop()
-            if isinstance(token, tuple):
-                parts.append(token[0])
+            if isinstance(token, _Text):
+                parts.append(token.text)
                 continue
             if token in self.labels:
                 parts.append(self.labels[token])
                 continue
             items = self._list_items(token)
             if items is not None:
-                expanded: list[Node | tuple[str]] = [("(",)]
+                expanded: list[_Token] = [_Text("(")]
                 for item in items:
-                    expanded.append((" ",))
-                    expanded.append(item if isinstance(item, BNode) else (self.term(item),))
-                expanded.append((" )",))
+                    expanded.append(_Text(" "))
+                    expanded.append(item if isinstance(item, BNode) else _Text(self.term(item)))
+                expanded.append(_Text(" )"))
                 stack.extend(reversed(expanded))
                 continue
             if not self.pairs(token):
                 parts.append("[]")
                 continue
-            stack.extend(reversed([("[ ",), *self._body(token), (" ]",)]))
+            stack.extend(reversed([_Text("[ "), *self._body(token), _Text(" ]")]))
         return "".join(parts)
 
-    def _body(self, node: Node) -> list[Node | tuple[str]]:
+    def _body(self, node: Node) -> list[_Token]:
         groups: dict[Node, list[Node]] = defaultdict(list)
         for predicate, obj in self.pairs(node):
             groups[predicate].append(obj)
         predicates = sorted(groups, key=lambda p: (p != RDF.type, self.term(p)))
 
-        tokens: list[Node | tuple[str]] = []
+        tokens: list[_Token] = []
         for i, predicate in enumerate(predicates):
             if i:
-                tokens.append((" ; ",))
-            tokens.append((f"{self.predicate(predicate)} ",))
+                tokens.append(_Text(" ; "))
+            tokens.append(_Text(f"{self.predicate(predicate)} "))
             for j, obj in enumerate(sorted(groups[predicate], key=self.object_key)):
                 if j:
-                    tokens.append((" , ",))
-                tokens.append(obj if isinstance(obj, BNode) else (self.term(obj),))
+                    tokens.append(_Text(" , "))
+                tokens.append(obj if isinstance(obj, BNode) else _Text(self.term(obj)))
         return tokens
 
     def _list_items(self, head: Node) -> list[Node] | None:
