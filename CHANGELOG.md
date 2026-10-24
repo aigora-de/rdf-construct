@@ -84,6 +84,15 @@ stripped or skolemised blank nodes. See
 [`diff`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#diff)
 in the migration note.
 
+**A `puml2rdf` diagram that converted can now exit 2.** A prefix the diagram
+names is used as written or refused: `package pfx as "URI"`, a prefix that is
+not legal Turtle, a core prefix on another namespace, or a prefix or namespace
+declared twice over now stops the run with the line named and nothing written,
+where before it wrote a file with a renamed prefix or one no parser can read.
+Write packages as `package "<namespace IRI>" as <prefix>`. See
+[`puml2rdf`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#puml2rdf)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
@@ -422,6 +431,21 @@ change, and what to do about it, is listed command by command in the
   them with "Missing argument" unless a file was passed, which they then
   ignored. A source given alongside either is still ignored. A bare `lint`
   still exits 2, now with "No source files specified."
+- **`puml2rdf` reads `package "URI" as pfx` as the guide documents** (#150,
+  contributed by @rudra337-lgtm). The quoted string is the namespace IRI and the
+  alias is the prefix. The `as` clause was read the other way round: the URI
+  became the package name, the alias was discarded, and the whole URI was bound
+  as a `@prefix`, a line no parser accepts, at exit 0 with a success message.
+  The guide's own worked example produced it. A prefix the diagram names is now
+  used as written or the run is refused at exit 2, with the line and nothing
+  written: the reverse spelling `package pfx as "URI"`, a prefix that is not
+  legal Turtle, a core prefix (`rdf`, `rdfs`, `owl`, `xsd`, `xml`) on another
+  namespace, one prefix for two IRIs, and one IRI under two prefixes. `as org`
+  writes `org:`, where rdflib's own bindings pushed it to `org1:`. A URI is
+  recognised by its scheme, so `urn:` namespaces work, and one ending in `:`
+  no longer has `#` appended. A `package "URI" { … }`
+  with no alias derives a prefix from the IRI and says which. See the
+  [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#puml2rdf).
 - **`sort: topological` no longer turns alphabetical on inferred graphs** (#339).
   RDFS entailment materialises `C rdfs:subClassOf C` for every class (`rdfs10`)
   and `P rdfs:subPropertyOf P` for every property (`rdfs6`). Each self-loop was

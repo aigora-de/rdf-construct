@@ -175,10 +175,9 @@ Nothing has landed yet.
 
 ## `puml2rdf`
 
-Nothing has landed yet.
-
 | Issue | What changed | What to do |
 |---|---|---|
+| [#150](https://github.com/aigora-de/rdf-construct/issues/150) | `package "http://example.org/x#" as pfx` now means "namespace `http://example.org/x#`, prefix `pfx`", as the guide documents. On v0.6.0 it wrote a `@prefix` line made of the whole URI, a file nothing can read, at exit 0. The reverse spelling (`package pfx as "http://…"`) is now **refused** (exit 2, the line named, nothing written), as is a prefix the diagram names that cannot be used as written: one that is not a legal Turtle prefix, a core prefix (`rdf`, `rdfs`, `owl`, `xsd`, `xml`) on another namespace, one prefix for two IRIs, or one IRI under two prefixes. That includes a simple package's name and the part before the dot in `class pfx.Name`. `as org` now writes `org:`, not `org1:`. A namespace IRI ending in `:`, such as `urn:example:building:`, no longer has `#` appended. `package "URI" { … }` with no alias derives a prefix from the IRI and says which; if that prefix is already taken, the run is refused. Contributed by @rudra337-lgtm (#346). | Re-run the conversion; the old output was unreadable, so there is nothing to diff against. If the run is refused, write the package as `package "<namespace IRI>" as <prefix>` with a prefix that is legal, unique and not a core one. |
 
 ## `cq-test`
 
