@@ -889,6 +889,22 @@ class TestPackageNamespaces:
         assert "@prefix bld: <urn:example:building#>" in text
         assert (Namespace("urn:example:building#").Building, RDF.type, OWL.Class) in graph
 
+    def test_urn_ending_in_colon_is_used_as_it_stands(self, tmp_path: Path) -> None:
+        """A URN namespace ending in `:` already ends in its delimiter: no `#` is appended."""
+        content = dedent(
+            """
+            @startuml
+            package "urn:example:building:" as bld {
+              class Building
+            }
+            @enduml
+            """
+        )
+        graph, text = self._convert(tmp_path, content)
+
+        assert "@prefix bld: <urn:example:building:>" in text
+        assert (URIRef("urn:example:building:Building"), RDF.type, OWL.Class) in graph
+
     def test_quoted_name_that_is_not_a_uri_is_display_text(self, tmp_path: Path) -> None:
         """`package "Building Things" as bld` behaves like `package bld`."""
         content = dedent(

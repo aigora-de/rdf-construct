@@ -73,8 +73,8 @@ package core {
 **There is one spelling.** In `package "<namespace IRI>" as <prefix>` the quoted string is the
 namespace IRI and the alias after `as` is the prefix, so `bld:Building` is
 `<http://example.org/building#Building>`. An IRI is anything that starts with a scheme, so
-`urn:example:building#` works as well as `http:`. An IRI that ends in neither `#` nor `/` has
-`#` appended. A quoted name that is not an IRI is display text: `package "Building Things" as bld`
+`urn:example:building#` works as well as `http:`. An IRI that ends in none of `#`, `/` or `:`
+has `#` appended, so `urn:example:building:` is used as it stands. A quoted name that is not an IRI is display text: `package "Building Things" as bld`
 is `package bld`.
 
 **A package with an IRI and no alias** gets a prefix derived from the IRI's last segment, and the

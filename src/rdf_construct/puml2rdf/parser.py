@@ -348,8 +348,8 @@ class PlantUMLParser:
 
     @staticmethod
     def _namespace_iri(uri: str) -> str:
-        """Return *uri* as the converter binds it: ending in ``#`` or ``/``."""
-        return uri if uri.endswith(("#", "/")) else f"{uri}#"
+        """Return *uri* as the converter binds it: ending in ``#``, ``/`` or ``:``."""
+        return uri if uri.endswith(("#", "/", ":")) else f"{uri}#"
 
     def _check_prefixes(self, source: str) -> None:
         """Refuse every prefix that cannot be written as the diagram gives it (#150).

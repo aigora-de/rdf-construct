@@ -173,7 +173,8 @@ class PumlToRdfConverter:
         for pkg in packages:
             if pkg.namespace_uri:
                 ns_uri = pkg.namespace_uri
-                if not ns_uri.endswith(("#", "/")):
+                # A URN namespace such as urn:example:building: already ends in its delimiter
+                if not ns_uri.endswith(("#", "/", ":")):
                     ns_uri += "#"
                 ns = Namespace(ns_uri)
                 self._namespaces[pkg.name] = ns

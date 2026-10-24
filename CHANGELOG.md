@@ -442,7 +442,8 @@ change, and what to do about it, is listed command by command in the
   legal Turtle, a core prefix (`rdf`, `rdfs`, `owl`, `xsd`, `xml`) on another
   namespace, one prefix for two IRIs, and one IRI under two prefixes. `as org`
   writes `org:`, where rdflib's own bindings pushed it to `org1:`. A URI is
-  recognised by its scheme, so `urn:` namespaces work, and `package "URI" { … }`
+  recognised by its scheme, so `urn:` namespaces work, and one ending in `:`
+  no longer has `#` appended. A `package "URI" { … }`
   with no alias derives a prefix from the IRI and says which. See the
   [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#puml2rdf).
 - **`sort: topological` no longer turns alphabetical on inferred graphs** (#339).
