@@ -2044,12 +2044,12 @@ OUTPUT_FORMATS = ["turtle", "ttl", "xml", "rdfxml", "jsonld", "json-ld", "nt", "
     "--validate",
     "-v",
     is_flag=True,
-    help="Validate only, don't generate output",
+    help="Check the diagram and the RDF it converts to, without writing output",
 )
 @click.option(
     "--strict",
     is_flag=True,
-    help="Treat warnings as errors",
+    help="Treat warnings as errors: exit 1 and write nothing",
 )
 @click.option(
     "--language",
@@ -2089,7 +2089,7 @@ def puml2rdf(
         # Custom output and namespace
         rdf-construct puml2rdf design.puml -o ontology.ttl -n http://example.org/ont#
 
-        # Validate without generating
+        # Check the diagram and its RDF without writing anything
         rdf-construct puml2rdf design.puml --validate
 
         # Merge with existing ontology
@@ -2100,9 +2100,10 @@ def puml2rdf(
 
     \b
     Exit codes:
-        0 - Success
-        1 - Validation warnings (with --strict)
-        2 - Parse or validation errors
+        0 - Success, or warnings without --strict
+        1 - Warnings, with --strict (nothing written)
+        2 - Refused or failed: not a whole diagram (no @startuml or
+            @enduml), a parse or model error, or RDF that cannot be written
     """
     # Normalise output format
     format_map = {
@@ -2153,14 +2154,34 @@ def puml2rdf(
     if parse_result.errors:
         click.secho("Parse errors:", fg="red", err=True)
         for error in parse_result.errors:
-            click.echo(f"  Line {error.line_number}: {error.message}", err=True)
+            where = source.name if error.line_number is None else f"Line {error.line_number}"
+            click.echo(f"  {where}: {error.message}", err=True)
         sys.exit(2)
 
-    # Report parse warnings
+    # Report what the parser chose on the author's behalf; never fatal
+    if parse_result.notes:
+        click.secho("Parse notes:", err=True)
+        for note in parse_result.notes:
+            click.echo(f"  {note}", err=True)
+
+    # Report what the parser read but did not convert; fatal under --strict
     if parse_result.warnings:
         click.secho("Parse warnings:", fg="yellow", err=True)
-        for warning in parse_result.warnings:
-            click.echo(f"  {warning}", err=True)
+        unread = []
+        for parse_warning in parse_result.warnings:
+            if parse_warning.code == "not-understood" and parse_warning.line_number is not None:
+                unread.append(parse_warning.line_number)
+            else:
+                click.echo(f"  {parse_warning}", err=True)
+        if unread:
+            shown = ", ".join(str(number) for number in unread[:10])
+            if len(unread) > 10:
+                shown += f", … {len(unread) - 10} more"
+            click.echo(
+                f"  \u26a0 {len(unread)} line{'s' if len(unread) != 1 else ''} not understood "
+                f"({shown}) \u2014 {'they are' if len(unread) != 1 else 'it is'} not in the output.",
+                err=True,
+            )
 
     model = parse_result.model
     click.echo(
@@ -2180,22 +2201,12 @@ def puml2rdf(
         click.secho("Model validation warnings:", fg="yellow", err=True)
         for issue in model_validation.warnings():
             click.echo(f"  {issue}", err=True)
-        if strict:
-            click.secho("Aborting due to --strict mode", fg="red", err=True)
-            sys.exit(1)
 
-    # If validate-only mode, stop here
-    if validate:
-        if model_validation.has_warnings:
-            click.secho(
-                f"Validation complete: {model_validation.warning_count} warnings",
-                fg="yellow",
-            )
-        else:
-            click.secho("Validation complete: no issues found", fg="green")
-        sys.exit(0)
+    if strict and (parse_result.warnings or model_validation.has_warnings):
+        click.secho("Aborting due to --strict mode", fg="red", err=True)
+        sys.exit(1)
 
-    # Convert to RDF
+    # Convert to RDF; --validate goes this far too, and checks the RDF (#290)
     click.echo("Converting to RDF...")
     converter = PumlToRdfConverter(conversion_config)
     conversion_result = converter.convert(model)
@@ -2214,6 +2225,32 @@ def puml2rdf(
         click.secho("RDF validation warnings:", fg="yellow", err=True)
         for issue in rdf_validation.warnings():
             click.echo(f"  {issue}", err=True)
+
+    if strict and (conversion_result.warnings or rdf_validation.has_warnings):
+        click.secho("Aborting due to --strict mode", fg="red", err=True)
+        sys.exit(1)
+
+    # If validate-only mode, serialise in memory and stop: no merge, nothing written
+    if validate:
+        try:
+            graph.serialize(format=rdf_format)
+        except Exception as e:
+            click.secho(f"Validation failed: the RDF cannot be written: {e}", fg="red", err=True)
+            sys.exit(2)
+        warning_count = (
+            len(parse_result.warnings)
+            + model_validation.warning_count
+            + len(conversion_result.warnings)
+            + rdf_validation.warning_count
+        )
+        if warning_count:
+            click.secho(
+                f"Validation complete: {warning_count} warning{'s' if warning_count != 1 else ''}",
+                fg="yellow",
+            )
+        else:
+            click.secho("Validation complete: no issues found", fg="green")
+        sys.exit(0)
 
     # Merge with existing if requested
     if merge:

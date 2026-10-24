@@ -975,3 +975,414 @@ class TestPackageNamespaces:
             "things",
             "xsd",
         }
+
+
+# ==============================================================================
+# The parser's failure path (#151)
+# ==============================================================================
+
+
+def _run(tmp_path: Path, text: str, *options: str, name: str = "diagram.puml"):
+    """Write *text* to *name* and run the CLI over it, with ``-o`` beside it."""
+    puml = tmp_path / name
+    puml.write_text(text, encoding="utf-8")
+    output = tmp_path / "diagram.ttl"
+    return CliRunner().invoke(cli, ["puml2rdf", str(puml), "-o", str(output), *options])
+
+
+def _wrote_nothing(tmp_path: Path, name: str = "diagram.puml") -> bool:
+    """True when the run left only its input behind."""
+    return sorted(path.name for path in tmp_path.iterdir()) == [name]
+
+
+SHOPPING_LIST = dedent(
+    """\
+    This is not a PlantUML diagram at all.
+    It is a shopping list.
+
+      bread
+      milk : semi-skimmed
+      eggs
+    """
+)
+
+TURTLE = dedent(
+    """\
+    @prefix ex: <http://example.org/> .
+    @prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+    ex:Animal a owl:Class .
+    """
+)
+
+
+class TestDiagramMarkers:
+    """A file without `@startuml` … `@enduml` is refused: exit 2, nothing written (#151)."""
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            pytest.param(SHOPPING_LIST, id="shopping-list"),
+            pytest.param("", id="empty-file"),
+            pytest.param(TURTLE, id="turtle-renamed"),
+        ],
+    )
+    @pytest.mark.parametrize("options", [(), ("--validate", "--strict")], ids=["run", "validate"])
+    def test_no_startuml_is_refused(
+        self, tmp_path: Path, text: str, options: tuple[str, ...]
+    ) -> None:
+        """The issue's three reproducers, which converted to a one-triple ontology at exit 0."""
+        result = _run(tmp_path, text, *options, name="shopping.puml")
+
+        assert result.exit_code == 2, result.output
+        assert _wrote_nothing(tmp_path, "shopping.puml")
+        assert (
+            "shopping.puml: no @startuml found — this does not look like a PlantUML diagram. "
+            "A fragment must be wrapped in @startuml … @enduml." in result.output
+        )
+
+    def test_no_enduml_is_refused(self, tmp_path: Path) -> None:
+        """A missing `@enduml` is the sign of a truncated file, refused in its own right."""
+        result = _run(tmp_path, "@startuml\nclass Building {\n  floorArea : decimal\n}\n")
+
+        assert result.exit_code == 2, result.output
+        assert _wrote_nothing(tmp_path)
+        assert "diagram.puml: no @enduml found — the diagram may have been cut short" in (
+            result.output
+        )
+
+    def test_enduml_before_startuml_is_refused(self, tmp_path: Path) -> None:
+        """Only an `@enduml` after the `@startuml` closes the diagram."""
+        result = _run(tmp_path, "@enduml\n@startuml\nclass Building\n")
+
+        assert result.exit_code == 2, result.output
+        assert "no @enduml found" in result.output
+
+    def test_parse_result_is_not_a_success(self) -> None:
+        """`ParseResult.success` can be false, and the model is empty."""
+        result = PlantUMLParser().parse("class Building\n")
+
+        assert not result.success
+        assert result.errors[0].line_number is None
+        assert result.errors[0].message.startswith("no @startuml found")
+        assert result.model.classes == []
+
+    @pytest.mark.parametrize(
+        "opening", ["@startuml", "@startuml building_model", "@startuml(id=main)", "  @startuml"]
+    )
+    def test_named_or_indented_markers_are_accepted(self, opening: str) -> None:
+        """A named, identified or indented `@startuml` opens a diagram, and is not reported."""
+        result = PlantUMLParser().parse(f"{opening}\nclass Building\n@enduml\n")
+
+        assert result.success
+        assert result.warnings == []
+        assert [cls.name for cls in result.model.classes] == ["Building"]
+
+
+class TestUnreadLines:
+    """A line no pass reads is reported by its file line number, and --strict makes it fatal."""
+
+    def test_lines_not_understood_are_reported_with_file_line_numbers(self, tmp_path: Path) -> None:
+        """Blank lines after `@startuml` do not shift the numbers (stripping removed them)."""
+        text = (
+            "@startuml\n\n\nclass Building\nthis line is junk\nclass Floor\nso is this\n@enduml\n"
+        )
+        result = _run(tmp_path, text)
+
+        assert result.exit_code == 0, result.output
+        assert "⚠ 2 lines not understood (5, 7) — they are not in the output." in result.output
+        graph = Graph().parse(tmp_path / "diagram.ttl", format="turtle")
+        ns = Namespace("http://example.org/ontology#")
+        assert (ns.Floor, RDF.type, OWL.Class) in graph
+
+    def test_one_line_not_understood(self, tmp_path: Path) -> None:
+        """One line reads as one."""
+        result = _run(tmp_path, "@startuml\nclass Building\nnonsense\n@enduml\n")
+
+        assert "⚠ 1 line not understood (3) — it is not in the output." in result.output
+
+    def test_parse_warnings_carry_line_and_content(self) -> None:
+        """Each unread line is a `ParseWarning` with its line, its text and its code."""
+        result = PlantUMLParser().parse("@startuml\nclass A\n  junk here\n@enduml\n")
+
+        assert result.success
+        [warning] = result.warnings
+        assert (warning.line_number, warning.line_content, warning.code) == (
+            3,
+            "junk here",
+            "not-understood",
+        )
+        assert str(warning) == "Line 3: not understood: junk here"
+
+    def test_a_long_list_is_shortened(self, tmp_path: Path) -> None:
+        """Past ten line numbers, the summary says how many more there are."""
+        junk = "".join(f"junk {i}\n" for i in range(12))
+        result = _run(tmp_path, f"@startuml\nclass A\n{junk}@enduml\n")
+
+        assert (
+            "⚠ 12 lines not understood (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, … 2 more)" in result.output
+        )
+
+    def test_strict_makes_lines_not_understood_fatal(self, tmp_path: Path) -> None:
+        """Under --strict a line not understood stops the run at 1, before anything is written."""
+        result = _run(tmp_path, "@startuml\nclass Building\nnonsense\n@enduml\n", "--strict")
+
+        assert result.exit_code == 1, result.output
+        assert _wrote_nothing(tmp_path)
+        assert "Aborting due to --strict mode" in result.output
+
+    @pytest.mark.parametrize(
+        "lines",
+        [
+            pytest.param("' a comment", id="comment"),
+            pytest.param("/' a block\n   comment '/", id="block-comment"),
+            pytest.param("/' a one-line block comment '/", id="block-comment-one-line"),
+            pytest.param("package core {\n  class Entity\n}", id="package-closing-brace"),
+            pytest.param("hide empty members", id="hide"),
+            pytest.param("show Building fields", id="show"),
+            pytest.param("left to right direction", id="left-to-right"),
+            pytest.param("top to bottom direction", id="top-to-bottom"),
+            pytest.param("!include common.iuml", id="include"),
+            pytest.param("!theme plain", id="theme"),
+            pytest.param("skinparam class {\n  BackgroundColor White\n}", id="skinparam-block"),
+            pytest.param("skinparam linetype ortho", id="skinparam-line"),
+            pytest.param("legend right\n  A legend\nendlegend", id="legend"),
+            pytest.param("header Draft", id="header"),
+            pytest.param("footer Page 1", id="footer"),
+            pytest.param("caption Figure 1", id="caption"),
+            pytest.param("header\n  Draft\nend header", id="header-block"),
+            pytest.param("title Building Ontology", id="title"),
+            pytest.param("title\n  A long title\n  over lines\nend title", id="title-block"),
+            pytest.param("together {\n  class Room\n}", id="together"),
+            pytest.param("note right of Building\n  A structure.\nend note", id="note-block"),
+            pytest.param("note left of Building : A structure", id="note-line"),
+            pytest.param('Building "1" --> "*" Floor : hasFloor', id="cardinalities"),
+            pytest.param("Building <|-- Floor", id="inheritance"),
+            pytest.param("Building --> Floor", id="association"),
+        ],
+    )
+    def test_ignorable_and_understood_lines_are_silent(self, tmp_path: Path, lines: str) -> None:
+        """Comments, layout, presentation and everything a pass reads pass --strict silently."""
+        text = f"@startuml\nclass Building {{\n  floorArea : decimal\n}}\nclass Floor\n{lines}\n@enduml\n"
+        result = _run(tmp_path, text, "--strict")
+
+        assert result.exit_code == 0, result.output
+        assert "Parse warnings" not in result.output
+
+    @pytest.mark.parametrize(
+        ("line", "expected"),
+        [
+            pytest.param(
+                "interface Shape",
+                "Line 3: interface Shape is not converted: only classes are, "
+                "so Shape is not in the output",
+                id="interface",
+            ),
+            pytest.param(
+                "enum Colour {\n  RED\n  GREEN\n}",
+                "Line 3: enum Colour is not converted: only classes are, "
+                "so Colour is not in the output",
+                id="enum",
+            ),
+            pytest.param(
+                "annotation Marker",
+                "Line 3: annotation Marker is not converted",
+                id="annotation",
+            ),
+            pytest.param("entity Person", "Line 3: entity Person is not converted", id="entity"),
+            pytest.param("struct Point", "Line 3: struct Point is not converted", id="struct"),
+            pytest.param(
+                "abstract Vehicle",
+                "Line 3: abstract Vehicle is not converted, so it is not in the output; "
+                'write "abstract class Vehicle" to convert it',
+                id="bare-abstract",
+            ),
+            pytest.param(
+                "Car ..|> Shape",
+                "Line 3: realisation is not converted, so it is not in the output: Car ..|> Shape",
+                id="realisation",
+            ),
+            pytest.param(
+                "Shape <|.. Car",
+                "Line 3: realisation is not converted",
+                id="realisation-reversed",
+            ),
+            pytest.param(
+                "Car ..> Colour",
+                "Line 3: dependency is not converted, so it is not in the output: Car ..> Colour",
+                id="dependency",
+            ),
+            pytest.param(
+                "Colour <.. Car", "Line 3: dependency is not converted", id="dependency-reversed"
+            ),
+        ],
+    )
+    def test_unmodelled_declarations_are_named(
+        self, tmp_path: Path, line: str, expected: str
+    ) -> None:
+        """Each kind the converter does not model is named as dropped, and --strict refuses it."""
+        text = f"@startuml\nclass Car\n{line}\n@enduml\n"
+        result = _run(tmp_path, text)
+
+        assert result.exit_code == 0, result.output
+        assert expected in result.output
+        # An enum's or interface's body belongs to the one warning
+        assert "not understood" not in result.output
+
+        strict = _run(tmp_path, text, "--strict")
+        assert strict.exit_code == 1, strict.output
+
+    def test_abstract_class_is_not_reported(self, tmp_path: Path) -> None:
+        """`abstract class Foo` is converted, so only the bare form is named."""
+        result = _run(tmp_path, "@startuml\nabstract class Vehicle\n@enduml\n", "--strict")
+
+        assert result.exit_code == 0, result.output
+
+    def test_note_on_an_unknown_class_is_fatal_under_strict(self, tmp_path: Path) -> None:
+        """A note attached to no class is content dropped from the output."""
+        text = "@startuml\nclass Building\nnote right of Floor : lost\n@enduml\n"
+
+        assert _run(tmp_path, text).exit_code == 0
+        result = _run(tmp_path, text, "--strict")
+        assert result.exit_code == 1, result.output
+        assert "Note attached to unknown class: Floor" in result.output
+
+    def test_empty_diagram_warns_and_writes(self, tmp_path: Path) -> None:
+        """A marked diagram with nothing in it is degenerate, not refused: exit 0, written."""
+        result = _run(tmp_path, "@startuml\n@enduml\n")
+
+        assert result.exit_code == 0, result.output
+        assert "nothing converted: the diagram has no classes or relationships" in result.output
+        assert (tmp_path / "diagram.ttl").exists()
+
+    def test_empty_diagram_is_fatal_under_strict(self, tmp_path: Path) -> None:
+        """--strict makes the empty diagram's warning fatal like any other."""
+        result = _run(tmp_path, "@startuml\n' only a comment\n@enduml\n", "--strict")
+
+        assert result.exit_code == 1, result.output
+        assert _wrote_nothing(tmp_path)
+
+    def test_derived_prefix_is_a_note_never_fatal(self, tmp_path: Path) -> None:
+        """A derived prefix drops nothing from the output, so --strict lets it through."""
+        text = '@startuml\npackage "urn:example:things#" {\n  class Thing\n}\n@enduml\n'
+        result = _run(tmp_path, text, "--strict")
+
+        assert result.exit_code == 0, result.output
+        assert "Parse notes:" in result.output
+        assert "Parse warnings" not in result.output
+        assert 'Line 2: derived the prefix "things"' in result.output
+
+    def test_unread_line_scan_is_linear(self) -> None:
+        """Ten times the diagram takes nowhere near a hundred times as long (Sam's scale probe)."""
+        import time
+
+        def diagram(n: int) -> str:
+            body = "".join(
+                f"class C{i} {{\n  a{i} : string\n}}\nC{i} --> C{i + 1} : r{i}\njunk {i}\n"
+                for i in range(n)
+            )
+            return f"@startuml\n{body}class C{n}\n@enduml\n"
+
+        def timed(text: str) -> float:
+            start = time.perf_counter()
+            PlantUMLParser().parse(text)
+            return time.perf_counter() - start
+
+        # 20,000 is where a quadratic line lookup shows: str.count per match is C-fast below it
+        small, large = diagram(2000), diagram(20000)
+        timed(small)
+        assert timed(large) < 30 * max(timed(small), 0.01)
+
+
+# ==============================================================================
+# --validate checks the RDF it would write (#290)
+# ==============================================================================
+
+
+class TestValidateConvertsAndChecks:
+    """`--validate` converts, validates the RDF and serialises it in memory; it writes nothing."""
+
+    BAD_IRI = '@startuml\npackage "http://example.org/a b#" as ab {\n  class Thing\n}\n@enduml\n'
+
+    def test_unserialisable_rdf_fails_validation(self, tmp_path: Path) -> None:
+        """An IRI the requested format cannot write fails --validate at 2, as a real run would."""
+        result = _run(tmp_path, self.BAD_IRI, "--validate")
+
+        assert result.exit_code == 2, result.output
+        assert "Validation failed: the RDF cannot be written" in result.output
+        assert _wrote_nothing(tmp_path)
+
+    def test_serialised_in_the_requested_format(self, tmp_path: Path) -> None:
+        """RDF/XML writes that IRI without complaint, so --validate -f xml passes."""
+        result = _run(tmp_path, self.BAD_IRI, "--validate", "-f", "xml")
+
+        assert result.exit_code == 0, result.output
+        assert _wrote_nothing(tmp_path)
+
+    def test_validate_converts_and_writes_nothing(self, tmp_path: Path) -> None:
+        """The conversion runs, its warnings are counted, and no file appears."""
+        text = "@startuml\nclass A {\n  size : Money\n}\nnonsense\n@enduml\n"
+        result = _run(tmp_path, text, "--validate")
+
+        assert result.exit_code == 0, result.output
+        assert "Converting to RDF..." in result.output
+        assert "Conversion warnings:" in result.output
+        assert "Validation complete: 3 warnings" in result.output
+        assert _wrote_nothing(tmp_path)
+
+    def test_validate_clean_diagram(self, tmp_path: Path) -> None:
+        """A clean diagram validates clean."""
+        result = _run(tmp_path, "@startuml\nclass A\nclass B\nA <|-- B\n@enduml\n", "--validate")
+
+        assert result.exit_code == 0, result.output
+        assert "Validation complete: no issues found" in result.output
+        assert _wrote_nothing(tmp_path)
+
+    def test_validate_does_not_merge(self, tmp_path: Path) -> None:
+        """--merge belongs to the write path; under --validate the existing file is not read."""
+        existing = tmp_path / "existing.ttl"
+        existing.write_text("this is not turtle", encoding="utf-8")
+        puml = tmp_path / "diagram.puml"
+        puml.write_text("@startuml\nclass A\n@enduml\n", encoding="utf-8")
+        result = CliRunner().invoke(
+            cli, ["puml2rdf", str(puml), "--validate", "--merge", str(existing)]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "Merging" not in result.output
+
+    def test_parse_warnings_reach_validate_strict(self, tmp_path: Path) -> None:
+        """Parse warnings are fatal under --validate --strict, as in a real run."""
+        result = _run(
+            tmp_path, "@startuml\nclass A\ninterface I\n@enduml\n", "--validate", "--strict"
+        )
+
+        assert result.exit_code == 1, result.output
+        assert "interface I is not converted" in result.output
+
+    def test_rdf_warnings_are_fatal_under_strict(self, tmp_path: Path, monkeypatch) -> None:
+        """--strict covers RDF validation warnings too, before anything is written.
+
+        The converter's own output never draws one today, so the validator is stubbed.
+        """
+        import sys
+
+        from rdf_construct.puml2rdf.validators import (
+            Severity,
+            ValidationIssue,
+            ValidationResult,
+        )
+
+        # `rdf_construct.cli` the attribute is the Click group, so take the module itself
+        cli_module = sys.modules["rdf_construct.cli"]
+        warning = ValidationIssue(Severity.WARNING, "UNTYPED_CLASS", "stubbed")
+        monkeypatch.setattr(
+            cli_module, "validate_rdf", lambda graph: ValidationResult(issues=[warning])
+        )
+        text = "@startuml\nclass A\n@enduml\n"
+
+        assert _run(tmp_path, text).exit_code == 0
+        (tmp_path / "diagram.ttl").unlink()
+        result = _run(tmp_path, text, "--strict")
+        assert result.exit_code == 1, result.output
+        assert _wrote_nothing(tmp_path)

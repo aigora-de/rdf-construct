@@ -492,7 +492,6 @@ MALFORMED = [
     ),
     _row(
         Row("puml2rdf", "refused", ("puml2rdf", str(SMOKE / "malformed.puml"), "-o", "@tmp/p.ttl")),
-        xfail="#151",
         label="puml",
     ),
     _row(

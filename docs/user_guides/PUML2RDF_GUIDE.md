@@ -94,7 +94,7 @@ rdf-construct puml2rdf things.puml -o things.ttl
 
 ```text
 Parsing things.puml...
-Parse warnings:
+Parse notes:
   Line 2: derived the prefix "things" for <urn:example:things#>; to choose it, write package "urn:example:things#" as <prefix>
   Found: 1 classes, 0 relationships
 Converting to RDF...
@@ -102,6 +102,9 @@ Converting to RDF...
 ✓ Wrote things.ttl
   Classes: 1, Properties: 0
 ```
+
+The derived prefix is a **note**, not a warning: nothing is missing from the output, so `--strict`
+lets it through.
 
 **A prefix the diagram names is used as written, or the run is refused.** That covers an alias,
 a simple package's name, and the part before the dot in `class bld.Building`. A refused run
@@ -209,8 +212,8 @@ rdf-construct from-uml [OPTIONS] SOURCE
 | `-n, --namespace URI` | Default namespace URI for the ontology |
 | `-C, --config PATH` | Path to YAML configuration file |
 | `-m, --merge PATH` | Existing ontology file to merge with |
-| `-v, --validate` | Validate only, don't generate output |
-| `--strict` | Treat warnings as errors |
+| `-v, --validate` | Check the diagram and the RDF it converts to, without writing output |
+| `--strict` | Treat warnings as errors: exit 1 and write nothing |
 | `-l, --language TAG` | Language tag for labels/comments (default: en) |
 | `--no-labels` | Don't auto-generate rdfs:label triples |
 
@@ -218,9 +221,9 @@ rdf-construct from-uml [OPTIONS] SOURCE
 
 | Code | Meaning |
 |------|---------|
-| 0 | Success |
-| 1 | Validation warnings (with --strict) |
-| 2 | Parse or validation errors |
+| 0 | Success, including a run with warnings when `--strict` is not given |
+| 1 | Warnings, with `--strict`; nothing is written |
+| 2 | Refused or failed: no `@startuml` or `@enduml`, a parse error, a model error, or RDF that cannot be written |
 
 ## Configuration File
 
@@ -297,13 +300,56 @@ This enables iterative workflows:
 
 ## Validation
 
-Run validation without generating output:
+`--validate` runs everything a conversion does except the merge and the write: it parses the
+diagram, checks the model, converts it, checks the RDF, and serialises it in memory in the
+requested format. Nothing is written.
 
 ```bash
 rdf-construct from-uml design.puml --validate
 ```
 
 ### Checks Performed
+
+**Parsing:**
+- The file must hold a whole diagram, from `@startuml` to `@enduml`. Without either marker the run
+  is refused: exit 2, nothing written. A fragment must be wrapped in `@startuml` … `@enduml`.
+- Every line the parser does not read is reported by its line number, unless it is a comment,
+  layout or presentation: `'` and `/' … '/` comments, closing braces, `hide`/`show`,
+  `left to right direction`, `top to bottom direction`, `!include`, `!theme`, `skinparam`,
+  `legend`, `header`, `footer`, `caption`, `title` and `together`.
+- Declarations of kinds the converter does not model are named as dropped: `interface`, `enum`,
+  `annotation`, `entity`, `struct`, `abstract Foo` without `class`, realisation (`..|>`) and
+  dependency (`..>`).
+- A diagram with no classes or relationships is converted with a warning.
+
+Given `design.puml`:
+
+```plantuml
+@startuml
+class Building {
+  floorArea : decimal
+}
+interface Occupiable
+Building ..|> Occupiable
+Building -right-> Floor
+@enduml
+```
+
+```bash
+rdf-construct puml2rdf design.puml --validate --strict
+```
+
+```text
+Parsing design.puml...
+Parse warnings:
+  Line 5: interface Occupiable is not converted: only classes are, so Occupiable is not in the output
+  Line 6: realisation is not converted, so it is not in the output: Building ..|> Occupiable
+  ⚠ 1 line not understood (7) — it is not in the output.
+  Found: 1 classes, 0 relationships
+Aborting due to --strict mode
+```
+
+Without `--strict`, the same diagram converts at exit 0 and the three lines are not in the output.
 
 **Model Validation:**
 - Duplicate class names
@@ -315,10 +361,12 @@ rdf-construct from-uml design.puml --validate
 - Classes properly typed
 - Properties have domain/range
 - No dangling references
+- The RDF can be written in the requested format
 
 ### Strict Mode
 
-Treat warnings as errors for CI pipelines:
+Treat warnings as errors for CI pipelines. Under `--strict` any parse, model, conversion or RDF
+warning stops the run at exit 1 with nothing written; a derived prefix is a note and does not:
 
 ```bash
 rdf-construct from-uml design.puml --validate --strict
@@ -428,8 +476,8 @@ bld:hasRoom a owl:ObjectProperty ;
 
 The following PlantUML features are not currently supported:
 
-- Interface declarations (`interface`)
-- Enum declarations (`enum`)
+- Interface declarations (`interface`), reported as not converted
+- Enum declarations (`enum`), reported as not converted
 - Method declarations in classes
 - Composition/aggregation semantic distinction (treated as associations)
 - Generic types (`List<String>`)

@@ -12,7 +12,8 @@ The parser uses a multi-pass approach:
 """
 
 import re
-from dataclasses import dataclass
+from bisect import bisect_right
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -42,6 +43,45 @@ CORE_PREFIXES: dict[str, str] = {
     prefix: str(namespace) for prefix, namespace in Graph(bind_namespaces="core").namespaces()
 }
 
+# A diagram is the text between `@startuml` and `@enduml`, each starting a line (#151).
+STARTUML_PATTERN = re.compile(r"^[ \t]*@startuml\b", re.MULTILINE)
+ENDUML_PATTERN = re.compile(r"^[ \t]*@enduml\b", re.MULTILINE)
+
+# Lines no pass reads that are known to carry nothing for the ontology: comments, layout and
+# presentation (#151). A line no pass reads and nothing here matches is reported.
+IGNORABLE_LINE_PATTERNS = [
+    re.compile(r"^\s*'"),  # ' comment
+    re.compile(r"^\s*\}\s*$"),  # a package's or group's closing brace
+    re.compile(r"^\s*(?:hide|show)\b"),
+    re.compile(r"^\s*(?:left\s+to\s+right|top\s+to\s+bottom)\s+direction\s*$"),
+    re.compile(r"^\s*!(?:include\w*|theme)\b"),
+    re.compile(r"^\s*(?:(?:left|right|center)\s+)?(?:header|footer)\b"),
+    re.compile(r"^\s*caption\b"),
+    re.compile(r"^\s*together\s*\{\s*$"),
+]
+
+# Ignorable blocks: (opening line, closing line). Every line from one to the other is skipped,
+# so a block-form `skinparam` is not read as `skinparam class {`, nor a legend's text as a line.
+IGNORABLE_BLOCK_PATTERNS = [
+    (re.compile(r"^\s*/'"), re.compile(r"'/")),
+    (re.compile(r"^\s*skinparam\s+\w+\s*\{\s*$"), re.compile(r"^\s*\}\s*$")),
+    (re.compile(r"^\s*legend\b"), re.compile(r"^\s*end\s*legend\b")),
+    (re.compile(r"^\s*title\s*$"), re.compile(r"^\s*end\s*title\b")),
+    (
+        re.compile(r"^\s*(?:(?:left|right|center)\s+)?(?:header|footer)\s*$"),
+        re.compile(r"^\s*end\s*(?:header|footer)\b"),
+    ),
+]
+
+# Declarations of kinds the converter does not model (#151): named, because each is a type or
+# a relationship the author declared and the output does not contain.
+UNMODELLED_DECLARATION_PATTERN = re.compile(
+    r'^\s*(interface|enum|annotation|entity|struct)\s+("[^"]+"|[\w.]+)'
+)
+BARE_ABSTRACT_PATTERN = re.compile(r'^\s*abstract\s+(?!class\b)("[^"]+"|[\w.]+)')
+REALISATION_PATTERN = re.compile(r"\.\.\|>|<\|\.\.")
+DEPENDENCY_PATTERN = re.compile(r"\.\.>|<\.\.")
+
 
 def parse_dotted_name(dotted: str) -> tuple[Optional[str], str]:
     """Split a dotted name into package and local name.
@@ -62,14 +102,37 @@ class ParseError:
     """An error encountered during parsing.
 
     Attributes:
-        line_number: Line where the error occurred
+        line_number: Line where the error occurred, or None for one about the whole file
         message: Description of the error
         line_content: The actual line content
     """
 
-    line_number: int
+    line_number: int | None
     message: str
     line_content: str
+
+
+@dataclass
+class ParseWarning:
+    """Something the parser read but did not convert, or chose on the author's behalf.
+
+    Attributes:
+        line_number: Line it was found on, or None for one about the whole diagram
+        message: Description of it
+        line_content: The actual line content
+        code: What kind it is: ``not-understood``, ``unmodelled``, ``note-unknown-class``,
+            ``empty-diagram`` or ``derived-prefix``
+    """
+
+    line_number: int | None
+    message: str
+    line_content: str = ""
+    code: str = "not-understood"
+
+    def __str__(self) -> str:
+        if self.line_number is None:
+            return self.message
+        return f"Line {self.line_number}: {self.message}"
 
 
 @dataclass
@@ -79,12 +142,14 @@ class ParseResult:
     Attributes:
         model: The parsed model (may be partial if errors occurred)
         errors: List of parse errors encountered
-        warnings: List of non-fatal warnings
+        warnings: Content the parser did not convert; ``--strict`` makes these fatal
+        notes: Choices made on the author's behalf, such as a derived prefix; never fatal
     """
 
     model: PumlModel
     errors: list[ParseError]
-    warnings: list[str]
+    warnings: list[ParseWarning]
+    notes: list[ParseWarning] = field(default_factory=list)
 
     @property
     def success(self) -> bool:
@@ -197,7 +262,9 @@ class PlantUMLParser:
     def __init__(self) -> None:
         """Initialise the parser."""
         self._errors: list[ParseError] = []
-        self._warnings: list[str] = []
+        self._warnings: list[ParseWarning] = []
+        self._notes: list[ParseWarning] = []
+        self._consumed: list[tuple[int, int]] = []
         self._current_package: Optional[str] = None
         self._package_stack: list[str] = []
 
@@ -212,13 +279,21 @@ class PlantUMLParser:
         """
         self._errors = []
         self._warnings = []
+        self._notes = []
+        self._consumed = []
 
         model = PumlModel()
+
+        # Without both markers this is not a diagram, or not all of one: refuse it whole (#151)
+        if not self._check_markers(content):
+            return ParseResult(model=model, errors=self._errors, warnings=[])
 
         # Prefixes are checked against the text as given, so a refusal names the file's line
         self._check_prefixes(content)
 
-        # Strip @startuml / @enduml
+        source = content
+
+        # Blank out @startuml / @enduml, so offsets in what the passes read are the file's own
         content = self._strip_diagram_markers(content)
 
         # Pass 1: Extract packages and namespaces
@@ -241,7 +316,21 @@ class PlantUMLParser:
         # Extract skinparams
         model.skin_params = self._parse_skinparams(content)
 
-        return ParseResult(model=model, errors=self._errors, warnings=self._warnings)
+        # Report every line no pass read, by the file's line number (#151)
+        self._report_unread_lines(source, content)
+
+        if not model.classes and not model.relationships:
+            self._warnings.append(
+                ParseWarning(
+                    line_number=None,
+                    message="nothing converted: the diagram has no classes or relationships",
+                    code="empty-diagram",
+                )
+            )
+
+        return ParseResult(
+            model=model, errors=self._errors, warnings=self._warnings, notes=self._notes
+        )
 
     def parse_file(self, path: Path) -> ParseResult:
         """Parse a PlantUML file.
@@ -255,19 +344,161 @@ class PlantUMLParser:
         content = path.read_text(encoding="utf-8")
         return self.parse(content)
 
+    def _check_markers(self, source: str) -> bool:
+        """Refuse a file that is not a whole PlantUML diagram (#151).
+
+        Without ``@startuml`` the file does not look like a diagram at all; without
+        ``@enduml`` after it, nothing shows the diagram was not cut short.
+
+        Args:
+            source: The file's text.
+
+        Returns:
+            True when both markers are present; otherwise a :class:`ParseError` is recorded.
+        """
+        start = STARTUML_PATTERN.search(source)
+        if start is None:
+            self._errors.append(
+                ParseError(
+                    line_number=None,
+                    message="no @startuml found — this does not look like a PlantUML diagram. "
+                    "A fragment must be wrapped in @startuml … @enduml.",
+                    line_content="",
+                )
+            )
+            return False
+        if ENDUML_PATTERN.search(source, start.end()) is None:
+            self._errors.append(
+                ParseError(
+                    line_number=None,
+                    message="no @enduml found — the diagram may have been cut short. "
+                    "A diagram must end with @enduml.",
+                    line_content="",
+                )
+            )
+            return False
+        return True
+
     def _strip_diagram_markers(self, content: str) -> str:
-        """Remove @startuml and @enduml markers."""
-        # Remove @startuml (with optional name)
-        content = re.sub(r"@startuml\s*(?:\([^)]*\))?\s*\n?", "", content)
-        # Remove @enduml
-        content = re.sub(r"@enduml\s*", "", content)
+        """Blank out @startuml and @enduml markers, keeping every newline.
+
+        The markers are replaced by spaces rather than removed, so an offset into the result
+        is an offset into the file, and its line numbers are the file's own.
+        """
+
+        def blank(match: re.Match[str]) -> str:
+            return re.sub(r"[^\n]", " ", match.group(0))
+
+        # Blank @startuml (with optional name)
+        content = re.sub(r"@startuml\s*(?:\([^)]*\))?\s*\n?", blank, content)
+        # Blank @enduml
+        content = re.sub(r"@enduml\s*", blank, content)
         return content
+
+    def _consume(self, match: re.Match[str]) -> None:
+        """Record that a pass read *match*'s text into the model."""
+        self._consumed.append(match.span())
+
+    def _report_unread_lines(self, source: str, content: str) -> None:
+        """Warn about every line no pass read, unless it is known to be ignorable (#151).
+
+        A line counts as read when a match a pass kept touches it; that is generous to a
+        line a pass read only part of. Declarations of kinds the converter does not model
+        are named; any other line is reported as not understood.
+
+        Args:
+            source: The diagram text as given, for the markers and the reported lines.
+            content: The text the passes read, with the markers blanked; same offsets.
+        """
+        lines = source.splitlines()
+        line_starts = [0]
+        line_starts.extend(i + 1 for i, char in enumerate(content) if char == "\n")
+
+        read: set[int] = set()
+        for start, end in self._consumed:
+            while start < end and content[start].isspace():
+                start += 1
+            while end > start and content[end - 1].isspace():
+                end -= 1
+            if start < end:
+                first = bisect_right(line_starts, start)
+                read.update(range(first, bisect_right(line_starts, end - 1) + 1))
+
+        block_end: re.Pattern[str] | None = None
+        body_depth = 0
+        for number, text in enumerate(lines, 1):
+            if block_end is not None:
+                if block_end.search(text):
+                    block_end = None
+                continue
+            if body_depth:
+                body_depth += text.count("{") - text.count("}")
+                continue
+            if not text.strip() or STARTUML_PATTERN.match(text) or ENDUML_PATTERN.match(text):
+                continue
+            opened = next(
+                (
+                    (match, closer)
+                    for opener, closer in IGNORABLE_BLOCK_PATTERNS
+                    if (match := opener.match(text))
+                ),
+                None,
+            )
+            if opened is not None:
+                match, closer = opened
+                # A block may close on the line it opens, as /' … '/ can
+                if not closer.search(text[match.end() :]):
+                    block_end = closer
+                continue
+            if number in read:
+                continue
+            message = self._unmodelled(text)
+            if message is not None:
+                self._warnings.append(
+                    ParseWarning(number, message, line_content=text.strip(), code="unmodelled")
+                )
+                body_depth = max(text.count("{") - text.count("}"), 0)
+                continue
+            if any(pattern.match(text) for pattern in IGNORABLE_LINE_PATTERNS):
+                continue
+            self._warnings.append(
+                ParseWarning(
+                    number,
+                    f"not understood: {text.strip()}",
+                    line_content=text.strip(),
+                    code="not-understood",
+                )
+            )
+
+    @staticmethod
+    def _unmodelled(text: str) -> str | None:
+        """Name the declaration on *text* if it is of a kind the converter does not model."""
+        declaration = UNMODELLED_DECLARATION_PATTERN.match(text)
+        if declaration:
+            kind, name = declaration.group(1), declaration.group(2).strip('"')
+            return (
+                f"{kind} {name} is not converted: only classes are, "
+                f"so {name} is not in the output"
+            )
+        abstract = BARE_ABSTRACT_PATTERN.match(text)
+        if abstract:
+            name = abstract.group(1).strip('"')
+            return (
+                f"abstract {name} is not converted, so it is not in the output; "
+                f'write "abstract class {name}" to convert it'
+            )
+        if REALISATION_PATTERN.search(text):
+            return f"realisation is not converted, so it is not in the output: {text.strip()}"
+        if DEPENDENCY_PATTERN.search(text):
+            return f"dependency is not converted, so it is not in the output: {text.strip()}"
+        return None
 
     def _parse_packages(self, content: str) -> list[PumlPackage]:
         """Extract package definitions from content."""
         packages = []
 
         for match in self.PACKAGE_PATTERN.finditer(content):
+            self._consume(match)
             name = match.group(1) or match.group(2)  # Quoted or unquoted
             stereotype = match.group(4)
 
@@ -460,9 +691,14 @@ class PlantUMLParser:
             else:
                 bound[prefix] = (iri, line)
                 named[iri] = (prefix, line)
-                self._warnings.append(
-                    f'Line {line}: derived the prefix "{prefix}" for <{iri}>; '
-                    f'to choose it, write package "{uri}" as <prefix>'
+                self._notes.append(
+                    ParseWarning(
+                        line,
+                        f'derived the prefix "{prefix}" for <{iri}>; '
+                        f'to choose it, write package "{uri}" as <prefix>',
+                        line_content=lines[line - 1].strip(),
+                        code="derived-prefix",
+                    )
                 )
                 continue
             refuse(
@@ -485,6 +721,7 @@ class PlantUMLParser:
         package_map = self._build_package_map(content)
 
         for match in self.CLASS_PATTERN.finditer(content):
+            self._consume(match)
             is_abstract = match.group(1) is not None
             display_name = None
 
@@ -584,6 +821,7 @@ class PlantUMLParser:
             # Split into package.name - store qualified name for lookup
             if left_head and not right_head:
                 # <|-- pattern: target extends source
+                self._consume(match)
                 relationships.append(
                     PumlRelationship(
                         source=target_full,  # Keep full qualified name for lookup
@@ -593,6 +831,7 @@ class PlantUMLParser:
                 )
             elif right_head and not left_head:
                 # --|> pattern: source extends target
+                self._consume(match)
                 relationships.append(
                     PumlRelationship(
                         source=source_full,
@@ -629,6 +868,7 @@ class PlantUMLParser:
             # Skip if this looks like inheritance (already handled)
             if "|" in str(target_marker) or "|" in str(source_marker):
                 continue
+            self._consume(match)
 
             # Determine relationship type
             if source_marker == "*" or target_marker == "*":
@@ -665,6 +905,7 @@ class PlantUMLParser:
         )
 
         for match in multiline_pattern.finditer(content):
+            self._consume(match)
             position = match.group(1)
             attached_to = match.group(2)
             text = match.group(3).strip()
@@ -684,6 +925,7 @@ class PlantUMLParser:
         )
 
         for match in inline_pattern.finditer(content):
+            self._consume(match)
             position = match.group(1)
             attached_to = match.group(2)
             text = match.group(3).strip()
@@ -706,12 +948,19 @@ class PlantUMLParser:
                 if cls:
                     cls.note = note.content
                 else:
-                    self._warnings.append(f"Note attached to unknown class: {note.attached_to}")
+                    self._warnings.append(
+                        ParseWarning(
+                            line_number=None,
+                            message=f"Note attached to unknown class: {note.attached_to}",
+                            code="note-unknown-class",
+                        )
+                    )
 
     def _parse_title(self, content: str) -> Optional[str]:
         """Extract diagram title."""
         match = self.TITLE_PATTERN.search(content)
         if match:
+            self._consume(match)
             return match.group(1).strip()
         return None
 
@@ -719,6 +968,7 @@ class PlantUMLParser:
         """Extract skinparam settings."""
         params = {}
         for match in self.SKINPARAM_PATTERN.finditer(content):
+            self._consume(match)
             key = match.group(1)
             value = match.group(2)
             params[key] = value

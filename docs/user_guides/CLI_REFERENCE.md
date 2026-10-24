@@ -372,10 +372,14 @@ rdf-construct puml2rdf SOURCE [OPTIONS]
 - `-n, --namespace URI`: Default namespace URI for the ontology
 - `-C, --config PATH`: Path to YAML configuration file
 - `-m, --merge PATH`: Existing ontology file to merge with
-- `-v, --validate`: Validate only, don't generate output
-- `--strict`: Treat warnings as errors
+- `-v, --validate`: Check the diagram and the RDF it converts to, without writing output
+- `--strict`: Treat warnings as errors: exit 1 and write nothing
 - `-l, --language TAG`: Language tag for labels/comments (default: en)
 - `--no-labels`: Don't auto-generate rdfs:label triples
+
+The file must hold a whole diagram, from `@startuml` to `@enduml`, or the run is refused. Lines the
+parser does not read, and declarations of kinds it does not model (`interface`, `enum`, `..|>`,
+`..>`), are reported by line number.
 
 **Supported PlantUML Syntax**:
 - Classes: `class Building`, `class "Display Name" as pkg.Building`
@@ -419,9 +423,9 @@ rdf-construct puml2rdf design.puml --validate --strict
 ```
 
 **Exit Codes**:
-- `0`: Success
-- `1`: Validation warnings (with --strict)
-- `2`: Parse or validation errors
+- `0`: Success, including a run with warnings when `--strict` is not given
+- `1`: Warnings, with `--strict`; nothing is written
+- `2`: Refused or failed: no `@startuml` or `@enduml`, a parse error, a model error, or RDF that cannot be written
 
 ---
 

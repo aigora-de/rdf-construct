@@ -93,6 +93,15 @@ Write packages as `package "<namespace IRI>" as <prefix>`. See
 [`puml2rdf`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#puml2rdf)
 in the migration note.
 
+**A `puml2rdf` input that converted can now be refused.** A file without
+`@startuml` and `@enduml` exits 2 with nothing written, where an empty file, a
+shopping list or a Turtle file converted to a one-triple ontology at exit 0. A
+diagram fragment must be wrapped in the two markers. Lines the parser does not
+understand are now reported by line number, and `--strict` makes them fatal.
+`--validate` now checks the generated RDF, as the guide says it does. See
+[`puml2rdf`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#puml2rdf)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
@@ -446,6 +455,25 @@ change, and what to do about it, is listed command by command in the
   no longer has `#` appended. A `package "URI" { … }`
   with no alias derives a prefix from the IRI and says which. See the
   [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#puml2rdf).
+- **`puml2rdf` can refuse its input, and says what it did not convert** (#151).
+  The parser had no failure path: any file parsed, text no pattern matched was
+  never looked at, and a file that was not PlantUML at all converted at exit 0
+  and passed `--validate --strict`. A file without `@startuml`, or without
+  `@enduml` after it, is now refused at exit 2 with nothing written. Every line
+  the parser does not read is reported by its line number, unless it is a
+  comment, layout or presentation, and declarations of kinds the converter does
+  not model (`interface`, `enum`, `annotation`, `entity`, `struct`, `abstract`
+  without `class`, `..|>`, `..>`) are named as dropped. `--strict` makes these
+  fatal at exit 1, as it does every parse, model, conversion and RDF warning;
+  conversion and RDF warnings were never fatal before. A derived prefix (#150)
+  is a note, which `--strict` lets through. A diagram with no classes or
+  relationships converts with a warning. `ParseResult.warnings` holds
+  `ParseWarning`s, and `ParseResult.notes` is new.
+- **`puml2rdf --validate` checks the RDF** (#290). It stopped after the model
+  checks, so the RDF validation the guide describes never ran. It now converts
+  the diagram, validates the RDF and serialises it in memory in the requested
+  format, writing nothing and running no `--merge`, so RDF that cannot be
+  written fails validation at exit 2 rather than at the real run.
 - **`sort: topological` no longer turns alphabetical on inferred graphs** (#339).
   RDFS entailment materialises `C rdfs:subClassOf C` for every class (`rdfs10`)
   and `P rdfs:subPropertyOf P` for every property (`rdfs6`). Each self-loop was
