@@ -186,6 +186,22 @@ def component_digest(component: Graph) -> str:
     return _labelled(component)[0]
 
 
+def is_tree(component: Graph) -> bool:
+    """Say whether a component is a tree, and so is hashed structurally rather than canonicalised.
+
+    A component that is not a tree (a node with two blank-node parents, or a cycle) goes through
+    ``rdflib.compare``, whose cost grows steeply with the component's size. A caller that must
+    stay fast on any input can check this first.
+
+    Args:
+        component: One blank-node component, as :func:`blank_node_components` returns it.
+
+    Returns:
+        True if the component is a tree.
+    """
+    return _tree_labels(component) is not None
+
+
 def label_by_content(graph: Graph) -> Graph:
     """Return a copy of ``graph`` whose blank nodes are labelled by their component's content.
 

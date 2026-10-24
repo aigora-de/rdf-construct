@@ -50,6 +50,8 @@ MERGE_BLANK_NODES = Path(__file__).parent / "fixtures" / "merge" / "blank_nodes"
 IES_SMALL = Path(__file__).parent / "fixtures" / "ies" / "ies-env-building-classification.ttl"
 OWL_FULL = str(EXAMPLES / "describe" / "owl_full_example.ttl")
 PROVENANCE = Path(__file__).parent / "fixtures" / "provenance"
+DIFF_V1 = str(EXAMPLES / "diff" / "v1.ttl")
+DIFF_V2 = str(EXAMPLES / "diff" / "v2.ttl")
 
 # A leading "@out" makes an argument a path under the case's constant output directory.
 OUT = "@out"
@@ -88,6 +90,8 @@ CASES = [
     _case("docs", ANIMAL, "-f", "json", "-o", OUT, label="docs-json"),
     _case("describe", ANIMAL, "--no-colour", label="describe"),
     _case("diff", ANIMAL, SIMPLE, expect_exit=1, label="diff"),
+    _case("diff", DIFF_V1, DIFF_V2, expect_exit=1, label="diff-blank-nodes"),
+    _case("diff", DIFF_V1, DIFF_V2, "-f", "json", expect_exit=1, label="diff-blank-nodes-json"),
     _case(
         "merge",
         str(MERGE / "merge_core.ttl"),

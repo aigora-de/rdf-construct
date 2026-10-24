@@ -153,10 +153,11 @@ Nothing has landed yet.
 
 ## `diff`
 
-Nothing has landed yet.
-
 | Issue | What changed | What to do |
 |---|---|---|
+| [#143](https://github.com/aigora-de/rdf-construct/issues/143) | **Blank nodes are compared by structure.** A file containing restrictions or other blank nodes no longer differs from a copy of itself (exit **0** where it was 1), and a change made only inside blank nodes is now reported (exit **1** where it was 0: an `owl:Axiom` annotation's comment, a restriction's cardinality, an `owl:AllDisjointClasses` member). A changed structure is written as Turtle under the named subject that refers to it, or that it annotates; one that belongs to none is listed under `BLANK-NODE STRUCTURES`. Removing one of two identical copies is reported. A structure that is not a tree and has more than 500 blank nodes is not compared: the run says so first and exits **1**, never "identical" ([#388](https://github.com/aigora-de/rdf-construct/issues/388)). | If you gate CI on `diff`, expect both changes. Remove any workaround that stripped or skolemised blank nodes. If you diff an OWL-RL closure, diff the asserted files instead. See [Blank Nodes](user_guides/DIFF_GUIDE.md#blank-nodes). |
+| [#143](https://github.com/aigora-de/rdf-construct/issues/143) | JSON: `identical` is now true only when nothing changed. A blank-node object is `{"type": "bnode", "turtle": "[ … ]"}`, and its `value` key (a parser's label) is gone. Each `modified` entry gains `structures`, and the top level gains `structures`, both lists of `{"action", "turtle"}`. `summary` gains `structures`. `warnings` lists only structures that were not compared; the advice to skolemise is gone. | Read `turtle` instead of `value` for a blank node, and read both `structures` lists. |
+| [#143](https://github.com/aigora-de/rdf-construct/issues/143) | Python API: `TripleChange.turtle`, `EntityChange.added_structures` and `removed_structures`, `GraphDiff.added_structures`, `removed_structures`, `uncompared` and `notes`, and the class `UncomparedStructure`, are new. `GraphDiff.is_identical` counts them all. `blank_node_warning` now means a structure was not compared, not that a blank node changed. | Nothing for code that only reads `is_identical` or formats with `format_diff`. Code that walks `GraphDiff` itself should read the new fields. |
 
 ## `docs`
 

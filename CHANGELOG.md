@@ -75,6 +75,15 @@ or `contains` is reported as that question's error; `has_results` and
 [`cq-test`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#cq-test)
 in the migration note.
 
+**If you gate CI on `diff`, its verdict changes for any file with a blank
+node.** Blank nodes are now compared by structure. A file containing
+restrictions or other blank nodes is identical to a copy of itself (exit 0,
+where it was 1), and a change made only inside blank nodes is reported (exit 1,
+where it was "semantically identical" at exit 0). Remove any workaround that
+stripped or skolemised blank nodes. See
+[`diff`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#diff)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
@@ -238,6 +247,27 @@ change, and what to do about it, is listed command by command in the
   and the config file overrides the option's default.
 
 ### Fixed
+- **`diff` compares blank nodes by structure, in both directions** (#143). It
+  compared triples by the labels rdflib gives blank nodes at parse time, and
+  then skipped every blank-node subject. So any file with an `owl:Restriction`
+  differed from a byte-identical copy of itself at exit 1, and a change made
+  only inside blank nodes, such as an `owl:Axiom` annotation's comment, printed
+  "Graphs are semantically identical." at exit 0; the warning meant for that
+  case came after the early return, and advised a `rapper` command that
+  skolemises nothing. Both graphs are now labelled by content
+  (`core.blank_nodes.label_by_content`, #170), so a structure both files state
+  drops out and a changed one is reported whole. It is written as Turtle
+  (`+ rdfs:subClassOf [ a owl:Restriction ; owl:cardinality "99"^^xsd:integer ;
+  … ]`), never as a parser's label, under the named subject that refers to it.
+  An axiom annotation, a reified statement or a negative property assertion is
+  listed under the subject it is about, and anything else under a new
+  `BLANK-NODE STRUCTURES` section. Shared and cyclic structures are compared
+  too. One that is not a tree and has more than 500 blank nodes is set aside,
+  named before anything else in the output, and the run exits 1. `diff X X`
+  now exits 0 for every IES fixture and every shipped example. New
+  `examples/diff/v1.ttl` and `v2.ttl` differ only inside blank nodes (#149's
+  `diff` slice), and `DIFF_GUIDE.md`'s blank-node sections are rewritten from
+  their output.
 - **`cq-test` refuses an ASK query checked with a count-based expectation**
   (#134). On an ASK, `has_results`, `no_results` and `count` counted the one
   boolean rdflib yields, so `has_results` and `count: 1` always passed and

@@ -679,4 +679,8 @@ IES_INVOCATIONS = [
 def test_ies_tier_completes(argv: tuple[str, ...], tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     result = _invoke(argv, tmp_path, monkeypatch)
     assert_no_crash(result)
-    assert result.exit_code in (STATE_CODE["clean"], STATE_CODE["findings"]), result.output
+    if argv[0] == "diff":
+        # A file compared with itself is identical, blank nodes included (#143)
+        assert result.exit_code == STATE_CODE["clean"], result.output
+    else:
+        assert result.exit_code in (STATE_CODE["clean"], STATE_CODE["findings"]), result.output
