@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from rdflib import Graph
+
 from rdf_construct.puml2rdf.model import (
     PumlAttribute,
     PumlClass,
@@ -25,6 +27,20 @@ from rdf_construct.puml2rdf.model import (
     PumlRelationship,
     RelationshipType,
 )
+
+# A URI starts with a scheme, so `urn:` counts as well as `http:` (#150).
+URI_SCHEME_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
+
+# Turtle's PN_PREFIX: what may stand before the colon of a prefixed name.
+_PN_CHARS_BASE = "A-Za-zÀ-ÖØ-öø-˿Ͱ-ͽͿ-῿‌-‍" "⁰-↏Ⰰ-⿯、-퟿豈-﷏ﷰ-�\U00010000-\U000effff"
+_PN_CHARS = _PN_CHARS_BASE + "_0-9·̀-ͯ‿-⁀\\-"
+PN_PREFIX_PATTERN = re.compile(f"[{_PN_CHARS_BASE}](?:[{_PN_CHARS}.]*[{_PN_CHARS}])?")
+
+# The prefixes the output graph binds before any package (bind_namespaces="core"). A package
+# may claim one only for that prefix's own namespace.
+CORE_PREFIXES: dict[str, str] = {
+    prefix: str(namespace) for prefix, namespace in Graph(bind_namespaces="core").namespaces()
+}
 
 
 def parse_dotted_name(dotted: str) -> tuple[Optional[str], str]:
@@ -199,6 +215,9 @@ class PlantUMLParser:
 
         model = PumlModel()
 
+        # Prefixes are checked against the text as given, so a refusal names the file's line
+        self._check_prefixes(content)
+
         # Strip @startuml / @enduml
         content = self._strip_diagram_markers(content)
 
@@ -266,8 +285,8 @@ class PlantUMLParser:
 
     @staticmethod
     def _looks_like_uri(value: str) -> bool:
-        """Return True when *value* is a URI rather than a name or alias."""
-        return value.startswith("http") or "://" in value
+        """Return True when *value* starts with a URI scheme, such as ``http:`` or ``urn:``."""
+        return URI_SCHEME_PATTERN.match(value) is not None
 
     @classmethod
     def _package_identity(cls, name: str, alias: str | None) -> tuple[str, str | None]:
@@ -277,28 +296,188 @@ class PlantUMLParser:
         quoted string is the namespace URI and the alias is the prefix
         (#150). Read the other way round, the URI becomes the package name,
         the alias is discarded, and the converter binds the whole URI as a
-        Turtle prefix. The reverse spelling, ``package Name as URI``, keeps
-        the name and takes the URI from the alias. A URI with no alias at all
-        still names the namespace; the converter derives a prefix from it.
+        Turtle prefix. A URI with no alias still names the namespace, and
+        its prefix is derived from it. A quoted name that is not a URI is
+        display text, so ``package "Building Things" as bld`` is ``package bld``.
+        The reverse spelling, ``package Name as URI``, is refused by
+        :meth:`_check_prefixes`.
 
         Args:
             name: The quoted or unquoted package name.
             alias: The value of the optional ``as`` clause, or None.
 
         Returns:
-            The package name (the key classes are filed under) and the
-            namespace URI the package declares, if any.
+            The package name (the key classes are filed under, and the
+            prefix it is bound to) and the namespace URI the package
+            declares, if any.
         """
         if alias is None:
-            # `package "http://x#" { … }`: the name is the namespace itself.
-            return name, name if cls._looks_like_uri(name) else None
-        if cls._looks_like_uri(alias):
-            # `package Name as http://x#` — the alias carries the URI.
-            return name, alias
+            if cls._looks_like_uri(name):
+                # `package "http://x#" { … }`: no prefix is named, so one is derived.
+                return cls._generate_prefix(name), name
+            return name, None
         if cls._looks_like_uri(name):
             # `package "http://x#" as pfx` — the guide's form.
             return alias, name
-        return name, None
+        return alias, None
+
+    @staticmethod
+    def _generate_prefix(name: str) -> str:
+        """Generate a namespace prefix from a package name.
+
+        Args:
+            name: Package name (may be a URI or display name)
+
+        Returns:
+            Short lowercase prefix string
+        """
+        # If it looks like a URI, extract the last segment
+        if URI_SCHEME_PATTERN.match(name):
+            # Extract meaningful part from URI
+            name = name.rstrip("#/:")
+            if "/" in name:
+                name = name.rsplit("/", 1)[-1]
+            if "#" in name:
+                name = name.rsplit("#", 1)[-1]
+            if ":" in name:
+                name = name.rsplit(":", 1)[-1]
+
+        # Clean and shorten
+        prefix = re.sub(r"[^a-zA-Z0-9]", "", name).lower()
+        return prefix[:10] if len(prefix) > 10 else prefix or "ns"
+
+    @staticmethod
+    def _namespace_iri(uri: str) -> str:
+        """Return *uri* as the converter binds it: ending in ``#`` or ``/``."""
+        return uri if uri.endswith(("#", "/")) else f"{uri}#"
+
+    def _check_prefixes(self, source: str) -> None:
+        """Refuse every prefix that cannot be written as the diagram gives it (#150).
+
+        A prefix the diagram names, as a package's alias, a package's own name or
+        a dotted class name, is used as written or refused: it must be a legal
+        Turtle prefix, may claim a core prefix only for that prefix's own
+        namespace, and may name only one namespace, which no other prefix names.
+        A prefix derived for a URI package with no alias is held to the same
+        rules, and is reported as a warning so the run says which it chose.
+        Each refusal is a :class:`ParseError` on the declaration's line, so
+        nothing is converted or written.
+
+        Args:
+            source: The diagram text before its markers are stripped, so that
+                line numbers are the file's own.
+        """
+        lines = source.splitlines()
+        # prefix -> (namespace IRI, or None for one generated from the default namespace, line)
+        bound: dict[str, tuple[str | None, int]] = {}
+        # namespace IRI -> (prefix, line)
+        named: dict[str, tuple[str, int]] = {}
+        derived: list[tuple[str, str, int]] = []
+
+        def line_of(position: int) -> int:
+            return source.count("\n", 0, position) + 1
+
+        def refuse(line: int, message: str) -> None:
+            content = lines[line - 1].strip() if line <= len(lines) else ""
+            self._errors.append(ParseError(line_number=line, message=message, line_content=content))
+
+        def claim(prefix: str, iri: str | None, line: int) -> None:
+            if not PN_PREFIX_PATTERN.fullmatch(prefix):
+                refuse(
+                    line,
+                    f'"{prefix}" is not a legal Turtle prefix: it must start with a letter, '
+                    'hold only letters, digits, "_", "-" and ".", and not end with "."',
+                )
+                return
+            core = CORE_PREFIXES.get(prefix)
+            if core is not None and iri != core:
+                refuse(
+                    line,
+                    f'"{prefix}" is a core prefix, bound to <{core}>; it cannot name '
+                    f"{f'<{iri}>' if iri else 'a namespace of this diagram'}. "
+                    "Choose another prefix",
+                )
+                return
+            if prefix in bound:
+                earlier, earlier_line = bound[prefix]
+                if iri is not None and earlier is not None and iri != earlier:
+                    refuse(
+                        line,
+                        f'"{prefix}" is already the prefix for <{earlier}> (line {earlier_line}); '
+                        f"one prefix cannot name <{iri}> as well",
+                    )
+                    return
+            if iri is not None:
+                if iri in named and named[iri][0] != prefix:
+                    other, other_line = named[iri]
+                    refuse(
+                        line,
+                        f'<{iri}> already has the prefix "{other}" (line {other_line}); '
+                        f'one namespace cannot have "{prefix}" as well',
+                    )
+                    return
+                named.setdefault(iri, (prefix, line))
+            if prefix not in bound or bound[prefix][0] is None:
+                bound[prefix] = (iri, line)
+
+        for match in self.PACKAGE_PATTERN.finditer(source):
+            line = line_of(match.start())
+            name = match.group(1) or match.group(2)
+            alias = match.group(3)
+            if alias is not None and self._looks_like_uri(alias.strip('"')):
+                refuse(
+                    line,
+                    'the namespace IRI goes in quotes before "as", and the prefix after it: '
+                    f'package "{alias.strip(chr(34))}" as {name}',
+                )
+                continue
+            prefix, uri = self._package_identity(name, alias)
+            if alias is None and uri is not None:
+                derived.append((prefix, uri, line))
+                continue
+            claim(prefix, self._namespace_iri(uri) if uri else None, line)
+
+        for prefix, uri, line in derived:
+            iri = self._namespace_iri(uri)
+            if prefix in bound and bound[prefix][0] == iri:
+                continue
+            if iri in named:
+                other, other_line = named[iri]
+                refuse(
+                    line,
+                    f'<{iri}> already has the prefix "{other}" (line {other_line}); '
+                    f'write package "{uri}" as {other}',
+                )
+                continue
+            if not PN_PREFIX_PATTERN.fullmatch(prefix):
+                problem = "is not a legal Turtle prefix"
+            elif prefix in CORE_PREFIXES and CORE_PREFIXES[prefix] != iri:
+                problem = f"is a core prefix, bound to <{CORE_PREFIXES[prefix]}>"
+            elif prefix in bound:
+                earlier, earlier_line = bound[prefix]
+                target = f"<{earlier}>" if earlier else "another package"
+                problem = f"already names {target} (line {earlier_line})"
+            else:
+                bound[prefix] = (iri, line)
+                named[iri] = (prefix, line)
+                self._warnings.append(
+                    f'Line {line}: derived the prefix "{prefix}" for <{iri}>; '
+                    f'to choose it, write package "{uri}" as <prefix>'
+                )
+                continue
+            refuse(
+                line,
+                f'no prefix is named for <{iri}>, and "{prefix}", derived from it, {problem}. '
+                f'Name one: package "{uri}" as <prefix>',
+            )
+
+        for match in self.CLASS_PATTERN.finditer(source):
+            dotted = match.group(3) or match.group(5)
+            package = parse_dotted_name(dotted)[0] if dotted else None
+            if package is None:
+                continue
+            line = line_of(match.start() + match.group(0).index("class"))
+            claim(package, bound[package][0] if package in bound else None, line)
 
     def _parse_classes(self, content: str) -> list[PumlClass]:
         """Extract class definitions from content."""

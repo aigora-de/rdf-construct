@@ -119,7 +119,7 @@ class PumlToRdfConverter:
             config: Conversion configuration options
         """
         self.config = config or ConversionConfig()
-        self._graph: Graph = Graph()
+        self._graph: Graph = Graph(bind_namespaces="core")
         self._namespaces: dict[str, Namespace] = {}
         self._class_uris: dict[str, URIRef] = {}
         self._property_uris: dict[str, URIRef] = {}
@@ -127,7 +127,7 @@ class PumlToRdfConverter:
 
     def convert(self, model: PumlModel) -> ConversionResult:
         """Convert a PlantUML model to an RDF graph."""
-        self._graph = Graph()
+        self._graph = Graph(bind_namespaces="core")
         self._namespaces = {}
         self._class_uris = {}
         self._property_uris = {}
@@ -177,9 +177,7 @@ class PumlToRdfConverter:
                     ns_uri += "#"
                 ns = Namespace(ns_uri)
                 self._namespaces[pkg.name] = ns
-                # override=False: never clobber owl/rdfs/xsd or another
-                # package's prefix; rdflib derives a free one instead.
-                self._graph.bind(self._bindable_prefix(pkg.name), ns, override=False)
+                self._graph.bind(pkg.name, ns)
                 prefixes.discard(pkg.name)  # Don't auto-generate
 
         # Auto-generate namespaces for remaining prefixes
@@ -188,54 +186,7 @@ class PumlToRdfConverter:
             ns_uri = f"{base}/{prefix}#"
             ns = Namespace(ns_uri)
             self._namespaces[prefix] = ns
-            self._graph.bind(self._bindable_prefix(prefix), ns, override=False)
-
-    def _bindable_prefix(self, name: str) -> str:
-        """Return a Turtle prefix that is legal to bind, derived from *name*.
-
-        A package name may be a URI — ``package "http://x#" { … }`` names the
-        namespace with no alias — and a URI is not a legal ``PN_PREFIX``, so
-        binding it verbatim writes a ``@prefix`` line no parser can read back
-        (#150). A legal name is kept as the author wrote it; anything else is
-        shortened by :meth:`_generate_prefix`, which was written for this and
-        was never called.
-
-        Args:
-            name: Package name or class-package key, possibly a URI.
-
-        Returns:
-            A non-empty prefix matching ``[A-Za-z_][A-Za-z0-9._-]*``.
-        """
-        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9._-]*", name) and not name.endswith("."):
-            return name
-        generated = self._generate_prefix(name)
-        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9._-]*", generated):
-            return generated
-        # _generate_prefix keeps digits it finds anywhere, so "2nd" is not yet
-        # a legal PN_PREFIX; anchor it.
-        return f"ns{generated}"
-
-    def _generate_prefix(self, name: str) -> str:
-        """Generate a namespace prefix from a package name.
-
-        Args:
-            name: Package name (may be a URI or display name)
-
-        Returns:
-            Short lowercase prefix string
-        """
-        # If it looks like a URI, extract the last segment
-        if "://" in name or name.startswith("http"):
-            # Extract meaningful part from URI
-            name = name.rstrip("#/")
-            if "/" in name:
-                name = name.rsplit("/", 1)[-1]
-            if "#" in name:
-                name = name.rsplit("#", 1)[-1]
-
-        # Clean and shorten
-        prefix = re.sub(r"[^a-zA-Z0-9]", "", name).lower()
-        return prefix[:10] if len(prefix) > 10 else prefix or "ns"
+            self._graph.bind(prefix, ns)
 
     def _create_ontology_header(self, model: PumlModel) -> None:
         """Create the owl:Ontology declaration."""

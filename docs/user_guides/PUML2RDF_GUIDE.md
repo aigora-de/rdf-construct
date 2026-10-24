@@ -70,6 +70,72 @@ package core {
 }
 ```
 
+**There is one spelling.** In `package "<namespace IRI>" as <prefix>` the quoted string is the
+namespace IRI and the alias after `as` is the prefix, so `bld:Building` is
+`<http://example.org/building#Building>`. An IRI is anything that starts with a scheme, so
+`urn:example:building#` works as well as `http:`. An IRI that ends in neither `#` nor `/` has
+`#` appended. A quoted name that is not an IRI is display text: `package "Building Things" as bld`
+is `package bld`.
+
+**A package with an IRI and no alias** gets a prefix derived from the IRI's last segment, and the
+run says which one. Given `things.puml`:
+
+```plantuml
+@startuml
+package "urn:example:things#" {
+  class Thing
+}
+@enduml
+```
+
+```bash
+rdf-construct puml2rdf things.puml -o things.ttl
+```
+
+```text
+Parsing things.puml...
+Parse warnings:
+  Line 2: derived the prefix "things" for <urn:example:things#>; to choose it, write package "urn:example:things#" as <prefix>
+  Found: 1 classes, 0 relationships
+Converting to RDF...
+  Generated: 3 triples
+✓ Wrote things.ttl
+  Classes: 1, Properties: 0
+```
+
+**A prefix the diagram names is used as written, or the run is refused.** That covers an alias,
+a simple package's name, and the part before the dot in `class bld.Building`. A refused run
+exits 2, names the line, and writes nothing:
+
+| The diagram has | Refused because |
+|---|---|
+| `package bld as "http://example.org/building#"` | it is the reverse spelling; the message shows the form above |
+| `as 2nd`, `as pkg.`, `as :` | it is not a legal Turtle prefix: one starts with a letter, holds only letters, digits, `_`, `-` and `.`, and does not end with `.` |
+| `as owl` on any namespace but OWL's, or `class rdfs.Thing` | `rdf`, `rdfs`, `owl`, `xsd` and `xml` are bound to their own namespaces |
+| two packages `as ex` with different IRIs | one prefix cannot name two namespaces |
+| one IRI as both `as ex` and `as ey` | one namespace cannot have two prefixes |
+| two IRIs with no alias whose derived prefixes are the same | the derived prefix is already taken; name one with `as` |
+
+Given `reversed.puml`:
+
+```plantuml
+@startuml
+package bld as "http://example.org/building#" {
+  class Building
+}
+@enduml
+```
+
+```bash
+rdf-construct puml2rdf reversed.puml -o reversed.ttl
+```
+
+```text
+Parsing reversed.puml...
+Parse errors:
+  Line 2: the namespace IRI goes in quotes before "as", and the prefix after it: package "http://example.org/building#" as bld
+```
+
 ### Notes and Comments
 
 ```plantuml

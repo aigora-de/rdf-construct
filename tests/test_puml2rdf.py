@@ -7,7 +7,7 @@ import pytest
 from pathlib import Path
 from textwrap import dedent
 from click.testing import CliRunner
-from rdflib import Graph, Namespace, RDF, RDFS, Literal
+from rdflib import Graph, Namespace, RDF, RDFS, Literal, URIRef
 from rdflib.namespace import OWL, XSD
 
 from rdf_construct.cli import cli
@@ -652,6 +652,10 @@ class TestPuml2rdfCliSummary:
         assert "Classes: 3," in result.output
         assert "Classes: 6," not in result.output
 
+        bld = Namespace("http://example.org/building#")
+        graph = Graph().parse(output, format="turtle")
+        assert (bld.Room, RDF.type, OWL.Class) in graph
+
 
 # ==============================================================================
 # Package namespace tests (#150)
@@ -746,3 +750,212 @@ class TestPackageNamespaces:
 
         core = Namespace("http://example.org/ontology/core#")
         assert (core.Entity, RDF.type, OWL.Class) in graph
+
+    def _refuse(self, tmp_path: Path, body: str) -> str:
+        """Run the CLI over *body* and check it was refused with nothing written.
+
+        Three blank lines follow ``@startuml``: stripping the markers removes all of them, so a
+        line number taken from the stripped text would be three short of the file's.
+        """
+        puml = tmp_path / "diagram.puml"
+        puml.write_text(f"@startuml\n\n\n{dedent(body).strip()}\n@enduml\n", encoding="utf-8")
+        result = CliRunner().invoke(
+            cli, ["puml2rdf", str(puml), "-o", str(tmp_path / "diagram.ttl")]
+        )
+
+        assert result.exit_code == 2, result.output
+        assert sorted(path.name for path in tmp_path.iterdir()) == ["diagram.puml"]
+        return result.output
+
+    @pytest.mark.parametrize(
+        ("body", "expected"),
+        [
+            pytest.param(
+                'package bld as "http://example.org/building#" {\n  class Building\n}',
+                'Line 4: the namespace IRI goes in quotes before "as", and the prefix after it: '
+                'package "http://example.org/building#" as bld',
+                id="reverse-spelling-quoted",
+            ),
+            pytest.param(
+                "package bld as http://example.org/building# {\n  class Building\n}",
+                'Line 4: the namespace IRI goes in quotes before "as", and the prefix after it: '
+                'package "http://example.org/building#" as bld',
+                id="reverse-spelling-bare",
+            ),
+            pytest.param(
+                'package "http://example.org/second#" as 2nd {\n  class Item\n}',
+                'Line 4: "2nd" is not a legal Turtle prefix',
+                id="prefix-starts-with-digit",
+            ),
+            pytest.param(
+                'package "http://example.org/pkg#" as pkg. {\n  class Item\n}',
+                'Line 4: "pkg." is not a legal Turtle prefix',
+                id="prefix-ends-with-dot",
+            ),
+            pytest.param(
+                'package "http://example.org/e#" as : {\n  class Item\n}',
+                'Line 4: ":" is not a legal Turtle prefix',
+                id="empty-prefix",
+            ),
+            pytest.param(
+                'package "http://example.org/mine#" as owl {\n  class Thing\n}',
+                'Line 4: "owl" is a core prefix, bound to <http://www.w3.org/2002/07/owl#>; '
+                "it cannot name <http://example.org/mine#>",
+                id="core-prefix-on-another-namespace",
+            ),
+            pytest.param(
+                "class rdfs.Thing",
+                'Line 4: "rdfs" is a core prefix',
+                id="core-prefix-on-a-dotted-class",
+            ),
+            pytest.param(
+                'package "http://example.org/a#" as ex {\n  class A\n}\n'
+                'package "http://example.org/b#" as ex {\n  class B\n}',
+                'Line 7: "ex" is already the prefix for <http://example.org/a#> (line 4); '
+                "one prefix cannot name <http://example.org/b#> as well",
+                id="one-prefix-two-namespaces",
+            ),
+            pytest.param(
+                'package "http://example.org/a#" as ex {\n  class A\n}\n'
+                'package "http://example.org/a#" as ey {\n  class B\n}',
+                'Line 7: <http://example.org/a#> already has the prefix "ex" (line 4); '
+                'one namespace cannot have "ey" as well',
+                id="one-namespace-two-prefixes",
+            ),
+            pytest.param(
+                'package "http://example.org/one/core#" {\n  class A\n}\n'
+                'package "http://example.org/two/Core#" {\n  class B\n}',
+                'Line 7: no prefix is named for <http://example.org/two/Core#>, and "core", '
+                "derived from it, already names <http://example.org/one/core#> (line 4)",
+                id="derived-prefix-already-taken",
+            ),
+        ],
+    )
+    def test_prefix_that_cannot_be_written_is_refused(
+        self, tmp_path: Path, body: str, expected: str
+    ) -> None:
+        """A prefix is used as written or refused: exit 2, the line named, nothing written."""
+        output = self._refuse(tmp_path, body)
+
+        assert "Parse errors:" in output
+        assert expected in output
+
+    def test_alias_taken_by_rdflib_default_is_kept(self, tmp_path: Path) -> None:
+        """`as org` writes `org:`; rdflib's own `org:` binding no longer pushes it to `org1:`."""
+        content = dedent(
+            """
+            @startuml
+            package "http://example.org/org#" as org {
+              class Team
+            }
+            @enduml
+            """
+        )
+        graph, text = self._convert(tmp_path, content)
+
+        assert "@prefix org: <http://example.org/org#>" in text
+        assert (Namespace("http://example.org/org#").Team, RDF.type, OWL.Class) in graph
+
+    def test_core_prefix_on_its_own_namespace_is_accepted(self, tmp_path: Path) -> None:
+        """`as owl` on OWL's own namespace is no clash."""
+        content = dedent(
+            """
+            @startuml
+            package "http://www.w3.org/2002/07/owl#" as owl {
+              class Widget
+            }
+            @enduml
+            """
+        )
+        graph, text = self._convert(tmp_path, content)
+
+        assert "owl1:" not in text
+        widget = URIRef("http://www.w3.org/2002/07/owl#Widget")
+        assert (widget, RDF.type, OWL.Class) in graph
+
+    def test_urn_namespace_is_a_uri(self, tmp_path: Path) -> None:
+        """A URI is anything with a scheme, so `urn:` names the namespace too."""
+        content = dedent(
+            """
+            @startuml
+            package "urn:example:building#" as bld {
+              class Building
+            }
+            @enduml
+            """
+        )
+        graph, text = self._convert(tmp_path, content)
+
+        assert "@prefix bld: <urn:example:building#>" in text
+        assert (Namespace("urn:example:building#").Building, RDF.type, OWL.Class) in graph
+
+    def test_quoted_name_that_is_not_a_uri_is_display_text(self, tmp_path: Path) -> None:
+        """`package "Building Things" as bld` behaves like `package bld`."""
+        content = dedent(
+            """
+            @startuml
+            package "Building Things" as bld {
+              class Building
+            }
+            @enduml
+            """
+        )
+        graph, text = self._convert(tmp_path, content)
+
+        bld = Namespace("http://example.org/ontology/bld#")
+        assert "@prefix bld: <http://example.org/ontology/bld#>" in text
+        assert (bld.Building, RDF.type, OWL.Class) in graph
+
+    def test_derived_prefix_is_reported(self, tmp_path: Path) -> None:
+        """A URI package with no alias says which prefix it was given, and still succeeds."""
+        puml = tmp_path / "diagram.puml"
+        puml.write_text(
+            '@startuml\npackage "urn:example:things#" {\n  class Thing\n}\n@enduml\n',
+            encoding="utf-8",
+        )
+        output = tmp_path / "diagram.ttl"
+        result = CliRunner().invoke(cli, ["puml2rdf", str(puml), "-o", str(output)])
+
+        assert result.exit_code == 0, result.output
+        assert 'Line 2: derived the prefix "things" for <urn:example:things#>' in result.output
+        assert "@prefix things: <urn:example:things#>" in output.read_text(encoding="utf-8")
+
+    def test_every_prefix_is_one_the_diagram_gave(self, tmp_path: Path) -> None:
+        """Read back, the file declares exactly the prefixes asked for: none renamed or invented."""
+        content = dedent(
+            """
+            @startuml
+            package "http://example.org/building#" as bld {
+              class Building {
+                floorArea : decimal
+              }
+            }
+            package "http://example.org/org#" as org {
+              class Team
+            }
+            package "http://www.w3.org/2002/07/owl#" as owl {
+              class Widget
+            }
+            package "urn:example:things#" {
+              class Thing
+            }
+            package core {
+              class Entity
+            }
+            class extra.Item
+            @enduml
+            """
+        )
+        graph, text = self._convert(tmp_path, content)
+        declared = Graph(bind_namespaces="none").parse(data=text, format="turtle")
+
+        assert {prefix for prefix, _ in declared.namespaces()} == {
+            "bld",
+            "core",
+            "extra",
+            "org",
+            "owl",
+            "rdfs",
+            "things",
+            "xsd",
+        }

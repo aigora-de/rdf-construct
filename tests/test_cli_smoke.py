@@ -496,6 +496,14 @@ MALFORMED = [
         label="puml",
     ),
     _row(
+        Row(
+            "puml2rdf",
+            "refused",
+            ("puml2rdf", str(SMOKE / "core_prefix.puml"), "-o", "@tmp/p.ttl"),
+        ),
+        label="puml-prefix",
+    ),
+    _row(
         Row("cq-test", "refused", ("cq-test", MALFORMED_TTL, str(SMOKE / "cq_failing.yml"))),
         label="ttl",
     ),
