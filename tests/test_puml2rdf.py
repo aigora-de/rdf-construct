@@ -1288,7 +1288,8 @@ class TestUnreadLines:
             PlantUMLParser().parse(text)
             return time.perf_counter() - start
 
-        small, large = diagram(200), diagram(2000)
+        # 20,000 is where a quadratic line lookup shows: str.count per match is C-fast below it
+        small, large = diagram(2000), diagram(20000)
         timed(small)
         assert timed(large) < 30 * max(timed(small), 0.01)
 
