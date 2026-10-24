@@ -285,6 +285,10 @@ THREE_STATES = [
     ),
     _row(Row("cq-test", "findings", ("cq-test", ANIMAL, str(SMOKE / "cq_failing.yml")))),
     _row(Row("cq-test", "refused", ("cq-test", ANIMAL, MALFORMED_YAML))),
+    _row(
+        Row("cq-test", "refused", ("cq-test", ANIMAL, str(SMOKE / "cq_ask_count.yml"))),
+        label="ask-count",
+    ),
     _row(Row("stats", "clean", ("stats", ANIMAL))),
     _row(Row("stats", "refused", ("stats", "--compare", ANIMAL))),
     _row(Row("describe", "clean", ("describe", ANIMAL))),

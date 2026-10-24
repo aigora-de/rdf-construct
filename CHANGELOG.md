@@ -67,6 +67,14 @@ an honest ontology IRI, printed with the rule that gave it, instead of
 [`split`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#split)
 in the migration note.
 
+**A `cq-test` suite that passed can now exit 2.** An ASK query paired with
+`has_results`, `no_results`, `count`, `min_results`, `max_results`, `results`
+or `contains` is reported as that question's error; `has_results` and
+`count: 1` on an ASK always passed whatever it answered. Use `expect: true` or
+`expect: false`. See
+[`cq-test`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#cq-test)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
@@ -230,6 +238,21 @@ change, and what to do about it, is listed command by command in the
   and the config file overrides the option's default.
 
 ### Fixed
+- **`cq-test` refuses an ASK query checked with a count-based expectation**
+  (#134). On an ASK, `has_results`, `no_results` and `count` counted the one
+  boolean rdflib yields, so `has_results` and `count: 1` always passed and
+  `no_results` and `count: 0` always failed, whether the ASK answered true or
+  false; `min_results` and `max_results` likewise. The question is now
+  reported as an `ERROR` naming its id and expectation and saying that an ASK
+  takes `expect: true` or `expect: false`; the run exits 2, and the other
+  questions still run. `results` and `contains` on an ASK give the same message
+  instead of `TypeError: 'bool' object is not iterable`, and on a CONSTRUCT
+  or DESCRIBE they are refused in the same way, saying that the query returns
+  triples, instead of a `ValueError` about a dictionary update. JUnit types the
+  `<error>` `InvalidExpectation`, and a query that fails to run stays
+  `QueryError`. `expect: true|false` on a SELECT, CONSTRUCT or DESCRIBE still
+  means "at least one row or triple", and its message no longer says "ASK
+  query matched".
 - **`split` places every subject of the source** (#176). It placed only
   classes and properties, so individuals, SKOS concepts, terms declared only by
   an OWL characteristic such as `owl:TransitiveProperty`, and the inside of
