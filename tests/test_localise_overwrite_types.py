@@ -167,7 +167,7 @@ class TestOverwrite:
         "content, reason",
         [
             ("not: [valid\n", "it is not valid YAML"),
-            ("# notes for the translator\n", "the file is empty"),
+            ("# notes for the translator\n", "the file holds no YAML, only comments"),
             ("just: a mapping\n", "target_language is missing"),
             ("metadata: [1]\n", "metadata must be a mapping"),
         ],
@@ -335,7 +335,10 @@ class TestTranslationFileTypes:
     @pytest.mark.parametrize(
         "content, message",
         [
-            ("", "t.yml: the file is empty; it is not a translation file"),
+            (
+                "",
+                "t.yml: the file holds no YAML, only comments or blank lines, if anything; it is not",
+            ),
             ("- 1\n", "t.yml: the file holds a list, not a mapping"),
             (
                 "metadata:\n  target_language: de\nentities: none\n",

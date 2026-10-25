@@ -477,7 +477,10 @@ class TranslationFile:
             data = yaml.safe_load(f)
 
         if data is None:
-            raise TranslationFileError("the file is empty; it is not a translation file")
+            raise TranslationFileError(
+                "the file holds no YAML, only comments or blank lines, if anything; "
+                "it is not a translation file"
+            )
         if not isinstance(data, dict):
             raise TranslationFileError(
                 f"the file holds {_kind(data)}, not a mapping; it is not a translation file"
