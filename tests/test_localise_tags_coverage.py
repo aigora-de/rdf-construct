@@ -243,6 +243,31 @@ class TestTags:
         assert extracted(out) == {}
         assert "Found 1 literal tagged en; --source-language en-GB" in result.output
 
+    @pytest.mark.parametrize(("source", "tag"), [("x-foo", "x-bar"), ("i-klingon", "i-enochian")])
+    def test_a_private_use_tag_is_related_to_nothing(
+        self, tmp_path: Path, source: str, tag: str
+    ) -> None:
+        # x- and i- start with a singleton, which names no language (#425)
+        src = ttl(tmp_path, f'ex:A rdfs:label "A"@{tag} .')
+        out = tmp_path / "de.yml"
+        result = run("localise", "extract", src, "-l", "de", "--source-language", source, "-o", out)
+        assert result.exit_code == 0, result.output
+        assert "Found" not in result.output
+
+    def test_one_literal_reads_it_not_them(self, tmp_path: Path) -> None:
+        src = ttl(tmp_path, 'ex:A rdfs:label "A"@en-GB .')
+        result = run("localise", "extract", src, "-l", "de", "-o", tmp_path / "de.yml")
+        assert (
+            "Found 1 literal tagged en-GB; --source-language en does not match it." in result.output
+        )
+
+    def test_non_ascii_target_language_is_refused(self, tmp_path: Path) -> None:
+        # A Kelvin-sign K would merge as @ko on main (#425)
+        src = ttl(tmp_path, 'ex:Building a owl:Class ; rdfs:label "Building"@en .')
+        trans = merge_file(tmp_path, "\u212ao", BUILDING_DE)
+        result = refused(tmp_path, "localise", "merge", src, trans, "-o", tmp_path / "out.ttl")
+        assert "not a well-formed" in result.output
+
     def test_no_warning_when_the_tag_matches_something(self, tmp_path: Path) -> None:
         src = ttl(
             tmp_path,
@@ -306,6 +331,8 @@ class TestTags:
             ("init", "-l", " "),
             ("report", "-l", "en,,de"),
             ("report", "-l", "en,de_DE"),
+            ("extract", "-l", "\u212ao"),
+            ("report", "-l", "en,d\u0131"),
         ],
     )
     def test_malformed_or_source_tag_on_the_command_line_is_refused(

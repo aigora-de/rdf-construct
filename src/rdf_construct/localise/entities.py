@@ -157,7 +157,9 @@ def related_tags(
     """Count literals tagged with a tag related to `language`, but not `language` itself.
 
     Two tags are related when they share a primary subtag: ``en``, ``en-GB`` and ``en-US`` are
-    related to one another. This finds the material an exact match leaves out, for the warning
+    related to one another. A private-use (``x-…``) or irregular grandfathered (``i-…``) tag
+    starts with a singleton, which names no language, so it is related to nothing (#425). This
+    finds the material an exact match leaves out, for the warning
     given when `language` matches nothing (#159).
 
     Args:
@@ -171,6 +173,8 @@ def related_tags(
     """
     primary = primary_subtag(language)
     found: Counter[str] = Counter()
+    if len(primary) == 1:
+        return found
     props = list(properties)
     for entity in entities:
         for prop in props:
@@ -194,7 +198,7 @@ def zero_match_warnings(found: Counter[str], language: str, flag: str) -> list[s
     """
     return [
         f"Found {count} literal{'s' if count != 1 else ''} tagged {tag}; {flag} {language} "
-        f"does not match them. Did you mean {flag} {tag}?"
+        f"does not match {'them' if count != 1 else 'it'}. Did you mean {flag} {tag}?"
         for tag, count in sorted(found.items(), key=lambda item: (-item[1], item[0]))
     ]
 
