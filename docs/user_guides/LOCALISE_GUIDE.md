@@ -109,13 +109,16 @@ rdf-construct localise extract ontology.ttl -l de --include-deprecated -o de.yml
 | `--overwrite` | Replace an existing translation file, even one holding finished translations |
 
 The output file is checked before the ontology is read. Without `--overwrite`, a file holding
-finished translations is refused, and so is a file that is not a translation file (an ontology,
-broken YAML), a directory, or a link to a file that does not exist. With `--overwrite` the file
-is replaced and the run says what it discarded, on stderr:
+finished translations is refused, and so is a link to a file that does not exist. With
+`--overwrite` the file is replaced and the run says what it discarded, on stderr:
 
 ```text
 ⚠ Replaced translations/de.yml: 8 finished translations discarded
 ```
+
+A file that is not a translation file (an ontology, broken YAML, an empty file) and a directory
+are refused even with `--overwrite`, so a slip such as `-o ontology.ttl --overwrite` cannot
+destroy an ontology. Remove the file first if you mean to replace it.
 
 #### Default Properties
 
@@ -522,7 +525,7 @@ The extractor treats literals without language tags as the source language. If y
 |------|---------|
 | 0 | Success |
 | 1 | Completed with findings: `merge` found translated entities that are not in the ontology; `extract`, `init` or `report` was given a language that matched no literal while a related tag did |
-| 2 | Input refused or run failed (invalid options or config, a malformed, missing or blank language tag, a target language that is the source language, file not found, parse error); `extract` or `init` asked to replace a file holding finished translations, or one that is not a translation file, without `--overwrite`; a translation file or config value of the wrong type |
+| 2 | Input refused or run failed (invalid options or config, a malformed, missing or blank language tag, a target language that is the source language, file not found, parse error); `extract` or `init` asked to replace a file holding finished translations without `--overwrite`, or a file that is not a translation file at all; a translation file or config value of the wrong type |
 
 ## Related Commands
 

@@ -181,12 +181,17 @@ class TestOverwrite:
         result = refused(tmp_path, "localise", "init", COVERAGE, "-l", "de", "-o", dest)
         assert f"de.yml exists and is not a translation file: {reason}" in result.output
 
-    def test_overwrite_replaces_a_file_that_is_not_a_translation_file(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("command", ["extract", "init"])
+    def test_overwrite_does_not_replace_a_file_that_is_not_a_translation_file(
+        self, tmp_path: Path, command: str
+    ) -> None:
         dest = tmp_path / "other.ttl"
         shutil.copy(COVERAGE, dest)
-        result = run("localise", "extract", COVERAGE, "-l", "de", "-o", dest, "--overwrite")
-        assert result.exit_code == 0, result.output
-        assert "which was not a translation file" in result.stderr
+        result = refused(
+            tmp_path, "localise", command, COVERAGE, "-l", "de", "-o", dest, "--overwrite"
+        )
+        assert "is not a translation file: it is not valid YAML" in result.output
+        assert "--overwrite replaces only a translation file" in result.output
 
     def test_a_directory_is_refused_even_with_overwrite(self, tmp_path: Path) -> None:
         dest = tmp_path / "out"

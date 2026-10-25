@@ -431,11 +431,11 @@ THREE_STATES = [
     _row(
         Row(
             "localise extract",
-            "clean",
+            "refused",
             ("localise", "extract", ANIMAL, "-l", "de", "--overwrite"),
             ("de.yml",),
         ),
-        label="overwrite",
+        label="overwrite-flag",
     ),
     _row(
         Row(

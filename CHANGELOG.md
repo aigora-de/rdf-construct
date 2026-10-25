@@ -311,10 +311,10 @@ change, and what to do about it, is listed command by command in the
 - **`localise extract` and `init` never replace translation work in silence**
   (#404). A destination holding an entry that is not `pending`, or whose
   translation is not blank, is refused at exit 2 before the ontology is read; so
-  is one that is not a translation file, a directory or a dangling link.
-  `--overwrite` replaces it and warns how many finished translations it
-  discarded. The default file is named in canonical case: `-l DE` writes
-  `de.yml`.
+  is a dangling link. `--overwrite` replaces it and warns how many finished
+  translations it discarded. A file that is not a translation file, or a
+  directory, is refused even with `--overwrite`. The default file is named in
+  canonical case: `-l DE` writes `de.yml`.
 - **`localise` reads YAML values as the type they must be** (#408). In a
   translation file, a translation YAML reads as a boolean or a number, a missing
   `uri`, `property` or `source`, an unknown `status` and a file of the wrong

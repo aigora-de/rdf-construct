@@ -4007,9 +4007,11 @@ def _check_translation_destination(path: Path, overwrite: bool) -> str | None:
 
     Principle 4e: a command never overwrites a file it did not write in silence. A destination
     that does not exist, or is a translation file with no finished entry, is written as
-    before. Anything else is refused unless ``--overwrite`` was given: a translation file with
-    a finished entry, a file that cannot be read as one (an ontology, broken YAML), and a
-    dangling link. A directory is always refused, since no file can be written there.
+    before. A translation file with a finished entry, and a dangling link, are refused unless
+    ``--overwrite`` was given. A file that cannot be read as a translation file (an ontology,
+    broken YAML) is refused even with ``--overwrite``, since ``-o ontology.ttl --overwrite`` is
+    an easy slip that would destroy the ontology. A directory is always refused, since no file
+    can be written there.
 
     The destination is asked of the filesystem, never compared by name, so on a
     case-insensitive filesystem ``DE.yml`` finds ``de.yml``. Call it before anything is parsed.
@@ -4023,7 +4025,8 @@ def _check_translation_destination(path: Path, overwrite: bool) -> str | None:
         after the write; otherwise ``None``.
 
     Raises:
-        Refusal: The destination is a directory, or holds something that may not be replaced.
+        Refusal: The destination is a directory, is not a translation file, or holds
+            something that may not be replaced without ``--overwrite``.
     """
     import yaml
 
@@ -4061,9 +4064,11 @@ def _check_translation_destination(path: Path, overwrite: bool) -> str | None:
         reason = e.strerror or type(e).__name__
 
     if reason is not None:
-        if overwrite:
-            return f"{path}, which was not a translation file"
-        raise Refusal(f"{path} exists and is not a translation file: {reason}. {ways_on}")
+        raise Refusal(
+            f"{path} exists and is not a translation file: {reason}. Leaving it untouched; "
+            "--overwrite replaces only a translation file. Pass -o <file> to write somewhere "
+            "else, or remove it first."
+        )
     if not finished:
         return None
 
