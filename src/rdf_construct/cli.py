@@ -4068,13 +4068,13 @@ def _check_translation_destination(path: Path, overwrite: bool) -> str | None:
         return None
 
     total = sum(finished.values())
-    plural = "translation" if total == 1 else "translations"
+    plural, them = ("translation", "it") if total == 1 else ("translations", "them")
     if overwrite:
         return f"{path}: {total} finished {plural} discarded"
     breakdown = ", ".join(f"{status} {n}" for status, n in finished.items())
     raise Refusal(
         f"{path} already holds {total} finished {plural} ({breakdown}); writing would "
-        f"replace them with empty pending entries. {ways_on}"
+        f"replace {them} with empty pending entries. {ways_on}"
     )
 
 

@@ -127,7 +127,9 @@ class TestOverwrite:
         tf.save(dest)
         before = dest.read_bytes()
         result = refused(tmp_path, "localise", "extract", COVERAGE, "-l", "de", "-o", dest)
-        assert "1 finished translation (pending with text 1)" in result.output
+        assert "1 finished translation (pending with text 1); writing would replace it" in (
+            result.output
+        )
         assert dest.read_bytes() == before
 
     def test_check_comes_before_the_ontology_is_read(self, tmp_path: Path) -> None:
