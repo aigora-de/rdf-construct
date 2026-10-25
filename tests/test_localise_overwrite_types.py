@@ -167,11 +167,11 @@ class TestOverwrite:
         "content, reason",
         [
             ("not: [valid\n", "it is not valid YAML"),
-            ("", "the file is empty"),
+            ("# notes for the translator\n", "the file is empty"),
             ("just: a mapping\n", "target_language is missing"),
             ("metadata: [1]\n", "metadata must be a mapping"),
         ],
-        ids=["broken-yaml", "empty", "other-mapping", "wrong-shape"],
+        ids=["broken-yaml", "comments-only", "other-mapping", "wrong-shape"],
     )
     def test_an_unreadable_destination_is_refused(
         self, tmp_path: Path, content: str, reason: str
@@ -180,6 +180,18 @@ class TestOverwrite:
         dest.write_text(content, encoding="utf-8")
         result = refused(tmp_path, "localise", "init", COVERAGE, "-l", "de", "-o", dest)
         assert f"de.yml exists and is not a translation file: {reason}" in result.output
+
+    @pytest.mark.parametrize("extra", [(), ("--overwrite",)], ids=["plain", "overwrite"])
+    @pytest.mark.parametrize("command", ["extract", "init"])
+    def test_an_empty_file_is_replaced_without_a_word(
+        self, tmp_path: Path, command: str, extra: tuple[str, ...]
+    ) -> None:
+        dest = tmp_path / "de.yml"
+        dest.write_bytes(b"")
+        result = run("localise", command, COVERAGE, "-l", "de", "-o", dest, *extra)
+        assert result.exit_code == 0, result.output
+        assert "Replaced" not in result.stderr
+        assert TranslationFile.from_yaml(dest).metadata.target_language == "de"
 
     @pytest.mark.parametrize("command", ["extract", "init"])
     def test_overwrite_does_not_replace_a_file_that_is_not_a_translation_file(

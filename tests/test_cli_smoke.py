@@ -203,7 +203,8 @@ class Row:
         command: The command path the row exercises, as in ``EXPECTED_COMMANDS``.
         state: ``clean``, ``findings`` or ``refused``.
         argv: The arguments, with output paths written as ``@tmp/<name>``.
-        existing: Files to create in the working directory first.
+        existing: Files to create in the working directory first, each holding a line of
+            text: an empty file has nothing to lose, so some commands replace it (#404).
     """
 
     command: str
@@ -508,7 +509,7 @@ def test_every_command_has_a_three_state_row():
 @pytest.mark.parametrize("row", THREE_STATES)
 def test_three_states(row: Row, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     for name in row.existing:
-        (tmp_path / name).write_text("")
+        (tmp_path / name).write_text("not written by rdf-construct\n")
     before = snapshot(_resolve(row.argv, tmp_path), tmp_path)
     result = _invoke(row.argv, tmp_path, monkeypatch)
     assert_no_crash(result)
