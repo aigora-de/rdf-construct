@@ -2167,19 +2167,26 @@ def puml2rdf(
     # Report what the parser read but did not convert; fatal under --strict
     if parse_result.warnings:
         click.secho("Parse warnings:", fg="yellow", err=True)
-        unread = []
+        # Lines not understood, and lines outside the diagram (#400), are summarised by number
+        folded: dict[str, list[int]] = {"not-understood": [], "outside-diagram": []}
         for parse_warning in parse_result.warnings:
-            if parse_warning.code == "not-understood" and parse_warning.line_number is not None:
-                unread.append(parse_warning.line_number)
+            if parse_warning.code in folded and parse_warning.line_number is not None:
+                folded[parse_warning.code].append(parse_warning.line_number)
             else:
                 click.echo(f"  {parse_warning}", err=True)
-        if unread:
-            shown = ", ".join(str(number) for number in unread[:10])
-            if len(unread) > 10:
-                shown += f", … {len(unread) - 10} more"
+        for code, why in (
+            ("not-understood", "not understood"),
+            ("outside-diagram", "outside @startuml \u2026 @enduml"),
+        ):
+            numbers = folded[code]
+            if not numbers:
+                continue
+            shown = ", ".join(str(number) for number in numbers[:10])
+            if len(numbers) > 10:
+                shown += f", … {len(numbers) - 10} more"
             click.echo(
-                f"  \u26a0 {len(unread)} line{'s' if len(unread) != 1 else ''} not understood "
-                f"({shown}) \u2014 {'they are' if len(unread) != 1 else 'it is'} not in the output.",
+                f"  \u26a0 {len(numbers)} line{'s' if len(numbers) != 1 else ''} {why} "
+                f"({shown}) \u2014 {'they are' if len(numbers) != 1 else 'it is'} not in the output.",
                 err=True,
             )
 

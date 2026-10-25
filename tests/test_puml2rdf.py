@@ -1386,3 +1386,200 @@ class TestValidateConvertsAndChecks:
         result = _run(tmp_path, text, "--strict")
         assert result.exit_code == 1, result.output
         assert _wrote_nothing(tmp_path)
+
+
+# ==============================================================================
+# Follow-ups to #151 from the review of #396 (#397–#402)
+# ==============================================================================
+
+
+class TestByteOrderMark:
+    """A leading UTF-8 byte-order mark is not part of the diagram (#397)."""
+
+    def test_file_with_bom_converts(self, tmp_path: Path) -> None:
+        """Refused as "no @startuml found" after #396, and `class A` dropped before it."""
+        puml = tmp_path / "diagram.puml"
+        puml.write_bytes(b"\xef\xbb\xbf@startuml\nclass A\n@enduml\n")
+        output = tmp_path / "diagram.ttl"
+        result = CliRunner().invoke(cli, ["puml2rdf", str(puml), "-o", str(output), "--strict"])
+
+        assert result.exit_code == 0, result.output
+        graph = Graph().parse(output, format="turtle")
+        assert (Namespace("http://example.org/ontology#").A, RDF.type, OWL.Class) in graph
+
+    def test_parse_ignores_a_leading_bom(self) -> None:
+        """Library callers passing text get the same treatment, with line numbers unmoved."""
+        result = PlantUMLParser().parse("﻿@startuml\nclass A\njunk\n@enduml\n")
+
+        assert result.success
+        assert [cls.name for cls in result.model.classes] == ["A"]
+        assert [str(w) for w in result.warnings] == ["Line 3: not understood: junk"]
+
+
+class TestClassClauses:
+    """`extends` and `implements` on a class line are named as not converted (#398)."""
+
+    @pytest.mark.parametrize(
+        ("line", "expected"),
+        [
+            pytest.param(
+                "class Car extends Base",
+                "Line 3: extends Base on class Car is not converted, so it is not in the output; "
+                'write "Car --|> Base"',
+                id="extends",
+            ),
+            pytest.param(
+                "class Boat implements Floats",
+                "Line 3: implements Floats on class Boat is not converted, "
+                "so it is not in the output",
+                id="implements",
+            ),
+            pytest.param(
+                'class "Motor Car" as Car extends Base {\n  wheels : integer\n}',
+                "Line 3: extends Base on class Car is not converted, so it is not in the output; "
+                'write "Car --|> Base"',
+                id="aliased-with-body",
+            ),
+            pytest.param(
+                "abstract class Car extends Base, Vehicle",
+                "Line 3: extends Base, Vehicle on class Car is not converted, "
+                'so it is not in the output; write "Car --|> Base"',
+                id="abstract-two-parents",
+            ),
+        ],
+    )
+    def test_clause_is_named_and_fatal_under_strict(
+        self, tmp_path: Path, line: str, expected: str
+    ) -> None:
+        """The class converts; its clause is reported, and --strict refuses the run."""
+        text = f"@startuml\nclass Base\n{line}\n@enduml\n"
+        result = _run(tmp_path, text)
+
+        assert result.exit_code == 0, result.output
+        assert expected in result.output
+        assert (tmp_path / "diagram.ttl").exists()
+
+        (tmp_path / "diagram.ttl").unlink()
+        strict = _run(tmp_path, text, "--strict")
+        assert strict.exit_code == 1, strict.output
+        assert _wrote_nothing(tmp_path)
+
+    def test_plain_class_has_no_clause(self, tmp_path: Path) -> None:
+        """A class whose name merely contains the word is not reported."""
+        result = _run(tmp_path, "@startuml\nclass extendsThing\nclass Base\n@enduml\n", "--strict")
+
+        assert result.exit_code == 0, result.output
+
+
+class TestBlocks:
+    """An ignorable block opens only on its own shape, and one never closed is reported (#399)."""
+
+    def test_class_named_legend_does_not_open_a_block(self, tmp_path: Path) -> None:
+        """`legend --> B` is a relationship, so the junk after it is still reported."""
+        text = (
+            "@startuml\nclass legend\nclass B\nlegend --> B : uses\n" "this line is junk\n@enduml\n"
+        )
+        result = _run(tmp_path, text)
+
+        assert result.exit_code == 0, result.output
+        assert "⚠ 1 line not understood (5) — it is not in the output." in result.output
+
+    @pytest.mark.parametrize(
+        "opener",
+        ["legend right", "/' a comment", "skinparam class {", "title", "header", "enum Colour {"],
+    )
+    def test_unclosed_block_is_reported(self, tmp_path: Path, opener: str) -> None:
+        """A block that never closes names its opening line instead of hiding the rest."""
+        text = f"@startuml\nclass A\n{opener}\n  inside\n@enduml\n"
+        result = _run(tmp_path, text)
+
+        assert result.exit_code == 0, result.output
+        assert (
+            "Line 3: this block is never closed, so the lines after it, up to @enduml, "
+            "were not checked:" in result.output
+        )
+        assert _run(tmp_path, text, "--strict").exit_code == 1
+
+    def test_legend_with_two_positions_is_a_block(self, tmp_path: Path) -> None:
+        """`legend top left` still opens a legend."""
+        text = "@startuml\nclass A\nlegend top left\n  key\nendlegend\n@enduml\n"
+
+        assert _run(tmp_path, text, "--strict").exit_code == 0
+
+
+class TestOutsideTheDiagram:
+    """Only the text between `@startuml` and its `@enduml` is read (#400)."""
+
+    def test_text_after_enduml_is_not_converted(self, tmp_path: Path) -> None:
+        """A class after `@enduml` is reported, not converted."""
+        result = _run(tmp_path, "@startuml\nclass A\n@enduml\nclass Smuggled\n")
+
+        assert result.exit_code == 0, result.output
+        assert "⚠ 1 line outside @startuml … @enduml (4) — it is not in the output." in (
+            result.output
+        )
+        graph = Graph().parse(tmp_path / "diagram.ttl", format="turtle")
+        ns = Namespace("http://example.org/ontology#")
+        assert (ns.Smuggled, RDF.type, OWL.Class) not in graph
+        assert (ns.A, RDF.type, OWL.Class) in graph
+
+    def test_text_before_startuml_and_a_second_diagram(self) -> None:
+        """Text before the diagram and a second diagram after it are both outside."""
+        text = "notes\n@startuml\nclass A\n@enduml\n@startuml\nclass B\n@enduml\n"
+        result = PlantUMLParser().parse(text)
+
+        assert [cls.name for cls in result.model.classes] == ["A"]
+        assert [(w.line_number, w.code) for w in result.warnings] == [
+            (1, "outside-diagram"),
+            (5, "outside-diagram"),
+            (6, "outside-diagram"),
+            (7, "outside-diagram"),
+        ]
+
+    def test_prefixes_outside_the_diagram_are_not_checked(self, tmp_path: Path) -> None:
+        """A package after `@enduml` is not converted, so its prefix is not refused either."""
+        text = (
+            "@startuml\nclass A\n@enduml\n"
+            'package "http://example.org/mine#" as owl {\n  class Thing\n}\n'
+        )
+        result = _run(tmp_path, text)
+
+        assert result.exit_code == 0, result.output
+        assert "outside @startuml … @enduml (4, 5, 6)" in result.output
+
+    def test_strict_refuses_text_outside(self, tmp_path: Path) -> None:
+        """Outside text is a warning like any other under --strict."""
+        result = _run(tmp_path, "@startuml\nclass A\n@enduml\nclass Smuggled\n", "--strict")
+
+        assert result.exit_code == 1, result.output
+        assert _wrote_nothing(tmp_path)
+
+
+class TestLineBreaks:
+    """Lines are numbered by newline only, as editors number them (#401)."""
+
+    @pytest.mark.parametrize("separator", ["\x0c", "\x0b", " ", "\x85", "\r"])
+    def test_other_line_breaks_do_not_shift_numbers(self, separator: str) -> None:
+        """Junk on the third newline-delimited line is reported as line 3."""
+        result = PlantUMLParser().parse(f"@startuml\nclass A{separator}\njunk here\n@enduml\n")
+
+        assert [w.line_number for w in result.warnings] == [3]
+
+    def test_prefix_refusal_records_the_right_line_content(self) -> None:
+        """P21's refusals take their line content from the same numbering."""
+        text = '@startuml\nclass A\x0c\npackage "http://example.org/mine#" as owl {\n}\n@enduml\n'
+        [error] = PlantUMLParser().parse(text).errors
+
+        assert error.line_number == 3
+        assert error.line_content.startswith('package "http://example.org/mine#" as owl')
+
+
+def test_parse_warning_is_exported() -> None:
+    """`ParseWarning` is public API beside `ParseError` and `ParseResult` (#402)."""
+    from rdf_construct import puml2rdf
+
+    assert "ParseWarning" in puml2rdf.__all__
+    assert (
+        puml2rdf.ParseWarning
+        is __import__("rdf_construct.puml2rdf.parser", fromlist=["ParseWarning"]).ParseWarning
+    )

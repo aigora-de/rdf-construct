@@ -65,7 +65,10 @@ IGNORABLE_LINE_PATTERNS = [
 IGNORABLE_BLOCK_PATTERNS = [
     (re.compile(r"^\s*/'"), re.compile(r"'/")),
     (re.compile(r"^\s*skinparam\s+\w+\s*\{\s*$"), re.compile(r"^\s*\}\s*$")),
-    (re.compile(r"^\s*legend\b"), re.compile(r"^\s*end\s*legend\b")),
+    (
+        re.compile(r"^\s*legend(?:\s+(?:top|bottom|left|right|center))*\s*$"),
+        re.compile(r"^\s*end\s*legend\b"),
+    ),
     (re.compile(r"^\s*title\s*$"), re.compile(r"^\s*end\s*title\b")),
     (
         re.compile(r"^\s*(?:(?:left|right|center)\s+)?(?:header|footer)\s*$"),
@@ -77,6 +80,11 @@ IGNORABLE_BLOCK_PATTERNS = [
 # a relationship the author declared and the output does not contain.
 UNMODELLED_DECLARATION_PATTERN = re.compile(
     r'^\s*(interface|enum|annotation|entity|struct)\s+("[^"]+"|[\w.]+)'
+)
+# `class Car extends Base`: the class pass reads the declaration, not the clause (#398).
+CLASS_CLAUSE_PATTERN = re.compile(
+    r'^\s*(?:abstract\s+)?class\s+(?:"[^"]+"\s+as\s+)?("[^"]+"|[\w.]+)'
+    r".*?\s(extends|implements)\s+([\w.]+(?:\s*,\s*[\w.]+)*)"
 )
 BARE_ABSTRACT_PATTERN = re.compile(r'^\s*abstract\s+(?!class\b)("[^"]+"|[\w.]+)')
 REALISATION_PATTERN = re.compile(r"\.\.\|>|<\|\.\.")
@@ -284,14 +292,22 @@ class PlantUMLParser:
 
         model = PumlModel()
 
+        # A byte-order mark is not part of the diagram (#397)
+        content = content.removeprefix("\ufeff")
+
         # Without both markers this is not a diagram, or not all of one: refuse it whole (#151)
-        if not self._check_markers(content):
+        span = self._check_markers(content)
+        if span is None:
             return ParseResult(model=model, errors=self._errors, warnings=[])
 
-        # Prefixes are checked against the text as given, so a refusal names the file's line
-        self._check_prefixes(content)
-
         source = content
+
+        # Only the diagram is read: text outside @startuml … @enduml is blanked, and reported
+        # by _report_unread_lines (#400)
+        content = self._blank_outside(content, span)
+
+        # Prefixes are checked before the markers are blanked, so a refusal names the file's line
+        self._check_prefixes(content)
 
         # Blank out @startuml / @enduml, so offsets in what the passes read are the file's own
         content = self._strip_diagram_markers(content)
@@ -317,7 +333,7 @@ class PlantUMLParser:
         model.skin_params = self._parse_skinparams(content)
 
         # Report every line no pass read, by the file's line number (#151)
-        self._report_unread_lines(source, content)
+        self._report_unread_lines(source, content, span)
 
         if not model.classes and not model.relationships:
             self._warnings.append(
@@ -344,7 +360,7 @@ class PlantUMLParser:
         content = path.read_text(encoding="utf-8")
         return self.parse(content)
 
-    def _check_markers(self, source: str) -> bool:
+    def _check_markers(self, source: str) -> tuple[int, int] | None:
         """Refuse a file that is not a whole PlantUML diagram (#151).
 
         Without ``@startuml`` the file does not look like a diagram at all; without
@@ -354,7 +370,8 @@ class PlantUMLParser:
             source: The file's text.
 
         Returns:
-            True when both markers are present; otherwise a :class:`ParseError` is recorded.
+            The diagram's span, from the start of the first ``@startuml`` line to the end of
+            the ``@enduml`` line that closes it; or None, with a :class:`ParseError` recorded.
         """
         start = STARTUML_PATTERN.search(source)
         if start is None:
@@ -366,8 +383,9 @@ class PlantUMLParser:
                     line_content="",
                 )
             )
-            return False
-        if ENDUML_PATTERN.search(source, start.end()) is None:
+            return None
+        end = ENDUML_PATTERN.search(source, start.end())
+        if end is None:
             self._errors.append(
                 ParseError(
                     line_number=None,
@@ -376,8 +394,19 @@ class PlantUMLParser:
                     line_content="",
                 )
             )
-            return False
-        return True
+            return None
+        line_end = source.find("\n", end.end())
+        return start.start(), len(source) if line_end == -1 else line_end
+
+    @staticmethod
+    def _blank_outside(content: str, span: tuple[int, int]) -> str:
+        """Blank everything outside *span*, keeping every newline, so offsets do not move."""
+
+        def blank(text: str) -> str:
+            return re.sub(r"[^\n]", " ", text)
+
+        start, end = span
+        return blank(content[:start]) + content[start:end] + blank(content[end:])
 
     def _strip_diagram_markers(self, content: str) -> str:
         """Blank out @startuml and @enduml markers, keeping every newline.
@@ -399,7 +428,7 @@ class PlantUMLParser:
         """Record that a pass read *match*'s text into the model."""
         self._consumed.append(match.span())
 
-    def _report_unread_lines(self, source: str, content: str) -> None:
+    def _report_unread_lines(self, source: str, content: str, span: tuple[int, int]) -> None:
         """Warn about every line no pass read, unless it is known to be ignorable (#151).
 
         A line counts as read when a match a pass kept touches it; that is generous to a
@@ -409,10 +438,25 @@ class PlantUMLParser:
         Args:
             source: The diagram text as given, for the markers and the reported lines.
             content: The text the passes read, with the markers blanked; same offsets.
+            span: The diagram's span in both; a line outside it is reported as such (#400).
         """
-        lines = source.splitlines()
+        # Lines are numbered by "\n" only, as offsets are mapped below (#401)
+        lines = source.split("\n")
         line_starts = [0]
         line_starts.extend(i + 1 for i, char in enumerate(content) if char == "\n")
+        first_line = bisect_right(line_starts, span[0])
+        last_line = bisect_right(line_starts, span[1] - 1)
+
+        for number, text in enumerate(lines, 1):
+            if text.strip() and not first_line <= number <= last_line:
+                self._warnings.append(
+                    ParseWarning(
+                        number,
+                        f"outside @startuml … @enduml, so not converted: {text.strip()}",
+                        line_content=text.strip(),
+                        code="outside-diagram",
+                    )
+                )
 
         read: set[int] = set()
         for start, end in self._consumed:
@@ -426,7 +470,9 @@ class PlantUMLParser:
 
         block_end: re.Pattern[str] | None = None
         body_depth = 0
-        for number, text in enumerate(lines, 1):
+        opened_on = 0
+        for number in range(first_line, last_line + 1):
+            text = lines[number - 1]
             if block_end is not None:
                 if block_end.search(text):
                     block_end = None
@@ -448,7 +494,18 @@ class PlantUMLParser:
                 match, closer = opened
                 # A block may close on the line it opens, as /' … '/ can
                 if not closer.search(text[match.end() :]):
-                    block_end = closer
+                    block_end, opened_on = closer, number
+                continue
+            clause = CLASS_CLAUSE_PATTERN.match(text)
+            if clause:
+                self._warnings.append(
+                    ParseWarning(
+                        number,
+                        self._clause_message(*clause.groups()),
+                        line_content=text.strip(),
+                        code="unmodelled",
+                    )
+                )
                 continue
             if number in read:
                 continue
@@ -458,6 +515,7 @@ class PlantUMLParser:
                     ParseWarning(number, message, line_content=text.strip(), code="unmodelled")
                 )
                 body_depth = max(text.count("{") - text.count("}"), 0)
+                opened_on = number
                 continue
             if any(pattern.match(text) for pattern in IGNORABLE_LINE_PATTERNS):
                 continue
@@ -469,6 +527,31 @@ class PlantUMLParser:
                     code="not-understood",
                 )
             )
+
+        # A block that never closes would otherwise hide the rest of the diagram (#399)
+        if block_end is not None or body_depth > 0:
+            opener = lines[opened_on - 1].strip()
+            self._warnings.append(
+                ParseWarning(
+                    opened_on,
+                    f"this block is never closed, so the lines after it, up to @enduml, were not "
+                    f"checked: {opener}",
+                    line_content=opener,
+                    code="unclosed-block",
+                )
+            )
+
+    @staticmethod
+    def _clause_message(name: str, keyword: str, targets: str) -> str:
+        """Name an ``extends`` or ``implements`` clause the class pass does not read (#398)."""
+        name = name.strip('"')
+        message = (
+            f"{keyword} {targets} on class {name} is not converted, so it is not in the output"
+        )
+        if keyword == "extends":
+            first = targets.split(",")[0].strip()
+            message += f'; write "{name} --|> {first}"'
+        return message
 
     @staticmethod
     def _unmodelled(text: str) -> str | None:
@@ -598,7 +681,7 @@ class PlantUMLParser:
             source: The diagram text before its markers are stripped, so that
                 line numbers are the file's own.
         """
-        lines = source.splitlines()
+        lines = source.split("\n")
         # prefix -> (namespace IRI, or None for one generated from the default namespace, line)
         bound: dict[str, tuple[str | None, int]] = {}
         # namespace IRI -> (prefix, line)
