@@ -17,6 +17,8 @@ import yaml
 from rdflib import URIRef
 
 from rdf_construct.core.language_tags import LanguageTagError, check_tag
+from rdf_construct.core.utils import CurieError
+from rdf_construct.localise.properties import FILE_PREFIXES, resolve_property
 
 # A translation file names this many unreadable values before summarising the rest
 MAX_PROBLEMS_SHOWN = 10
@@ -85,6 +87,15 @@ def _required_text(data: dict[str, Any], key: str) -> str:
     if not value.strip():
         raise TranslationFileError(f"{key} is blank")
     return value
+
+
+def _unresolvable(name: str, value: str, kind: str) -> str:
+    """Say that a property in a YAML file names neither an IRI nor a CURIE it may use (#355)."""
+    return (
+        f"{name} {value!r} is not an IRI or a CURIE on a {kind}'s prefixes "
+        f"({', '.join(sorted(FILE_PREFIXES))}); write the IRI in full, or in angle brackets "
+        f"(<urn:…>)"
+    )
 
 
 def _optional_text(data: dict[str, Any], key: str, default: str) -> str:
@@ -177,11 +188,19 @@ class TranslationEntry:
 
         Raises:
             TranslationFileError: If ``property`` or ``source`` is missing or not text, if
-                ``translation`` is not text (YAML reads an unquoted ``Yes`` or ``123`` as a
-                boolean or a number, and the text typed cannot be recovered from it), or if
+                ``property`` is neither an IRI nor a CURIE on the file format's prefixes
+                (#355), if ``translation`` is not text (YAML reads an unquoted ``Yes`` or
+                ``123`` as a boolean or a number, and the text typed cannot be recovered from
+                it), or if
                 ``status`` is not one of the four statuses (#408).
         """
         prop = _required_text(data, "property")
+        try:
+            resolve_property(FILE_PREFIXES, prop)
+        except CurieError:
+            raise TranslationFileError(
+                _unresolvable("property", prop, "translation file")
+            ) from None
         source = data.get("source")
         if source is None or not isinstance(source, str):
             detail = "is missing" if "source" not in data else _reads_as(source)
@@ -685,6 +704,8 @@ class LocaliseConfig:
             _config_text_list(data, "target_languages", "target_languages", []),
         )
         properties = _config_text_list(data, "properties", "properties", None)
+        if properties is not None:
+            properties = _config_properties(properties)
 
         # Parse extract settings
         extract_data = _config_section(data, "extract")
@@ -768,6 +789,23 @@ def _config_text_list(
         if not item.strip():
             raise LocaliseConfigError(f"{name} item {i} is blank")
     return value
+
+
+def _config_properties(values: list[str]) -> list[str]:
+    """Resolve a configuration file's ``properties`` on the file format's prefixes (#355).
+
+    Each is returned as a `URIRef`, so it is not read again against an ontology's prefixes.
+    """
+    resolved: list[str] = []
+    problems: list[str] = []
+    for i, value in enumerate(values, start=1):
+        try:
+            resolved.append(resolve_property(FILE_PREFIXES, value))
+        except CurieError:
+            problems.append(_unresolvable(f"properties item {i}", value, "configuration file"))
+    if problems:
+        raise LocaliseConfigError("; ".join(problems))
+    return resolved
 
 
 def _config_bool(data: dict[str, Any], key: str, section: str) -> bool:

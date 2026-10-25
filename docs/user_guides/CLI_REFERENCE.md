@@ -1087,7 +1087,7 @@ rdf-construct localise extract SOURCE [OPTIONS]
 - `-l, --language CODE`: Target language code (required, e.g., de, fr, es)
 - `-o, --output PATH`: Output YAML file (default: {language}.yml)
 - `--source-language CODE`: Source language code (default: en)
-- `-p, --properties PROPS`: Comma-separated properties to extract (e.g., rdfs:label,rdfs:comment)
+- `-p, --properties PROPS`: Comma-separated properties to extract (e.g., rdfs:label,rdfs:comment). A CURIE uses the ontology's own prefixes plus rdf, rdfs, owl, xsd and xml; an unbound prefix is refused (exit 2)
 - `--include-deprecated`: Include deprecated entities
 - `--missing-only`: Only extract strings missing in target language
 - `-c, --config PATH`: YAML configuration file
@@ -1164,7 +1164,7 @@ rdf-construct localise report SOURCE [OPTIONS]
 **Options**:
 - `-l, --languages CODES`: Comma-separated language codes to check (required, e.g., en,de,fr)
 - `--source-language CODE`: Base language for translations (default: en)
-- `-p, --properties PROPS`: Comma-separated properties to check
+- `-p, --properties PROPS`: Comma-separated properties to check. A CURIE uses the ontology's own prefixes plus rdf, rdfs, owl, xsd and xml; an unbound prefix is refused (exit 2)
 - `-o, --output PATH`: Output file for report
 - `-f, --format FORMAT`: Output format (text|markdown, default: text)
 - `-v, --verbose`: Show detailed missing translation list
