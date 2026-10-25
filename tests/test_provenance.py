@@ -105,6 +105,25 @@ class TestStampDerivation:
         stamp_derivation(graph, A, [A_V1])
         assert (PROV.wasDerivedFrom, RDF.type, OWL.AnnotationProperty) in graph
 
+    def test_a_generic_property_type_does_not_suppress_the_declaration(self) -> None:
+        """#426: ``rdf:Property`` says the IRI is a property, not which kind."""
+        graph = Graph()
+        graph.add((PROV.wasDerivedFrom, RDF.type, RDF.Property))
+        stamp_derivation(graph, A, [A_V1])
+        assert (PROV.wasDerivedFrom, RDF.type, OWL.AnnotationProperty) in graph
+
+    def test_a_lone_functional_property_still_gets_the_declaration(self) -> None:
+        graph = Graph()
+        graph.add((PROV.wasDerivedFrom, RDF.type, OWL.FunctionalProperty))
+        stamp_derivation(graph, A, [A_V1])
+        assert (PROV.wasDerivedFrom, RDF.type, OWL.AnnotationProperty) in graph
+
+    def test_an_existing_annotation_declaration_is_kept(self) -> None:
+        graph = Graph()
+        graph.add((PROV.wasDerivedFrom, RDF.type, OWL.AnnotationProperty))
+        stamp_derivation(graph, A, [A_V1])
+        assert set(graph.objects(PROV.wasDerivedFrom, RDF.type)) == {OWL.AnnotationProperty}
+
     def test_binds_prov(self) -> None:
         graph = Graph(bind_namespaces="none")
         stamp_derivation(graph, A, [A_V1])
