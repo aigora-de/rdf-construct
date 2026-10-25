@@ -24,6 +24,19 @@ rdf-construct localise merge ontology.ttl translations/de.yml -o localised.ttl
 rdf-construct localise report ontology.ttl --languages en,de,fr
 ```
 
+Running the first command again once translation has started does not replace the translator's
+work. `extract` and `init` refuse, at exit 2, to write over a file holding any finished entry, and
+leave it byte-identical:
+
+```text
+Error: translations/de.yml already holds 8 finished translations (translated 8); writing would replace them with empty pending entries. Leaving it untouched. Pass -o <file> to write somewhere else, or --overwrite to replace it.
+```
+
+An entry is finished when its status is not `pending`, or when its translation is not blank:
+text typed with the status left at `pending` counts. A file with no finished entry, such as one
+just extracted, is replaced without a word. To update a translation file for new terms, extract
+to a new file (`--missing-only -o de_update.yml`); merging the two is not supported.
+
 ## Language Tags and Which Terms Are Translated
 
 These rules are the same in `extract`, `merge` and `report`.
@@ -87,12 +100,22 @@ rdf-construct localise extract ontology.ttl -l de --include-deprecated -o de.yml
 | Option | Description |
 |--------|-------------|
 | `--language, -l` | Target language tag (required). A tag, not a range: `en` does not match `en-GB` |
-| `--output, -o` | Output YAML file (default: `{language}.yml`) |
+| `--output, -o` | Output YAML file (default: `{language}.yml`, the tag in canonical case: `-l DE` writes `de.yml`) |
 | `--source-language` | Source language tag (default: `en`) |
 | `--properties, -p` | Comma-separated properties to extract |
 | `--include-deprecated` | Include deprecated entities |
 | `--missing-only` | Only extract strings without target translations |
 | `--config, -c` | YAML configuration file |
+| `--overwrite` | Replace an existing translation file, even one holding finished translations |
+
+The output file is checked before the ontology is read. Without `--overwrite`, a file holding
+finished translations is refused, and so is a file that is not a translation file (an ontology,
+broken YAML), a directory, or a link to a file that does not exist. With `--overwrite` the file
+is replaced and the run says what it discarded, on stderr:
+
+```text
+⚠ Replaced translations/de.yml: 8 finished translations discarded
+```
 
 #### Default Properties
 
@@ -228,6 +251,9 @@ Creates an empty translation file for a new language. This is equivalent to `ext
 rdf-construct localise init ontology.ttl --language ja -o translations/ja.yml
 ```
 
+It takes `-l`, `-o`, `--source-language` and `--overwrite`, and refuses to replace a file holding
+finished translations exactly as `extract` does.
+
 ### `localise config`
 
 Generates a default configuration file for localisation workflows.
@@ -318,6 +344,26 @@ summary:
 | `translated` | Translation complete |
 | `approved` | Reviewed and confirmed |
 
+### Quoting: YAML reads some text as other values
+
+YAML reads an unquoted `Yes`, `No`, `On`, `Off`, `true` or `false` as a boolean, and a number as
+a number: `0123` becomes 83 and `1.50` becomes 1.5. The word that was typed cannot be recovered
+from either, so `merge` refuses such a translation, at exit 2, with nothing written, and names
+where it is:
+
+```text
+Error: de.yml: entity 5 (http://example.org/heritage#Listing), label 1 (rdfs:label): translation reads as true, not text: YAML reads an unquoted yes, no, on, off, true or false that way. Quote the text, e.g. "Yes"
+```
+
+Quote it: `translation: "Yes"`. The same holds for `target_language: no` (Norwegian): write
+`'no'`. A `translation:` left blank is untranslated, like `''`, and is skipped.
+
+`merge` reads the whole file before writing anything. A missing `uri`, `property` or `source`, a
+`status` that is not one of the four, or a file that is empty or not a translation file is
+refused the same way, and every unreadable value in the file is listed, so one run finds them
+all. `generated`, `tool`, `source_file`, `type`, `notes` and `summary` are for people and never
+reach the ontology, so a value of the wrong type there is ignored.
+
 ### Notes Field
 
 Add the optional `notes` field to include guidance for translators:
@@ -373,6 +419,16 @@ Use the config file:
 
 ```bash
 rdf-construct localise extract ontology.ttl -l de -c localise.yml
+```
+
+Each value must be the type shown: `properties` and `targets` are lists (a single value is
+refused, not read as a list of one, since `rdfs:label, skos:prefLabel` would become one property
+that matches nothing), a switch is `true` or `false` unquoted (`'false'` is text, and is refused),
+and a language is text (`'no'`, quoted). A key written with no value takes its default. A value of
+the wrong type is refused at exit 2, naming the file and the key:
+
+```text
+Error: localise.yml: properties must be a list, not the single value 'rdfs:label'; write it as a list: properties: [rdfs:label]
 ```
 
 ## Workflow Examples
@@ -466,7 +522,7 @@ The extractor treats literals without language tags as the source language. If y
 |------|---------|
 | 0 | Success |
 | 1 | Completed with findings: `merge` found translated entities that are not in the ontology; `extract`, `init` or `report` was given a language that matched no literal while a related tag did |
-| 2 | Input refused or run failed (invalid options or config, a malformed, missing or blank language tag, a target language that is the source language, file not found, parse error) |
+| 2 | Input refused or run failed (invalid options or config, a malformed, missing or blank language tag, a target language that is the source language, file not found, parse error); `extract` or `init` asked to replace a file holding finished translations, or one that is not a translation file, without `--overwrite`; a translation file or config value of the wrong type |
 
 ## Related Commands
 

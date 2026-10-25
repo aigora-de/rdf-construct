@@ -3991,6 +3991,93 @@ def _localise_tags(target_language: str, source_language: str) -> tuple[str, str
     return target, source
 
 
+def _localise_output(output: Path | None, target_language: str) -> Path:
+    """Return the translation file to write: ``-o``, or ``<tag>.yml`` in canonical case.
+
+    The default is named in canonical case so that ``-l DE`` and ``-l de`` name one file on
+    every filesystem, not only on a case-insensitive one (#404).
+    """
+    from rdf_construct.core.language_tags import canonical_case
+
+    return output or Path(f"{canonical_case(target_language)}.yml")
+
+
+def _check_translation_destination(path: Path, overwrite: bool) -> str | None:
+    """Refuse to replace a translation file that holds a translator's work (#404).
+
+    Principle 4e: a command never overwrites a file it did not write in silence. A destination
+    that does not exist, or is a translation file with no finished entry, is written as
+    before. Anything else is refused unless ``--overwrite`` was given: a translation file with
+    a finished entry, a file that cannot be read as one (an ontology, broken YAML), and a
+    dangling link. A directory is always refused, since no file can be written there.
+
+    The destination is asked of the filesystem, never compared by name, so on a
+    case-insensitive filesystem ``DE.yml`` finds ``de.yml``. Call it before anything is parsed.
+
+    Args:
+        path: The translation file the command will write.
+        overwrite: Whether ``--overwrite`` was given.
+
+    Returns:
+        When ``--overwrite`` replaces something worth a word, what it replaced, for a warning
+        after the write; otherwise ``None``.
+
+    Raises:
+        Refusal: The destination is a directory, or holds something that may not be replaced.
+    """
+    import yaml
+
+    from rdf_construct.core.language_tags import LanguageTagError
+    from rdf_construct.localise.config import TranslationFileError
+
+    if path.is_dir():
+        raise Refusal(f"{path} is a directory; give -o a file name, such as {path}/de.yml")
+    ways_on = (
+        "Leaving it untouched. Pass -o <file> to write somewhere else, "
+        "or --overwrite to replace it."
+    )
+    if not path.exists():
+        if path.is_symlink():
+            if overwrite:
+                return None
+            raise Refusal(f"{path} is a link to a file that does not exist. {ways_on}")
+        return None
+
+    reason: str | None = None
+    finished: dict[str, int] = {}
+    try:
+        finished = TranslationFile.from_yaml(path).finished_entries()
+    except TranslationFileError as e:
+        reason = e.problems[0] + (
+            f" (and {len(e.problems) - 1} more)" if len(e.problems) > 1 else ""
+        )
+    except LanguageTagError as e:
+        reason = str(e)
+    except yaml.YAMLError:
+        reason = "it is not valid YAML"
+    except UnicodeDecodeError:
+        reason = "it is not UTF-8 text"
+    except OSError as e:
+        reason = e.strerror or type(e).__name__
+
+    if reason is not None:
+        if overwrite:
+            return f"{path}, which was not a translation file"
+        raise Refusal(f"{path} exists and is not a translation file: {reason}. {ways_on}")
+    if not finished:
+        return None
+
+    total = sum(finished.values())
+    plural = "translation" if total == 1 else "translations"
+    if overwrite:
+        return f"{path}: {total} finished {plural} discarded"
+    breakdown = ", ".join(f"{status} {n}" for status, n in finished.items())
+    raise Refusal(
+        f"{path} already holds {total} finished {plural} ({breakdown}); writing would "
+        f"replace them with empty pending entries. {ways_on}"
+    )
+
+
 def _echo_localise_warnings(warnings: list[str]) -> None:
     """Print a localise run's warnings to stderr."""
     for warning in warnings:
@@ -4010,7 +4097,7 @@ def _echo_localise_warnings(warnings: list[str]) -> None:
     "--output",
     "-o",
     type=click.Path(path_type=Path),
-    help="Output YAML file (default: {language}.yml)",
+    help="Output YAML file (default: {language}.yml, the tag in canonical case)",
 )
 @click.option(
     "--source-language",
@@ -4039,6 +4126,11 @@ def _echo_localise_warnings(warnings: list[str]) -> None:
     type=click.Path(exists=True, path_type=Path),
     help="YAML configuration file",
 )
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    help="Replace an existing translation file, even one holding finished translations",
+)
 def localise_extract(
     source: Path,
     target_language: str,
@@ -4048,6 +4140,7 @@ def localise_extract(
     include_deprecated: bool,
     missing_only: bool,
     config_file: Path | None,
+    overwrite: bool,
 ):
     """Extract translatable strings from an ontology.
 
@@ -4075,8 +4168,12 @@ def localise_extract(
     # Load config if provided
     if config_file:
         from rdf_construct.localise import load_localise_config
+        from rdf_construct.localise.config import LocaliseConfigError
 
-        config = load_localise_config(config_file)
+        try:
+            config = load_localise_config(config_file)
+        except LocaliseConfigError as e:
+            raise Refusal(f"{config_file}: {e}") from e
         extract_config = config.extract
         extract_config.target_language = target_language
 
@@ -4111,6 +4208,10 @@ def localise_extract(
         target_language, extract_config.source_language
     )
 
+    # Refuse to replace a translator's work before reading anything (#404)
+    output_path = _localise_output(output, target_language)
+    replaced = _check_translation_destination(output_path, overwrite)
+
     # Load graph
     click.echo(f"Loading {source}...")
     graph = Graph()
@@ -4129,11 +4230,12 @@ def localise_extract(
         raise SystemExit(2)
 
     # Save output
-    output_path = output or Path(f"{target_language}.yml")
     if result.translation_file:
         result.translation_file.save(output_path)
         click.echo()
         click.secho(f"\u2713 Wrote {output_path}", fg="green")
+        if replaced:
+            click.secho(f"\u26a0 Replaced {replaced}", fg="yellow", err=True)
 
     # Finished, but the source language may have matched nothing (#286: 1)
     _echo_localise_warnings(result.warnings)
@@ -4217,13 +4319,15 @@ def localise_merge(
     # Load translation files
     click.echo(f"Loading {len(translations)} translation file(s)...")
     from rdf_construct.core.language_tags import LanguageTagError
+    from rdf_construct.localise.config import TranslationFileError
 
     trans_files = []
     for path in translations:
         try:
             trans_files.append(TranslationFile.from_yaml(path))
-        except LanguageTagError as e:
-            # Nothing is written: a file without a usable target tag would merge untagged (#159)
+        except (LanguageTagError, TranslationFileError) as e:
+            # Nothing is written: a file without a usable target tag would merge untagged (#159),
+            # and a value read as the wrong type would merge text nobody typed (#408)
             raise Refusal(f"{path}: {e}") from e
 
     # Build config
@@ -4401,18 +4505,24 @@ def localise_report(
     "--output",
     "-o",
     type=click.Path(path_type=Path),
-    help="Output YAML file (default: {language}.yml)",
+    help="Output YAML file (default: {language}.yml, the tag in canonical case)",
 )
 @click.option(
     "--source-language",
     default="en",
     help="Source language tag (default: en). A tag, not a range: en does not match en-GB",
 )
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    help="Replace an existing translation file, even one holding finished translations",
+)
 def localise_init(
     source: Path,
     target_language: str,
     output: Path | None,
     source_language: str,
+    overwrite: bool,
 ):
     """Create empty translation file for a new language.
 
@@ -4431,6 +4541,10 @@ def localise_init(
 
     # Refuse a malformed tag before reading anything (#159)
     target_language, source_language = _localise_tags(target_language, source_language)
+
+    # Refuse to replace a translator's work before reading anything (#404)
+    output_path = _localise_output(output, target_language)
+    replaced = _check_translation_destination(output_path, overwrite)
 
     # Build config
     extract_config = ExtractConfig(
@@ -4456,11 +4570,12 @@ def localise_init(
         raise SystemExit(2)
 
     # Save output
-    output_path = output or Path(f"{target_language}.yml")
     if result.translation_file:
         result.translation_file.save(output_path)
         click.echo()
         click.secho(f"\u2713 Created {output_path}", fg="green")
+        if replaced:
+            click.secho(f"\u26a0 Replaced {replaced}", fg="yellow", err=True)
         click.echo(f"  Fill in translations and run:")
         click.echo(f"    rdf-construct localise merge {source} {output_path} -o localised.ttl")
 
