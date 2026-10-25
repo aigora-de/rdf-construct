@@ -4006,8 +4006,8 @@ def _check_translation_destination(path: Path, overwrite: bool) -> str | None:
     """Refuse to replace a translation file that holds a translator's work (#404).
 
     Principle 4e: a command never overwrites a file it did not write in silence. A destination
-    that does not exist, or is a translation file with no finished entry, is written as
-    before. A translation file with a finished entry, and a dangling link, are refused unless
+    that does not exist, is empty (zero bytes), or is a translation file with no finished entry,
+    is written as before, since nothing in it can be lost. A translation file with a finished entry, and a dangling link, are refused unless
     ``--overwrite`` was given. A file that cannot be read as a translation file (an ontology,
     broken YAML) is refused even with ``--overwrite``, since ``-o ontology.ttl --overwrite`` is
     an easy slip that would destroy the ontology. A directory is always refused, since no file
@@ -4044,6 +4044,8 @@ def _check_translation_destination(path: Path, overwrite: bool) -> str | None:
             if overwrite:
                 return None
             raise Refusal(f"{path} is a link to a file that does not exist. {ways_on}")
+        return None
+    if path.stat().st_size == 0:
         return None
 
     reason: str | None = None

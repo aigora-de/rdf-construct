@@ -116,9 +116,10 @@ finished translations is refused, and so is a link to a file that does not exist
 ⚠ Replaced translations/de.yml: 8 finished translations discarded
 ```
 
-A file that is not a translation file (an ontology, broken YAML, an empty file) and a directory
-are refused even with `--overwrite`, so a slip such as `-o ontology.ttl --overwrite` cannot
-destroy an ontology. Remove the file first if you mean to replace it.
+A file that is not a translation file (an ontology, broken YAML) and a directory are refused
+even with `--overwrite`, so a slip such as `-o ontology.ttl --overwrite` cannot destroy an
+ontology. Remove the file first if you mean to replace it. An empty (zero-byte) file holds
+nothing to lose, and is replaced without a word.
 
 #### Default Properties
 
