@@ -438,6 +438,33 @@ THREE_STATES = [
         ),
         label="overwrite-flag",
     ),
+    # --properties reads the ontology's own prefixes, and refuses one it does not bind (#355)
+    _row(
+        Row(
+            "localise extract",
+            "clean",
+            (
+                "localise",
+                "extract",
+                ANIMAL,
+                "-l",
+                "de",
+                "-p",
+                "ex:scientificName",
+                "-o",
+                "@tmp/de.yml",
+            ),
+        ),
+        label="properties",
+    ),
+    _row(
+        Row(
+            "localise extract",
+            "refused",
+            ("localise", "extract", ANIMAL, "-l", "de", "-p", "zz:note", "-o", "@tmp/de.yml"),
+        ),
+        label="unbound-prefix",
+    ),
     _row(
         Row(
             "localise merge",
@@ -480,6 +507,10 @@ THREE_STATES = [
     _row(Row("localise report", "refused", ("localise", "report"))),
     _row(Row("localise report", "findings", ("localise", "report", GB_ONLY, "-l", "en,de"))),
     _row(Row("localise report", "refused", ("localise", "report", ANIMAL, "-l", "en,,de"))),
+    _row(
+        Row("localise report", "refused", ("localise", "report", ANIMAL, "-l", "de", "-p", "zz:x")),
+        label="unbound-prefix",
+    ),
     _row(
         Row("localise init", "clean", ("localise", "init", ANIMAL, "-l", "ja", "-o", "@tmp/ja.yml"))
     ),

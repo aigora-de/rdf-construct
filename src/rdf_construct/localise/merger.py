@@ -21,6 +21,7 @@ from rdf_construct.localise.config import (
     TranslationFile,
     TranslationStatus,
 )
+from rdf_construct.localise.properties import FILE_PREFIXES, resolve_property
 
 
 @dataclass
@@ -103,7 +104,7 @@ class TranslationMerger:
         """
         try:
             # Create a copy of the graph to work with
-            merged = Graph()
+            merged = Graph(bind_namespaces="core")
             for prefix, namespace in graph.namespaces():
                 merged.bind(prefix, namespace)
             for triple in graph:
@@ -135,8 +136,8 @@ class TranslationMerger:
                         stats.skipped_status += 1
                         continue
 
-                    # Expand property
-                    prop_uri = URIRef(self._expand_property(entry.property))
+                    # A translation file's CURIEs are the file format's, not the ontology's (#355)
+                    prop_uri = resolve_property(FILE_PREFIXES, entry.property)
 
                     # Check for existing translation
                     existing = self._get_existing_translation(
@@ -195,7 +196,7 @@ class TranslationMerger:
             Combined MergeResult.
         """
         # Start with a copy
-        merged = Graph()
+        merged = Graph(bind_namespaces="core")
         for prefix, namespace in graph.namespaces():
             merged.bind(prefix, namespace)
         for triple in graph:
@@ -300,30 +301,6 @@ class TranslationMerger:
 
         return existing
 
-    def _expand_property(self, prop: str) -> str:
-        """Expand a CURIE to full URI.
-
-        Args:
-            prop: Property string (CURIE or full URI).
-
-        Returns:
-            Full URI string.
-        """
-        prefixes = {
-            "rdfs:": "http://www.w3.org/2000/01/rdf-schema#",
-            "skos:": "http://www.w3.org/2004/02/skos/core#",
-            "owl:": "http://www.w3.org/2002/07/owl#",
-            "rdf:": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-            "dc:": "http://purl.org/dc/elements/1.1/",
-            "dcterms:": "http://purl.org/dc/terms/",
-        }
-
-        for prefix, namespace in prefixes.items():
-            if prop.startswith(prefix):
-                return namespace + prop[len(prefix) :]
-
-        return prop
-
 
 def merge_translations(
     source: Path,
@@ -346,8 +323,8 @@ def merge_translations(
     Returns:
         MergeResult with merged graph.
     """
-    # Load graph
-    graph = Graph()
+    # Load graph: the source's own prefixes, plus rdf, rdfs, owl, xsd and xml (#355)
+    graph = Graph(bind_namespaces="core")
     graph.parse(source)
 
     # Load translation files

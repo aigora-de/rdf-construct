@@ -710,6 +710,10 @@ Multi-language translation management for ontologies.
 - Per-language and per-property statistics
 - Missing entity tracking
 
+**`localise/properties.py`**
+- `FILE_PREFIXES` - the six prefixes a translation or config file may use
+- `resolve_property()`, `shorten_property()` - property names via `core.utils.resolve_curie`, against an ontology's own prefixes or the file format's (#355)
+
 **`localise/formatters/`**
 - `text.py` - Console output with colour support
 - `markdown.py` - Markdown report generation

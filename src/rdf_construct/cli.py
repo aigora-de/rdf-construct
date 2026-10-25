@@ -3991,6 +3991,25 @@ def _localise_tags(target_language: str, source_language: str) -> tuple[str, str
     return target, source
 
 
+def _localise_properties(properties: str, graph: Graph) -> list[str]:
+    """Resolve ``--properties`` against the ontology's own prefixes, or refuse them (#355).
+
+    The graph is parsed with ``bind_namespaces="core"``, so a CURIE means the source's prefix,
+    or rdf, rdfs, owl, xsd and xml, never rdflib's extended table. Nothing has been written when
+    this refuses.
+    """
+    from rdf_construct.core.utils import CurieError
+    from rdf_construct.localise.properties import resolve_properties, source_prefixes
+
+    try:
+        resolved: list[str] = [
+            *resolve_properties(source_prefixes(graph), [p.strip() for p in properties.split(",")])
+        ]
+    except CurieError as e:
+        raise Refusal(f"--properties: {e}") from e
+    return resolved
+
+
 def _localise_output(output: Path | None, target_language: str) -> Path:
     """Return the translation file to write: ``-o``, or ``<tag>.yml`` in canonical case.
 
@@ -4187,24 +4206,15 @@ def localise_extract(
         # Apply CLI overrides
         if flag_given("source_language"):
             extract_config.source_language = source_language
-        if properties:
-            extract_config.properties = [
-                _expand_localise_property(p.strip()) for p in properties.split(",")
-            ]
         if flag_given("include_deprecated"):
             extract_config.include_deprecated = include_deprecated
         if flag_given("missing_only"):
             extract_config.missing_only = missing_only
     else:
         # Build config from CLI args
-        prop_list = None
-        if properties:
-            prop_list = [_expand_localise_property(p.strip()) for p in properties.split(",")]
-
         extract_config = ExtractConfig(
             source_language=source_language,
             target_language=target_language,
-            properties=prop_list or ExtractConfig().properties,
             include_deprecated=include_deprecated,
             missing_only=missing_only,
         )
@@ -4219,10 +4229,12 @@ def localise_extract(
     output_path = _localise_output(output, target_language)
     replaced = _check_translation_destination(output_path, overwrite)
 
-    # Load graph
+    # Load graph: --properties are read against its own prefixes (#355)
     click.echo(f"Loading {source}...")
-    graph = Graph()
+    graph = Graph(bind_namespaces="core")
     graph.parse(source)
+    if properties:
+        extract_config.properties = _localise_properties(properties, graph)
 
     # Extract
     click.echo(f"Extracting strings for {target_language}...")
@@ -4320,7 +4332,7 @@ def localise_merge(
 
     # Load graph
     click.echo(f"Loading {source}...")
-    graph = Graph()
+    graph = Graph(bind_namespaces="core")
     graph.parse(source)
 
     # Load translation files
@@ -4462,15 +4474,11 @@ def localise_report(
     except LanguageTagError as e:
         raise Refusal(str(e)) from e
 
-    # Parse properties
-    prop_list = None
-    if properties:
-        prop_list = [_expand_localise_property(p.strip()) for p in properties.split(",")]
-
-    # Load graph
+    # Load graph: --properties are read against its own prefixes (#355)
     click.echo(f"Loading {source}...")
-    graph = Graph()
+    graph = Graph(bind_namespaces="core")
     graph.parse(source)
+    prop_list = _localise_properties(properties, graph) if properties else None
 
     # Generate report
     click.echo("Analysing translation coverage...")
@@ -4561,7 +4569,7 @@ def localise_init(
 
     # Load graph
     click.echo(f"Loading {source}...")
-    graph = Graph()
+    graph = Graph(bind_namespaces="core")
     graph.parse(source)
 
     # Extract
@@ -4619,24 +4627,6 @@ def localise_config(init_config: bool):
         click.echo("Use --init to create a default configuration file.")
 
     raise SystemExit(0)
-
-
-def _expand_localise_property(prop: str) -> str:
-    """Expand a CURIE to full URI for localise commands."""
-    prefixes = {
-        "rdfs:": "http://www.w3.org/2000/01/rdf-schema#",
-        "skos:": "http://www.w3.org/2004/02/skos/core#",
-        "owl:": "http://www.w3.org/2002/07/owl#",
-        "rdf:": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-        "dc:": "http://purl.org/dc/elements/1.1/",
-        "dcterms:": "http://purl.org/dc/terms/",
-    }
-
-    for prefix, namespace in prefixes.items():
-        if prop.startswith(prefix):
-            return namespace + prop[len(prefix) :]
-
-    return prop
 
 
 if __name__ == "__main__":

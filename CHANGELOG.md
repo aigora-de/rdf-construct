@@ -322,6 +322,19 @@ change, and what to do about it, is listed command by command in the
   translation is untranslated. In an `extract -c` config, a scalar `properties:`,
   a switch written as text and any other value of the wrong type are refused.
   Each of these crashed, aborted with Python's message, or was misread.
+- **`localise --properties` reads the ontology's own prefixes** (#355). A CURIE
+  means the prefix the ontology declares, or `rdf`, `rdfs`, `owl`, `xsd` and
+  `xml`, so `-p ex:note` extracts `ex:note` instead of nothing at exit 0, and
+  `dc:` follows the ontology. An unbound prefix, including a bare `urn:x`, is
+  refused at exit 2 naming the bound ones. A translation file's `property:` and
+  a config file's `properties:` use the file format's six prefixes (`rdf`,
+  `rdfs`, `owl`, `skos`, `dc` for elements, `dcterms`), and any other CURIE is
+  refused: `merge` used to write it as a predicate such as `<ex:note>`. `report`
+  names properties with the ontology's prefixes, and `merge` keeps the
+  ontology's own `org:` instead of renaming it `org1:`. The reporter API
+  resolves CURIEs too; it reported 0 for `rdfs:label`.
+- **`LanguageCoverage.total_strings` is renamed `total_pairs`** (#421): it
+  counts entity and property pairs. The CLI output is unchanged.
 
 ### Fixed
 - **`diff` compares blank nodes by structure, in both directions** (#143). It

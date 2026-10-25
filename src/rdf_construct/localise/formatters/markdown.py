@@ -160,14 +160,14 @@ class MarkdownFormatter:
                 row.append(pct)
 
             # Overall
-            row.append(f"**{format_fraction(coverage.translated, coverage.total_strings)}**")
+            row.append(f"**{format_fraction(coverage.translated, coverage.total_pairs)}**")
 
             # Status
-            if coverage.total_strings == 0:
+            if coverage.total_pairs == 0:
                 row.append("— Nothing to measure")
-            elif coverage.translated == coverage.total_strings:
+            elif coverage.translated == coverage.total_pairs:
                 row.append("✅ Complete")
-            elif percent(coverage.translated, coverage.total_strings) >= 75:
+            elif percent(coverage.translated, coverage.total_pairs) >= 75:
                 row.append(f"⚠️ {coverage.pending} pending")
             elif coverage.translated > 0:
                 row.append(f"❌ {coverage.pending} pending")

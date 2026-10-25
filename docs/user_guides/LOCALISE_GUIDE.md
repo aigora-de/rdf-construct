@@ -74,6 +74,49 @@ ontology header, and untyped subjects. A deprecated entity (`owl:deprecated true
 or as the string `"true"`, or a type of `owl:DeprecatedClass` or `owl:DeprecatedProperty`) is
 skipped by `extract` and left out of `report` unless `--include-deprecated` is given.
 
+## Naming Properties
+
+A property is named as a CURIE (`rdfs:label`), as a full IRI, or as an IRI in angle brackets
+(`<urn:example:note>`). What a CURIE means depends on where it is written.
+
+**On the command line, `--properties` uses the ontology's own prefixes**: the ones it declares,
+plus `rdf`, `rdfs`, `owl`, `xsd` and `xml`. If the ontology declares `ex:`, `-p ex:note` extracts
+`ex:note`. If it binds `dc:` to Dublin Core terms, `-p dc:title` means the terms title. A prefix
+the ontology does not declare is refused at exit 2, before anything is written:
+
+```bash
+rdf-construct localise report tests/fixtures/localise/coverage.ttl -l de -p skos:prefLabel
+```
+
+```text
+Loading tests/fixtures/localise/coverage.ttl...
+Error: --properties: cannot resolve 'skos:prefLabel': prefix 'skos' is not bound. Prefixes bound: ex, owl, rdf, rdfs, xml, xsd. To give an IRI, write it in full or in angle brackets (<urn:…>).
+```
+
+Give the IRI in full instead (`-p http://www.w3.org/2004/02/skos/core#prefLabel`), or declare the
+prefix in the ontology. A bare `urn:x` reads as a CURIE whose prefix is `urn`, so write it as
+`<urn:x>`. `report` prints each property with the ontology's prefixes, or in full where none
+fits. The Python API's `extract_strings` and `generate_coverage_report` read their `properties`
+the same way.
+
+**In a translation file or a configuration file, a CURIE uses the file format's six prefixes**,
+whatever ontology it meets:
+
+| Prefix | Namespace |
+|--------|-----------|
+| `rdf` | `http://www.w3.org/1999/02/22-rdf-syntax-ns#` |
+| `rdfs` | `http://www.w3.org/2000/01/rdf-schema#` |
+| `owl` | `http://www.w3.org/2002/07/owl#` |
+| `skos` | `http://www.w3.org/2004/02/skos/core#` |
+| `dc` | `http://purl.org/dc/elements/1.1/` (Dublin Core elements) |
+| `dcterms` | `http://purl.org/dc/terms/` |
+
+A YAML file declares no prefixes, and one translation file can be merged into more than one
+ontology, so its `property:` values cannot depend on the ontology's prefixes. `extract` writes
+these six as CURIEs and every other property as a full IRI, so `-p ex:note` writes
+`property: http://example.org/ont#note`. Any other CURIE in a file is refused at exit 2, with
+every one listed, and nothing is merged.
+
 ## Commands
 
 ### `localise extract`
@@ -102,7 +145,7 @@ rdf-construct localise extract ontology.ttl -l de --include-deprecated -o de.yml
 | `--language, -l` | Target language tag (required). A tag, not a range: `en` does not match `en-GB` |
 | `--output, -o` | Output YAML file (default: `{language}.yml`, the tag in canonical case: `-l DE` writes `de.yml`) |
 | `--source-language` | Source language tag (default: `en`) |
-| `--properties, -p` | Comma-separated properties to extract |
+| `--properties, -p` | Comma-separated properties to extract, on the ontology's own prefixes (see [Naming Properties](#naming-properties)) |
 | `--include-deprecated` | Include deprecated entities |
 | `--missing-only` | Only extract strings without target translations |
 | `--config, -c` | YAML configuration file |
@@ -194,7 +237,7 @@ rdf-construct localise report ontology.ttl -l en,de -p rdfs:label
 | `--languages, -l` | Comma-separated language tags (required). Each is a tag, not a range |
 | `--source-language` | Base language tag (default: `en`) |
 | `--include-deprecated` | Count deprecated entities (left out by default) |
-| `--properties, -p` | Comma-separated properties to check |
+| `--properties, -p` | Comma-separated properties to check, on the ontology's own prefixes (see [Naming Properties](#naming-properties)) |
 | `--output, -o` | Output file for report |
 | `--format, -f` | Output format: `text` or `markdown` |
 | `--verbose, -v` | Show detailed missing translation list |
@@ -338,6 +381,9 @@ summary:
     pending: 2
   coverage: "50.0%"
 ```
+
+Each `property:` is one of the six CURIEs in [Naming Properties](#naming-properties) or a full
+IRI.
 
 ### Translation Status Values
 
@@ -526,7 +572,7 @@ The extractor treats literals without language tags as the source language. If y
 |------|---------|
 | 0 | Success |
 | 1 | Completed with findings: `merge` found translated entities that are not in the ontology; `extract`, `init` or `report` was given a language that matched no literal while a related tag did |
-| 2 | Input refused or run failed (invalid options or config, a malformed, missing or blank language tag, a target language that is the source language, file not found, parse error); `extract` or `init` asked to replace a file holding finished translations without `--overwrite`, or a file that is not a translation file at all; a translation file or config value of the wrong type |
+| 2 | Input refused or run failed (invalid options or config, a malformed, missing or blank language tag, a target language that is the source language, file not found, parse error); `extract` or `init` asked to replace a file holding finished translations without `--overwrite`, or a file that is not a translation file at all; a translation file or config value of the wrong type; a property whose prefix is not bound |
 
 ## Related Commands
 
