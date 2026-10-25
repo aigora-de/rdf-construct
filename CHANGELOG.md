@@ -277,7 +277,8 @@ change, and what to do about it, is listed command by command in the
   IRI subject carrying a requested property as a literal: a term typed only
   `owl:TransitiveProperty` or `owl:DeprecatedClass`, a SKOS concept or scheme,
   the ontology header, an individual and an untyped subject are all extracted
-  and counted. A translation file records an `rdfs:Class` as `rdfs:Class`.
+  and counted. A translation file records a term typed only `rdfs:Class` as
+  `rdfs:Class`.
 - **`localise` compares language tags as tags** (#159). Case is folded on both
   sides; a tag is matched exactly, not as a range; a zero-match beside a related
   tag warns (`Found 2 literals tagged en-GB; --source-language en does not
