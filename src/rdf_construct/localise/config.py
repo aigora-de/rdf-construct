@@ -16,6 +16,8 @@ from typing import Any, Literal
 import yaml
 from rdflib import URIRef
 
+from rdf_construct.core.language_tags import LanguageTagError, check_tag
+
 
 class TranslationStatus(str, Enum):
     """Status of a translation entry."""
@@ -136,7 +138,28 @@ class TranslationFileMetadata:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "TranslationFileMetadata":
-        """Create from dictionary."""
+        """Create from dictionary.
+
+        Raises:
+            LanguageTagError: If ``target_language`` is missing, blank, not a string or not a
+                well-formed language tag, if ``source_language`` is given and malformed, or if
+                the two are the same tag. A file without a usable target would merge its
+                translations as untagged literals, which ``localise`` reads as the source
+                language (#159).
+        """
+        # A key written with no value reads as None in YAML: that is a blank tag, not a missing one
+        target_value = data.get("target_language")
+        if target_value is None and "target_language" in data:
+            target_value = ""
+        target_language = check_tag(target_value, "target_language")
+        source_language = check_tag(data.get("source_language", "en"), "source_language")
+        if target_language.lower() == source_language.lower():
+            raise LanguageTagError(
+                f"target_language {target_language} is the source language; merging it would "
+                "replace the source text rather than add a translation",
+                target_language,
+            )
+
         generated = data.get("generated")
         if isinstance(generated, str):
             generated = datetime.fromisoformat(generated)
@@ -145,8 +168,8 @@ class TranslationFileMetadata:
 
         return cls(
             source_file=data.get("source_file", ""),
-            source_language=data.get("source_language", "en"),
-            target_language=data.get("target_language", ""),
+            source_language=source_language,
+            target_language=target_language,
             generated=generated,
             properties=data.get("properties", []),
             tool_version=data.get("tool", "rdf-construct"),

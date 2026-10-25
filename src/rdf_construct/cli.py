@@ -3948,6 +3948,10 @@ def localise():
 
     Extract translatable strings, merge translations, and track coverage.
 
+    Every language option takes a BCP 47 tag, not a range. Tags are compared without
+    regard to case, but exactly: -l en does not match @en-GB. A language that matches
+    nothing while a related tag does is warned about, and the run exits 1.
+
     \b
     Commands:
       extract   Extract strings for translation
@@ -3969,6 +3973,30 @@ def localise():
     pass
 
 
+def _localise_tags(target_language: str, source_language: str) -> tuple[str, str]:
+    """Return the target and source language tags, or refuse them (#159).
+
+    A tag that is blank or not well formed is refused, and so is a target that is the source
+    language, since a translation into it would be the source text.
+    """
+    from rdf_construct.core.language_tags import LanguageTagError, check_tag
+
+    try:
+        target = check_tag(target_language, "-l")
+        source = check_tag(source_language, "--source-language")
+    except LanguageTagError as e:
+        raise Refusal(str(e)) from e
+    if target.lower() == source.lower():
+        raise Refusal(f"-l {target} is the source language; give the language to translate into")
+    return target, source
+
+
+def _echo_localise_warnings(warnings: list[str]) -> None:
+    """Print a localise run's warnings to stderr."""
+    for warning in warnings:
+        click.secho(f"\u26a0 {warning}", fg="yellow", err=True)
+
+
 @localise.command("extract")
 @click.argument("source", type=click.Path(exists=True, path_type=Path))
 @click.option(
@@ -3976,7 +4004,7 @@ def localise():
     "-l",
     "target_language",
     required=True,
-    help="Target language code (e.g., de, fr, es)",
+    help="Target language tag (e.g., de, fr, en-GB). A tag, not a range: en does not match en-GB",
 )
 @click.option(
     "--output",
@@ -3987,7 +4015,7 @@ def localise():
 @click.option(
     "--source-language",
     default="en",
-    help="Source language code (default: en)",
+    help="Source language tag (default: en). A tag, not a range: en does not match en-GB",
 )
 @click.option(
     "--properties",
@@ -4077,6 +4105,12 @@ def localise_extract(
             missing_only=missing_only,
         )
 
+    # Refuse a malformed tag before reading anything (#159). A configuration file can set the
+    # source language, so check the one that will be used.
+    target_language, extract_config.source_language = _localise_tags(
+        target_language, extract_config.source_language
+    )
+
     # Load graph
     click.echo(f"Loading {source}...")
     graph = Graph()
@@ -4101,7 +4135,9 @@ def localise_extract(
         click.echo()
         click.secho(f"\u2713 Wrote {output_path}", fg="green")
 
-    raise SystemExit(0)
+    # Finished, but the source language may have matched nothing (#286: 1)
+    _echo_localise_warnings(result.warnings)
+    raise SystemExit(1 if result.warnings else 0)
 
 
 @localise.command("merge")
@@ -4180,7 +4216,15 @@ def localise_merge(
 
     # Load translation files
     click.echo(f"Loading {len(translations)} translation file(s)...")
-    trans_files = [TranslationFile.from_yaml(p) for p in translations]
+    from rdf_construct.core.language_tags import LanguageTagError
+
+    trans_files = []
+    for path in translations:
+        try:
+            trans_files.append(TranslationFile.from_yaml(path))
+        except LanguageTagError as e:
+            # Nothing is written: a file without a usable target tag would merge untagged (#159)
+            raise Refusal(f"{path}: {e}") from e
 
     # Build config
     config = LocaliseMergeConfig(
@@ -4220,12 +4264,20 @@ def localise_merge(
     "--languages",
     "-l",
     required=True,
-    help="Comma-separated language codes to check (e.g., en,de,fr)",
+    help=(
+        "Comma-separated language tags to check (e.g., en,de,fr). Each is a tag, "
+        "not a range: en does not match en-GB"
+    ),
 )
 @click.option(
     "--source-language",
     default="en",
-    help="Base language for translations (default: en)",
+    help="Base language tag for translations (default: en)",
+)
+@click.option(
+    "--include-deprecated",
+    is_flag=True,
+    help="Count deprecated entities (left out by default, as extract leaves them out)",
 )
 @click.option(
     "--properties",
@@ -4261,6 +4313,7 @@ def localise_report(
     source: Path,
     languages: str,
     source_language: str,
+    include_deprecated: bool,
     properties: str | None,
     output: Path | None,
     output_format: str,
@@ -4289,8 +4342,14 @@ def localise_report(
         get_formatter as get_localise_formatter,
     )
 
-    # Parse languages
-    lang_list = [lang.strip() for lang in languages.split(",")]
+    # Parse languages, refusing a blank or malformed tag (#159)
+    from rdf_construct.core.language_tags import LanguageTagError, check_tag
+
+    try:
+        lang_list = [check_tag(lang, "-l") for lang in languages.split(",")]
+        source_language = check_tag(source_language, "--source-language")
+    except LanguageTagError as e:
+        raise Refusal(str(e)) from e
 
     # Parse properties
     prop_list = None
@@ -4307,6 +4366,7 @@ def localise_report(
     reporter = CoverageReporter(
         source_language=source_language,
         properties=prop_list,
+        include_deprecated=include_deprecated,
     )
     report = reporter.report(graph, lang_list, source)
 
@@ -4319,11 +4379,13 @@ def localise_report(
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(report_text)
         click.secho(f"\u2713 Wrote {output}", fg="green")
+        _echo_localise_warnings(report.warnings)
     else:
         click.echo()
         click.echo(report_text)
 
-    raise SystemExit(0)
+    # A language that matched nothing beside a related tag is an unanswered question (#286: 1)
+    raise SystemExit(1 if report.warnings else 0)
 
 
 @localise.command("init")
@@ -4333,7 +4395,7 @@ def localise_report(
     "-l",
     "target_language",
     required=True,
-    help="Target language code (e.g., de, fr, es)",
+    help="Target language tag (e.g., de, fr, en-GB). A tag, not a range: en does not match en-GB",
 )
 @click.option(
     "--output",
@@ -4344,7 +4406,7 @@ def localise_report(
 @click.option(
     "--source-language",
     default="en",
-    help="Source language code (default: en)",
+    help="Source language tag (default: en). A tag, not a range: en does not match en-GB",
 )
 def localise_init(
     source: Path,
@@ -4366,6 +4428,9 @@ def localise_init(
         ExtractConfig,
         get_formatter as get_localise_formatter,
     )
+
+    # Refuse a malformed tag before reading anything (#159)
+    target_language, source_language = _localise_tags(target_language, source_language)
 
     # Build config
     extract_config = ExtractConfig(
@@ -4399,7 +4464,8 @@ def localise_init(
         click.echo(f"  Fill in translations and run:")
         click.echo(f"    rdf-construct localise merge {source} {output_path} -o localised.ttl")
 
-    raise SystemExit(0)
+    _echo_localise_warnings(result.warnings)
+    raise SystemExit(1 if result.warnings else 0)
 
 
 @localise.command("config")

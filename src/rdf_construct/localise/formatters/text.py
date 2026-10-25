@@ -6,7 +6,7 @@ and coverage reports.
 
 from rdf_construct.localise.extractor import ExtractionResult
 from rdf_construct.localise.merger import MergeResult
-from rdf_construct.localise.reporter import CoverageReport
+from rdf_construct.localise.reporter import CoverageReport, format_fraction, percent
 
 
 class TextFormatter:
@@ -109,64 +109,84 @@ class TextFormatter:
         lines.append("")
         lines.append(f"Source: {report.source_file}")
         lines.append(f"Entities: {report.total_entities}")
+        if report.deprecated_entities:
+            lines.append(
+                f"Deprecated: {report.deprecated_entities} (not counted; "
+                "--include-deprecated counts them)"
+            )
         lines.append(f"Properties: {', '.join(report.properties)}")
         lines.append("")
 
-        # Table header
-        # Calculate column widths
-        lang_width = max(8, max(len(lang) for lang in report.languages.keys()))
-        prop_width = max(10, max(len(p) for p in report.properties))
-
-        # Build header row
-        header_parts = ["Language".ljust(lang_width)]
-        for prop in report.properties:
-            header_parts.append(prop.ljust(prop_width))
-        header_parts.append("Overall")
-        header_parts.append("Status")
-
-        lines.append("  ".join(header_parts))
-        lines.append("-" * (len("  ".join(header_parts))))
-
-        # Data rows
+        # Build every cell first, so each column is as wide as its widest cell
+        header = ["Language", *report.properties, "Overall", "Status"]
+        rows: list[list[str]] = []
+        statuses: list[str] = []
         for lang, coverage in report.languages.items():
-            row_parts = []
+            row = [f"{lang} (base)" if coverage.is_source else lang]
 
-            # Language name
-            lang_display = f"{lang} (base)" if coverage.is_source else lang
-            row_parts.append(lang_display.ljust(lang_width))
-
-            # Property coverages
+            # Property coverages: entities in this language, of those carrying the property
             for prop in report.properties:
                 prop_cov = coverage.by_property.get(prop)
-                if prop_cov:
-                    pct = f"{prop_cov.coverage:.0f}%"
-                else:
-                    pct = "-"
-                row_parts.append(pct.ljust(prop_width))
+                row.append(
+                    format_fraction(prop_cov.translated, prop_cov.total) if prop_cov else "-"
+                )
 
-            # Overall coverage
-            overall_pct = f"{coverage.coverage:.0f}%"
-            row_parts.append(overall_pct.ljust(7))
+            # Overall coverage, over every entity and property pair
+            row.append(format_fraction(coverage.translated, coverage.total_strings))
+            rows.append(row)
 
             # Status indicator
-            if coverage.coverage == 100:
-                status = self._success("✓ Complete")
-            elif coverage.coverage >= 75:
-                status = self._warning(f"⚠ {coverage.pending} pending")
-            elif coverage.coverage > 0:
-                status = f"✗ {coverage.pending} pending"
+            if coverage.total_strings == 0:
+                statuses.append("— Nothing to measure")
+            elif coverage.translated == coverage.total_strings:
+                statuses.append(self._success("✓ Complete"))
+            elif percent(coverage.translated, coverage.total_strings) >= 75:
+                statuses.append(self._warning(f"⚠ {coverage.pending} pending"))
+            elif coverage.translated > 0:
+                statuses.append(f"✗ {coverage.pending} pending")
             else:
-                status = "✗ Not started"
-            row_parts.append(status)
+                statuses.append("✗ Not started")
 
-            lines.append("  ".join(row_parts))
+        widths = [max(len(cells[i]) for cells in [header, *rows]) for i in range(len(header) - 1)]
+        lines.append(
+            "  ".join([*(h.ljust(w) for h, w in zip(header, widths, strict=False)), header[-1]])
+        )
+        lines.append("-" * (sum(widths) + 2 * len(widths) + len(header[-1])))
+        for row, status in zip(rows, statuses, strict=True):
+            lines.append(
+                "  ".join([*(c.ljust(w) for c, w in zip(row, widths, strict=False)), status])
+            )
+
+        # A language that matched nothing while a related tag did (#159)
+        if report.warnings:
+            lines.append("")
+            for warning in report.warnings:
+                lines.append(self._warning(f"⚠ {warning}"))
+
+        # A second literal in one language, for a property that takes one per language (#158)
+        for lang, coverage in report.languages.items():
+            if coverage.duplicates:
+                lines.append("")
+                lines.append(
+                    self._warning(
+                        f"⚠ {len(coverage.duplicates)} entit"
+                        f"{'y has' if len(coverage.duplicates) == 1 else 'ies have'} "
+                        f"more than one {lang} value for a property that takes one per language:"
+                    )
+                )
+                for uri, prop in coverage.duplicates[:20]:
+                    lines.append(f"  - {self._shorten_uri(uri)} {prop}")
+                if len(coverage.duplicates) > 20:
+                    lines.append(f"  ... and {len(coverage.duplicates) - 20} more")
 
         # Missing entities section
         if verbose:
             for lang, coverage in report.languages.items():
-                if coverage.missing_entities and not coverage.is_source:
+                if coverage.missing_entities:
                     lines.append("")
-                    lines.append(f"Missing {lang} translations:")
+                    # The base row can be incomplete too: terms labelled only in other languages
+                    what = "source labels" if coverage.is_source else "translations"
+                    lines.append(f"Missing {lang} {what}:")
                     for uri in coverage.missing_entities[:20]:
                         # Shorten URI for display
                         short_uri = self._shorten_uri(uri)

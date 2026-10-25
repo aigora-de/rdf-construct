@@ -51,6 +51,7 @@ ORDERING = str(EXAMPLES / "order" / "ordering.yml")
 UML_CONTEXTS = str(EXAMPLES / "uml" / "uml_contexts.yml")
 MONOLITH = str(EXAMPLES / "split" / "split_monolith.ttl")
 TRANSLATIONS = str(SMOKE / "translations_de.yml")
+GB_ONLY = str(REPO / "tests" / "fixtures" / "ies" / "ies-env-building-classification.ttl")
 MALFORMED_TTL = str(SMOKE / "malformed.ttl")
 MALFORMED_YAML = str(SMOKE / "malformed.yml")
 
@@ -405,6 +406,21 @@ THREE_STATES = [
         )
     ),
     _row(Row("localise extract", "refused", ("localise", "extract"))),
+    # Every label is @en-gb, so the default source language en matches none of them (#159)
+    _row(
+        Row(
+            "localise extract",
+            "findings",
+            ("localise", "extract", GB_ONLY, "-l", "de", "-o", "@tmp/de.yml"),
+        )
+    ),
+    _row(
+        Row(
+            "localise extract",
+            "refused",
+            ("localise", "extract", ANIMAL, "-l", "en_GB", "-o", "@tmp/de.yml"),
+        )
+    ),
     _row(
         Row(
             "localise merge",
@@ -419,8 +435,24 @@ THREE_STATES = [
             ("localise", "merge", ANIMAL, "@tmp/missing.yml", "-o", "@tmp/l.ttl"),
         )
     ),
+    _row(
+        Row(
+            "localise merge",
+            "refused",
+            (
+                "localise",
+                "merge",
+                ANIMAL,
+                str(SMOKE / "translations_no_target.yml"),
+                "-o",
+                "@tmp/l.ttl",
+            ),
+        )
+    ),
     _row(Row("localise report", "clean", ("localise", "report", ANIMAL, "-l", "en,de"))),
     _row(Row("localise report", "refused", ("localise", "report"))),
+    _row(Row("localise report", "findings", ("localise", "report", GB_ONLY, "-l", "en,de"))),
+    _row(Row("localise report", "refused", ("localise", "report", ANIMAL, "-l", "en,,de"))),
     _row(
         Row("localise init", "clean", ("localise", "init", ANIMAL, "-l", "ja", "-o", "@tmp/ja.yml"))
     ),

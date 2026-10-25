@@ -102,6 +102,16 @@ understand are now reported by line number, and `--strict` makes them fatal.
 [`puml2rdf`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#puml2rdf)
 in the migration note.
 
+**Every figure `localise report` prints changes, and `localise` now sees every
+labelled term.** Coverage is counted in entities and printed as counts:
+`6/8 (75%)`. The base row is no longer 100% by construction, and coverage can no
+longer exceed 100% or pending go negative. Language tags are compared without
+regard to case but exactly (`-l en` does not match `@en-GB`), and a language that
+matches nothing beside a related tag warns and exits 1. A malformed, missing or
+blank tag is refused at exit 2. See
+[`localise`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#localise)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
@@ -263,6 +273,31 @@ change, and what to do about it, is listed command by command in the
   `--include-deprecated` were silently discarded whenever a config file was
   passed. An option given on the command line now overrides the config file,
   and the config file overrides the option's default.
+- **`localise` translates every labelled term** (#157, #406). An entity is any
+  IRI subject carrying a requested property as a literal: a term typed only
+  `owl:TransitiveProperty` or `owl:DeprecatedClass`, a SKOS concept or scheme,
+  the ontology header, an individual and an untyped subject are all extracted
+  and counted. A translation file records a term typed only `rdfs:Class` as
+  `rdfs:Class`.
+- **`localise` compares language tags as tags** (#159). Case is folded on both
+  sides; a tag is matched exactly, not as a range; a zero-match beside a related
+  tag warns (`Found 2 literals tagged en-GB; --source-language en does not
+  match them. Did you mean --source-language en-GB?`) and exits 1. `merge` writes
+  canonical case (`en-GB`) and refuses, at exit 2 with nothing written, a
+  `target_language` that is missing, blank, not text, malformed or the source
+  language. `extract`, `init` and `report` refuse a malformed `-l` or
+  `--source-language` the same way.
+- **`localise report` measures coverage** (#158). The denominator is the
+  entities carrying a property in at least one language, the unit is entities,
+  and counts print beside every percentage in text and Markdown. A second value
+  in one language for `rdfs:label` or `skos:prefLabel` is listed as a warning.
+  A property no entity carries reads `0/0 (—)`.
+- **`localise` has one rule for "deprecated"** (#407). `report` leaves out what
+  `extract` skips, and gains `--include-deprecated`; a plain-string
+  `owl:deprecated "true"` counts.
+- **`localise merge --existing preserve` keeps every translation of a repeatable
+  property** such as `skos:altLabel` (#405, in part). It skips one only when the
+  same text already exists in that language.
 
 ### Fixed
 - **`diff` compares blank nodes by structure, in both directions** (#143). It
