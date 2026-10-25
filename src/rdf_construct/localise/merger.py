@@ -9,6 +9,12 @@ from pathlib import Path
 
 from rdflib import Graph, Literal, URIRef
 
+from rdf_construct.core.language_tags import canonical_case
+from rdf_construct.core.predicate_tiers import (
+    DEFAULT_PREDICATE_TIERS,
+    PredicateTier,
+    tier_of,
+)
 from rdf_construct.localise.config import (
     ExistingStrategy,
     MergeConfig,
@@ -65,6 +71,12 @@ class TranslationMerger:
 
     The merger takes completed translation YAML files and adds the
     translations as new language-tagged literals to the ontology.
+
+    Language tags are compared without regard to case, so an existing ``@de`` label is found
+    for a file whose ``target_language`` is ``DE``, and every literal written carries the tag in
+    canonical case (``en-GB``) (#159). For a property that takes any number of values, such as
+    ``skos:altLabel``, ``preserve`` skips a translation only when that same text already exists
+    in the language, rather than whenever any value does.
     """
 
     def __init__(self, config: MergeConfig | None = None):
@@ -99,7 +111,7 @@ class TranslationMerger:
 
             stats = MergeStats()
             warnings: list[str] = []
-            target_lang = translation_file.metadata.target_language
+            target_lang = canonical_case(translation_file.metadata.target_language)
 
             # Process each entity
             for entity in translation_file.entities:
@@ -130,6 +142,14 @@ class TranslationMerger:
                     existing = self._get_existing_translation(
                         merged, entity_uri, prop_uri, target_lang
                     )
+
+                    if (
+                        existing
+                        and self.config.existing == ExistingStrategy.PRESERVE
+                        and tier_of(prop_uri, DEFAULT_PREDICATE_TIERS) is PredicateTier.REPEATABLE
+                    ):
+                        # Another value is another assertion: keep it only if it is this text
+                        existing = [t for t in existing if str(t[2]) == entry.translation]
 
                     if existing:
                         if self.config.existing == ExistingStrategy.PRESERVE:
@@ -266,12 +286,16 @@ class TranslationMerger:
             language: Language code.
 
         Returns:
-            List of matching triples.
+            List of matching triples, whatever the case of their tags.
         """
         existing = []
 
         for obj in graph.objects(subject, predicate):
-            if isinstance(obj, Literal) and obj.language == language:
+            if (
+                isinstance(obj, Literal)
+                and obj.language
+                and obj.language.lower() == language.lower()
+            ):
                 existing.append((subject, predicate, obj))
 
         return existing

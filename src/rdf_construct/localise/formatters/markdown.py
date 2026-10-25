@@ -8,7 +8,7 @@ from datetime import datetime
 
 from rdf_construct.localise.extractor import ExtractionResult
 from rdf_construct.localise.merger import MergeResult
-from rdf_construct.localise.reporter import CoverageReport
+from rdf_construct.localise.reporter import CoverageReport, format_fraction
 
 
 class MarkdownFormatter:
@@ -120,6 +120,11 @@ class MarkdownFormatter:
         lines.append(f"- **Source file:** `{report.source_file}`")
         lines.append(f"- **Source language:** {report.source_language}")
         lines.append(f"- **Total entities:** {report.total_entities}")
+        if report.deprecated_entities:
+            lines.append(
+                f"- **Deprecated, not counted:** {report.deprecated_entities} "
+                "(`--include-deprecated` counts them)"
+            )
         lines.append(f"- **Properties checked:** {', '.join(report.properties)}")
         lines.append("")
 
@@ -149,25 +154,45 @@ class MarkdownFormatter:
             for prop in report.properties:
                 prop_cov = coverage.by_property.get(prop)
                 if prop_cov:
-                    pct = f"{prop_cov.coverage:.0f}%"
+                    pct = format_fraction(prop_cov.translated, prop_cov.total)
                 else:
                     pct = "-"
                 row.append(pct)
 
             # Overall
-            row.append(f"**{coverage.coverage:.0f}%**")
+            row.append(f"**{format_fraction(coverage.translated, coverage.total_strings)}**")
 
             # Status
-            if coverage.coverage == 100:
+            if coverage.total_strings == 0:
+                row.append("— Nothing to measure")
+            elif coverage.translated == coverage.total_strings:
                 row.append("✅ Complete")
             elif coverage.coverage >= 75:
                 row.append(f"⚠️ {coverage.pending} pending")
-            elif coverage.coverage > 0:
+            elif coverage.translated > 0:
                 row.append(f"❌ {coverage.pending} pending")
             else:
                 row.append("❌ Not started")
 
             lines.append("| " + " | ".join(row) + " |")
+
+        # A language that matched nothing while a related tag did (#159)
+        if report.warnings:
+            lines.append("")
+            lines.append("## Warnings")
+            lines.append("")
+            for warning in report.warnings:
+                lines.append(f"- ⚠️ {warning}")
+
+        # A second literal in one language, for a property that takes one per language (#158)
+        duplicated = [(lang, c) for lang, c in report.languages.items() if c.duplicates]
+        if duplicated:
+            lines.append("")
+            lines.append("## More Than One Value in One Language")
+            lines.append("")
+            for lang, coverage in duplicated:
+                for uri, prop in coverage.duplicates:
+                    lines.append(f"- `{self._shorten_uri(uri)}` {prop} ({lang})")
 
         # Missing translations section
         if verbose:
