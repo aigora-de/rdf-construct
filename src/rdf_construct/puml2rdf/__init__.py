@@ -32,6 +32,7 @@ from rdf_construct.puml2rdf.model import (
 from rdf_construct.puml2rdf.parser import (
     ParseError,
     ParseResult,
+    ParseWarning,
     PlantUMLParser,
 )
 from rdf_construct.puml2rdf.converter import (
@@ -76,6 +77,7 @@ __all__ = [
     # Parser
     "ParseError",
     "ParseResult",
+    "ParseWarning",
     "PlantUMLParser",
     # Converter
     "ConversionConfig",

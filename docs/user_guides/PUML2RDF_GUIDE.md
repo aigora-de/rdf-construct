@@ -313,13 +313,17 @@ rdf-construct from-uml design.puml --validate
 **Parsing:**
 - The file must hold a whole diagram, from `@startuml` to `@enduml`. Without either marker the run
   is refused: exit 2, nothing written. A fragment must be wrapped in `@startuml` … `@enduml`.
+  Only the first diagram is read: text before `@startuml`, or after the `@enduml` that closes it,
+  is reported and not converted. A leading byte-order mark is ignored.
 - Every line the parser does not read is reported by its line number, unless it is a comment,
   layout or presentation: `'` and `/' … '/` comments, closing braces, `hide`/`show`,
   `left to right direction`, `top to bottom direction`, `!include`, `!theme`, `skinparam`,
-  `legend`, `header`, `footer`, `caption`, `title` and `together`.
+  `legend`, `header`, `footer`, `caption`, `title` and `together`. A block of these that is never
+  closed is reported on its opening line.
 - Declarations of kinds the converter does not model are named as dropped: `interface`, `enum`,
   `annotation`, `entity`, `struct`, `abstract Foo` without `class`, realisation (`..|>`) and
-  dependency (`..>`).
+  dependency (`..>`). So are `extends` and `implements` on a class line: the class is converted,
+  its superclass is not; write `Car --|> Base` instead.
 - A diagram with no classes or relationships is converted with a warning.
 
 Given `design.puml`:
