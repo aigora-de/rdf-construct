@@ -45,6 +45,21 @@ def test_malformed(tag: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "tag",
+    [
+        "\u212ao",  # Kelvin sign: lower-cases to an ASCII k, and would merge as Korean (#425)
+        "\u017fr",  # long s
+        "d\u0131",  # dotless i
+        "\u0130t",  # dotted capital I
+        "i-\u212alingon",  # a grandfathered tag spelt with the Kelvin sign
+        "de\n",  # $ alone would match before a trailing newline
+    ],
+)
+def test_non_ascii_and_trailing_newline_are_malformed(tag: str) -> None:
+    assert not is_well_formed(tag)
+
+
+@pytest.mark.parametrize(
     ("tag", "canonical"),
     [
         ("EN-gb", "en-GB"),

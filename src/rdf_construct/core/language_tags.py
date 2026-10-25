@@ -49,6 +49,8 @@ GRANDFATHERED: frozenset[str] = frozenset(
 )
 
 #: RFC 5646 §2.1's ``langtag`` and ``privateuse`` productions, matched without regard to case.
+#: Only ever applied to ASCII text: under ``IGNORECASE`` Python lets the Kelvin sign, ``ſ``, ``ı``
+#: and ``İ`` match ``[a-z]`` (#425), so :func:`is_well_formed` refuses non-ASCII first.
 _LANGTAG = re.compile(
     r"""^(?:
         (?:[a-z]{2,3}(?:-[a-z]{3}){0,3}|[a-z]{4}|[a-z]{5,8})   # language, with extlang
@@ -83,9 +85,12 @@ def is_well_formed(tag: str) -> bool:
         tag: The tag, in any case.
 
     Returns:
-        True if it matches RFC 5646's grammar or is a grandfathered tag.
+        True if it matches RFC 5646's grammar or is a grandfathered tag. A tag is ASCII, so
+        anything else is not well formed, and so is a tag with a trailing newline.
     """
-    return tag.lower() in GRANDFATHERED or _LANGTAG.match(tag) is not None
+    if not tag.isascii():
+        return False  # also before folding: str.lower() maps the Kelvin sign to "k"
+    return tag.lower() in GRANDFATHERED or _LANGTAG.fullmatch(tag) is not None
 
 
 def canonical_case(tag: str) -> str:

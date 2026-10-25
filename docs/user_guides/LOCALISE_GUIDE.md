@@ -31,7 +31,8 @@ These rules are the same in `extract`, `merge` and `report`.
 **`-l` and `--source-language` take a language tag, not a range.** Tags are compared without regard
 to case, so `-l en-gb`, `-l EN-GB` and `-l en-GB` are the same, but they are matched exactly:
 `-l en` does not match `@en-GB`, and `-l en-GB` does not match `@en`. When the tag you give matches
-no literal and a related tag (one with the same primary subtag) matches some, the command says so
+no literal and a related tag (one with the same primary subtag; a private-use `x-` or `i-` tag
+has none) matches some, the command says so
 and exits 1:
 
 ```
