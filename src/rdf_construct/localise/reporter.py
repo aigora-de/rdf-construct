@@ -32,6 +32,22 @@ from rdf_construct.localise.entities import (
 )
 
 
+def percent(covered: int, total: int) -> int:
+    """Return `covered` as a whole percentage of `total`, the figure a report prints.
+
+    Rounded half up, except that an incomplete figure is never 100 and a non-zero one never 0.
+    A status drawn from it therefore agrees with the printed percentage. 0 when `total` is 0.
+    """
+    if total == 0:
+        return 0
+    value = (200 * covered + total) // (2 * total)  # half up, in integers
+    if covered < total:
+        value = min(value, 99)
+    if covered > 0:
+        value = max(value, 1)
+    return value
+
+
 def format_fraction(covered: int, total: int) -> str:
     """Format a coverage figure as counts beside a percentage: ``42/57 (74%)``.
 
@@ -47,12 +63,7 @@ def format_fraction(covered: int, total: int) -> str:
     """
     if total == 0:
         return "0/0 (—)"
-    percent = (200 * covered + total) // (2 * total)  # half up, in integers
-    if covered < total:
-        percent = min(percent, 99)
-    if covered > 0:
-        percent = max(percent, 1)
-    return f"{covered}/{total} ({percent}%)"
+    return f"{covered}/{total} ({percent(covered, total)}%)"
 
 
 @dataclass

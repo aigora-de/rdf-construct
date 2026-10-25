@@ -6,7 +6,7 @@ and coverage reports.
 
 from rdf_construct.localise.extractor import ExtractionResult
 from rdf_construct.localise.merger import MergeResult
-from rdf_construct.localise.reporter import CoverageReport, format_fraction
+from rdf_construct.localise.reporter import CoverageReport, format_fraction, percent
 
 
 class TextFormatter:
@@ -140,7 +140,7 @@ class TextFormatter:
                 statuses.append("— Nothing to measure")
             elif coverage.translated == coverage.total_strings:
                 statuses.append(self._success("✓ Complete"))
-            elif coverage.coverage >= 75:
+            elif percent(coverage.translated, coverage.total_strings) >= 75:
                 statuses.append(self._warning(f"⚠ {coverage.pending} pending"))
             elif coverage.translated > 0:
                 statuses.append(f"✗ {coverage.pending} pending")
@@ -182,9 +182,11 @@ class TextFormatter:
         # Missing entities section
         if verbose:
             for lang, coverage in report.languages.items():
-                if coverage.missing_entities and not coverage.is_source:
+                if coverage.missing_entities:
                     lines.append("")
-                    lines.append(f"Missing {lang} translations:")
+                    # The base row can be incomplete too: terms labelled only in other languages
+                    what = "source labels" if coverage.is_source else "translations"
+                    lines.append(f"Missing {lang} {what}:")
                     for uri in coverage.missing_entities[:20]:
                         # Shorten URI for display
                         short_uri = self._shorten_uri(uri)

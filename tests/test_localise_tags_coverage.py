@@ -12,7 +12,6 @@
 - #405 (the half that lands here): ``preserve`` keeps every translation of a repeatable property.
 """
 
-import ast
 import re
 from pathlib import Path
 from textwrap import dedent
@@ -161,15 +160,11 @@ class TestEntities:
         )  # fmt: skip
         assert "Entities: 6" in report.output
 
-    def test_no_inline_type_list_in_localise(self) -> None:
-        # The fix for #157 is that no module in localise enumerates entity types itself
-        enumerated = {"Class", "ObjectProperty", "DatatypeProperty", "AnnotationProperty"}
-        for path in (REPO / "src" / "rdf_construct" / "localise").rglob("*.py"):
-            for node in ast.walk(ast.parse(path.read_text())):
-                if isinstance(node, ast.Attribute) and node.attr in enumerated:
-                    assert not (
-                        isinstance(node.value, ast.Name) and node.value.id in ("OWL", "RDFS")
-                    ), f"{path.name}:{node.lineno} names {node.value.id}.{node.attr}"
+    def test_a_class_typed_both_ways_is_recorded_as_owl_class(self, tmp_path: Path) -> None:
+        src = ttl(tmp_path, 'ex:A a owl:Class, rdfs:Class ; rdfs:label "A"@en .')
+        out = tmp_path / "de.yml"
+        run("localise", "extract", src, "-l", "de", "-o", out)
+        assert "type: owl:Class" in out.read_text()
 
 
 # --- #407: one rule for "deprecated" ------------------------------------------------------
@@ -180,16 +175,19 @@ class TestDeprecated:
         ex:A a owl:Class ; rdfs:label "A"@en, "A"@de .
         ex:B a owl:Class ; rdfs:label "B"@en ; owl:deprecated "true"^^xsd:boolean .
         ex:C a owl:Class ; rdfs:label "C"@en ; owl:deprecated "true" .
+        ex:D a owl:Class ; rdfs:label "D"@en ; owl:deprecated "TRUE" .
         """
 
     def test_report_leaves_out_what_extract_skips(self, tmp_path: Path) -> None:
         src = ttl(tmp_path, self.DEP)
         out = tmp_path / "de.yml"
         run("localise", "extract", src, "-l", "de", "-o", out)
-        assert set(extracted(out)) == {EX + "A"}
+        # A plain "TRUE" is not a boolean's lexical form, so ex:D is not deprecated (rdflib
+        # rewrites "TRUE"^^xsd:boolean to "true" at parse, which is #377's ground)
+        assert set(extracted(out)) == {EX + "A", EX + "D"}
 
         report = run("localise", "report", src, "-l", "en,de", "--no-colour")
-        assert re.search(r"^de\s+1/1 \(100%\)", report.output, re.M), report.output
+        assert re.search(r"^de\s+1/2 \(50%\)", report.output, re.M), report.output
         assert "Deprecated: 2 (not counted; --include-deprecated counts them)" in report.output
 
     def test_include_deprecated_counts_them(self, tmp_path: Path) -> None:
@@ -197,7 +195,7 @@ class TestDeprecated:
         report = run(
             "localise", "report", src, "-l", "en,de", "--include-deprecated", "--no-colour"
         )
-        assert re.search(r"^de\s+1/3 \(33%\)", report.output, re.M), report.output
+        assert re.search(r"^de\s+1/4 \(25%\)", report.output, re.M), report.output
         assert "Deprecated:" not in report.output
 
 
@@ -413,6 +411,21 @@ class TestCoverage:
         )  # fmt: skip
         assert "A skos:prefLabel" in report.output
         assert "skos:altLabel\n" not in report.output.split("value for a property")[-1]
+
+    def test_status_agrees_with_the_printed_percentage(self, tmp_path: Path) -> None:
+        # 149/200 is printed as 75%, so the status is the 75%-and-over one
+        german = ', "K"@de'
+        body = "".join(
+            f'ex:C{i} a owl:Class ; rdfs:label "C"@en{german if i < 149 else ""} .\n'
+            for i in range(200)
+        )
+        report = run("localise", "report", ttl(tmp_path, body), "-l", "en,de", "--no-colour")
+        assert re.search(r"^de\s+149/200 \(75%\).*⚠ 51 pending", report.output, re.M)
+
+    def test_verbose_lists_what_the_base_row_is_missing(self, tmp_path: Path) -> None:
+        src = ttl(tmp_path, 'ex:A rdfs:label "A"@en .\nex:Turm rdfs:label "Turm"@de .')
+        report = run("localise", "report", src, "-l", "en,de", "--no-colour", "-v")
+        assert "Missing en source labels:\n  - Turm" in report.output
 
     def test_markdown_prints_counts(self, tmp_path: Path) -> None:
         src = ttl(

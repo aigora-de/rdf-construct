@@ -8,7 +8,7 @@ from datetime import datetime
 
 from rdf_construct.localise.extractor import ExtractionResult
 from rdf_construct.localise.merger import MergeResult
-from rdf_construct.localise.reporter import CoverageReport, format_fraction
+from rdf_construct.localise.reporter import CoverageReport, format_fraction, percent
 
 
 class MarkdownFormatter:
@@ -167,7 +167,7 @@ class MarkdownFormatter:
                 row.append("— Nothing to measure")
             elif coverage.translated == coverage.total_strings:
                 row.append("✅ Complete")
-            elif coverage.coverage >= 75:
+            elif percent(coverage.translated, coverage.total_strings) >= 75:
                 row.append(f"⚠️ {coverage.pending} pending")
             elif coverage.translated > 0:
                 row.append(f"❌ {coverage.pending} pending")
@@ -198,14 +198,17 @@ class MarkdownFormatter:
         if verbose:
             has_missing = False
             for lang, coverage in report.languages.items():
-                if coverage.missing_entities and not coverage.is_source:
+                if coverage.missing_entities:
                     if not has_missing:
                         lines.append("")
                         lines.append("## Missing Translations")
                         has_missing = True
 
                     lines.append("")
-                    lines.append(f"### {lang.upper()}")
+                    # The base row can be incomplete too: terms labelled only in other languages
+                    lines.append(
+                        f"### {lang.upper()}" + (" (source)" if coverage.is_source else "")
+                    )
                     lines.append("")
 
                     # Group by entity type based on URI pattern

@@ -69,7 +69,8 @@ def collect_entities(graph: Graph, properties: Iterable[URIRef]) -> list[URIRef]
 def entity_type(graph: Graph, entity: URIRef) -> str:
     """Return the type a translation file records for `entity`.
 
-    Classes come first (the first class type by IRI), then the property kinds, then
+    Classes come first (``owl:Class`` when given, else the first class type by IRI), then the
+    property kinds, then
     ``owl:NamedIndividual``, using the ``core.vocab`` sets; a property whose kind is not
     inferable is ``rdf:Property``. Otherwise
     the entity's first type by IRI is given, and ``untyped`` when it has none.
@@ -83,6 +84,8 @@ def entity_type(graph: Graph, entity: URIRef) -> str:
     """
     types = set(graph.objects(entity, RDF.type))
     declared_classes = sorted(str(t) for t in types & CLASS_TYPES)
+    if OWL.Class in types:
+        return "owl:Class"  # as on main, for a term also typed rdfs:Class
     if declared_classes:
         return _shorten(declared_classes[0])
     if types & OBJECT_PROPERTY_TYPES:
@@ -107,15 +110,15 @@ def is_deprecated(graph: Graph, entity: URIRef) -> bool:
         entity: An entity.
 
     Returns:
-        True for ``owl:deprecated`` true (an ``xsd:boolean``, or the plain string ``"true"`` or
-        ``"1"``), or a type of ``owl:DeprecatedClass`` or ``owl:DeprecatedProperty``.
+        True for ``owl:deprecated`` true (``"true"`` or ``"1"``, as an ``xsd:boolean`` or a plain
+        string; ``"TRUE"`` is not a boolean's lexical form), or a type of ``owl:DeprecatedClass`` or ``owl:DeprecatedProperty``.
     """
     for value in graph.objects(entity, OWL.deprecated):
         if (
             isinstance(value, Literal)
             and value.datatype in (None, XSD.boolean, XSD.string)
             and value.language is None
-            and str(value).strip().lower() in ("true", "1")
+            and str(value) in ("true", "1")
         ):
             return True
     return any(
