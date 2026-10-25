@@ -463,7 +463,9 @@ change, and what to do about it, is listed command by command in the
   the parser does not read is reported by its line number, unless it is a
   comment, layout or presentation, and declarations of kinds the converter does
   not model (`interface`, `enum`, `annotation`, `entity`, `struct`, `abstract`
-  without `class`, `..|>`, `..>`) are named as dropped. `--strict` makes these
+  without `class`, `..|>`, `..>`, and `extends`/`implements` on a class line)
+  are named as dropped. Text outside `@startuml` … `@enduml` is reported, not
+  converted, and a leading byte-order mark is ignored. `--strict` makes these
   fatal at exit 1, as it does every parse, model, conversion and RDF warning;
   conversion and RDF warnings were never fatal before. A derived prefix (#150)
   is a note, which `--strict` lets through. A diagram with no classes or
