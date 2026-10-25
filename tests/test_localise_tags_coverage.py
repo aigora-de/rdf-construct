@@ -243,13 +243,14 @@ class TestTags:
         assert extracted(out) == {}
         assert "Found 1 literal tagged en; --source-language en-GB" in result.output
 
-    def test_a_private_use_tag_is_related_to_nothing(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize(("source", "tag"), [("x-foo", "x-bar"), ("i-klingon", "i-enochian")])
+    def test_a_private_use_tag_is_related_to_nothing(
+        self, tmp_path: Path, source: str, tag: str
+    ) -> None:
         # x- and i- start with a singleton, which names no language (#425)
-        src = ttl(tmp_path, 'ex:A rdfs:label "A"@x-bar .')
+        src = ttl(tmp_path, f'ex:A rdfs:label "A"@{tag} .')
         out = tmp_path / "de.yml"
-        result = run(
-            "localise", "extract", src, "-l", "de", "--source-language", "x-foo", "-o", out
-        )
+        result = run("localise", "extract", src, "-l", "de", "--source-language", source, "-o", out)
         assert result.exit_code == 0, result.output
         assert "Found" not in result.output
 
