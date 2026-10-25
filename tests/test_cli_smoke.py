@@ -421,12 +421,38 @@ THREE_STATES = [
             ("localise", "extract", ANIMAL, "-l", "en_GB", "-o", "@tmp/de.yml"),
         )
     ),
+    # A destination that is not a translation file is not replaced in silence (#404)
+    _row(
+        Row(
+            "localise extract", "refused", ("localise", "extract", ANIMAL, "-l", "de"), ("de.yml",)
+        ),
+        label="overwrite",
+    ),
+    _row(
+        Row(
+            "localise extract",
+            "refused",
+            ("localise", "extract", ANIMAL, "-l", "de", "--overwrite"),
+            ("de.yml",),
+        ),
+        label="overwrite-flag",
+    ),
     _row(
         Row(
             "localise merge",
             "clean",
             ("localise", "merge", ANIMAL, TRANSLATIONS, "-o", "@tmp/l.ttl"),
         )
+    ),
+    # An empty translation file crashed before #408
+    _row(
+        Row(
+            "localise merge",
+            "refused",
+            ("localise", "merge", ANIMAL, "@tmp/t.yml", "-o", "@tmp/l.ttl"),
+            ("t.yml",),
+        ),
+        label="empty",
     ),
     _row(
         Row(
@@ -457,6 +483,10 @@ THREE_STATES = [
         Row("localise init", "clean", ("localise", "init", ANIMAL, "-l", "ja", "-o", "@tmp/ja.yml"))
     ),
     _row(Row("localise init", "refused", ("localise", "init"))),
+    _row(
+        Row("localise init", "refused", ("localise", "init", ANIMAL, "-l", "ja"), ("ja.yml",)),
+        label="overwrite",
+    ),
     _row(Row("localise config", "clean", ("localise", "config", "--init"))),
     _row(
         Row(

@@ -112,6 +112,16 @@ blank tag is refused at exit 2. See
 [`localise`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#localise)
 in the migration note.
 
+**If you re-run `localise extract` or `init` over a translation file, it now
+refuses.** A file holding any translation work is left untouched at exit 2,
+where it was silently replaced with empty entries. Pass `-o` to write a new
+file, or `--overwrite` to replace it. `localise` also checks the type of every
+value it reads from YAML: an unquoted `Yes` or `123` translation and a scalar
+`properties:` are refused with a message naming where they are, where they
+aborted the merge or extracted nothing. See
+[`localise`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#localise)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
@@ -298,6 +308,20 @@ change, and what to do about it, is listed command by command in the
 - **`localise merge --existing preserve` keeps every translation of a repeatable
   property** such as `skos:altLabel` (#405, in part). It skips one only when the
   same text already exists in that language.
+- **`localise extract` and `init` never replace translation work in silence**
+  (#404). A destination holding an entry that is not `pending`, or whose
+  translation is not blank, is refused at exit 2 before the ontology is read; so
+  is a dangling link. `--overwrite` replaces it and warns how many finished
+  translations it discarded. A file that is not a translation file, or a
+  directory, is refused even with `--overwrite`. The default file is named in
+  canonical case: `-l DE` writes `de.yml`.
+- **`localise` reads YAML values as the type they must be** (#408). In a
+  translation file, a translation YAML reads as a boolean or a number, a missing
+  `uri`, `property` or `source`, an unknown `status` and a file of the wrong
+  shape are refused at exit 2, every one named by file, entity and key; a blank
+  translation is untranslated. In an `extract -c` config, a scalar `properties:`,
+  a switch written as text and any other value of the wrong type are refused.
+  Each of these crashed, aborted with Python's message, or was misread.
 
 ### Fixed
 - **`diff` compares blank nodes by structure, in both directions** (#143). It
