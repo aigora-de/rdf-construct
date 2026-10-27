@@ -98,6 +98,13 @@ rdf-construct refactor rename ontology.ttl \
     -o fixed.ttl
 ```
 
+Each renamed IRI moves wherever the data uses it: as a subject, as an object, or as a predicate.
+Renaming a property therefore moves every triple that uses it, and a namespace rename moves the
+data's properties in that namespace as well as its classes. The line printed for each data file
+counts every substitution. The shipped `examples/refactor/renames.yml` fixes four typos, one of them
+the property `ex:hasAddres`, and migrating `examples/refactor/instances.ttl` with it reports
+`Migrated instances.ttl: 7 changes`, two of them the `ex:hasAddres` triples.
+
 ### Configuration File
 
 For complex renames, use a YAML configuration:

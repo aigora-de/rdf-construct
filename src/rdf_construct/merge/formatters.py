@@ -184,6 +184,7 @@ class TextFormatter(BaseFormatter):
 
         lines.append("Changes:")
         lines.append(f"  Subjects updated: {result.stats.subjects_updated}")
+        lines.append(f"  Predicates updated: {result.stats.predicates_updated}")
         lines.append(f"  Objects updated: {result.stats.objects_updated}")
         lines.append(f"  Triples added: {result.stats.triples_added}")
         lines.append(f"  Triples removed: {result.stats.triples_removed}")
@@ -341,6 +342,7 @@ class MarkdownFormatter(BaseFormatter):
         lines.append(f"| Source triples | {result.source_triples} |")
         lines.append(f"| Result triples | {result.result_triples} |")
         lines.append(f"| Subjects updated | {result.stats.subjects_updated} |")
+        lines.append(f"| Predicates updated | {result.stats.predicates_updated} |")
         lines.append(f"| Objects updated | {result.stats.objects_updated} |")
         lines.append(f"| Triples added | {result.stats.triples_added} |")
         lines.append(f"| Triples removed | {result.stats.triples_removed} |")

@@ -29,6 +29,7 @@ class MigrationStats:
         triples_added: Number of triples added by transformations
         triples_removed: Number of triples removed by transformations
         rules_applied: Count of each rule applied
+        predicates_updated: Number of predicate URIs substituted
     """
 
     subjects_updated: int = 0
@@ -36,12 +37,18 @@ class MigrationStats:
     triples_added: int = 0
     triples_removed: int = 0
     rules_applied: dict[str, int] = field(default_factory=dict)
+    # Last, so that positional construction from before #415 keeps its meaning.
+    predicates_updated: int = 0
 
     @property
     def total_changes(self) -> int:
         """Total number of changes made."""
         return (
-            self.subjects_updated + self.objects_updated + self.triples_added + self.triples_removed
+            self.subjects_updated
+            + self.predicates_updated
+            + self.objects_updated
+            + self.triples_added
+            + self.triples_removed
         )
 
 
@@ -122,8 +129,9 @@ class DataMigrator:
         if uri_map:
             for s, p, o in data:
                 new_s = self._substitute_uri(s, uri_map, result.stats, is_subject=True)
+                new_p = self._substitute_predicate(p, uri_map, result.stats)
                 new_o = self._substitute_uri(o, uri_map, result.stats, is_subject=False)
-                migrated.add((new_s, p, new_o))
+                migrated.add((new_s, new_p, new_o))
         else:
             # No substitutions, just copy
             for triple in data:
@@ -182,6 +190,30 @@ class DataMigrator:
             return uri_map[term]
         return term
 
+    def _substitute_predicate(
+        self,
+        term: Any,
+        uri_map: dict[URIRef, URIRef],
+        stats: MigrationStats,
+    ) -> Any:
+        """Substitute a predicate URI if it's in the mapping.
+
+        A renamed property must move in the data that uses it, or every instance triple is
+        left on a property the ontology no longer declares (#415).
+
+        Args:
+            term: Predicate to potentially substitute
+            uri_map: URI substitution map
+            stats: Statistics to update
+
+        Returns:
+            Substituted term or original
+        """
+        if isinstance(term, URIRef) and term in uri_map:
+            stats.predicates_updated += 1
+            return uri_map[term]
+        return term
+
     def _apply_uri_substitution(
         self,
         graph: Graph,
@@ -206,8 +238,9 @@ class DataMigrator:
 
         for s, p, o in graph:
             new_s = self._substitute_uri(s, uri_map, stats, is_subject=True)
+            new_p = self._substitute_predicate(p, uri_map, stats)
             new_o = self._substitute_uri(o, uri_map, stats, is_subject=False)
-            new_graph.add((new_s, p, new_o))
+            new_graph.add((new_s, new_p, new_o))
 
         return new_graph
 
@@ -310,6 +343,7 @@ def migrate_data_files(
 
         # Combine stats
         combined_stats.subjects_updated += result.stats.subjects_updated
+        combined_stats.predicates_updated += result.stats.predicates_updated
         combined_stats.objects_updated += result.stats.objects_updated
         combined_stats.triples_added += result.stats.triples_added
         combined_stats.triples_removed += result.stats.triples_removed

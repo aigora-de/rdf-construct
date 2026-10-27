@@ -370,6 +370,10 @@ migrations:
     delete_matched: true
 ```
 
+A `rename` rule moves the IRI wherever the data uses it: as a subject, as an object, or as a
+predicate, so the same rule renames a property or a class. The migration summary counts each
+position on its own line: `Subjects updated`, `Predicates updated` and `Objects updated`.
+
 Apply with:
 
 ```bash

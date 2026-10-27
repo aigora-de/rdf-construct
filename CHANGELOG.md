@@ -122,6 +122,14 @@ aborted the merge or extracted nothing. See
 [`localise`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#localise)
 in the migration note.
 
+**If you migrated instance data after renaming a property, the data still uses
+the old one.** `refactor rename --migrate-data` and `merge`'s rename rules moved
+an IRI only where the data used it as a subject or an object, never as a
+predicate, so a renamed property, and every property in a renamed namespace,
+was left on its old IRI. Re-run the migration. See
+[`refactor`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#refactor)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
@@ -563,6 +571,16 @@ change, and what to do about it, is listed command by command in the
 - **`puml2rdf` no longer doubles the class count for packaged diagrams** (#154).
   Each class is stored under both `name` and `qualified_name` for relationship
   lookup; the summary now counts distinct URIs so it matches the parse line.
+- **Data migration renames predicates** (#415). `DataMigrator` substituted
+  subjects and objects only, so `refactor rename --from ex:hasFloors --to
+  ex:floorCount --migrate-data data.ttl` left `d:b1 ex:hasFloors 3` as it was
+  and reported `0 changes`, beside an ontology that no longer declared
+  `ex:hasFloors`. A namespace rename moved the data's classes and left its
+  properties behind, and the shipped `examples/refactor/renames.yml` left both
+  `ex:hasAddres` triples in `instances.ttl`. A renamed IRI now moves in every
+  position, as it already did in the ontology. `MigrationStats` gains
+  `predicates_updated`, counted in `total_changes`, and `merge`'s migration
+  summary prints `Predicates updated`.
 
 ## [0.6.0] - 2026-09-04
 
