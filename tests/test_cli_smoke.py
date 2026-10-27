@@ -631,6 +631,28 @@ MALFORMED = [
     ),
     _row(
         Row(
+            "refactor rename",
+            "refused",
+            (
+                "refactor",
+                "rename",
+                str(EXAMPLES / "refactor" / "typos.ttl"),
+                "--from",
+                "http://example.org/ont#Buiding",
+                "--to",
+                "http://example.org/ont#Building",
+                "-o",
+                "@tmp/r.ttl",
+                "--migrate-data",
+                MALFORMED_TTL,
+                "--data-output",
+                "@tmp/d.ttl",
+            ),
+        ),
+        label="data-ttl",
+    ),
+    _row(
+        Row(
             "refactor deprecate",
             "refused",
             (

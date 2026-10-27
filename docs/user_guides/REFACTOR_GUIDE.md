@@ -47,6 +47,7 @@ rdf-construct refactor rename ontology.ttl \
 | `-o, --output PATH` | Output file or directory |
 | `--migrate-data FILE` | Data files to migrate (repeatable) |
 | `--data-output PATH` | Output path for migrated data |
+| `--in-place` | Allow `-o` or `--data-output` to name an input, and rewrite it with its own result |
 | `--dry-run` | Preview changes without writing |
 | `--init` | Generate template configuration |
 
@@ -56,6 +57,43 @@ rdf-construct refactor rename ontology.ttl \
 2. **Literals are NOT modified** - text mentioning old URIs in comments is preserved
 3. **Namespace bindings** are updated to reflect new namespaces, and the source's own prefixes
    are written back as declared (`org:` stays `org:`)
+
+### Where Output Goes
+
+`-o` names the output file for one source, or a directory for several, where each result keeps
+its source's file name. `--data-output` works the same way for the data files given to
+`--migrate-data`; without it, each migrated file is written beside its data file as
+`migrated_<name>`. A config file's `output:` names one file and `output_dir:` a directory; `-o`
+overrides both. Without `-o` or a config `output:`, a single source is renamed and nothing is
+written.
+
+Every output path is worked out, and every source and data file read, before anything is written.
+The run is refused at exit 2, with nothing written, when:
+
+- two outputs would be the same file: two sources, or two data files, with the same name written
+  into one directory (names that differ only in case count as the same), or a data output equal to
+  an ontology output;
+- an output would replace an input, unless `--in-place` is given and the input is the file the
+  output is made from;
+- a config's `output:` names one file for several sources;
+- a data file cannot be parsed.
+
+Paths are compared as files, so a symbolic link or a `..` reaches the same file it points at:
+
+```bash
+rdf-construct refactor rename examples/refactor/typos.ttl \
+    --from ex:Buiding --to ex:Building -o examples/refactor/typos.ttl
+```
+
+```
+Error: Nothing was written:
+  examples/refactor/typos.ttl is the input it is made from: writing it would replace that file. Pass --in-place to rewrite it, or choose another path.
+```
+
+With `--in-place`, each source named by `-o` (directly, or as the directory it is in) is rewritten
+with its own rename, and the data file named by `--data-output` with its own migration. Each one
+replaced is reported on stderr as `⚠ Replaced <path>`. An output that would replace a *different*
+input, such as `--data-output` naming the ontology, is refused even with `--in-place`.
 
 ### CURIEs and Namespace Boundaries
 
@@ -98,6 +136,8 @@ rdf-construct refactor rename ontology.ttl \
     -o fixed.ttl
 ```
 
+The data's rename map is built from the sources as they were read, so a rename written back over
+its own source (`-o ontology.ttl --in-place`) migrates the same data as one written elsewhere.
 Each renamed IRI moves wherever the data uses it: as a subject, as an object, or as a predicate.
 Renaming a property therefore moves every triple that uses it, and a namespace rename moves the
 data's properties in that namespace as well as its classes. The line printed for each data file

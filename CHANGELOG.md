@@ -130,6 +130,13 @@ was left on its old IRI. Re-run the migration. See
 [`refactor`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#refactor)
 in the migration note.
 
+**If you rename in place with `refactor rename -o <source>`, add `--in-place`.**
+Every output is now checked before anything is written, and a run whose outputs
+would overwrite each other, or overwrite an input, is refused at exit 2 instead
+of losing files at exit 0. See
+[`refactor`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#refactor)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
@@ -207,6 +214,18 @@ change, and what to do about it, is listed command by command in the
   IRI, as an IRI or a CURIE of the source's prefixes.
 
 ### Changed
+- **`refactor rename` plans its outputs, and refuses a plan that loses work**
+  (#411). Every source and data file is read, and every output path worked out,
+  before the first write. Two outputs that are one file (two `onto.ttl` sources
+  into one `-o` directory, `A.ttl` and `a.ttl`, a `--data-output` equal to `-o`),
+  an output that would replace an input, and a config `output:` with several
+  sources are refused at exit 2 with nothing written; each used to exit 0 with
+  the last write winning or a source replaced. Paths are compared as files, so a
+  symbolic link or `..` is caught. `--in-place` lets a source or data file be
+  rewritten with its own result, and reports `⚠ Replaced <path>`. A CLI `-o` now
+  overrides a config `output:`. `-o` naming a file with several sources is
+  refused instead of crashing. The checks are in `core/output_paths.py`, which
+  reports and never decides.
 - **`split`'s unmatched module is called `unmatched` by default** (#382), not
   `common`, and a run whose unmatched module would take another module's name
   is refused at exit 2 instead of overwriting it. `--common-name common` keeps
@@ -571,6 +590,12 @@ change, and what to do about it, is listed command by command in the
 - **`puml2rdf` no longer doubles the class count for packaged diagrams** (#154).
   Each class is stored under both `name` and `qualified_name` for relationship
   lookup; the summary now counts distinct URIs so it matches the parse line.
+- **An in-place `refactor rename --migrate-data` migrates the data** (#414). The
+  rename map was rebuilt by re-reading the sources after they were written, so a
+  namespace rename written back over its source found nothing left to map and
+  wrote no data at all, at exit 0. The map now comes from the sources as read. A
+  data file that does not parse is refused at exit 2 before anything is written,
+  where it was skipped with a `✗` line after the ontology had been written.
 - **Data migration renames predicates** (#415). `DataMigrator` substituted
   subjects and objects only, so `refactor rename --from ex:hasFloors --to
   ex:floorCount --migrate-data data.ttl` left `d:b1 ex:hasFloors 3` as it was
