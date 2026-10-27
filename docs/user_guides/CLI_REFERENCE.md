@@ -884,6 +884,7 @@ rdf-construct refactor rename SOURCES [OPTIONS]
 - `-o, --output PATH`: Output file (single source) or directory (multiple sources)
 - `--migrate-data PATH`: Data file(s) to migrate (can specify multiple)
 - `--data-output PATH`: Output path for migrated data
+- `--in-place`: Allow `-o` or `--data-output` to name an input, and rewrite it with its own result
 - `--dry-run`: Preview changes without writing files
 - `--no-colour`: Disable coloured output
 - `--init`: Generate a template rename configuration file

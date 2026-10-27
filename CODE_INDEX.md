@@ -314,6 +314,12 @@ tests/
 - `get_predicate_order()` - retrieve ordering for a profile
 - Configurable predicate output order within subjects
 
+**`core/output_paths.py`**
+- `PlannedOutput` - an output path and the input it is made from
+- `colliding_outputs()` - outputs that are one file (resolved path, ignoring case)
+- `outputs_over_inputs()`, `is_same_file()` - outputs that would replace an input (`os.path.samefile`)
+- Reports only; each command decides what to refuse (`refactor rename`, #411)
+
 **`core/utils.py`**
 - `extract_prefix_map()` - get namespaces from graph
 - `expand_curie()` - expand CURIEs to full IRIs

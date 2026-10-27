@@ -3,6 +3,7 @@
 import sys
 import traceback
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Any
 
@@ -44,6 +45,12 @@ from rdf_construct.core.formats import (
     normalise_format,
 )
 from rdf_construct.core.outdir import OUTPUT_MARKER, foreign_entries, mark_output_dir, read_marker
+from rdf_construct.core.output_paths import (
+    PlannedOutput,
+    colliding_outputs,
+    is_same_file,
+    outputs_over_inputs,
+)
 
 from rdf_construct.cast import CastConverter
 
@@ -3418,6 +3425,138 @@ def _load_refactor_sources(paths: list[Path]) -> list[tuple[Path, Graph]]:
     return graphs
 
 
+@dataclass
+class _RenameOutputs:
+    """Where ``refactor rename`` will write, worked out before anything is written (#411).
+
+    Attributes:
+        ontology: Each source's output path, for the sources that have one.
+        data: Each data file's output path, when the data is migrated.
+    """
+
+    ontology: dict[Path, Path] = field(default_factory=dict)
+    data: dict[Path, Path] = field(default_factory=dict)
+
+    def planned(self) -> list[PlannedOutput]:
+        """Every output, ontology first, each with the input it is made from."""
+        return [
+            PlannedOutput(path=out, made_from=source)
+            for source, out in [*self.ontology.items(), *self.data.items()]
+        ]
+
+
+def _plan_rename_outputs(
+    config: RefactorConfig,
+    graphs: list[tuple[Path, Graph]],
+    data_graphs: list[tuple[Path, Graph]],
+    uri_map: dict[URIRef, URIRef],
+    data_output: Path | None,
+) -> _RenameOutputs:
+    """Work out every path ``refactor rename`` would write.
+
+    The paths are the ones each write used to work out for itself: ``-o`` or the config's
+    ``output:`` for one source, ``output_dir`` joined with the basename for several; for the
+    data, ``--data-output`` for one file, joined with the basename for several, and
+    ``migrated_<name>`` beside the data file without it. A data file is planned only when the
+    rename maps something, because only then is it migrated.
+
+    Args:
+        config: The resolved refactor configuration.
+        graphs: Each source with its graph.
+        data_graphs: Each data file with its graph.
+        uri_map: The rename map the data is migrated with.
+        data_output: ``--data-output``, if given.
+
+    Returns:
+        The planned outputs.
+    """
+    outputs = _RenameOutputs()
+    for source_path, _ in graphs:
+        out_path = config.output or (
+            config.output_dir / source_path.name if config.output_dir else None
+        )
+        if out_path:
+            outputs.ontology[source_path] = out_path
+    if uri_map:
+        for data_path, _ in data_graphs:
+            if data_output and len(data_graphs) == 1:
+                outputs.data[data_path] = data_output
+            elif data_output:
+                outputs.data[data_path] = data_output / data_path.name
+            else:
+                outputs.data[data_path] = data_path.parent / f"migrated_{data_path.name}"
+    return outputs
+
+
+def _check_rename_outputs(
+    outputs: _RenameOutputs,
+    config: RefactorConfig,
+    data_paths: tuple[Path, ...],
+    data_output: Path | None,
+    config_file: Path | None,
+    in_place: bool,
+) -> dict[Path, Path]:
+    """Refuse a plan that would write one file twice, or write over an input (#411).
+
+    An output may replace an input only when it is that input's own result and
+    ``--in-place`` is given: a source rewritten with its rename, a data file with its
+    migration. Every other overlap is refused, flag or not.
+
+    Args:
+        outputs: The planned outputs.
+        config: The resolved refactor configuration.
+        data_paths: The data files given to ``--migrate-data``.
+        data_output: ``--data-output``, if given.
+        config_file: The config file, which is an input too.
+        in_place: Whether ``--in-place`` was given.
+
+    Returns:
+        Each output that ``--in-place`` lets replace its own input, with that input.
+
+    Raises:
+        Refusal: When any output collides with another or with an input.
+    """
+    directories = []
+    if config.output is None and config.output_dir is not None and outputs.ontology:
+        directories.append((config.output_dir, "-o"))
+    if data_output is not None and len(outputs.data) > 1:
+        directories.append((data_output, "--data-output"))
+    for directory, flag in directories:
+        if directory.exists() and not directory.is_dir():
+            raise Refusal(
+                f"{directory} is a file, but with several inputs {flag} names a directory."
+            )
+
+    planned = outputs.planned()
+    problems: list[str] = []
+    for group in colliding_outputs(planned):
+        made_from = ", ".join(str(output.made_from) for output in group)
+        problems.append(f"{group[0].path} would be written {len(group)} times, from {made_from}.")
+
+    inputs = [*config.source_files, *data_paths, *([config_file] if config_file else [])]
+    replaced: dict[Path, Path] = {}
+    for output, existing in outputs_over_inputs(planned, inputs):
+        own = output.made_from is not None and is_same_file(output.made_from, existing)
+        if own and in_place:
+            replaced[output.path] = existing
+        elif own:
+            same = "" if output.path == existing else f" ({existing})"
+            problems.append(
+                f"{output.path} is the input it is made from{same}: writing it would replace "
+                "that file. Pass --in-place to rewrite it, or choose another path."
+            )
+        else:
+            which = "an input" if output.path == existing else f"the input {existing}"
+            problems.append(
+                f"{output.path} would replace {which}, but it is the result of "
+                f"{output.made_from}. Choose another path."
+            )
+
+    if problems:
+        raise Refusal("Nothing was written:\n  " + "\n  ".join(problems))
+    return replaced
+
+
 @refactor.command("rename")
 @click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
 @click.option(
@@ -3463,6 +3602,11 @@ def _load_refactor_sources(paths: list[Path]) -> list[tuple[Path, Graph]]:
     help="Output path for migrated data.",
 )
 @click.option(
+    "--in-place",
+    is_flag=True,
+    help="Allow -o or --data-output to name an input, and rewrite it with its own result.",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Preview changes without writing files.",
@@ -3489,6 +3633,7 @@ def refactor_rename(
     config_file: Path | None,
     migrate_data: tuple[Path, ...],
     data_output: Path | None,
+    in_place: bool,
     dry_run: bool,
     no_colour: bool,
     init_config: bool,
@@ -3578,9 +3723,11 @@ def refactor_rename(
             config = load_refactor_config(config_file)
             click.echo(f"Using config: {config_file}")
 
-            # Override output if provided on CLI
+            # Override output if provided on CLI. -o replaces the config's output: and
+            # output_dir: alike, so a config's single file cannot outrank it (#411).
             if output:
                 if len(sources) > 1 or (config.source_files and len(config.source_files) > 1):
+                    config.output = None
                     config.output_dir = output
                 else:
                     config.output = output
@@ -3615,6 +3762,15 @@ def refactor_rename(
             "or provide a config file."
         )
 
+    # One output file cannot hold the results of several sources: each would replace the
+    # last (#411).
+    if config.output and len(config.source_files) > 1:
+        raise Refusal(
+            f"The config's output: names one file, {config.output}, but there are "
+            f"{len(config.source_files)} sources, and each result would replace the last. "
+            "Use output_dir: in the config, or -o with a directory."
+        )
+
     # Load every source before writing anything, so that a CURIE is resolved once, against
     # the prefixes the files declare, and refused before any output exists (#182).
     graphs = _load_refactor_sources(config.source_files)
@@ -3625,83 +3781,81 @@ def refactor_rename(
     except (CurieError, AmbiguousCurieError) as e:
         raise Refusal(str(e)) from e
 
+    # Parse every data file before writing anything, so that one that cannot be read refuses
+    # the run instead of being skipped after the ontology is written (#414).
+    data_graphs: list[tuple[Path, Graph]] = []
+    if migrate_data:
+        for data_path in migrate_data:
+            data_graph = Graph()
+            try:
+                data_graph.parse(data_path.as_posix())
+            except Exception as e:
+                raise Refusal(f"Could not parse data file {data_path}: {e}") from e
+            data_graphs.append((data_path, data_graph))
+
+    # The data's rename map comes from the sources as they were read, not as written: an
+    # in-place rename would otherwise find nothing left to map (#414).
+    uri_map: dict[URIRef, URIRef] = {}
+    if migrate_data:
+        combined_graph = Graph()
+        for _, graph in graphs:
+            combined_graph += graph
+        for mapping in config.rename.build_mappings(combined_graph):
+            uri_map[mapping.from_uri] = mapping.to_uri
+
+    planned = _plan_rename_outputs(config, graphs, data_graphs, uri_map, data_output)
+    replaced = _check_rename_outputs(
+        planned, config, migrate_data, data_output, config_file, in_place
+    )
+
     # Execute rename
     formatter = RefactorTextFormatter(use_colour=not no_colour)
     renamer = OntologyRenamer()
 
-    for source_path, graph in graphs:
-        click.echo(f"\nProcessing: {source_path}")
-
-        # Build mappings for preview
-        mappings = config.rename.build_mappings(graph)
-
-        if dry_run:
-            # Show preview
+    if dry_run:
+        for source_path, graph in graphs:
+            click.echo(f"\nProcessing: {source_path}")
             click.echo()
             click.echo(
                 formatter.format_rename_preview(
-                    mappings=mappings,
+                    mappings=config.rename.build_mappings(graph),
                     source_file=source_path.name,
                     source_triples=len(graph),
                 )
             )
-        else:
-            # Perform rename
-            result = renamer.rename(graph, config.rename)
+        raise SystemExit(0)
 
-            if not result.success:
-                click.secho(f"\u2717 Rename failed: {result.error}", fg="red", err=True)
-                raise SystemExit(2)
+    # Rename every source before writing any of them, so a failure leaves nothing behind.
+    results = []
+    for source_path, graph in graphs:
+        result = renamer.rename(graph, config.rename)
+        if not result.success:
+            raise Refusal(f"Rename failed for {source_path}: {result.error}")
+        results.append(result)
 
-            # Show result
-            click.echo(formatter.format_rename_result(result))
+    for (source_path, _), result in zip(graphs, results, strict=True):
+        click.echo(f"\nProcessing: {source_path}")
+        click.echo(formatter.format_rename_result(result))
 
-            # Write output
-            if result.renamed_graph:
-                out_path = config.output or (
-                    config.output_dir / source_path.name if config.output_dir else None
-                )
-                if out_path:
-                    out_path.parent.mkdir(parents=True, exist_ok=True)
-                    result.renamed_graph.serialize(destination=out_path.as_posix(), format="turtle")
-                    click.secho(f"\u2713 Wrote {out_path}", fg="green")
+        out_path = planned.ontology.get(source_path)
+        if result.renamed_graph and out_path:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            result.renamed_graph.serialize(destination=out_path.as_posix(), format="turtle")
+            click.secho(f"\u2713 Wrote {out_path}", fg="green")
+            if out_path in replaced:
+                click.secho(f"\u26a0 Replaced {replaced[out_path]}", fg="yellow", err=True)
 
     # Handle data migration
-    if migrate_data and not dry_run:
+    if migrate_data:
         click.echo("\nMigrating data...")
-
-        # Build URI map from rename config
-        combined_graph = Graph()
-        for source_path in config.source_files:
-            combined_graph.parse(source_path.as_posix())
-
-        uri_map = {}
-        for mapping in config.rename.build_mappings(combined_graph):
-            uri_map[mapping.from_uri] = mapping.to_uri
 
         if uri_map:
             migrator = DataMigrator()
-            for data_path in migrate_data:
-                data_graph = Graph()
-                try:
-                    data_graph.parse(data_path.as_posix())
-                except Exception as e:
-                    click.secho(
-                        f"\u2717 Failed to parse data file {data_path}: {e}", fg="red", err=True
-                    )
-                    continue
-
+            for data_path, data_graph in data_graphs:
                 migration_result = migrator.migrate(data_graph, uri_map=uri_map)
 
                 if migration_result.success and migration_result.migrated_graph:
-                    # Determine output path
-                    if data_output and len(migrate_data) == 1:
-                        out_path = data_output
-                    elif data_output:
-                        out_path = data_output / data_path.name
-                    else:
-                        out_path = data_path.parent / f"migrated_{data_path.name}"
-
+                    out_path = planned.data[data_path]
                     out_path.parent.mkdir(parents=True, exist_ok=True)
                     migration_result.migrated_graph.serialize(
                         destination=out_path.as_posix(), format="turtle"
@@ -3710,6 +3864,10 @@ def refactor_rename(
                         f"  Migrated {data_path.name}: {migration_result.stats.total_changes} changes"
                     )
                     click.secho(f"  \u2713 Wrote {out_path}", fg="green")
+                    if out_path in replaced:
+                        click.secho(
+                            f"  \u26a0 Replaced {replaced[out_path]}", fg="yellow", err=True
+                        )
 
     raise SystemExit(0)
 
