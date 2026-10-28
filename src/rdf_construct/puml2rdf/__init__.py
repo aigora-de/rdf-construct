@@ -49,6 +49,7 @@ from rdf_construct.puml2rdf.config import (
     load_import_config,
 )
 from rdf_construct.puml2rdf.merger import (
+    MergeConflict,
     MergeResult,
     OntologyMerger,
     merge_with_existing,
@@ -91,6 +92,7 @@ __all__ = [
     "create_default_config",
     "load_import_config",
     # Merger
+    "MergeConflict",
     "MergeResult",
     "OntologyMerger",
     "merge_with_existing",

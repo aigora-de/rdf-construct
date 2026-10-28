@@ -586,8 +586,9 @@ Convert PlantUML class diagrams to RDF/OWL ontologies.
 
 **`puml2rdf/merger.py`**
 - `OntologyMerger` class - merge generated RDF with existing ontologies
-- Preserves manual annotations while updating structure
-- Conflict detection and reporting
+- Keeps every type and blank-node axiom the diagram cannot draw; replaces a named superclass,
+  domain or range only with the diagram's own, when the diagram draws the class (#417)
+- `MergeConflict` - one replaced value or kind clash, reported by the CLI at exit 1
 
 **`puml2rdf/validators.py`**
 - `PumlModelValidator` - validate parsed PlantUML model

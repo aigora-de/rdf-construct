@@ -312,6 +312,22 @@ THREE_STATES = [
     ),
     _row(
         Row(
+            "puml2rdf",
+            "findings",
+            (
+                "puml2rdf",
+                str(SMOKE / "diagram.puml"),
+                "--merge",
+                "@tmp/merge_target.ttl",
+                "-o",
+                "@tmp/merge_target.ttl",
+            ),
+            copied=(str(SMOKE / "merge_target.ttl"),),
+        ),
+        label="merge-conflict",
+    ),
+    _row(
+        Row(
             "cq-test",
             "clean",
             ("cq-test", ANIMAL, str(EXAMPLES / "cq-test" / "cq_tests_animal.yml")),
@@ -718,6 +734,14 @@ MALFORMED = [
             ("puml2rdf", str(SMOKE / "core_prefix.puml"), "-o", "@tmp/p.ttl"),
         ),
         label="puml-prefix",
+    ),
+    _row(
+        Row(
+            "puml2rdf",
+            "refused",
+            ("puml2rdf", str(SMOKE / "diagram.puml"), "--merge", MALFORMED_TTL, "-o", "@tmp/p.ttl"),
+        ),
+        label="merge-ttl",
     ),
     _row(
         Row("cq-test", "refused", ("cq-test", MALFORMED_TTL, str(SMOKE / "cq_failing.yml"))),

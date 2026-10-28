@@ -86,8 +86,8 @@ from rdf_construct.puml2rdf import (
     ConversionConfig,
     PlantUMLParser,
     PumlToRdfConverter,
+    OntologyMerger as PumlOntologyMerger,
     load_import_config,
-    merge_with_existing,
     validate_puml,
     validate_rdf,
 )
@@ -2149,9 +2149,12 @@ def puml2rdf(
     \b
     Exit codes:
         0 - Success, or warnings without --strict
-        1 - Warnings, with --strict (nothing written)
+        1 - Warnings, with --strict (nothing written); or --merge
+            replaced or refused a value the ontology held (written,
+            unless --strict)
         2 - Refused or failed: not a whole diagram (no @startuml or
-            @enduml), a parse or model error, or RDF that cannot be written
+            @enduml), a parse or model error, an ontology to merge with
+            that cannot be parsed, or RDF that cannot be written
     """
     # Normalise output format
     format_map = {
@@ -2312,27 +2315,32 @@ def puml2rdf(
         sys.exit(0)
 
     # Merge with existing if requested
+    merge_conflicts = 0
     if merge:
         click.echo(f"Merging with {merge.name}...")
+        # Read in its own format, binding only the prefixes it declares (#417, #354)
+        existing = Graph(bind_namespaces="core")
+        parse_into(existing, merge, infer_rdf_format(merge))
         try:
-            merge_result = merge_with_existing(graph, merge)
-            graph = merge_result.graph
-            click.echo(
-                f"  Added: {merge_result.added_count}, "
-                f"Preserved: {merge_result.preserved_count}"
-            )
-            if merge_result.conflicts:
-                click.secho("Merge conflicts:", fg="yellow", err=True)
-                for conflict in merge_result.conflicts[:5]:  # Limit output
-                    click.echo(f"  {conflict}", err=True)
-                if len(merge_result.conflicts) > 5:
-                    click.echo(
-                        f"  ... and {len(merge_result.conflicts) - 5} more",
-                        err=True,
-                    )
+            merge_result = PumlOntologyMerger().merge_graphs(graph, existing)
         except Exception as e:
             click.secho(f"Error merging: {e}", fg="red", err=True)
             sys.exit(2)
+        graph = merge_result.graph
+        click.echo(
+            f"  Added: {merge_result.added_count}, "
+            f"Preserved: {merge_result.preserved_count}, "
+            f"Replaced: {merge_result.updated_count}"
+        )
+        # Every value the diagram disagreed with, because the target may be the only copy
+        merge_conflicts = len(merge_result.conflicts)
+        if merge_conflicts:
+            click.secho("Merge conflicts:", fg="yellow", err=True)
+            for conflict in merge_result.conflicts:
+                click.echo(f"  \u26a0 {conflict}", err=True)
+            if strict:
+                click.secho("Aborting due to --strict mode", fg="red", err=True)
+                sys.exit(1)
 
     # Serialise output
     try:
@@ -2345,6 +2353,10 @@ def puml2rdf(
     except Exception as e:
         click.secho(f"Error writing output: {e}", fg="red", err=True)
         sys.exit(2)
+
+    # Written, with findings: the diagram disagreed with the merged ontology (#286)
+    if merge_conflicts:
+        sys.exit(1)
 
 
 @cli.command("cq-test")

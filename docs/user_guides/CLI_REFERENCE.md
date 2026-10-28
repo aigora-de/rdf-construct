@@ -371,7 +371,7 @@ rdf-construct puml2rdf SOURCE [OPTIONS]
 - `-f, --format FORMAT`: Output format: `turtle`, `ttl`, `xml`, `rdfxml`, `jsonld`, `json-ld`, `nt`, `ntriples` (default: turtle)
 - `-n, --namespace URI`: Default namespace URI for the ontology
 - `-C, --config PATH`: Path to YAML configuration file
-- `-m, --merge PATH`: Existing ontology file to merge with
+- `-m, --merge PATH`: Existing ontology file to merge with, read in the format its extension names (exit 2 if it cannot be parsed). Its types, blank-node superclasses, domains and ranges, and anything the diagram does not draw are kept. A named superclass, domain or range is replaced only by the diagram's own for the same term, when the diagram draws the class it names. Each replacement, and each term the diagram declares a different kind of thing, is reported and exits 1 (with `--strict`, before anything is written). See [Merging with Existing Ontologies](PUML2RDF_GUIDE.md#merging-with-existing-ontologies)
 - `-v, --validate`: Check the diagram and the RDF it converts to, without writing output
 - `--strict`: Treat warnings as errors: exit 1 and write nothing
 - `-l, --language TAG`: Language tag for labels/comments (default: en)
@@ -412,8 +412,8 @@ rdf-construct puml2rdf design.puml -o ontology.ttl -n http://example.org/ont#
 # Validate without generating
 rdf-construct puml2rdf design.puml --validate
 
-# Merge with existing ontology (preserves manual annotations)
-rdf-construct puml2rdf design.puml --merge existing.ttl
+# Merge with existing ontology (keeps what the diagram cannot draw)
+rdf-construct puml2rdf design.puml --merge existing.ttl -o existing.ttl
 
 # Use configuration file for namespace mappings
 rdf-construct puml2rdf design.puml -C puml-config.yml
