@@ -214,6 +214,18 @@ change, and what to do about it, is listed command by command in the
   IRI, as an IRI or a CURIE of the source's prefixes.
 
 ### Changed
+- **An output that names an input, or another output, is refused** (#412).
+  `stats`, `describe`, `diff`, `cq-test`, `shacl-gen`, `puml2rdf`,
+  `localise report` and `localise merge` refuse an `-o` that names one of the
+  run's inputs. `merge` checks `-o`, `--report` and `--data-output` against
+  its sources, data files, config and migration rules, and against each other,
+  under `--dry-run` too. Each is refused at exit 2 before anything is written,
+  listing every problem. Each used to replace the file at exit 0 (1 for `diff`):
+  `stats a.ttl -o a.ttl` left a report where the ontology was, and
+  `merge -o out.ttl --report out.ttl` kept only the report. Paths are compared
+  as files through `core/output_paths.py`, so a link, `..` or a difference in
+  case is caught. `puml2rdf -o` may still name its `--merge` ontology, and
+  `localise merge -o` its source (#162).
 - **`refactor rename` plans its outputs, and refuses a plan that loses work**
   (#411). Every source and data file is read, and every output path worked out,
   before the first write. Two outputs that are one file (two `onto.ttl` sources

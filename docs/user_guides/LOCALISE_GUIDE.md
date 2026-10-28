@@ -195,7 +195,7 @@ rdf-construct localise merge ontology.ttl de.yml -o test.ttl --dry-run
 
 | Option | Description |
 |--------|-------------|
-| `--output, -o` | Output file (required) |
+| `--output, -o` | Output file (required). Refused (exit 2) if it names a translation file |
 | `--status` | Minimum status to include: `pending`, `needs_review`, `translated`, `approved` |
 | `--existing` | How to handle existing translations: `preserve` or `overwrite` |
 | `--dry-run` | Show what would happen without writing |
@@ -238,7 +238,7 @@ rdf-construct localise report ontology.ttl -l en,de -p rdfs:label
 | `--source-language` | Base language tag (default: `en`) |
 | `--include-deprecated` | Count deprecated entities (left out by default) |
 | `--properties, -p` | Comma-separated properties to check, on the ontology's own prefixes (see [Naming Properties](#naming-properties)) |
-| `--output, -o` | Output file for report |
+| `--output, -o` | Output file for report. Refused (exit 2) if it names the source |
 | `--format, -f` | Output format: `text` or `markdown` |
 | `--verbose, -v` | Show detailed missing translation list |
 | `--no-colour` | Disable coloured output |

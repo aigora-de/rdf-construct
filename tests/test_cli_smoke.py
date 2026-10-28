@@ -24,6 +24,7 @@ remove its marker, so the list cannot go quietly stale.
 """
 
 import hashlib
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -205,12 +206,15 @@ class Row:
         argv: The arguments, with output paths written as ``@tmp/<name>``.
         existing: Files to create in the working directory first, each holding a line of
             text: an empty file has nothing to lose, so some commands replace it (#404).
+        copied: Files to copy into the working directory first, under their own names, so
+            ``argv`` can name a real input there as ``@tmp/<name>`` (#412).
     """
 
     command: str
     state: str
     argv: tuple[str, ...]
     existing: tuple[str, ...] = ()
+    copied: tuple[str, ...] = ()
 
 
 def _row(row: Row, *, xfail: str | None = None, label: str = "") -> "ParameterSet":
@@ -270,14 +274,42 @@ THREE_STATES = [
     _row(Row("diff", "clean", ("diff", ANIMAL, ANIMAL))),
     _row(Row("diff", "findings", ("diff", ANIMAL, SIMPLE))),
     _row(Row("diff", "refused", ("diff", ANIMAL, "@tmp/missing.ttl"))),
+    # An output that is an input is refused before anything is written (#412)
+    _row(
+        Row(
+            "diff",
+            "refused",
+            ("diff", "@tmp/animal_ontology.ttl", SIMPLE, "-o", "@tmp/animal_ontology.ttl"),
+            copied=(ANIMAL,),
+        ),
+        label="output-is-input",
+    ),
     _row(Row("docs", "clean", ("docs", ANIMAL, "-o", "@tmp/docs"))),
     _row(Row("docs", "refused", ("docs", ANIMAL, "--format", "nope", "-o", "@tmp/docs"))),
     _row(Row("shacl-gen", "clean", ("shacl-gen", ANIMAL, "-o", "@tmp/shapes.ttl"))),
     _row(
         Row("shacl-gen", "refused", ("shacl-gen", ANIMAL, "-C", MALFORMED_YAML, "-o", "@tmp/s.ttl"))
     ),
+    _row(
+        Row(
+            "shacl-gen",
+            "refused",
+            ("shacl-gen", "@tmp/animal_ontology.ttl", "-o", "@tmp/animal_ontology.ttl"),
+            copied=(ANIMAL,),
+        ),
+        label="output-is-input",
+    ),
     _row(Row("puml2rdf", "clean", ("puml2rdf", str(SMOKE / "diagram.puml"), "-o", "@tmp/d.ttl"))),
     _row(Row("puml2rdf", "refused", ("puml2rdf", "@tmp/missing.puml"))),
+    _row(
+        Row(
+            "puml2rdf",
+            "refused",
+            ("puml2rdf", "@tmp/diagram.puml", "-o", "@tmp/diagram.puml"),
+            copied=(str(SMOKE / "diagram.puml"),),
+        ),
+        label="output-is-input",
+    ),
     _row(
         Row(
             "cq-test",
@@ -291,10 +323,49 @@ THREE_STATES = [
         Row("cq-test", "refused", ("cq-test", ANIMAL, str(SMOKE / "cq_ask_count.yml"))),
         label="ask-count",
     ),
+    _row(
+        Row(
+            "cq-test",
+            "refused",
+            (
+                "cq-test",
+                "@tmp/animal_ontology.ttl",
+                str(EXAMPLES / "cq-test" / "cq_tests_animal.yml"),
+                "-o",
+                "@tmp/animal_ontology.ttl",
+            ),
+            copied=(ANIMAL,),
+        ),
+        label="output-is-input",
+    ),
     _row(Row("stats", "clean", ("stats", ANIMAL))),
     _row(Row("stats", "refused", ("stats", "--compare", ANIMAL))),
+    _row(
+        Row(
+            "stats",
+            "refused",
+            ("stats", "@tmp/animal_ontology.ttl", "-o", "@tmp/animal_ontology.ttl"),
+            copied=(ANIMAL,),
+        ),
+        label="output-is-input",
+    ),
     _row(Row("describe", "clean", ("describe", ANIMAL))),
     _row(Row("describe", "refused", ("describe", ANIMAL, "--format", "nope"))),
+    _row(
+        Row(
+            "describe",
+            "refused",
+            (
+                "describe",
+                "@tmp/animal_ontology.ttl",
+                "--no-resolve",
+                "-o",
+                "@tmp/animal_ontology.ttl",
+            ),
+            copied=(ANIMAL,),
+        ),
+        label="output-is-input",
+    ),
     _row(
         Row(
             "merge",
@@ -324,6 +395,23 @@ THREE_STATES = [
         )
     ),
     _row(Row("merge", "refused", ("merge", "-c", MALFORMED_YAML, "-o", "@tmp/merged.ttl"))),
+    # The sources conflict, so --report would be written over the merge (#412)
+    _row(
+        Row(
+            "merge",
+            "refused",
+            (
+                "merge",
+                str(EXAMPLES / "merge" / "merge_core.ttl"),
+                str(EXAMPLES / "merge" / "merge_conflicting.ttl"),
+                "-o",
+                "@tmp/merged.ttl",
+                "--report",
+                "@tmp/merged.ttl",
+            ),
+        ),
+        label="report-is-output",
+    ),
     _row(Row("split", "clean", ("split", MONOLITH, "--by-namespace", "-o", "@tmp/split"))),
     _row(Row("split", "refused", ("split", MONOLITH, "-o", "@tmp/split"))),
     _row(
@@ -503,6 +591,22 @@ THREE_STATES = [
             ),
         )
     ),
+    _row(
+        Row(
+            "localise merge",
+            "refused",
+            (
+                "localise",
+                "merge",
+                ANIMAL,
+                "@tmp/translations_de.yml",
+                "-o",
+                "@tmp/translations_de.yml",
+            ),
+            copied=(TRANSLATIONS,),
+        ),
+        label="output-is-input",
+    ),
     _row(Row("localise report", "clean", ("localise", "report", ANIMAL, "-l", "en,de"))),
     _row(Row("localise report", "refused", ("localise", "report"))),
     _row(Row("localise report", "findings", ("localise", "report", GB_ONLY, "-l", "en,de"))),
@@ -510,6 +614,23 @@ THREE_STATES = [
     _row(
         Row("localise report", "refused", ("localise", "report", ANIMAL, "-l", "de", "-p", "zz:x")),
         label="unbound-prefix",
+    ),
+    _row(
+        Row(
+            "localise report",
+            "refused",
+            (
+                "localise",
+                "report",
+                "@tmp/animal_ontology.ttl",
+                "-l",
+                "de",
+                "-o",
+                "@tmp/animal_ontology.ttl",
+            ),
+            copied=(ANIMAL,),
+        ),
+        label="output-is-input",
     ),
     _row(
         Row("localise init", "clean", ("localise", "init", ANIMAL, "-l", "ja", "-o", "@tmp/ja.yml"))
@@ -541,6 +662,8 @@ def test_every_command_has_a_three_state_row():
 def test_three_states(row: Row, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     for name in row.existing:
         (tmp_path / name).write_text("not written by rdf-construct\n")
+    for source in row.copied:
+        shutil.copy(source, tmp_path)
     before = snapshot(_resolve(row.argv, tmp_path), tmp_path)
     result = _invoke(row.argv, tmp_path, monkeypatch)
     assert_no_crash(result)

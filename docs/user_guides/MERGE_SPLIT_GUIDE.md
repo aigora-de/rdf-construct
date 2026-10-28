@@ -45,16 +45,16 @@ rdf-construct merge [OPTIONS] [SOURCES]...
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `-o, --output PATH` | Output file (required) | - |
+| `-o, --output PATH` | Output file (required); see [Where Output Goes](#where-output-goes) | - |
 | `-c, --config PATH` | YAML configuration file | - |
 | `-p, --priority INT` | Priority for each source (repeatable) | 1, 2, 3... |
 | `--strategy` | Conflict resolution: `priority`, `first`, `last`, `mark_all` | `priority` |
-| `-r, --report PATH` | Write conflict report | - |
+| `-r, --report PATH` | Write conflict report; see [Where Output Goes](#where-output-goes) | - |
 | `--report-format` | Report format: `text`, `markdown` | `markdown` |
 | `--imports` | owl:imports handling: `preserve`, `remove`, `merge` | `preserve` |
 | `--migrate-data PATH` | Data file(s) to migrate (repeatable) | - |
 | `--migration-rules PATH` | YAML file with migration rules | - |
-| `--data-output PATH` | Output path for migrated data | - |
+| `--data-output PATH` | Output path for migrated data; see [Where Output Goes](#where-output-goes) | - |
 | `--dry-run` | Show what would happen without writing | `False` |
 | `--no-colour` | Disable coloured output | `False` |
 | `--init` | Generate default configuration file | - |
@@ -65,7 +65,30 @@ rdf-construct merge [OPTIONS] [SOURCES]...
 |------|---------|
 | 0 | Merged; every conflict was resolved by `--strategy`, or there were none |
 | 1 | Merged, with conflicts marked in the output for review: always for `rdfs:domain`, `rdfs:range` and functional properties; for labels under `mark_all`, or when the highest-priority sources are tied |
-| 2 | Input refused or run failed (invalid options or config, file not found, parse error) |
+| 2 | Input refused or run failed (invalid options or config, file not found, parse error, an output that names an input or another output) |
+
+#### Where Output Goes
+
+`merge` writes up to three files: the merged ontology (`-o`), the conflict report (`--report`)
+and the migrated data (`--data-output`). Before it reads anything, it checks that they are three
+different files and that none of them is an input: a source, a `--migrate-data` file, the
+`--config` file or the `--migration-rules` file. If any check fails, it writes nothing, lists every
+problem and exits 2. Paths count as one file however they are spelled: through a symbolic or
+hard link, with `..`, or in a different case on a filesystem that ignores case.
+
+```bash
+rdf-construct merge examples/merge/merge_core.ttl examples/merge/merge_conflicting.ttl \
+    -o merged.ttl --report merged.ttl
+```
+
+```
+Error: Nothing was written:
+  -o and --report name one file, merged.ttl. Choose different paths.
+```
+
+The report is written only when the merge has conflicts, but the check doesn't depend on that:
+`--report` naming `-o` is refused even for sources that agree. There is no flag that allows it.
+To merge `b.ttl` into `a.ttl`, write the merge to a new file and move it into place yourself.
 
 ### Conflict Detection
 

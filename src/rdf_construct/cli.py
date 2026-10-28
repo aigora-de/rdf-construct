@@ -249,6 +249,43 @@ def parse_into(graph: Graph, source: Path, rdf_format: str) -> None:
         raise Refusal(f"Could not parse {source} as {rdf_format}: {detail}") from exc
 
 
+def check_outputs(outputs: Sequence[tuple[str, Path]], inputs: Sequence[Path]) -> None:
+    """Refuse a run whose outputs are one file, or would replace one of its inputs (#412).
+
+    Call it once every output path and input is known, before the first byte is written. Two
+    outputs are one file when their resolved paths match, ignoring case; an output replaces an
+    input when they are the same existing file, however either is spelled. Both checks are
+    ``core.output_paths``'s. Here neither is ever allowed: a report written over an ontology,
+    or a result over a file it was not made from, is never an in-place rewrite. A command that
+    lets an output replace one of its inputs on purpose leaves that input out of ``inputs``.
+
+    Args:
+        outputs: Each file the run would write, with the option that names it (``-o``,
+            ``--report``), in the order it would write them.
+        inputs: Every file the run reads that no output may replace.
+
+    Raises:
+        Refusal: When any output collides with another or would replace an input. The message
+            lists every problem, one per line.
+    """
+    planned = [PlannedOutput(path) for _, path in outputs]
+    # Two outputs on one path are equal PlannedOutputs, so each is told apart by identity
+    flags = {id(output): flag for output, (flag, _) in zip(planned, outputs, strict=True)}
+
+    problems: list[str] = []
+    for group in colliding_outputs(planned):
+        named = " and ".join(flags[id(output)] for output in group)
+        problems.append(f"{named} name one file, {group[0].path}. Choose different paths.")
+    for output, existing in outputs_over_inputs(planned, inputs):
+        problems.append(
+            f"{flags[id(output)]} {output.path} would replace the input {existing}. "
+            "Choose another path."
+        )
+
+    if problems:
+        raise Refusal("Nothing was written:\n  " + "\n  ".join(problems))
+
+
 def check_default_output_dir(
     path: Path, param_name: str, command: str, *, overwrite: bool, named: bool = False
 ) -> None:
@@ -1465,6 +1502,8 @@ def diff(
         1 - Differences were found
         2 - Error occurred
     """
+    if output:
+        check_outputs([("-o", output)], [old_file, new_file])
 
     try:
         # Parse ignored predicates
@@ -1945,6 +1984,8 @@ def shacl_gen(
     elif output_format.lower() in ("json-ld", "jsonld"):
         output_format = "json-ld"
 
+    check_outputs([("-o", output)], [source, *([config] if config else [])])
+
     try:
         # Load configuration from file or build from CLI options
         if config:
@@ -2127,6 +2168,10 @@ def puml2rdf(
         ext_map = {"turtle": ".ttl", "xml": ".rdf", "json-ld": ".jsonld", "nt": ".nt"}
         ext = ext_map.get(rdf_format, ".ttl")
         output = source.with_suffix(ext)
+
+    # -o may name the --merge ontology: updating it from the diagram is what --merge is for
+    if output is not None:
+        check_outputs([("-o", output)], [source, *([config] if config else [])])
 
     # Load configuration if provided
     if config:
@@ -2391,6 +2436,9 @@ def cq_test(
         1 - One or more tests failed
         2 - Error occurred (invalid file, parse error, etc.)
     """
+    if output:
+        check_outputs([("-o", output)], [ontology, test_file, *data])
+
     try:
         # Load ontology
         click.echo(f"Loading ontology: {ontology.name}...", err=True)
@@ -2554,6 +2602,9 @@ def stats(
         0 - Success
         2 - Input refused or run failed (invalid options, unreadable file, etc.)
     """
+    if output:
+        check_outputs([("-o", output)], files)
+
     try:
         # Validate file count for compare mode
         if compare:
@@ -2732,6 +2783,9 @@ def describe(
         2 - Error (file not found, parse error)
     """
     from rdf_construct.describe import describe_file, format_description
+
+    if output:
+        check_outputs([("-o", output)], [file])
 
     try:
         click.echo(f"Analysing {file}...", err=True)
@@ -2977,6 +3031,23 @@ def merge(
             migrate_data=data_migration,
             dry_run=dry_run,
         )
+
+    # Every output is known now, before anything is read or written (#412)
+    planned: list[tuple[str, Path]] = []
+    if config.output:
+        planned.append(("-o", config.output.path))
+    if report:
+        planned.append(("--report", report))
+    migration = config.migrate_data
+    if migration and migration.data_sources and migration.output_path:
+        planned.append(("--data-output", migration.output_path))
+    read = [
+        *(src.path for src in config.sources),
+        *(migration.data_sources if migration else []),
+        *([config_file] if config_file else []),
+        *([migration_rules] if migration_rules else []),
+    ]
+    check_outputs(planned, read)
 
     # Execute merge
     click.echo("Merging ontologies...")
@@ -4488,6 +4559,9 @@ def localise_merge(
         get_formatter as get_localise_formatter,
     )
 
+    # -o equal to SOURCE is #162's question, so only the translation files are checked
+    check_outputs([("-o", output)], translations)
+
     # Load graph
     click.echo(f"Loading {source}...")
     graph = Graph(bind_namespaces="core")
@@ -4631,6 +4705,9 @@ def localise_report(
         source_language = check_tag(source_language, "--source-language")
     except LanguageTagError as e:
         raise Refusal(str(e)) from e
+
+    if output:
+        check_outputs([("-o", output)], [source])
 
     # Load graph: --properties are read against its own prefixes (#355)
     click.echo(f"Loading {source}...")

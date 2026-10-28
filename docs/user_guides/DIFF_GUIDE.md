@@ -41,7 +41,7 @@ rdf-construct diff [OPTIONS] OLD_FILE NEW_FILE
 
 | Option | Description |
 |--------|-------------|
-| `-o, --output FILE` | Write output to file instead of stdout |
+| `-o, --output FILE` | Write output to file instead of stdout. Refused (exit 2) if it names either input |
 | `-f, --format FORMAT` | Output format: `text` (default), `markdown`, `json` |
 | `--show TYPES` | Show only these change types (comma-separated) |
 | `--hide TYPES` | Hide these change types (comma-separated) |

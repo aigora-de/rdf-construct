@@ -42,7 +42,7 @@ rdf-construct describe SOURCE [OPTIONS]
 - `SOURCE`: RDF ontology file to describe (.ttl, .rdf, .owl, etc.)
 
 **Options**:
-- `-o, --output PATH`: Write output to file instead of stdout
+- `-o, --output PATH`: Write output to file instead of stdout; refused (exit 2) if it names an input
 - `-f, --format FORMAT`: Output format: `text` (default), `json`, `markdown`, `md`
 - `-b, --brief`: Quick overview (metadata + metrics + profile only)
 - `--no-resolve`: Skip import resolution (no network requests)
@@ -367,7 +367,7 @@ rdf-construct puml2rdf SOURCE [OPTIONS]
 - `SOURCE`: PlantUML file (.puml or .plantuml)
 
 **Options**:
-- `-o, --output PATH`: Output file path (default: source name with .ttl extension)
+- `-o, --output PATH`: Output file path (default: source name with .ttl extension); refused (exit 2) if it names the diagram or the `-C` config, but it may name the `--merge` ontology
 - `-f, --format FORMAT`: Output format: `turtle`, `ttl`, `xml`, `rdfxml`, `jsonld`, `json-ld`, `nt`, `ntriples` (default: turtle)
 - `-n, --namespace URI`: Default namespace URI for the ontology
 - `-C, --config PATH`: Path to YAML configuration file
@@ -441,7 +441,7 @@ rdf-construct shacl-gen SOURCE [OPTIONS]
 - `SOURCE`: Input RDF ontology file (.ttl, .rdf, .owl, etc.)
 
 **Options**:
-- `-o, --output PATH`: Output file path (default: `<source>-shapes.ttl`)
+- `-o, --output PATH`: Output file path (default: `<source>-shapes.ttl`); refused (exit 2) if it names the source or the `--config` file
 - `-f, --format FORMAT`: Output format: `turtle`, `ttl`, `json-ld`, `jsonld` (default: turtle)
 - `-l, --level LEVEL`: Strictness level: `minimal`, `standard`, `strict` (default: standard)
 - `-C, --config PATH`: YAML configuration file
@@ -500,7 +500,7 @@ rdf-construct diff OLD_FILE NEW_FILE [OPTIONS]
 - `NEW_FILE`: Updated RDF file
 
 **Options**:
-- `-o, --output PATH`: Write output to file instead of stdout
+- `-o, --output PATH`: Write output to file instead of stdout; refused (exit 2) if it names either input
 - `-f, --format FORMAT`: Output format: `text`, `markdown`, `md`, `json` (default: text)
 - `--show TYPES`: Show only these change types (comma-separated: added,removed,modified)
 - `--hide TYPES`: Hide these change types
@@ -627,16 +627,16 @@ rdf-construct merge [SOURCES...] -o OUTPUT [OPTIONS]
 - `SOURCES`: One or more RDF files to merge (.ttl, .rdf, .owl)
 
 **Options**:
-- `-o, --output PATH`: Output file for merged ontology (required)
+- `-o, --output PATH`: Output file for merged ontology (required); refused (exit 2) if it names an input (a source, a data file, the config or the migration rules)
 - `-c, --config PATH`: YAML configuration file
 - `-p, --priority INT`: Priority for each source (can specify multiple, higher wins conflicts)
 - `--strategy STRATEGY`: Conflict resolution: `priority`, `first`, `last`, `mark_all` (default: priority)
-- `-r, --report PATH`: Write conflict report to file
+- `-r, --report PATH`: Write conflict report to file; refused (exit 2) if it names an input or the same file as `-o` or `--data-output`, whether or not the merge has conflicts
 - `--report-format FORMAT`: Report format: `text`, `markdown`, `md` (default: markdown)
 - `--imports STRATEGY`: owl:imports handling: `preserve`, `remove`, `merge` (default: preserve)
 - `--migrate-data PATH`: Data file(s) to migrate (can specify multiple)
 - `--migration-rules PATH`: YAML file with migration rules
-- `--data-output PATH`: Output path for migrated data
+- `--data-output PATH`: Output path for migrated data; refused (exit 2) if it names an input or the same file as `-o` or `--report`
 - `--dry-run`: Show what would happen without writing files
 - `--no-colour`: Disable coloured output
 - `--init`: Generate a default merge configuration file
@@ -1124,7 +1124,7 @@ rdf-construct localise merge SOURCE TRANSLATIONS... [OPTIONS]
 - `TRANSLATIONS`: One or more translation YAML files
 
 **Options**:
-- `-o, --output PATH`: Output file for merged ontology (required)
+- `-o, --output PATH`: Output file for merged ontology (required); refused (exit 2) if it names a translation file
 - `--status STATUS`: Minimum status to include (pending|needs_review|translated|approved, default: translated)
 - `--existing STRATEGY`: How to handle existing translations (preserve|overwrite, default: preserve)
 - `--dry-run`: Preview changes without writing files
@@ -1166,7 +1166,7 @@ rdf-construct localise report SOURCE [OPTIONS]
 - `-l, --languages CODES`: Comma-separated language codes to check (required, e.g., en,de,fr)
 - `--source-language CODE`: Base language for translations (default: en)
 - `-p, --properties PROPS`: Comma-separated properties to check. A CURIE uses the ontology's own prefixes plus rdf, rdfs, owl, xsd and xml; an unbound prefix is refused (exit 2)
-- `-o, --output PATH`: Output file for report
+- `-o, --output PATH`: Output file for report; refused (exit 2) if it names an input
 - `-f, --format FORMAT`: Output format (text|markdown, default: text)
 - `-v, --verbose`: Show detailed missing translation list
 - `--no-colour`: Disable coloured output
@@ -1292,7 +1292,7 @@ rdf-construct cq-test ONTOLOGY TEST_FILE [OPTIONS]
 - `TEST_FILE`: YAML file containing competency question tests
 
 **Options**:
-- `-o, --output PATH`: Write output to file instead of stdout
+- `-o, --output PATH`: Write output to file instead of stdout; refused (exit 2) if it names the ontology, the test file or a `--data` file
 - `-f, --format FORMAT`: Output format: `text`, `json`, `junit` (default: text)
 - `-d, --data PATH`: Additional RDF data files (can specify multiple)
 - `-t, --tag TAG`: Run only tests with this tag (can specify multiple)
@@ -1365,7 +1365,7 @@ rdf-construct stats FILE [FILE...] [OPTIONS]
 - `FILE`: One or more RDF ontology files
 
 **Options**:
-- `-o, --output PATH`: Write output to file instead of stdout
+- `-o, --output PATH`: Write output to file instead of stdout; refused (exit 2) if it names one of the input files
 - `-f, --format FORMAT`: Output format: `text`, `json`, `markdown`, `md` (default: text)
 - `--compare`: Compare two ontology files (requires exactly 2 files)
 - `--include CATEGORIES`: Include only these metric categories (comma-separated)
