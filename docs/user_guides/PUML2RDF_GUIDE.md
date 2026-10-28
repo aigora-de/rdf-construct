@@ -405,6 +405,7 @@ bld:Wall a owl:Class ;
 | The output is written in `-f`'s format (Turtle by default), whatever `-o`'s extension. Pass `-f xml` to merge into a `.rdf` file in place, or the next run cannot read it. | [#162](https://github.com/aigora-de/rdf-construct/issues/162) |
 | A diagram that `uml` drew has no packages, so its terms are minted in another namespace and match nothing in the ontology the diagram came from. Each merge adds a second copy. | to be filed |
 | `uml`'s property and individual boxes are read as classes, so merging its diagram back reports a clash for every property. | [#395](https://github.com/aigora-de/rdf-construct/issues/395) |
+| A domain or range the diagram does not draw, a blank-node one included, is kept beside the diagram's, and RDFS reads several as their intersection: an ontology's `rdfs:range bld:Storey` and a diagram's `bld:Floor` make the range things that are both. Nothing is reported. | — |
 | A merge can create an `rdfs:subClassOf` cycle without saying so. | — |
 
 ## Validation
