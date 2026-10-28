@@ -45,6 +45,11 @@ def _kind(rdf_type: Node) -> str | None:
     return None
 
 
+def _name(node: Node, graph: Graph) -> str:
+    """``node`` as ``graph``'s prefixes write it, for a conflict message."""
+    return node.n3(graph.namespace_manager)
+
+
 @dataclass(frozen=True)
 class MergeConflict:
     """A value in the existing ontology that the diagram disagreed with.
@@ -186,9 +191,6 @@ class OntologyMerger:
         for prefix, ns in new_graph.namespace_manager.namespaces():
             merged.bind(prefix, ns, override=False)
 
-        def name(node: Node) -> str:
-            return node.n3(merged.namespace_manager)
-
         conflicts: list[MergeConflict] = []
         for triple in existing:
             merged.add(triple)
@@ -201,63 +203,8 @@ class OntologyMerger:
         declared = set(new_graph.subjects(RDF.type, None))
 
         for subject in sorted(set(new_graph.subjects()) - skipped, key=str):
-            # Types: added, unless the diagram declares a different kind of term
-            existing_types = set(existing.objects(subject, RDF.type))
-            existing_kinds = {_kind(t) for t in existing_types} - {None}
-            for new_type in sorted(new_graph.objects(subject, RDF.type), key=str):
-                kind = _kind(new_type)
-                if kind is None or not existing_kinds or kind in existing_kinds:
-                    continue
-                clashing = tuple(
-                    sorted((t for t in existing_types if _kind(t) is not None), key=str)
-                )
-                if self.preserve_existing:
-                    message = (
-                        f"{name(subject)} is {', '.join(name(t) for t in clashing)} here; "
-                        f"the diagram's {name(new_type)} was not written."
-                    )
-                else:
-                    for existing_type in clashing:
-                        merged.remove((subject, RDF.type, existing_type))
-                    message = (
-                        f"{name(subject)} was {', '.join(name(t) for t in clashing)}; "
-                        f"the diagram's {name(new_type)} replaced it."
-                    )
-                conflicts.append(
-                    MergeConflict("kind-clash", subject, RDF.type, clashing, (new_type,), message)
-                )
-
-            # Hierarchy, domain and range: a named value the diagram could have drawn is replaced
-            is_datatype_property = (subject, RDF.type, OWL.DatatypeProperty) in new_graph
-            for predicate in sorted(self.AUTHORITATIVE_PREDICATES - {RDF.type}, key=str):
-                new_values = set(new_graph.objects(subject, predicate))
-                if not new_values:
-                    continue
-                for value in sorted(
-                    set(existing.objects(subject, predicate)) - new_values, key=str
-                ):
-                    if isinstance(value, BNode):
-                        continue
-                    drawn = value in declared or (
-                        predicate == RDFS.range
-                        and is_datatype_property
-                        and isinstance(value, URIRef)
-                    )
-                    if not drawn:
-                        continue
-                    merged.remove((subject, predicate, value))
-                    shown = ", ".join(name(v) for v in sorted(new_values, key=str))
-                    conflicts.append(
-                        MergeConflict(
-                            "replaced",
-                            subject,
-                            predicate,
-                            (value,),
-                            tuple(sorted(new_values, key=str)),
-                            f"{name(subject)} {name(predicate)} {name(value)} was replaced "
-                            f"by the diagram's {shown}.",
-                        )
-                    )
+            conflicts += self._merge_types(subject, new_graph, existing, merged)
+            conflicts += self._merge_values(subject, new_graph, existing, merged, declared)
 
         # Add triples from new graph
         withheld = {(c.subject, RDF.type, c.new[0]) for c in conflicts if c.code == "kind-clash"}
@@ -277,6 +224,104 @@ class OntologyMerger:
             preserved_count=len(existing_triples & merged_triples),
             conflicts=conflicts,
         )
+
+    def _merge_types(
+        self, subject: Node, new_graph: Graph, existing: Graph, merged: Graph
+    ) -> list[MergeConflict]:
+        """Report each diagram type for ``subject`` that declares a different kind of term.
+
+        Types are added, so only a clash needs deciding. With ``preserve_existing`` the
+        diagram's type is held back (``merge_graphs`` leaves it out); otherwise the existing
+        types of the other kind are removed from ``merged``.
+
+        Args:
+            subject: A term the diagram mentions.
+            new_graph: Newly generated RDF graph
+            existing: Existing ontology graph
+            merged: The graph being built, holding the existing triples
+
+        Returns:
+            One ``kind-clash`` conflict per clashing diagram type.
+        """
+        conflicts: list[MergeConflict] = []
+        existing_types = set(existing.objects(subject, RDF.type))
+        existing_kinds = {_kind(t) for t in existing_types} - {None}
+        for new_type in sorted(new_graph.objects(subject, RDF.type), key=str):
+            kind = _kind(new_type)
+            if kind is None or not existing_kinds or kind in existing_kinds:
+                continue
+            clashing = tuple(sorted((t for t in existing_types if _kind(t) is not None), key=str))
+            if self.preserve_existing:
+                message = (
+                    f"{_name(subject, merged)} is "
+                    f"{', '.join(_name(t, merged) for t in clashing)} here; "
+                    f"the diagram's {_name(new_type, merged)} was not written."
+                )
+            else:
+                for existing_type in clashing:
+                    merged.remove((subject, RDF.type, existing_type))
+                message = (
+                    f"{_name(subject, merged)} was "
+                    f"{', '.join(_name(t, merged) for t in clashing)}; "
+                    f"the diagram's {_name(new_type, merged)} replaced it."
+                )
+            conflicts.append(
+                MergeConflict("kind-clash", subject, RDF.type, clashing, (new_type,), message)
+            )
+        return conflicts
+
+    def _merge_values(
+        self,
+        subject: Node,
+        new_graph: Graph,
+        existing: Graph,
+        merged: Graph,
+        declared: set[Node],
+    ) -> list[MergeConflict]:
+        """Remove from ``merged`` each existing value the diagram replaces for ``subject``.
+
+        Only a predicate the diagram gives ``subject`` a value for is considered. A blank-node
+        value is never replaced; a named one is replaced when the diagram declares it, or when
+        it is a datatype property's range.
+
+        Args:
+            subject: A term the diagram mentions.
+            new_graph: Newly generated RDF graph
+            existing: Existing ontology graph
+            merged: The graph being built, holding the existing triples
+            declared: Every term the diagram gives a type
+
+        Returns:
+            One ``replaced`` conflict per value removed.
+        """
+        conflicts: list[MergeConflict] = []
+        is_datatype_property = (subject, RDF.type, OWL.DatatypeProperty) in new_graph
+        for predicate in sorted(self.AUTHORITATIVE_PREDICATES - {RDF.type}, key=str):
+            new_values = set(new_graph.objects(subject, predicate))
+            if not new_values:
+                continue
+            for value in sorted(set(existing.objects(subject, predicate)) - new_values, key=str):
+                if isinstance(value, BNode):
+                    continue
+                drawn = value in declared or (
+                    predicate == RDFS.range and is_datatype_property and isinstance(value, URIRef)
+                )
+                if not drawn:
+                    continue
+                merged.remove((subject, predicate, value))
+                shown = ", ".join(_name(v, merged) for v in sorted(new_values, key=str))
+                conflicts.append(
+                    MergeConflict(
+                        "replaced",
+                        subject,
+                        predicate,
+                        (value,),
+                        tuple(sorted(new_values, key=str)),
+                        f"{_name(subject, merged)} {_name(predicate, merged)} "
+                        f"{_name(value, merged)} was replaced by the diagram's {shown}.",
+                    )
+                )
+        return conflicts
 
 
 def merge_with_existing(
