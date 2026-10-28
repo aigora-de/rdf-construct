@@ -102,6 +102,19 @@ understand are now reported by line number, and `--strict` makes them fatal.
 [`puml2rdf`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#puml2rdf)
 in the migration note.
 
+**If you round-trip an ontology through `puml2rdf --merge`, check what it
+lost.** Merging a diagram into a hand-maintained ontology dropped every type,
+superclass, domain and range the diagram could not draw: OWL characteristics
+such as `owl:TransitiveProperty`, `owl:NamedIndividual`, `rdfs:Class`,
+restrictions and other blank-node superclasses, all at exit 0, with no
+conflict reported, and the documented `--merge X -o X` round trip wrote that
+over its only copy. They are now kept. A superclass, domain or range the diagram
+replaces, or a term it declares a different kind of thing, is reported and exits
+1 (`--strict`: 1, nothing written). The ontology is read in its own format, and
+keeps its own `owl:Ontology` header. See
+[`puml2rdf`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#puml2rdf)
+in the migration note.
+
 **Every figure `localise report` prints changes, and `localise` now sees every
 labelled term.** Coverage is counted in entities and printed as counts:
 `6/8 (75%)`. The base row is no longer 100% by construction, and coverage can no
