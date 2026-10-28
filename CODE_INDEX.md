@@ -318,7 +318,8 @@ tests/
 - `PlannedOutput` - an output path and the input it is made from
 - `colliding_outputs()` - outputs that are one file (resolved path, ignoring case)
 - `outputs_over_inputs()`, `is_same_file()` - outputs that would replace an input (`os.path.samefile`)
-- Reports only; each command decides what to refuse (`refactor rename`, #411)
+- Reports only; each command decides what to refuse (`refactor rename`, #411). Nine more commands
+  refuse every case through `cli.py`'s `check_outputs()` (#412)
 
 **`core/utils.py`**
 - `extract_prefix_map()` - get namespaces from graph

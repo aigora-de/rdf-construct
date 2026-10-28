@@ -207,7 +207,7 @@ rdf-construct from-uml [OPTIONS] SOURCE
 
 | Option | Description |
 |--------|-------------|
-| `-o, --output PATH` | Output file path (default: source with .ttl extension) |
+| `-o, --output PATH` | Output file path (default: source with .ttl extension). Refused (exit 2) if it names the diagram or the `-C` config; it may name the `--merge` ontology |
 | `-f, --format FORMAT` | Output format: turtle, xml, jsonld, nt (default: turtle) |
 | `-n, --namespace URI` | Default namespace URI for the ontology |
 | `-C, --config PATH` | Path to YAML configuration file |
