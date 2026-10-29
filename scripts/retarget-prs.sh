@@ -144,8 +144,11 @@ for n in $prs; do
     bad "#$n: could not retarget it to $target"
     continue
   fi
-  if gh api "repos/:owner/:repo/issues/$n/comments" -f body="Thanks for this. \`main\` holds the last release, and work for the next one lands on a release branch, so I've retargeted this PR to \`$target\`. Your commits are unchanged and there's nothing you need to do. \`CONTRIBUTING.md\` has the details." >/dev/null 2>&1; then
+  if gh api "repos/:owner/:repo/issues/$n/comments" -f body="Thanks for this. \`main\` holds the last release, and work for the next one lands on a release branch, so I've retargeted this PR to \`$target\`. Your commits are unchanged. If that branch has moved on far enough to conflict with them, I'll say so here. \`CONTRIBUTING.md\` has the details." >/dev/null 2>&1; then
     ok "retargeted to $target ($reason); $(gh api "repos/:owner/:repo/pulls/$n" --jq '.commits') commit(s) in its diff"
+    # A PR branched from the last release often conflicts with the next one.
+    # GitHub computes this asynchronously, so null means "ask again shortly".
+    note "mergeable: $(gh api "repos/:owner/:repo/pulls/$n" --jq '.mergeable // "not computed yet"') — follow up on a conflict"
   else
     bad "#$n: retargeted to $target, but the comment could not be posted"
   fi
