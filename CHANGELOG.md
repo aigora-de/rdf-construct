@@ -389,6 +389,16 @@ change, and what to do about it, is listed command by command in the
   counts entity and property pairs. The CLI output is unchanged.
 
 ### Fixed
+- **`localise report` writes a `-o` report as UTF-8, and plain** (#163). The
+  report was written by `Path.write_text` with no encoding, so on a machine
+  whose preferred encoding is not UTF-8 the run died with
+  `UnicodeEncodeError` at the point of writing, after the whole report had
+  been computed — the status column is `✓`, `⚠` and `✗`, which an encoding
+  such as cp1252 cannot encode. It is now written with `encoding="utf-8"`,
+  like the other writes in the command. The text written to a file was also
+  coloured: the formatter was built with `--no-colour`'s negation whatever
+  `-o` said, so a checked-in report needed `--no-colour` to keep ANSI escapes
+  out of it. A written report is now plain text, and stdout keeps its colour.
 - **`diff` compares blank nodes by structure, in both directions** (#143). It
   compared triples by the labels rdflib gives blank nodes at parse time, and
   then skipped every blank-node subject. So any file with an `owl:Restriction`

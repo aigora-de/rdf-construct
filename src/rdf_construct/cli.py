@@ -4736,14 +4736,14 @@ def localise_report(
     )
     report = reporter.report(graph, lang_list, source)
 
-    # Format output
-    formatter = get_localise_formatter(output_format, use_colour=not no_colour)
+    # Format output; a written file is plain text, without ANSI escapes (#163)
+    formatter = get_localise_formatter(output_format, use_colour=not (no_colour or output))
     report_text = formatter.format_coverage_report(report, verbose=verbose)
 
     # Output
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(report_text)
+        output.write_text(report_text, encoding="utf-8")
         click.secho(f"\u2713 Wrote {output}", fg="green")
         _echo_localise_warnings(report.warnings)
     else:
