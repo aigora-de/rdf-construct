@@ -454,6 +454,26 @@ class TestEdgeCases:
         # Should still generate, using QName as fallback
         assert result.classes_count == 1
 
+    def test_class_with_whitespace_label(self, output_dir: Path):
+        """A whitespace-only label falls back to the qname like an empty one (#260)."""
+        g = Graph()
+        g.bind("ex", EX)
+        g.bind("owl", OWL)
+        g.bind("rdfs", RDFS)
+        g.add((EX.Blank, RDF.type, OWL.Class))
+        g.add((EX.Blank, RDFS.label, Literal("   ")))
+
+        config = DocsConfig(output_dir=output_dir, format="html")
+        generator = DocsGenerator(config)
+
+        result = generator.generate(g)
+
+        assert result.classes_count == 1
+        # The index must link with the qname as visible text. A whitespace-only
+        # link renders as nothing to click (#260).
+        index_content = (output_dir / "index.html").read_text()
+        assert "ex:Blank" in index_content
+
     def test_circular_hierarchy(self, output_dir: Path):
         """Test handling of circular class hierarchies."""
         g = Graph()
@@ -1760,9 +1780,19 @@ class TestSKOSRendering:
         config = DocsConfig(output_dir=output_dir, format="json", single_page=True)
         DocsGenerator(config).generate(skos_vocabulary)
 
-        data = json.loads((output_dir / "ontology.json").read_text())
+        data = json.loads((output_dir / "index.json").read_text())
         assert len(data["concepts"]) == 7
         assert len(data["concept_schemes"]) == 2
+
+    def test_json_single_page_writes_index_json(
+        self, skos_vocabulary: Graph, output_dir: Path
+    ):
+        """Single-page JSON uses the documented name index.json, like multi-page (#258)."""
+        config = DocsConfig(output_dir=output_dir, format="json", single_page=True)
+        DocsGenerator(config).generate(skos_vocabulary)
+
+        assert (output_dir / "index.json").exists()
+        assert not (output_dir / "ontology.json").exists()
 
 
 class TestSKOSIndexAndSinglePage:
