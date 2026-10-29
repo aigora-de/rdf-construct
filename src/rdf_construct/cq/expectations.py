@@ -10,7 +10,7 @@ Supports various expectation styles:
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from typing import Any
 
 from rdflib import URIRef, Literal, BNode
 from rdflib.query import Result
@@ -34,20 +34,7 @@ class CheckResult:
 
 
 class Expectation(ABC):
-    """Abstract base class for all expectation types.
-
-    Attributes:
-        query_forms: The SPARQL query forms whose result this expectation can be checked against.
-            A boolean ASK answer has no rows to count or bind, so only ``BooleanExpectation``
-            accepts it.
-    """
-
-    query_forms: ClassVar[frozenset[str]] = frozenset({"SELECT", "CONSTRUCT", "DESCRIBE"})
-
-    @property
-    def key(self) -> str:
-        """Return the ``expect:`` spelling this expectation is written with."""
-        return self.describe()
+    """Abstract base class for all expectation types."""
 
     @abstractmethod
     def check(self, result: Result) -> CheckResult:
@@ -68,19 +55,10 @@ class Expectation(ABC):
 
 
 class BooleanExpectation(Expectation):
-    """Expectation for ASK queries returning true/false.
-
-    Against a SELECT, CONSTRUCT or DESCRIBE, true means at least one row or triple.
-    """
-
-    query_forms: ClassVar[frozenset[str]] = frozenset({"ASK", "SELECT", "CONSTRUCT", "DESCRIBE"})
+    """Expectation for ASK queries returning true/false."""
 
     def __init__(self, expected: bool):
         self.expected = expected
-
-    @property
-    def key(self) -> str:
-        return str(self.expected).lower()
 
     def check(self, result: Result) -> CheckResult:
         # ASK queries return a boolean result
@@ -89,11 +67,7 @@ class BooleanExpectation(Expectation):
 
         return CheckResult(
             passed=passed,
-            message=(
-                f"Query answered {actual}, as expected"
-                if passed
-                else f"Query answered {actual}, expected {self.expected}"
-            ),
+            message="ASK query matched" if passed else "ASK query did not match",
             expected=str(self.expected),
             actual=str(actual),
         )
@@ -104,10 +78,6 @@ class BooleanExpectation(Expectation):
 
 class HasResultsExpectation(Expectation):
     """Expectation that a query returns at least one result."""
-
-    @property
-    def key(self) -> str:
-        return "has_results"
 
     def check(self, result: Result) -> CheckResult:
         # Convert to list to count (consumes the iterator)
@@ -128,10 +98,6 @@ class HasResultsExpectation(Expectation):
 
 class NoResultsExpectation(Expectation):
     """Expectation that a query returns zero results."""
-
-    @property
-    def key(self) -> str:
-        return "no_results"
 
     def check(self, result: Result) -> CheckResult:
         results_list = list(result)
@@ -162,17 +128,6 @@ class CountExpectation(Expectation):
     exact: int | None = None
     min_count: int | None = None
     max_count: int | None = None
-
-    @property
-    def key(self) -> str:
-        if self.exact is not None:
-            return "count"
-        keys = []
-        if self.min_count is not None:
-            keys.append("min_results")
-        if self.max_count is not None:
-            keys.append("max_results")
-        return " and ".join(keys) if keys else "count"
 
     def check(self, result: Result) -> CheckResult:
         results_list = list(result)
@@ -228,11 +183,6 @@ class ValuesExpectation(Expectation):
     """
 
     expected_results: list[dict[str, Any]] = field(default_factory=list)
-    query_forms: ClassVar[frozenset[str]] = frozenset({"SELECT"})
-
-    @property
-    def key(self) -> str:
-        return "results"
 
     def check(self, result: Result) -> CheckResult:
         results_list = list(result)
@@ -293,11 +243,6 @@ class ContainsExpectation(Expectation):
     """
 
     expected_bindings: list[dict[str, Any]] = field(default_factory=list)
-    query_forms: ClassVar[frozenset[str]] = frozenset({"SELECT"})
-
-    @property
-    def key(self) -> str:
-        return "contains"
 
     def check(self, result: Result) -> CheckResult:
         results_list = list(result)
@@ -360,31 +305,6 @@ class ContainsExpectation(Expectation):
 
     def describe(self) -> str:
         return f"contains {len(self.expected_bindings)} binding(s)"
-
-
-def query_form_refusal(question_id: str, expectation: Expectation, query_form: str) -> str | None:
-    """Say why an expectation cannot be checked against a query form, if it cannot.
-
-    Args:
-        question_id: Id of the competency question, named in the message
-        expectation: The question's expectation
-        query_form: The form of the executed query: ``ASK``, ``SELECT``, ``CONSTRUCT`` or
-            ``DESCRIBE``
-
-    Returns:
-        None if the expectation accepts the form, otherwise the refusal message
-    """
-    if query_form in expectation.query_forms:
-        return None
-    if query_form == "ASK":
-        return (
-            f"{question_id}: an ASK query answers true or false, so it cannot be checked with "
-            f"'{expectation.key}'; an ASK takes expect: true or expect: false"
-        )
-    return (
-        f"{question_id}: a {query_form} query returns triples, not variable bindings, so it "
-        f"cannot be checked with '{expectation.key}'"
-    )
 
 
 def parse_expectation(expect: Any) -> Expectation:

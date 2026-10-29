@@ -22,26 +22,15 @@ rdf-construct lint ontology.ttl --format json
 
 | Code | Meaning |
 |------|---------|
-| 0 | No findings at or above `--fail-on` |
-| 1 | Findings at or above `--fail-on` |
-| 2 | Input refused or run failed (invalid options or config, an unknown rule name, a selection that leaves no rule to run, file not found, parse error) |
-
-`--fail-on` sets the lowest severity that counts: `error` (the default), `warning`, `info` or
-`never`. With the default, a run with only warnings exits 0.
+| 0 | No issues found |
+| 1 | Warnings found (no errors) |
+| 2 | Errors found |
 
 Use exit codes in CI pipelines:
 
 ```bash
-# Fail on errors only (the default)
-rdf-construct lint ontology.ttl || exit 1
-
-# Fail on warnings too
-rdf-construct lint ontology.ttl --fail-on warning || exit 1
+rdf-construct lint ontology.ttl --level strict || exit 1
 ```
-
-A `1` always means the run completed and found something; a `2` means it could not check the file
-at all. Before v0.7.0, error findings exited 2 — see the
-[migration note](../MIGRATION_v0.7.0.md#lint).
 
 ## Strictness Levels
 
@@ -65,9 +54,7 @@ rdf-construct lint ontology.ttl --level strict
 
 ### Relaxed
 
-Downgrades warnings to info. Every rule still runs: relaxed changes how findings are reported, not
-which checks are made, so the output is quieter but no shorter. To run fewer checks,
-[disable them](#enabling-and-disabling-rules).
+Downgrades warnings to info and skips info-level rules. Useful for early development.
 
 ```bash
 rdf-construct lint ontology.ttl --level relaxed
@@ -115,27 +102,6 @@ rdf-construct lint ontology.ttl --disable inconsistent-naming
 # Combine both
 rdf-construct lint ontology.ttl --enable orphan-class --disable dangling-reference
 ```
-
-Every rule name is checked. An unknown name in `--enable` or `--disable` is refused with exit 2 and
-the list of available rules, as it already was in a config file:
-
-```bash
-rdf-construct lint ontology.ttl --enable orpahn-class
-# Error: Unknown rule 'orpahn-class' in --enable. Available rules: circular-subclass, ...
-```
-
-A selection that leaves no rule to run is refused too, because a run with no rules would report
-every file clean:
-
-```bash
-rdf-construct lint ontology.ttl --enable orphan-class --disable orphan-class
-# Error: No lint rules left to run: enabled orphan-class; disabled orphan-class. A run with no
-# rules would report every file clean.
-```
-
-On the command line, `--enable` **replaces** a config file's `enable:` list, while `--disable` **adds
-to** its `disable:` list. A config that disables a rule, plus an `--enable` naming only that rule,
-leaves nothing to run; the refusal says so. `--level` never changes which rules run.
 
 ### From Configuration File
 
@@ -197,9 +163,6 @@ The linter automatically searches for configuration files in this order:
 3. `.rdf-lint.yaml` in current directory
 4. Parent directories (up to filesystem root)
 
-An option given on the command line overrides the config file, and the config file overrides the
-option's default: a `.rdf-lint.yml` that says `level: strict` applies unless you pass `--level`.
-
 ## Output Formats
 
 ### Text Output (default)
@@ -207,11 +170,11 @@ option's default: a `.rdf-lint.yml` that says `level: strict` applies unless you
 Human-readable output with optional colours:
 
 ```
-ontology.ttl:12: warning[orphan-class]: 'Building' Class has no rdfs:subClassOf declaration
+ontology.ttl:12: error[orphan-class]: 'Building' Class has no rdfs:subClassOf declaration
 ontology.ttl:18: warning[missing-label]: 'hasFloor' Property lacks rdfs:label
 ontology.ttl:24: info[property-no-domain]: 'builtIn' Object property has no rdfs:domain
 
-Found 0 errors, 2 warnings, 1 info in 1 file
+Found 1 error, 1 warning, 1 info in 1 file
 ```
 
 Disable colours for piping:
@@ -236,16 +199,16 @@ rdf-construct lint ontology.ttl --format json
       "issues": [
         {
           "rule": "orphan-class",
-          "severity": "warning",
+          "severity": "error",
           "entity": "http://example.org/Building",
           "message": "Class has no rdfs:subClassOf declaration",
           "line": null
         }
       ],
-      "summary": {"errors": 0, "warnings": 1, "info": 0}
+      "summary": {"errors": 1, "warnings": 0, "info": 0}
     }
   ],
-  "summary": {"errors": 0, "warnings": 1, "info": 0, "files": 1}
+  "summary": {"errors": 1, "warnings": 0, "info": 0, "files": 1}
 }
 ```
 
@@ -302,9 +265,6 @@ repos:
         args: [--level, standard]
 ```
 
-With the default `--fail-on error`, a file with only warnings passes this hook. Add
-`--fail-on, warning` to `args` to block on warnings as well.
-
 ## Listing Available Rules
 
 ```bash
@@ -317,7 +277,7 @@ Output:
 Available lint rules:
 
   Structural
-    orphan-class: warning - Class has no rdfs:subClassOf declaration
+    orphan-class: error - Class has no rdfs:subClassOf declaration
     dangling-reference: error - Reference to undefined entity
     ...
 
@@ -335,7 +295,7 @@ Available lint rules:
 ### Typical Development Workflow
 
 ```bash
-# During development - relaxed mode (warnings reported as info; every rule still runs)
+# During development - relaxed mode
 rdf-construct lint ontology.ttl --level relaxed
 
 # Before committing - standard mode
@@ -375,44 +335,15 @@ rdf-construct lint ontology.ttl \
 
 ### "Unknown rule" Error
 
-An unknown name in `--enable`, `--disable`, or a config's `enable:`, `disable:` or `severity:` is
-refused, and the message lists the available rules. Check them with `--list-rules`. Rule names are
-case-sensitive and use hyphens.
-
-### "No lint rules left to run" Error
-
-Your `--enable`, `--disable` and config settings together select no rule at all. The message names
-what was enabled and what was disabled. Remember that `--enable` on the command line replaces the
-config's `enable:` list but `--disable` adds to its `disable:` list.
+Check available rules with `--list-rules`. Rule names are case-sensitive and use hyphens.
 
 ### Many False Positives
 
-To run fewer checks, disable the rules that do not apply to your ontology:
+Consider:
 
-1. Disable them in `.rdf-lint.yml` (`disable:`), so every run in the project agrees, or for a
-   single run with `--disable`
-2. Lower a rule's severity under `severity:` if you still want to see its findings without them
-   failing your gate
-3. Check whether your ontology imports external definitions that aren't loaded
-
-`--level relaxed` makes the output quieter, not shorter: warnings are reported as info, but every
-rule still runs and every finding is still listed.
-
-Before v0.7.0, relaxed also skipped the four rules whose default severity is info. To get that run
-back, disable them alongside it:
-
-```yaml
-level: relaxed
-disable: [redundant-subclass, property-no-domain, property-no-range, inconsistent-naming]
-```
-
-or for a single run:
-
-```bash
-rdf-construct lint ontology.ttl --level relaxed \
-  --disable redundant-subclass --disable property-no-domain \
-  --disable property-no-range --disable inconsistent-naming
-```
+1. Using `--level relaxed` during early development
+2. Disabling specific rules in config
+3. Checking if your ontology imports external definitions that aren't loaded
 
 ### External References Flagged as Dangling
 

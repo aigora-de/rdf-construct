@@ -20,7 +20,7 @@ Example usage:
 
     # Multiple files
     summary = engine.lint_files([Path("a.ttl"), Path("b.ttl")])
-    print(f"{summary.total_errors} errors, {summary.total_warnings} warnings")
+    print(f"Exit code: {summary.exit_code}")
 """
 
 from .rules import (

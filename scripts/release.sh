@@ -58,8 +58,7 @@ Checks performed:
   gate       scripts/ci-local.sh passes
   versions   pyproject.toml = __init__.py = CHANGELOG = README.md = CLAUDE.md
   changelog  top entry is dated, matches the version, [Unreleased] is empty,
-             the footer carries this version's compare link, and the Version
-             History Summary table's top row is this version, dated to match
+             and the footer carries this version's compare link
   tag        does not already exist, locally or on origin
 
 Then: a clean dist/; a build; the wheel installed into a throwaway venv and
@@ -170,11 +169,9 @@ check_versions() {
 check_changelog() {
   say "CHANGELOG"
 
-  local top entry_date=""
-  top="$(grep -m1 -E '^## \[[0-9]' CHANGELOG.md)"
+  local top; top="$(grep -m1 -E '^## \[[0-9]' CHANGELOG.md)"
   if [[ "$top" =~ ^\#\#\ \[$VERSION\]\ -\ ([0-9]{4}-[0-9]{2}-[0-9]{2})$ ]]; then
-    entry_date="${BASH_REMATCH[1]}"
-    ok "top entry is [$VERSION], dated $entry_date"
+    ok "top entry is [$VERSION], dated ${BASH_REMATCH[1]}"
   else
     bad "top dated entry is not '## [$VERSION] - YYYY-MM-DD'"
     note "found: $top"
@@ -198,28 +195,6 @@ check_changelog() {
   grep -q "^\[Unreleased\]: .*compare/v$VERSION\.\.\.HEAD$" CHANGELOG.md \
     && ok "[Unreleased] link is based on v$VERSION" \
     || bad "[Unreleased] link does not read 'compare/v$VERSION...HEAD'"
-
-  # The Version History Summary table is maintained by hand, and it drifted a
-  # whole release before anyone noticed: the 0.5.0 row was never added, so the
-  # table sat at 0.4.7 throughout the v0.6.0 cycle (#124).
-  #
-  # Only the TOP row is checked. The table has never been complete — 0.2.1 has a
-  # section heading and a compare link but no row, from 2025-12-03 — so asserting
-  # completeness would fail on history nobody is releasing, and a check that fails
-  # for reasons outside the release is one people learn to skip.
-  local row
-  row="$(grep -m1 -E '^\| \[[0-9]+\.[0-9]+\.[0-9]+\] \|' CHANGELOG.md)"
-  if [[ -z "$row" ]]; then
-    bad "no version rows found in the Version History Summary table"
-  elif [[ ! "$row" =~ ^\|\ \[$VERSION\]\ \| ]]; then
-    bad "Version History Summary table has no row for $VERSION"
-    note "its top row is: $row"
-  elif [[ "$row" =~ ^\|\ \[$VERSION\]\ \|\ ([0-9]{4}-[0-9]{2}-[0-9]{2})\ \| ]] \
-       && [[ -n "$entry_date" ]] && [[ "${BASH_REMATCH[1]}" != "$entry_date" ]]; then
-    bad "summary table dates $VERSION ${BASH_REMATCH[1]}, the entry says $entry_date"
-  else
-    ok "summary table's top row is $VERSION"
-  fi
 }
 
 check_tag() {
@@ -301,63 +276,25 @@ do_dry_run() {
 
 # --- after you have published --------------------------------------------------
 
-# The whole CHANGELOG section made a 302-line release page for v0.6.0, opening
-# with the lead and then 280 lines of bullets nobody scrolls (#125). The release
-# page and the CHANGELOG want different things: the file stays complete and
-# canonical, the page carries the lead, the credits and a link to the rest.
-#
-# Written to stdout so it can be inspected without publishing anything.
-build_notes() {
-  local lead contributors anchor repo_url
-
-  # Everything between the version heading and its first '###' subsection.
-  lead="$(awk -v v="$VERSION" \
-    '$0 ~ "^## \\["v"\\]" {f=1; next} /^## \[/ {f=0} /^### / {f=0} f' CHANGELOG.md \
-    | awk 'NF {seen=1} seen')"
-
-  # The credits, if the section has any, kept verbatim with their heading.
-  contributors="$(awk -v v="$VERSION" \
-    '$0 ~ "^## \\["v"\\]" {s=1; next} /^## \[/ {s=0}
-     s && /^### Contributors/ {c=1}
-     s && c && /^### / && !/^### Contributors/ {c=0}
-     s && c' CHANGELOG.md)"
-
-  echo "PyPI: https://pypi.org/project/rdf-construct/$VERSION/"
-  echo
-  echo '```'
-  echo "pip install rdf-construct==$VERSION"
-  echo '```'
-  echo
-  echo "---"
-  echo
-
-  if [[ -z "$(printf '%s' "$lead" | tr -d '[:space:]')" ]]; then
-    # No lead paragraph — the sections before v0.6.0 carry none, and #121 said
-    # so deliberately. Fall back to the whole section rather than publishing an
-    # empty release body.
-    awk -v v="$VERSION" '$0 ~ "^## \\["v"\\]"{f=1;next} /^## \[/{f=0} f' CHANGELOG.md
-    return
-  fi
-
-  printf '%s\n\n' "$lead"
-  [[ -n "$contributors" ]] && printf '%s\n\n' "$contributors"
-
-  # GitHub's heading anchor for '## [0.6.0] - 2026-09-04' is '#060---2026-09-04'.
-  anchor="$(grep -m1 -E "^## \[$VERSION\]" CHANGELOG.md \
-    | sed 's/^## //' | tr -d '][.' | tr ' ' '-' | tr '[:upper:]' '[:lower:]')"
-  repo_url="$(gh api repos/:owner/:repo --jq .html_url 2>/dev/null)"
-  echo "**Full changelog:** ${repo_url:-https://github.com/aigora-de/rdf-construct}/blob/$TAG/CHANGELOG.md#$anchor"
-}
-
 do_post() {
   say "GitHub release for $TAG"
   if gh release view "$TAG" >/dev/null 2>&1; then
     ok "release already exists"
   else
     local notes; notes="$(mktemp)"
-    build_notes > "$notes"
+    {
+      echo "PyPI: https://pypi.org/project/rdf-construct/$VERSION/"
+      echo
+      echo '```'
+      echo "pip install rdf-construct==$VERSION"
+      echo '```'
+      echo
+      echo "---"
+      echo
+      awk -v v="$VERSION" '$0 ~ "^## \\["v"\\]"{f=1;next} /^## \[/{f=0} f' CHANGELOG.md
+    } > "$notes"
     if gh release create "$TAG" --title "$TAG" --notes-file "$notes" --verify-tag >/dev/null 2>&1; then
-      ok "created, notes built from the CHANGELOG entry"
+      ok "created, notes taken from the CHANGELOG entry"
     else
       bad "gh release create failed"
     fi

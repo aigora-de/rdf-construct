@@ -17,10 +17,6 @@ UNCLAIMED_POLICIES = ("warn", "emit", "ignore")
 
 DEFAULT_UNCLAIMED_POLICY = "warn"
 
-#: Section name with a fixed meaning: it places the ``owl:Ontology`` subjects. A profile
-#: without one still writes them, first, unless it sets ``header: false`` (#90).
-HEADER_SECTION = "header"
-
 
 class OrderingProfile:
     """Represents an ordering profile from a YAML configuration.
@@ -36,8 +32,6 @@ class OrderingProfile:
         predicate_order: Optional predicate ordering configuration
         unclaimed: Policy for subjects no section claims, or None to inherit
             the config-level default
-        header: Whether to write the ontology header, or None to inherit the
-            config-level default
     """
 
     def __init__(self, name: str, config: dict[str, Any]):
@@ -51,16 +45,7 @@ class OrderingProfile:
         self.description = config.get("description", "")
         self.sections = config.get("sections", [])
         self.unclaimed = config.get("unclaimed")
-        self.header = config.get("header")
         self.predicate_order = PredicateOrderConfig.from_dict(config.get("predicate_order"))
-
-    @property
-    def has_header_section(self) -> bool:
-        """Whether one of the profile's sections is the ``header`` section."""
-        return any(
-            isinstance(sec, dict) and sec and next(iter(sec)) == HEADER_SECTION
-            for sec in self.sections
-        )
 
     def __repr__(self) -> str:
         return f"OrderingProfile(name={self.name!r}, sections={len(self.sections)})"
@@ -185,48 +170,6 @@ class OrderingConfig:
             )
 
         return str(policy)
-
-    def get_header_policy(self, profile_name: str) -> bool:
-        """Get whether a profile writes the ontology header.
-
-        The header is not a section's to lose (#90): a profile with no ``header``
-        section still writes the ``owl:Ontology`` subjects, first. Omitting them
-        takes ``header: false``. Profile-level ``header``, or a ``header`` section,
-        takes precedence over ``defaults.header``, which in turn takes precedence
-        over the built-in default (true).
-
-        Args:
-            profile_name: Profile identifier
-
-        Returns:
-            False if the profile omits the header, True otherwise
-
-        Raises:
-            KeyError: If profile name not found
-            ValueError: If the setting is not a boolean, or is false in a profile
-                that also has a ``header`` section
-        """
-        profile = self.get_profile(profile_name)
-
-        header = profile.header
-        if header is None and profile.has_header_section:
-            # The profile's own section outranks a config-level default.
-            header = True
-        if header is None:
-            header = self.defaults.get("header", True)
-
-        if not isinstance(header, bool):
-            raise ValueError(
-                f"Unknown 'header' setting {header!r} in profile '{profile_name}'. "
-                f"Expected true or false"
-            )
-        if not header and profile.has_header_section:
-            raise ValueError(
-                f"Profile '{profile_name}' sets 'header: false' but also has a "
-                f"'header' section. Remove one of them"
-            )
-
-        return header
 
     def list_profiles(self) -> list[str]:
         """Get list of available profile names.

@@ -13,7 +13,7 @@ from typing import TextIO
 
 from rdflib import Graph
 
-from rdf_construct.merge.conflicts import Conflict, conflict_explanation
+from rdf_construct.merge.conflicts import Conflict, ConflictType
 from rdf_construct.merge.merger import MergeResult
 from rdf_construct.merge.migrator import MigrationResult
 
@@ -159,12 +159,8 @@ class TextFormatter(BaseFormatter):
                 subj = self._format_term(conflict.subject, graph)
                 pred = self._format_term(conflict.predicate, graph)
                 lines.append(f"  {subj} {pred}")
-                if conflict.winner:
-                    lines.append(
-                        f"    → Kept {conflict.winner.path} (priority {conflict.winner.priority})"
-                    )
-                    for cv in conflict.discarded:
-                        lines.append(f"    → Removed: {cv} (from {cv.source_path})")
+                if conflict.resolution:
+                    lines.append(f"    → Used: {conflict.resolution}")
 
         return "\n".join(lines)
 
@@ -184,7 +180,6 @@ class TextFormatter(BaseFormatter):
 
         lines.append("Changes:")
         lines.append(f"  Subjects updated: {result.stats.subjects_updated}")
-        lines.append(f"  Predicates updated: {result.stats.predicates_updated}")
         lines.append(f"  Objects updated: {result.stats.objects_updated}")
         lines.append(f"  Triples added: {result.stats.triples_added}")
         lines.append(f"  Triples removed: {result.stats.triples_removed}")
@@ -286,15 +281,13 @@ class MarkdownFormatter(BaseFormatter):
                 for cv in conflict.values:
                     lines.append(f"| {cv.source_path} | {cv.priority} | {cv} |")
                 lines.append("")
-                lines.append(f"**Reason**: {self._conflict_reason(conflict, graph)}")
+                lines.append(f"**Reason**: {self._conflict_reason(conflict)}")
                 lines.append("")
 
         if resolved:
             lines.append("## Auto-Resolved Conflicts")
             lines.append("")
-            lines.append(
-                "These were resolved by `--strategy`. Discarded values are not in the output file."
-            )
+            lines.append("These were resolved automatically based on priority.")
             lines.append("")
 
             for conflict in resolved:
@@ -303,14 +296,17 @@ class MarkdownFormatter(BaseFormatter):
 
                 lines.append(f"### {subj} {pred}")
                 lines.append("")
-                if conflict.winner:
-                    winner = conflict.winner
-                    kept = ", ".join(str(cv) for cv in conflict.kept) or "only shared values"
-                    lines.append(f"- **Kept** ({winner.path}, priority {winner.priority}): {kept}")
-                    for cv in conflict.discarded:
-                        lines.append(
-                            f"- *Discarded* ({cv.source_path}, " f"priority {cv.priority}): {cv}"
-                        )
+                if conflict.resolution:
+                    lines.append(
+                        f"- **Kept** ({conflict.resolution.source_path}, "
+                        f"priority {conflict.resolution.priority}): {conflict.resolution}"
+                    )
+                    for cv in conflict.values:
+                        if cv != conflict.resolution:
+                            lines.append(
+                                f"- *Discarded* ({cv.source_path}, "
+                                f"priority {cv.priority}): {cv}"
+                            )
                 lines.append("")
 
         lines.append("## Recommendations")
@@ -342,7 +338,6 @@ class MarkdownFormatter(BaseFormatter):
         lines.append(f"| Source triples | {result.source_triples} |")
         lines.append(f"| Result triples | {result.result_triples} |")
         lines.append(f"| Subjects updated | {result.stats.subjects_updated} |")
-        lines.append(f"| Predicates updated | {result.stats.predicates_updated} |")
         lines.append(f"| Objects updated | {result.stats.objects_updated} |")
         lines.append(f"| Triples added | {result.stats.triples_added} |")
         lines.append(f"| Triples removed | {result.stats.triples_removed} |")
@@ -368,10 +363,15 @@ class MarkdownFormatter(BaseFormatter):
                 pass
         return f"`{term}`"
 
-    def _conflict_reason(self, conflict: Conflict, graph: Graph | None = None) -> str:
+    def _conflict_reason(self, conflict: Conflict) -> str:
         """Get a human-readable reason for the conflict."""
-        lines = conflict_explanation(conflict, graph if graph is not None else Graph())
-        return " ".join(line for line in lines if not line.startswith("To resolve:"))
+        type_reasons = {
+            ConflictType.VALUE_DIFFERENCE: "Different values for the same predicate",
+            ConflictType.TYPE_DIFFERENCE: "Different type declarations",
+            ConflictType.HIERARCHY_DIFFERENCE: "Different hierarchy positions",
+            ConflictType.SEMANTIC_CONTRADICTION: "Semantically incompatible assertions",
+        }
+        return type_reasons.get(conflict.conflict_type, "Values differ between sources")
 
 
 # Formatter registry

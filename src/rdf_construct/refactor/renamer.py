@@ -16,7 +16,6 @@ from typing import Any
 
 from rdflib import Graph, URIRef, Literal, BNode
 
-from rdf_construct.core.utils import rebase_iri
 from rdf_construct.refactor.config import RenameConfig, RenameMapping
 
 
@@ -125,9 +124,8 @@ class OntologyRenamer:
         # Track which mappings were actually applied
         applied_mappings: set[URIRef] = set()
 
-        # Create new graph with renamed URIs. "core" rather than rdflib's default table, so
-        # a source prefix such as org: is not pushed aside to org1: on the way out.
-        renamed_graph = Graph(bind_namespaces="core")
+        # Create new graph with renamed URIs
+        renamed_graph = Graph()
 
         # Copy namespace bindings, updating if needed
         old_ns_to_new: dict[str, str] = {}
@@ -138,9 +136,8 @@ class OntologyRenamer:
             ns_str = str(ns)
             new_ns_str = ns_str
             for old_ns, new_ns in old_ns_to_new.items():
-                rebased = rebase_iri(ns_str, old_ns, new_ns)
-                if rebased is not None:
-                    new_ns_str = rebased
+                if ns_str.startswith(old_ns) or ns_str == old_ns:
+                    new_ns_str = ns_str.replace(old_ns, new_ns, 1)
                     break
             renamed_graph.bind(prefix, new_ns_str, override=True)
 
@@ -248,7 +245,7 @@ def rename_file(
         RenameResult with statistics.
     """
     # Load source graph
-    graph = Graph(bind_namespaces="core")
+    graph = Graph()
     try:
         graph.parse(source_path.as_posix())
     except Exception as e:

@@ -2,73 +2,13 @@
 
 Analyses ontologies and reports translation coverage across languages,
 identifying missing translations and tracking progress.
-
-Coverage is counted in **entities**, not literals (#158). For each property, the denominator is
-the entities carrying that property in at least one language, and a language's figure is how many
-of them carry it in that language. The source language is measured the same way, so its row says
-how much of the labelled material exists in the source language. A second literal in one language
-adds nothing to the figure; for a per-language property such as ``rdfs:label`` it is reported as
-a duplicate instead. Which subjects are entities, and which literals are in which language, is
-defined once in :mod:`rdf_construct.localise.entities`.
 """
 
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from rdflib import Graph, URIRef
-
-from rdf_construct.core.predicate_tiers import (
-    DEFAULT_PREDICATE_TIERS,
-    PredicateTier,
-    tier_of,
-)
-from rdf_construct.localise.entities import (
-    collect_entities,
-    in_language,
-    is_deprecated,
-    literals,
-    related_tags,
-    zero_match_warnings,
-)
-from rdf_construct.localise.properties import (
-    resolve_properties,
-    shorten_property,
-    source_prefixes,
-)
-
-
-def percent(covered: int, total: int) -> int:
-    """Return `covered` as a whole percentage of `total`, the figure a report prints.
-
-    Rounded half up, except that an incomplete figure is never 100 and a non-zero one never 0.
-    A status drawn from it therefore agrees with the printed percentage. 0 when `total` is 0.
-    """
-    if total == 0:
-        return 0
-    value = (200 * covered + total) // (2 * total)  # half up, in integers
-    if covered < total:
-        value = min(value, 99)
-    if covered > 0:
-        value = max(value, 1)
-    return value
-
-
-def format_fraction(covered: int, total: int) -> str:
-    """Format a coverage figure as counts beside a percentage: ``42/57 (74%)``.
-
-    The percentage is rounded half up, except that an incomplete figure never reads 100% and a non-zero
-    one never reads 0%. A figure with nothing to measure reads ``0/0 (—)``.
-
-    Args:
-        covered: Entities covered.
-        total: Entities measured.
-
-    Returns:
-        The formatted figure.
-    """
-    if total == 0:
-        return "0/0 (—)"
-    return f"{covered}/{total} ({percent(covered, total)}%)"
+from rdflib import Graph, Literal, URIRef
+from rdflib.namespace import OWL, RDF, RDFS
 
 
 @dataclass
@@ -77,8 +17,8 @@ class PropertyCoverage:
 
     Attributes:
         property: Property URI (shortened).
-        total: Entities carrying the property in at least one language.
-        translated: Of those, the entities carrying it in this language.
+        total: Total strings in source language.
+        translated: Number translated.
     """
 
     property: str
@@ -100,33 +40,30 @@ class LanguageCoverage:
     Attributes:
         language: Language code.
         is_source: Whether this is the source language.
-        total_pairs: Entity and property pairs measured: the sum of every property's total.
-        translated: Of those, the pairs present in this language.
+        total_strings: Total translatable strings.
+        translated: Number translated.
         by_property: Coverage broken down by property.
-        missing_entities: URIs of entities missing this language for a property they carry.
-        duplicates: (entity URI, property) pairs with more than one literal in this language,
-            for a property that takes one value per language.
+        missing_entities: URIs of entities missing translations.
     """
 
     language: str
     is_source: bool = False
-    total_pairs: int = 0
+    total_strings: int = 0
     translated: int = 0
     by_property: dict[str, PropertyCoverage] = field(default_factory=dict)
     missing_entities: list[str] = field(default_factory=list)
-    duplicates: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def coverage(self) -> float:
         """Overall coverage percentage."""
-        if self.total_pairs == 0:
+        if self.total_strings == 0:
             return 0.0
-        return (self.translated / self.total_pairs) * 100
+        return (self.translated / self.total_strings) * 100
 
     @property
     def pending(self) -> int:
         """Number of pending translations."""
-        return self.total_pairs - self.translated
+        return self.total_strings - self.translated
 
 
 @dataclass
@@ -136,13 +73,9 @@ class CoverageReport:
     Attributes:
         source_file: Source ontology file.
         source_language: Base language.
-        total_entities: Entities measured.
-        properties: Properties analysed, shortened with the ontology's own prefixes.
+        total_entities: Total entities in ontology.
+        properties: Properties analysed.
         languages: Coverage by language.
-        deprecated_entities: Deprecated entities left out of every figure (0 when they are
-            included).
-        warnings: Languages that matched no literal while a related tag did (#159). Each one
-            means the report could not answer what it was asked.
     """
 
     source_file: str
@@ -150,8 +83,6 @@ class CoverageReport:
     total_entities: int = 0
     properties: list[str] = field(default_factory=list)
     languages: dict[str, LanguageCoverage] = field(default_factory=dict)
-    deprecated_entities: int = 0
-    warnings: list[str] = field(default_factory=list)
 
 
 class CoverageReporter:
@@ -165,19 +96,14 @@ class CoverageReporter:
         self,
         source_language: str = "en",
         properties: list[str] | None = None,
-        include_deprecated: bool = False,
     ):
         """Initialise the reporter.
 
         Args:
             source_language: Base language code.
-            properties: Properties to check, as CURIEs on the graph's prefixes or as IRIs. Uses
-                defaults if not provided.
-            include_deprecated: Count deprecated entities. By default they are left out, as
-                ``extract`` leaves them out.
+            properties: Properties to check. Uses defaults if not provided.
         """
         self.source_language = source_language
-        self.include_deprecated = include_deprecated
         self.properties = properties or [
             "http://www.w3.org/2000/01/rdf-schema#label",
             "http://www.w3.org/2000/01/rdf-schema#comment",
@@ -198,55 +124,83 @@ class CoverageReporter:
 
         Returns:
             CoverageReport with detailed statistics.
-
-        Raises:
-            CurieError: If a property is a CURIE whose prefix the graph does not bind (#355).
         """
-        # Collect entities. A CURIE means what the ontology's prefixes say, and a property is
-        # printed with them (#355)
-        prefixes = source_prefixes(graph)
-        prop_uris = resolve_properties(prefixes, self.properties)
-        names = [(prop, shorten_property(prefixes, prop)) for prop in prop_uris]
-        entities = collect_entities(graph, prop_uris)
-        deprecated = 0
-        if not self.include_deprecated:
-            kept = [entity for entity in entities if not is_deprecated(graph, entity)]
-            deprecated = len(entities) - len(kept)
-            entities = kept
+        # Collect entities
+        entities = self._collect_entities(graph)
 
         # Build report
         report = CoverageReport(
             source_file=str(source_file),
             source_language=self.source_language,
             total_entities=len(entities),
-            properties=[short for _, short in names],
-            deprecated_entities=deprecated,
+            properties=[self._shorten_property(p) for p in self.properties],
         )
 
-        # The source language first, then each target once, compared without regard to case
-        measured = [(self.source_language, True, "--source-language")]
-        seen = {self.source_language.lower()}
-        for lang in languages:
-            if lang.lower() not in seen:
-                seen.add(lang.lower())
-                measured.append((lang, False, "-l"))
+        # Analyse source language first
+        source_coverage = self._analyse_language(
+            graph, entities, self.source_language, is_source=True
+        )
+        report.languages[self.source_language] = source_coverage
 
-        for lang, is_source, flag in measured:
-            coverage = self._analyse_language(graph, entities, lang, names, is_source=is_source)
-            report.languages[lang] = coverage
-            if coverage.translated == 0:
-                found = related_tags(graph, entities, prop_uris, lang)
-                report.warnings.extend(zero_match_warnings(found, lang, flag))
+        # Analyse each target language
+        for lang in languages:
+            if lang == self.source_language:
+                continue
+
+            lang_coverage = self._analyse_language(
+                graph,
+                entities,
+                lang,
+                is_source=False,
+                source_coverage=source_coverage,
+            )
+            report.languages[lang] = lang_coverage
 
         return report
+
+    def _collect_entities(self, graph: Graph) -> list[URIRef]:
+        """Collect all entities from the graph.
+
+        Args:
+            graph: RDF graph.
+
+        Returns:
+            List of entity URIs.
+        """
+        entities: set[URIRef] = set()
+
+        # Classes
+        for cls_type in [OWL.Class, RDFS.Class]:
+            for s in graph.subjects(RDF.type, cls_type):
+                if isinstance(s, URIRef):
+                    entities.add(s)
+
+        # Properties
+        property_types = [
+            OWL.ObjectProperty,
+            OWL.DatatypeProperty,
+            OWL.AnnotationProperty,
+            RDF.Property,
+        ]
+        for prop_type in property_types:
+            for s in graph.subjects(RDF.type, prop_type):
+                if isinstance(s, URIRef):
+                    entities.add(s)
+
+        # Named Individuals
+        for s in graph.subjects(RDF.type, OWL.NamedIndividual):
+            if isinstance(s, URIRef):
+                entities.add(s)
+
+        return sorted(entities, key=str)
 
     def _analyse_language(
         self,
         graph: Graph,
         entities: list[URIRef],
         language: str,
-        names: list[tuple[URIRef, str]],
         is_source: bool = False,
+        source_coverage: LanguageCoverage | None = None,
     ) -> LanguageCoverage:
         """Analyse coverage for a single language.
 
@@ -254,8 +208,8 @@ class CoverageReporter:
             graph: RDF graph.
             entities: List of entity URIs.
             language: Language code to analyse.
-            names: Each property to measure, resolved, with the name it is reported under.
             is_source: Whether this is the source language.
+            source_coverage: Source language coverage (for comparison).
 
         Returns:
             LanguageCoverage statistics.
@@ -266,42 +220,108 @@ class CoverageReporter:
         )
 
         # Initialise property coverage
-        for _, short_prop in names:
+        for prop_uri_str in self.properties:
+            short_prop = self._shorten_property(prop_uri_str)
             coverage.by_property[short_prop] = PropertyCoverage(property=short_prop)
 
         missing: list[str] = []
 
         for entity in entities:
+            entity_has_any = False
             entity_missing_any = False
 
-            for prop_uri, short_prop in names:
-                values = literals(graph, entity, prop_uri)
-                if not values:
-                    continue
+            for prop_uri_str in self.properties:
+                prop_uri = URIRef(prop_uri_str)
+                short_prop = self._shorten_property(prop_uri_str)
 
-                # The entity carries the property, so it is measured for every language
-                coverage.by_property[short_prop].total += 1
-                coverage.total_pairs += 1
+                # Count strings in this language
+                count = self._count_language_literals(graph, entity, prop_uri, language)
 
-                count = sum(
-                    1 for value in values if in_language(value, language, self.source_language)
-                )
-                if count > 0:
-                    coverage.by_property[short_prop].translated += 1
-                    coverage.translated += 1
+                if is_source:
+                    # For source language, all found strings count as "total"
+                    coverage.by_property[short_prop].total += count
+                    coverage.by_property[short_prop].translated += count
+                    coverage.total_strings += count
+                    coverage.translated += count
+                    if count > 0:
+                        entity_has_any = True
                 else:
-                    entity_missing_any = True
+                    # For target languages, compare against source
+                    if source_coverage:
+                        source_count = self._count_language_literals(
+                            graph, entity, prop_uri, self.source_language
+                        )
+                        coverage.by_property[short_prop].total += source_count
+                        coverage.total_strings += source_count
 
-                if count > 1 and (
-                    tier_of(prop_uri, DEFAULT_PREDICATE_TIERS) is PredicateTier.PER_LANGUAGE
-                ):
-                    coverage.duplicates.append((str(entity), short_prop))
+                        if count > 0:
+                            coverage.by_property[short_prop].translated += count
+                            coverage.translated += count
+                            entity_has_any = True
 
-            if entity_missing_any:
+                        if source_count > 0 and count == 0:
+                            entity_missing_any = True
+
+            # Track missing entities (have source but no target)
+            if entity_missing_any and not is_source:
                 missing.append(str(entity))
 
         coverage.missing_entities = missing
         return coverage
+
+    def _count_language_literals(
+        self,
+        graph: Graph,
+        subject: URIRef,
+        predicate: URIRef,
+        language: str,
+    ) -> int:
+        """Count literals with a specific language tag.
+
+        Args:
+            graph: RDF graph.
+            subject: Subject URI.
+            predicate: Predicate URI.
+            language: Language code.
+
+        Returns:
+            Count of matching literals.
+        """
+        count = 0
+
+        for obj in graph.objects(subject, predicate):
+            if isinstance(obj, Literal):
+                if obj.language == language:
+                    count += 1
+                elif obj.language is None and language == self.source_language:
+                    # Treat untagged as source language
+                    count += 1
+
+        return count
+
+    def _shorten_property(self, prop: str) -> str:
+        """Shorten a full URI to CURIE if possible.
+
+        Args:
+            prop: Full property URI.
+
+        Returns:
+            CURIE or original URI.
+        """
+        namespaces = {
+            "http://www.w3.org/2000/01/rdf-schema#": "rdfs:",
+            "http://www.w3.org/2004/02/skos/core#": "skos:",
+            "http://www.w3.org/2002/07/owl#": "owl:",
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#": "rdf:",
+            "http://purl.org/dc/elements/1.1/": "dc:",
+            "http://purl.org/dc/terms/": "dcterms:",
+        }
+
+        for namespace, prefix in namespaces.items():
+            if prop.startswith(namespace):
+                return prefix + prop[len(namespace) :]
+
+        return prop
 
 
 def generate_coverage_report(
@@ -309,7 +329,6 @@ def generate_coverage_report(
     languages: list[str],
     source_language: str = "en",
     properties: list[str] | None = None,
-    include_deprecated: bool = False,
 ) -> CoverageReport:
     """Generate translation coverage report for an ontology.
 
@@ -319,25 +338,19 @@ def generate_coverage_report(
         source: Source ontology file.
         languages: List of language codes to check.
         source_language: Base language code.
-        properties: Properties to analyse, as CURIEs on the source file's own prefixes or as
-            IRIs.
-        include_deprecated: Count deprecated entities.
+        properties: Properties to analyse.
 
     Returns:
         CoverageReport with detailed statistics.
-
-    Raises:
-        CurieError: If a property is a CURIE whose prefix the source file does not bind.
     """
-    # Load graph: the source's own prefixes, plus rdf, rdfs, owl, xsd and xml (#355)
-    graph = Graph(bind_namespaces="core")
+    # Load graph
+    graph = Graph()
     graph.parse(source)
 
     # Report
     reporter = CoverageReporter(
         source_language=source_language,
         properties=properties,
-        include_deprecated=include_deprecated,
     )
 
     return reporter.report(graph, languages, source)

@@ -326,104 +326,6 @@ class TestLintConfig:
         assert severity == Severity.INFO
 
 
-INFO_RULES = {
-    "redundant-subclass",
-    "property-no-domain",
-    "property-no-range",
-    "inconsistent-naming",
-}
-
-
-class TestRuleSelection:
-    """Rule selection refuses what it cannot honour (#203, #293); level never selects (#208)."""
-
-    @pytest.mark.parametrize(
-        ("kwargs", "where"),
-        [
-            ({"enabled_rules": {"orphan-class", "orpahn-class"}}, "LintConfig.enabled_rules"),
-            ({"disabled_rules": {"orpahn-class"}}, "LintConfig.disabled_rules"),
-            (
-                {"severity_overrides": {"orpahn-class": Severity.INFO}},
-                "LintConfig.severity_overrides",
-            ),
-        ],
-    )
-    def test_unknown_rule_raises(self, kwargs, where):
-        with pytest.raises(ValueError, match=f"Unknown rule 'orpahn-class' in {where}"):
-            LintConfig(**kwargs).get_effective_rules()
-
-    def test_empty_selection_raises_from_lint_graph(self):
-        g = Graph()
-        g.add((EX.Building, RDF.type, OWL.Class))
-        config = LintConfig(enabled_rules={"orphan-class"}, disabled_rules={"orphan-class"})
-        with pytest.raises(ValueError, match="No lint rules left to run"):
-            LintEngine(config).lint_graph(g)
-
-    def test_empty_selection_raises_before_parsing(self, tmp_path):
-        broken = tmp_path / "broken.ttl"
-        broken.write_text("this is not turtle .\n")
-        config = LintConfig(disabled_rules=set(list_rules()))
-        with pytest.raises(ValueError, match="enabled all rules; disabled "):
-            LintEngine(config).lint_file(broken)
-
-    def test_empty_enable_means_all_rules(self):
-        assert len(LintConfig(enabled_rules=set()).get_effective_rules()) == len(list_rules())
-
-    def test_rules_identical_at_every_level(self):
-        ids = {
-            level: sorted(r.rule_id for r in LintConfig(level=level).get_effective_rules())
-            for level in ("strict", "standard", "relaxed")
-        }
-        assert ids["strict"] == ids["standard"] == ids["relaxed"] == sorted(list_rules())
-
-    def test_relaxed_runs_info_rules(self):
-        rule_ids = {r.rule_id for r in LintConfig(level="relaxed").get_effective_rules()}
-        assert INFO_RULES.issubset(rule_ids)
-
-    def test_config_level_relaxed_runs_info_rules(self, tmp_path):
-        from rdf_construct.lint import load_lint_config
-
-        path = tmp_path / "lint.yml"
-        path.write_text("level: relaxed\n")
-        config = load_lint_config(path)
-        assert config.level == "relaxed"
-        assert INFO_RULES.issubset({r.rule_id for r in config.get_effective_rules()})
-
-    def test_relaxed_demotes_warning_findings(self):
-        g = Graph()
-        g.add((EX.Building, RDF.type, OWL.Class))  # orphan-class is a warning by default
-        result = LintEngine(LintConfig(level="relaxed")).lint_graph(g)
-        orphan = [i for i in result.issues if i.rule_id == "orphan-class"]
-        assert orphan and all(i.severity == Severity.INFO for i in orphan)
-        assert result.warning_count == 0
-
-    def test_severity_override_beats_relaxed(self, tmp_path):
-        # LINT_GUIDE's worked example: the override is honoured under relaxed too
-        from rdf_construct.lint import load_lint_config
-
-        path = tmp_path / "lint.yml"
-        path.write_text("level: relaxed\nseverity:\n  property-no-domain: warning\n")
-        g = Graph()
-        g.add((EX.hasPart, RDF.type, OWL.ObjectProperty))
-        result = LintEngine(load_lint_config(path)).lint_graph(g)
-        no_domain = [i for i in result.issues if i.rule_id == "property-no-domain"]
-        assert no_domain and all(i.severity == Severity.WARNING for i in no_domain)
-
-    @pytest.mark.parametrize("section", ["enable", "disable", "severity"])
-    def test_config_messages_unchanged(self, tmp_path, section):
-        from rdf_construct.lint import load_lint_config
-
-        path = tmp_path / "lint.yml"
-        body = "  orpahn-class: info\n" if section == "severity" else "  - orpahn-class\n"
-        path.write_text(f"{section}:\n{body}")
-        with pytest.raises(ValueError) as excinfo:
-            load_lint_config(path)
-        assert str(excinfo.value) == (
-            f"Unknown rule 'orpahn-class' in '{section}' section of {path}. "
-            f"Available rules: {', '.join(sorted(list_rules()))}"
-        )
-
-
 class TestLintEngine:
     """Tests for LintEngine."""
 
@@ -436,7 +338,7 @@ class TestLintEngine:
         result = engine.lint_graph(g)
 
         assert result.total_issues > 0
-        assert result.warning_count > 0  # orphan-class is a warning (#302)
+        assert result.error_count > 0  # orphan-class is an error
 
     def test_lint_with_config(self):
         """Engine should respect config."""

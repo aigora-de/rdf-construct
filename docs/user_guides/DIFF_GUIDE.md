@@ -41,7 +41,7 @@ rdf-construct diff [OPTIONS] OLD_FILE NEW_FILE
 
 | Option | Description |
 |--------|-------------|
-| `-o, --output FILE` | Write output to file instead of stdout. Refused (exit 2) if it names either input |
+| `-o, --output FILE` | Write output to file instead of stdout |
 | `-f, --format FORMAT` | Output format: `text` (default), `markdown`, `json` |
 | `--show TYPES` | Show only these change types (comma-separated) |
 | `--hide TYPES` | Hide these change types (comma-separated) |
@@ -50,8 +50,8 @@ rdf-construct diff [OPTIONS] OLD_FILE NEW_FILE
 
 ### Exit Codes
 
-- `0` — Graphs are semantically identical, blank nodes included
-- `1` — Differences were found, or a blank-node structure was too large to compare (see [Blank Nodes](#blank-nodes))
+- `0` — Graphs are semantically identical
+- `1` — Differences were found
 - `2` — Error occurred (file not found, parse error, etc.)
 
 ## Output Formats
@@ -240,97 +240,31 @@ The diff considers these as **identical** (no changes):
 1. **Statement order** — Triples in different order
 2. **Prefix bindings** — Same URIs with different prefixes
 3. **Whitespace** — Formatting differences
-4. **Blank node labels** — `_:b1` vs `_:genid123`: a blank-node structure with the same content, including the named subject that refers to it, is the same structure
+4. **Blank node labels** — `_:b1` vs `_:genid123` (if structurally equivalent)
 
 The diff detects these as **changes**:
 
 1. **URI changes** — Even if labels are the same
 2. **Literal type changes** — `"42"` (string) vs `42` (integer)
 3. **Language tag changes** — `"Building"@en` vs `"Building"`
-4. **Changes inside blank nodes** — a restriction's cardinality, an axiom annotation's comment, a list's members (see [Blank Nodes](#blank-nodes))
-
-## Blank Nodes
-
-A blank node has no name of its own: the parser labels it afresh every time it reads a file. So
-`diff` compares a blank-node structure, such as a restriction, an `owl:Axiom` annotation or an
-`rdf:List`, by its **content**, including the named subject that refers to it. A file compared with
-a copy of itself is identical, however many restrictions it has. A change anywhere inside a
-structure is reported as that whole structure removed and its new version added, written as Turtle.
-
-`examples/diff/` holds a pair of files that differ **only** inside blank nodes:
-
-```bash
-rdf-construct diff examples/diff/v1.ttl examples/diff/v2.ttl
-```
-
-```text
-Comparing v1.ttl → v2.ttl
-
-MODIFIED (2 entities):
-  ~ Class bld:Building
-    + rdfs:subClassOf [ a owl:Restriction ; owl:minCardinality "2"^^xsd:nonNegativeInteger ; owl:onProperty bld:hasFloor ]
-    - rdfs:subClassOf [ a owl:Restriction ; owl:minCardinality "1"^^xsd:nonNegativeInteger ; owl:onProperty bld:hasFloor ]
-  ~ Class bld:Room
-    + [ a owl:Axiom ; owl:annotatedProperty rdfs:subClassOf ; owl:annotatedSource bld:Room ; owl:annotatedTarget bld:Space ; rdfs:comment "A room is an enclosed space."@en ]
-    - [ a owl:Axiom ; owl:annotatedProperty rdfs:subClassOf ; owl:annotatedSource bld:Room ; owl:annotatedTarget bld:Space ; rdfs:comment "A room is a space."@en ]
-
-BLANK-NODE STRUCTURES (1 added, 1 removed):
-  + [ a owl:AllDisjointClasses ; owl:members ( bld:Building bld:Door bld:Floor bld:Room ) ]
-  - [ a owl:AllDisjointClasses ; owl:members ( bld:Building bld:Floor bld:Room ) ]
-
-Summary: 0 added, 0 removed, 2 modified; blank-node structures: 1 added, 1 removed
-```
-
-The exit code is 1. The restriction on `bld:Room` and the `owl:unionOf` on `bld:Space` are the same
-in both files, so they are not listed.
-
-**Where a change is listed:**
-
-- A structure that a named subject refers to is listed under that subject, after the predicate
-  that refers to it (`bld:Building` above). If several subjects refer to one structure, it is
-  listed under each of them.
-- A structure that nothing refers to is listed under the subject it is about: the
-  `owl:annotatedSource` of an axiom annotation (`bld:Room` above), the `rdf:subject` of a reified
-  statement, or the `owl:sourceIndividual` of a negative property assertion.
-- Anything else, such as `owl:AllDisjointClasses`, is listed under **BLANK-NODE STRUCTURES**
-  (in Markdown, `## Blank-node structures`), and the summary counts them as added and removed.
-
-**How a structure is written.** A structure in which every blank node is referred to once is
-written inline, as `[ … ]`, with `( … )` for a well-formed list. A blank node that is referred to
-twice, or one in a cycle, cannot be written inline. Its structure is written as Turtle statements
-instead, and only those nodes get a label: `_:s1`, `_:s2` and so on. These labels belong to the line
-they are on, and are the same in every run. No label the parser invented is ever shown.
-
-**Repeated structures count.** If a class states the same restriction twice and the new file
-states it once, the diff reports one copy removed.
-
-**In JSON**, a blank-node object is `{"type": "bnode", "turtle": "[ … ]"}`. Each entry in `modified`
-has a `structures` list, and the top level has one for structures that belong to no entity. Each
-item in these lists is `{"action": "added" | "removed", "turtle": "…"}`. `summary.structures`
-counts the top-level list.
-
-**Ignored predicates** are removed before structures are compared. So with
-`--ignore-predicates rdfs:comment`, an axiom annotation whose only change is its comment is the
-same in both files.
 
 ## Known Limitations
 
-### Blank-node structures too large to compare
+### Blank Nodes
 
-Most structures are trees: no blank node in them is referred to by two others, and there is no
-cycle. A tree of any size is compared quickly. A structure that is not a tree is
-compared exactly too, but the cost grows steeply with its size. So `diff` sets aside any structure
-that is not a tree and has more than 500 blank nodes. It names the structure first, before
-anything else in the output, and exits 1, never claiming the files are identical:
+Blank nodes are challenging for diff. The current implementation:
 
-```text
-Note: A blank-node structure in old.ttl was not compared: it is not a tree, and it has 5,000 blank nodes, over the limit of 500, under ex:U owl:unionOf. Its changes, if any, are not shown. Each of its blank nodes is owl:sameAs itself, which an OWL-RL closure adds; diff the asserted files instead.
+- **Detects** that blank node changes occurred
+- **Does not** perform deep structural comparison of blank node neighbourhoods
+
+If your ontology uses blank nodes extensively, consider skolemising them before comparison:
+
+```bash
+# Skolemise blank nodes first (using rapper or similar)
+rapper -i turtle -o turtle old.ttl > old-skolem.ttl
+rapper -i turtle -o turtle new.ttl > new-skolem.ttl
+rdf-construct diff old-skolem.ttl new-skolem.ttl
 ```
-
-The usual cause is a reasoner's output: an OWL-RL closure states that every blank node is
-`owl:sameAs` itself, which turns every list into a structure that is not a tree. Compare the
-asserted files instead. Everything outside the set-aside structure is still compared and
-reported. [#388](https://github.com/aigora-de/rdf-construct/issues/388) records the cost and the options for removing the limit.
 
 ### Large Ontologies
 

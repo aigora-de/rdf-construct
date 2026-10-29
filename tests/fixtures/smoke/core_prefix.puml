@@ -1,5 +1,0 @@
-@startuml
-package "http://example.org/mine#" as owl {
-  class Thing
-}
-@enduml

@@ -1,6 +1,5 @@
 """Ordering and sorting logic for RDF subjects."""
 
-import heapq
 from typing import Optional
 
 from rdflib import Graph, URIRef, RDF, RDFS
@@ -15,7 +14,6 @@ def build_adjacency(
     """Build adjacency list and indegree map for topological sorting.
 
     Creates parent->children adjacency representation within the given node set.
-    A self-loop (``C rdfs:subClassOf C``) is ignored: it is a tautology, not a cycle.
 
     Args:
         graph: RDF graph containing the relationships
@@ -33,9 +31,7 @@ def build_adjacency(
 
     for n in nodes:
         for parent in graph.objects(n, edge_predicate):
-            # RDFS entailment (rdfs10, rdfs6) materialises n ⊑ n for every term;
-            # as an edge it would keep n and its subtree out of the sort (#339).
-            if parent in nodes and parent != n:
+            if parent in nodes:
                 adj[parent].add(n)  # parent before child
                 indeg[n] += 1
 
@@ -62,40 +58,27 @@ def topo_sort_subset(graph: Graph, nodes: set, edge_predicate: URIRef) -> list:
 
     adj, indeg = build_adjacency(graph, nodes, edge_predicate)
 
-    # Compute each sort key once: normalizeUri is uncached and dominated the
-    # quadratic version of this sort (#300).
-    key = {n: qname_sort_key(graph, n) for n in nodes}
-
-    # The ready set is a heap of (key, seq, node). The insertion counter breaks
-    # ties on key exactly as the previous stable re-sort + pop(0) did (earliest
-    # ready first), and means two terms are never compared directly.
-    ready: list[tuple[str, int, URIRef]] = []
-    seq = 0
-
     # Start with nodes that have no incoming edges
-    for n in sorted((n for n, d in indeg.items() if d == 0), key=key.__getitem__):
-        ready.append((key[n], seq, n))
-        seq += 1
-    heapq.heapify(ready)
+    zero = [n for n, d in indeg.items() if d == 0]
+    zero.sort(key=lambda t: qname_sort_key(graph, t))
 
     out: list = []
 
-    while ready:
-        _, _, u = heapq.heappop(ready)
+    while zero:
+        u = zero.pop(0)
         out.append(u)
 
         # Process children in alphabetical order
-        for v in sorted(adj[u], key=key.__getitem__):
+        for v in sorted(adj[u], key=lambda t: qname_sort_key(graph, t)):
             indeg[v] -= 1
             if indeg[v] == 0:
-                heapq.heappush(ready, (key[v], seq, v))
-                seq += 1
+                zero.append(v)
+                zero.sort(key=lambda t: qname_sort_key(graph, t))
 
     # Handle any remaining nodes (cycles or disconnected components)
     if len(out) < len(nodes):
-        emitted = set(out)
-        remaining = [n for n in nodes if n not in emitted]
-        remaining.sort(key=key.__getitem__)
+        remaining = [n for n in nodes if n not in out]
+        remaining.sort(key=lambda t: qname_sort_key(graph, t))
         out.extend(remaining)
 
     return out

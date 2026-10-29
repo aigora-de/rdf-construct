@@ -255,7 +255,7 @@ def get_namespace(uri: URIRef) -> str:
     rule_id="orphan-class",
     description="Class has no rdfs:subClassOf declaration and isn't owl:Thing or rdfs:Resource",
     category="structural",
-    default_severity=Severity.WARNING,
+    default_severity=Severity.ERROR,
 )
 def check_orphan_class(graph: Graph) -> list[LintIssue]:
     """Check for classes with no superclass."""
@@ -274,7 +274,7 @@ def check_orphan_class(graph: Graph) -> list[LintIssue]:
             issues.append(
                 LintIssue(
                     rule_id="orphan-class",
-                    severity=Severity.WARNING,
+                    severity=Severity.ERROR,
                     entity=cls,
                     message="Class has no rdfs:subClassOf declaration",
                 )

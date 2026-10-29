@@ -1,3 +1,0 @@
-# Verbatim upstream copies, pinned by git blob SHA in tests/test_ies_fixtures.py (#307).
-# Never convert their line endings on checkout.
-tests/fixtures/ies/*.ttl -text

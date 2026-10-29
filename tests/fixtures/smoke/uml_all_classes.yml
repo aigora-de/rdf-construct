@@ -1,5 +1,0 @@
-# One UML context selecting every class: the realistic tier of the CLI smoke test (#195).
-contexts:
-  all_classes:
-    description: "Every class in the ontology"
-    selector: classes

@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from rdflib import Graph, URIRef
+from rdflib import Graph, Literal, URIRef
+from rdflib.namespace import OWL, RDF, RDFS
 
 from rdf_construct.localise.config import (
     EntityTranslations,
@@ -17,21 +18,6 @@ from rdf_construct.localise.config import (
     TranslationFile,
     TranslationFileMetadata,
     TranslationStatus,
-)
-from rdf_construct.localise.entities import (
-    collect_entities,
-    entity_type,
-    in_language,
-    is_deprecated,
-    literals,
-    related_tags,
-    zero_match_warnings,
-)
-from rdf_construct.localise.properties import (
-    FILE_PREFIXES,
-    resolve_properties,
-    shorten_property,
-    source_prefixes,
 )
 
 
@@ -64,8 +50,6 @@ class ExtractionResult:
         total_strings: Number of strings extracted.
         skipped_entities: Number of entities skipped.
         error: Error message if failed.
-        warnings: Findings that did not stop the extraction, such as a source language that
-            matched no literal while a related tag did.
     """
 
     success: bool
@@ -74,14 +58,12 @@ class ExtractionResult:
     total_strings: int = 0
     skipped_entities: int = 0
     error: str | None = None
-    warnings: list[str] = field(default_factory=list)
 
 
 class StringExtractor:
     """Extracts translatable strings from RDF ontologies.
 
-    The extractor identifies entities (every IRI subject carrying one of the
-    configured properties, see :mod:`rdf_construct.localise.entities`) and
+    The extractor identifies entities (classes, properties, individuals) and
     extracts text values for configured properties (rdfs:label, rdfs:comment, etc.)
     in the source language. The output is a translation file with empty
     translation fields ready for translators.
@@ -119,29 +101,25 @@ class StringExtractor:
             )
 
         try:
-            # Get all entities from the graph. A CURIE means what the ontology's prefixes say (#355)
-            properties = resolve_properties(source_prefixes(graph), self.config.properties)
-            entities = collect_entities(graph, properties)
+            # Get all entities from the graph
+            entities = self._collect_entities(graph)
 
             # Extract translations for each entity
             entity_translations: list[EntityTranslations] = []
-            read: list[URIRef] = []
             total_strings = 0
             skipped = 0
 
-            for entity_uri in entities:
+            for entity_uri, entity_type in entities:
                 # Check for deprecation
-                if not self.config.include_deprecated and is_deprecated(graph, entity_uri):
+                if not self.config.include_deprecated and self._is_deprecated(graph, entity_uri):
                     skipped += 1
                     continue
-                read.append(entity_uri)
 
                 # Extract labels for this entity
                 labels = self._extract_entity_labels(
                     graph,
                     entity_uri,
                     target_lang,
-                    properties,
                 )
 
                 if not labels:
@@ -156,7 +134,7 @@ class StringExtractor:
                     entity_translations.append(
                         EntityTranslations(
                             uri=str(entity_uri),
-                            entity_type=entity_type(graph, entity_uri),
+                            entity_type=entity_type,
                             labels=labels,
                         )
                     )
@@ -168,7 +146,7 @@ class StringExtractor:
                 source_language=self.config.source_language,
                 target_language=target_lang,
                 generated=datetime.now(),
-                properties=[shorten_property(FILE_PREFIXES, p) for p in properties],
+                properties=[self._shorten_property(p) for p in self.config.properties],
             )
 
             translation_file = TranslationFile(
@@ -176,28 +154,12 @@ class StringExtractor:
                 entities=entity_translations,
             )
 
-            # A source language that matched nothing, beside a related tag that did (#159)
-            source_lang = self.config.source_language
-            warnings: list[str] = []
-            if not any(
-                in_language(value, source_lang, source_lang)
-                for entity in read
-                for prop in properties
-                for value in literals(graph, entity, prop)
-            ):
-                warnings = zero_match_warnings(
-                    related_tags(graph, read, properties, source_lang),
-                    source_lang,
-                    "--source-language",
-                )
-
             return ExtractionResult(
                 success=True,
                 translation_file=translation_file,
                 total_entities=len(entity_translations),
                 total_strings=total_strings,
                 skipped_entities=skipped,
-                warnings=warnings,
             )
 
         except Exception as e:
@@ -206,12 +168,65 @@ class StringExtractor:
                 error=str(e),
             )
 
+    def _collect_entities(self, graph: Graph) -> list[tuple[URIRef, str]]:
+        """Collect all entities from the graph with their types.
+
+        Args:
+            graph: RDF graph.
+
+        Returns:
+            List of (URI, type_string) tuples.
+        """
+        entities: list[tuple[URIRef, str]] = []
+        seen: set[URIRef] = set()
+
+        # Classes
+        for cls_type in [OWL.Class, RDFS.Class]:
+            for s in graph.subjects(RDF.type, cls_type):
+                if isinstance(s, URIRef) and s not in seen:
+                    seen.add(s)
+                    entities.append((s, "owl:Class"))
+
+        # Object Properties
+        for s in graph.subjects(RDF.type, OWL.ObjectProperty):
+            if isinstance(s, URIRef) and s not in seen:
+                seen.add(s)
+                entities.append((s, "owl:ObjectProperty"))
+
+        # Datatype Properties
+        for s in graph.subjects(RDF.type, OWL.DatatypeProperty):
+            if isinstance(s, URIRef) and s not in seen:
+                seen.add(s)
+                entities.append((s, "owl:DatatypeProperty"))
+
+        # Annotation Properties
+        for s in graph.subjects(RDF.type, OWL.AnnotationProperty):
+            if isinstance(s, URIRef) and s not in seen:
+                seen.add(s)
+                entities.append((s, "owl:AnnotationProperty"))
+
+        # RDF Properties
+        for s in graph.subjects(RDF.type, RDF.Property):
+            if isinstance(s, URIRef) and s not in seen:
+                seen.add(s)
+                entities.append((s, "rdf:Property"))
+
+        # Named Individuals
+        for s in graph.subjects(RDF.type, OWL.NamedIndividual):
+            if isinstance(s, URIRef) and s not in seen:
+                seen.add(s)
+                entities.append((s, "owl:NamedIndividual"))
+
+        # Sort by URI for consistent output
+        entities.sort(key=lambda x: str(x[0]))
+
+        return entities
+
     def _extract_entity_labels(
         self,
         graph: Graph,
         entity: URIRef,
         target_lang: str,
-        properties: list[URIRef],
     ) -> list[TranslationEntry]:
         """Extract label properties for a single entity.
 
@@ -219,7 +234,6 @@ class StringExtractor:
             graph: RDF graph.
             entity: Entity URI.
             target_lang: Target language code.
-            properties: The properties to extract, resolved.
 
         Returns:
             List of TranslationEntry objects.
@@ -227,7 +241,9 @@ class StringExtractor:
         labels: list[TranslationEntry] = []
         source_lang = self.config.source_language
 
-        for prop_uri in properties:
+        for prop_uri_str in self.config.properties:
+            prop_uri = URIRef(self._expand_property(prop_uri_str))
+
             # Find source language literals
             source_literals = self._get_language_literals(graph, entity, prop_uri, source_lang)
 
@@ -243,7 +259,7 @@ class StringExtractor:
             for source_text in source_literals:
                 labels.append(
                     TranslationEntry(
-                        property=shorten_property(FILE_PREFIXES, prop_uri),
+                        property=self._shorten_property(str(prop_uri)),
                         source_text=source_text,
                         translation="",
                         status=TranslationStatus.PENDING,
@@ -270,11 +286,90 @@ class StringExtractor:
         Returns:
             List of literal string values.
         """
-        return [
-            str(value)
-            for value in literals(graph, subject, predicate)
-            if in_language(value, language, self.config.source_language)
-        ]
+        results: list[str] = []
+
+        for obj in graph.objects(subject, predicate):
+            if isinstance(obj, Literal):
+                # Match language exactly or match untagged literals for source
+                obj_lang = obj.language
+                if obj_lang == language:
+                    results.append(str(obj))
+                elif obj_lang is None and language == self.config.source_language:
+                    # Treat untagged literals as source language
+                    results.append(str(obj))
+
+        return results
+
+    def _is_deprecated(self, graph: Graph, entity: URIRef) -> bool:
+        """Check if an entity is deprecated.
+
+        Args:
+            graph: RDF graph.
+            entity: Entity URI.
+
+        Returns:
+            True if entity is deprecated.
+        """
+        # Check owl:deprecated
+        for obj in graph.objects(entity, OWL.deprecated):
+            if isinstance(obj, Literal) and obj.toPython() is True:
+                return True
+
+        # Check owl:DeprecatedClass / owl:DeprecatedProperty
+        deprecated_types = [OWL.DeprecatedClass, OWL.DeprecatedProperty]
+        for dtype in deprecated_types:
+            if (entity, RDF.type, dtype) in graph:
+                return True
+
+        return False
+
+    def _expand_property(self, prop: str) -> str:
+        """Expand a CURIE to full URI.
+
+        Args:
+            prop: Property string (CURIE or full URI).
+
+        Returns:
+            Full URI string.
+        """
+        prefixes = {
+            "rdfs:": "http://www.w3.org/2000/01/rdf-schema#",
+            "skos:": "http://www.w3.org/2004/02/skos/core#",
+            "owl:": "http://www.w3.org/2002/07/owl#",
+            "rdf:": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+            "dc:": "http://purl.org/dc/elements/1.1/",
+            "dcterms:": "http://purl.org/dc/terms/",
+        }
+
+        for prefix, namespace in prefixes.items():
+            if prop.startswith(prefix):
+                return namespace + prop[len(prefix) :]
+
+        return prop
+
+    def _shorten_property(self, prop: str) -> str:
+        """Shorten a full URI to CURIE if possible.
+
+        Args:
+            prop: Full property URI.
+
+        Returns:
+            CURIE or original URI.
+        """
+        namespaces = {
+            "http://www.w3.org/2000/01/rdf-schema#": "rdfs:",
+            "http://www.w3.org/2004/02/skos/core#": "skos:",
+            "http://www.w3.org/2002/07/owl#": "owl:",
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#": "rdf:",
+            "http://purl.org/dc/elements/1.1/": "dc:",
+            "http://purl.org/dc/terms/": "dcterms:",
+        }
+
+        for namespace, prefix in namespaces.items():
+            if prop.startswith(namespace):
+                return prefix + prop[len(namespace) :]
+
+        return prop
 
 
 def extract_strings(
@@ -295,17 +390,15 @@ def extract_strings(
         target_language: Target language code.
         output: Output file path. Auto-generated if not provided.
         source_language: Source language code.
-        properties: Properties to extract, as CURIEs on the source file's own prefixes or as
-            IRIs. Uses defaults if not provided.
+        properties: Properties to extract. Uses defaults if not provided.
         include_deprecated: Include deprecated entities.
         missing_only: Only extract missing translations.
 
     Returns:
-        ExtractionResult with translation file. A CURIE whose prefix the source file does not
-        bind fails the extraction, naming the bound prefixes.
+        ExtractionResult with translation file.
     """
-    # Load graph: the source's own prefixes, plus rdf, rdfs, owl, xsd and xml (#355)
-    graph = Graph(bind_namespaces="core")
+    # Load graph
+    graph = Graph()
     graph.parse(source)
 
     # Build config

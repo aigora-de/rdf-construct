@@ -14,8 +14,6 @@ split:
     - name: core
       description: "Core upper ontology concepts"
       output: core.ttl
-      # Its ontology IRI: the module has no namespace of its own to be named from
-      ontology_iri: http://example.org/ontology/core
       include:
         classes:
           - http://example.org/ontology#Entity
@@ -42,9 +40,8 @@ split:
       output: building.ttl
       namespaces:
         - "http://example.org/ontology/building#"
-      # owl:imports take ontology IRIs, never file names
       imports:
-        - http://example.org/ontology/core
+        - core.ttl
       auto_imports: true
 
   # Handling for entities that don't match any module

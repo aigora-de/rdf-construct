@@ -216,8 +216,7 @@ ignored_properties:
   - rdfs:label
 ```
 
-An option given on the command line overrides the configuration file, and the configuration file
-overrides the option's default: `level: strict` in the file applies unless you pass `--level`.
+CLI options override configuration file settings.
 
 ## Output Formats
 

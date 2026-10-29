@@ -40,7 +40,6 @@ def _build_json_structure(diff: GraphDiff, graph: Graph | None = None) -> dict[s
         "added": _format_entity_group_json(diff.added, graph),
         "removed": _format_entity_group_json(diff.removed, graph),
         "modified": _format_modified_entities_json(diff.modified, graph),
-        "structures": _format_structures_json(diff.added_structures, diff.removed_structures),
         "summary": diff.summary,
         "warnings": _build_warnings(diff),
     }
@@ -103,9 +102,6 @@ def _format_modified_entities_json(
             "label": entity.label,
             "type": entity.entity_type.value,
             "changes": [],
-            "structures": _format_structures_json(
-                entity.added_structures, entity.removed_structures
-            ),
         }
 
         # Format added triples
@@ -115,7 +111,7 @@ def _format_modified_entities_json(
                     "action": "added",
                     "predicate": str(change.predicate),
                     "predicate_curie": _format_uri(change.predicate, graph),
-                    "object": _format_object_json(change.object, graph, change.turtle),
+                    "object": _format_object_json(change.object, graph),
                     "category": change.category.value,
                 }
             )
@@ -127,7 +123,7 @@ def _format_modified_entities_json(
                     "action": "removed",
                     "predicate": str(change.predicate),
                     "predicate_curie": _format_uri(change.predicate, graph),
-                    "object": _format_object_json(change.object, graph, change.turtle),
+                    "object": _format_object_json(change.object, graph),
                     "category": change.category.value,
                 }
             )
@@ -137,18 +133,8 @@ def _format_modified_entities_json(
     return result
 
 
-def _format_structures_json(added: list[str], removed: list[str]) -> list[dict]:
-    """Format blank-node structures, each written as Turtle, for JSON output."""
-    return [{"action": "added", "turtle": text} for text in added] + [
-        {"action": "removed", "turtle": text} for text in removed
-    ]
-
-
-def _format_object_json(obj: Node, graph: Graph | None = None, turtle: str | None = None) -> dict:
-    """Format an RDF object for JSON output.
-
-    A blank node is given as its structure written in Turtle, never as a parser's label (#143).
-    """
+def _format_object_json(obj: Node, graph: Graph | None = None) -> dict:
+    """Format an RDF object for JSON output."""
     if isinstance(obj, URIRef):
         return {
             "type": "uri",
@@ -158,7 +144,7 @@ def _format_object_json(obj: Node, graph: Graph | None = None, turtle: str | Non
     elif isinstance(obj, BNode):
         return {
             "type": "bnode",
-            "turtle": turtle if turtle is not None else f"_:{obj}",
+            "value": str(obj),
         }
     elif isinstance(obj, Literal):
         result = {
@@ -199,4 +185,12 @@ def _format_uri(uri: URIRef | BNode, graph: Graph | None = None) -> str:
 
 def _build_warnings(diff: GraphDiff) -> list[str]:
     """Build list of warning messages."""
-    return diff.notes
+    warnings = []
+
+    if diff.blank_node_warning:
+        warnings.append(
+            "Blank node changes were detected but not fully analysed. "
+            "Consider skolemising blank nodes for detailed comparison."
+        )
+
+    return warnings

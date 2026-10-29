@@ -1,6 +1,0 @@
-<http://example.org/ontology#Thing> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
-<http://example.org/ontology/org#Team> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
-<http://example.org/ontology/org#Team> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://example.org/ontology#Thing> .
-<http://example.org/vocab/memberOf> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#ObjectProperty> .
-<http://example.org/vocab/memberOf> <http://www.w3.org/2000/01/rdf-schema#range> <http://example.org/ontology/org#Team> .
-<urn:example:codes:Red> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .

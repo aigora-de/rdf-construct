@@ -21,16 +21,10 @@ repos:
     hooks:
       # These two rewrite the staged file. Both pass repo-wide since the #77
       # sweep, so they now only ever act on new debt as it is introduced.
-      # tests/fixtures/ies/ is excluded: those files are verbatim upstream
-      # copies, pinned by hash, and two of them carry trailing whitespace (#307).
       - id: trailing-whitespace
-        exclude: ^tests/fixtures/ies/
       - id: end-of-file-fixer
-        exclude: ^tests/fixtures/ies/
       # Read-only checks; all pass repo-wide as at 2026-08-22.
-      # The smoke test's malformed.yml is invalid on purpose (#195).
       - id: check-yaml
-        exclude: ^tests/fixtures/smoke/malformed\.yml$
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: check-toml

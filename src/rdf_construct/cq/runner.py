@@ -11,7 +11,7 @@ from pathlib import Path
 from rdflib import Graph
 
 from rdf_construct.cq.loader import CQTest, CQTestSuite, build_query_with_prefixes
-from rdf_construct.cq.expectations import CheckResult, query_form_refusal
+from rdf_construct.cq.expectations import CheckResult
 
 
 class CQStatus(Enum):
@@ -34,8 +34,6 @@ class CQTestResult:
         result_count: Number of results returned (if applicable)
         check_result: Detailed check result from expectation
         error: Error message if status is ERROR
-        error_type: Kind of error: ``QueryError`` when the query could not be run,
-            ``InvalidExpectation`` when its expectation cannot be checked against its query form
     """
 
     test: CQTest
@@ -44,7 +42,6 @@ class CQTestResult:
     result_count: int | None = None
     check_result: CheckResult | None = None
     error: str | None = None
-    error_type: str = "QueryError"
 
     @property
     def passed(self) -> bool:
@@ -208,20 +205,11 @@ class CQTestRunner:
             # Execute query
             result = graph.query(full_query)
 
-            # Refuse an expectation that cannot be checked against this query form,
-            # e.g. a count against an ASK, which answers true or false
-            query_form = result.type
-            refusal = query_form_refusal(test.id, test.expectation, query_form)
-            if refusal:
-                return CQTestResult(
-                    test=test,
-                    status=CQStatus.ERROR,
-                    duration_ms=(time.perf_counter() - start_time) * 1000,
-                    error=refusal,
-                    error_type="InvalidExpectation",
-                )
+            # Check if this is an ASK query (returns boolean) or SELECT (returns rows)
+            # rdflib Result objects have a 'type' attribute
+            is_ask_query = getattr(result, "type", None) == "ASK"
 
-            if query_form == "ASK":
+            if is_ask_query:
                 # ASK query - result is boolean
                 result_count = None
                 check_input = result

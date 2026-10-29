@@ -18,7 +18,10 @@ Flatline ROM construct in Gibson's *Neuromancer*. Its founding feature: serialis
 **semantic order** — respecting class and property hierarchies — instead of the alphabetical order
 every rdflib serialiser imposes. Public, MIT, published to PyPI; v0.6.0.
 
-17 commands across 14 subpackages under `src/rdf_construct/`.
+17 commands across 14 subpackages under `src/rdf_construct/`: `order`, `cast`, `uml`,
+`lint`, `diff`, `docs`, `shacl-gen`, `puml2rdf`, `cq-test`, `stats`, `describe`, `merge`, `split`,
+`refactor rename|deprecate`, `localise extract|merge|report`, plus `profiles` and `contexts`.
+Built on rdflib 7, Click, Rich, Jinja2 and PyYAML.
 
 ## Routing table
 
@@ -57,8 +60,7 @@ is silently incorrect:
 - **Respect `rdfs:subClassOf` and `rdfs:subPropertyOf`** when sorting topologically — and define
   the behaviour when they form a cycle.
 - **rdflib's built-in serialisers always sort alphabetically.** This is the whole reason the
-  project exists; never delegate *Turtle* output to them — every Turtle file the tool writes
-  goes through `core/serialiser.py`. Non-Turtle formats are rdflib's by necessity.
+  project exists; never delegate ordered output to them.
 - **British English everywhere** — ontologies, documentation, code identifiers, CLI help
   (`colour`, `organisation`, `serialise`, `localise`).
 

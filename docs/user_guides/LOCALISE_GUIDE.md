@@ -24,99 +24,6 @@ rdf-construct localise merge ontology.ttl translations/de.yml -o localised.ttl
 rdf-construct localise report ontology.ttl --languages en,de,fr
 ```
 
-Running the first command again once translation has started does not replace the translator's
-work. `extract` and `init` refuse, at exit 2, to write over a file holding any finished entry, and
-leave it byte-identical:
-
-```text
-Error: translations/de.yml already holds 8 finished translations (translated 8); writing would replace them with empty pending entries. Leaving it untouched. Pass -o <file> to write somewhere else, or --overwrite to replace it.
-```
-
-An entry is finished when its status is not `pending`, or when its translation is not blank:
-text typed with the status left at `pending` counts. A file with no finished entry, such as one
-just extracted, is replaced without a word. To update a translation file for new terms, extract
-to a new file (`--missing-only -o de_update.yml`); merging the two is not supported.
-
-## Language Tags and Which Terms Are Translated
-
-These rules are the same in `extract`, `merge` and `report`.
-
-**`-l` and `--source-language` take a language tag, not a range.** Tags are compared without regard
-to case, so `-l en-gb`, `-l EN-GB` and `-l en-GB` are the same, but they are matched exactly:
-`-l en` does not match `@en-GB`, and `-l en-GB` does not match `@en`. When the tag you give matches
-no literal and a related tag (one with the same primary subtag; a private-use `x-` or `i-` tag
-has none) matches some, the command says so
-and exits 1:
-
-```
-⚠ Found 2 literals tagged en-GB; --source-language en does not match them. Did you mean --source-language en-GB?
-```
-
-The warning is given only when the tag you asked for matches nothing. An ontology that carries
-both `@en` and `@en-GB` is read without a warning, and each tag counts only its own literals.
-
-**A malformed tag is refused** at exit 2, before anything is written: a blank `-l`, `en_GB`, or a
-`target_language` in a translation file that is missing, blank or not a well-formed BCP 47 tag.
-In YAML, quote a tag that reads as a boolean, such as Norwegian: `target_language: 'no'`. A
-target language that is the source language is refused too.
-
-**`merge` writes tags in canonical case** (`en-GB`, `zh-Hant-TW`), whatever case the translation
-file uses. An existing literal whose tag differs only in case counts as existing.
-
-**An untagged literal counts as the source language**, so untagged English labels are extracted and
-counted as English. **`@und` is never read as the source language**, or as any language you did
-not ask for by that tag: a term labelled only `@und` is measured, but counts as missing in every
-row of a report unless `-l und` is one of them.
-
-**An entity is any subject with an IRI that carries one of the requested properties as a
-literal**, whatever its type: classes and properties of every kind, individuals, SKOS concepts, the
-ontology header, and untyped subjects. A deprecated entity (`owl:deprecated true`, as a boolean
-or as the string `"true"`, or a type of `owl:DeprecatedClass` or `owl:DeprecatedProperty`) is
-skipped by `extract` and left out of `report` unless `--include-deprecated` is given.
-
-## Naming Properties
-
-A property is named as a CURIE (`rdfs:label`), as a full IRI, or as an IRI in angle brackets
-(`<urn:example:note>`). What a CURIE means depends on where it is written.
-
-**On the command line, `--properties` uses the ontology's own prefixes**: the ones it declares,
-plus `rdf`, `rdfs`, `owl`, `xsd` and `xml`. If the ontology declares `ex:`, `-p ex:note` extracts
-`ex:note`. If it binds `dc:` to Dublin Core terms, `-p dc:title` means the terms title. A prefix
-the ontology does not declare is refused at exit 2, before anything is written:
-
-```bash
-rdf-construct localise report tests/fixtures/localise/coverage.ttl -l de -p skos:prefLabel
-```
-
-```text
-Loading tests/fixtures/localise/coverage.ttl...
-Error: --properties: cannot resolve 'skos:prefLabel': prefix 'skos' is not bound. Prefixes bound: ex, owl, rdf, rdfs, xml, xsd. To give an IRI, write it in full or in angle brackets (<urn:…>).
-```
-
-Give the IRI in full instead (`-p http://www.w3.org/2004/02/skos/core#prefLabel`), or declare the
-prefix in the ontology. A bare `urn:x` reads as a CURIE whose prefix is `urn`, so write it as
-`<urn:x>`. `report` prints each property with the ontology's prefixes, or in full where none
-fits. The Python API's `extract_strings` and `generate_coverage_report` read their `properties`
-the same way.
-
-**In a translation file or a configuration file, a CURIE uses the file format's six prefixes**,
-whatever ontology it meets:
-
-| Prefix | Namespace |
-|--------|-----------|
-| `rdf` | `http://www.w3.org/1999/02/22-rdf-syntax-ns#` |
-| `rdfs` | `http://www.w3.org/2000/01/rdf-schema#` |
-| `owl` | `http://www.w3.org/2002/07/owl#` |
-| `skos` | `http://www.w3.org/2004/02/skos/core#` |
-| `dc` | `http://purl.org/dc/elements/1.1/` (Dublin Core elements) |
-| `dcterms` | `http://purl.org/dc/terms/` |
-
-A YAML file declares no prefixes, and one translation file can be merged into more than one
-ontology, so its `property:` values cannot depend on the ontology's prefixes. `extract` writes
-these six as CURIEs and every other property as a full IRI, so `-p ex:note` writes
-`property: http://example.org/ont#note`. Any other CURIE in a file is refused at exit 2, with
-every one listed, and nothing is merged.
-
 ## Commands
 
 ### `localise extract`
@@ -142,27 +49,13 @@ rdf-construct localise extract ontology.ttl -l de --include-deprecated -o de.yml
 
 | Option | Description |
 |--------|-------------|
-| `--language, -l` | Target language tag (required). A tag, not a range: `en` does not match `en-GB` |
-| `--output, -o` | Output YAML file (default: `{language}.yml`, the tag in canonical case: `-l DE` writes `de.yml`) |
-| `--source-language` | Source language tag (default: `en`) |
-| `--properties, -p` | Comma-separated properties to extract, on the ontology's own prefixes (see [Naming Properties](#naming-properties)) |
+| `--language, -l` | Target language code (required) |
+| `--output, -o` | Output YAML file (default: `{language}.yml`) |
+| `--source-language` | Source language (default: `en`) |
+| `--properties, -p` | Comma-separated properties to extract |
 | `--include-deprecated` | Include deprecated entities |
 | `--missing-only` | Only extract strings without target translations |
 | `--config, -c` | YAML configuration file |
-| `--overwrite` | Replace an existing translation file, even one holding finished translations |
-
-The output file is checked before the ontology is read. Without `--overwrite`, a file holding
-finished translations is refused, and so is a link to a file that does not exist. With
-`--overwrite` the file is replaced and the run says what it discarded, on stderr:
-
-```text
-⚠ Replaced translations/de.yml: 8 finished translations discarded
-```
-
-A file that is not a translation file (an ontology, broken YAML) and a directory are refused
-even with `--overwrite`, so a slip such as `-o ontology.ttl --overwrite` cannot destroy an
-ontology. Remove the file first if you mean to replace it. An empty (zero-byte) file holds
-nothing to lose, and is replaced without a word.
 
 #### Default Properties
 
@@ -195,7 +88,7 @@ rdf-construct localise merge ontology.ttl de.yml -o test.ttl --dry-run
 
 | Option | Description |
 |--------|-------------|
-| `--output, -o` | Output file (required). Refused (exit 2) if it names a translation file |
+| `--output, -o` | Output file (required) |
 | `--status` | Minimum status to include: `pending`, `needs_review`, `translated`, `approved` |
 | `--existing` | How to handle existing translations: `preserve` or `overwrite` |
 | `--dry-run` | Show what would happen without writing |
@@ -214,7 +107,7 @@ By default, only `translated` and `approved` entries are merged. Use `--status p
 
 ### `localise report`
 
-Generates a translation coverage report showing how much of the content exists in each language.
+Generates a translation coverage report showing what percentage of content has been translated.
 
 ```bash
 # Basic report
@@ -234,61 +127,31 @@ rdf-construct localise report ontology.ttl -l en,de -p rdfs:label
 
 | Option | Description |
 |--------|-------------|
-| `--languages, -l` | Comma-separated language tags (required). Each is a tag, not a range |
-| `--source-language` | Base language tag (default: `en`) |
-| `--include-deprecated` | Count deprecated entities (left out by default) |
-| `--properties, -p` | Comma-separated properties to check, on the ontology's own prefixes (see [Naming Properties](#naming-properties)) |
-| `--output, -o` | Output file for report. Refused (exit 2) if it names the source |
+| `--languages, -l` | Comma-separated language codes (required) |
+| `--source-language` | Base language (default: `en`) |
+| `--properties, -p` | Comma-separated properties to check |
+| `--output, -o` | Output file for report |
 | `--format, -f` | Output format: `text` or `markdown` |
 | `--verbose, -v` | Show detailed missing translation list |
 | `--no-colour` | Disable coloured output |
 
-#### How Coverage Is Counted
-
-Coverage counts **entities, not literals**. For each property, the denominator is the entities that
-carry that property in at least one language, and each language's figure is how many of them carry
-it in that language. Counts print beside the percentage, so `6/8 (75%)` reads "6 of the 8 labelled
-entities have an English label".
-
-- The **base row is measured the same way**: it says how much of the labelled material exists in
-  the source language. A term labelled only in German counts against it.
-- **Overall** adds up every entity and property pair, and **pending** is the number of pairs
-  missing in that language. Neither can exceed what was measured.
-- A property no entity carries reads `0/0 (—)` and is left out of Overall.
-- A second literal in one language adds nothing to the figure. For a property that takes one
-  value per language (`rdfs:label`, `skos:prefLabel`) it is listed as a warning. Several
-  `skos:altLabel` or `rdfs:comment` values in one language are normal and are not.
-
 #### Example Output
-
-Generated from [`tests/fixtures/localise/coverage.ttl`](../../tests/fixtures/localise/coverage.ttl),
-whose comments say what each term demonstrates:
-
-```bash
-rdf-construct localise report tests/fixtures/localise/coverage.ttl -l en,de,fr --no-colour
-```
 
 ```
 Translation Coverage Report
 ========================================
 
-Source: tests/fixtures/localise/coverage.ttl
-Entities: 8
-Deprecated: 1 (not counted; --include-deprecated counts them)
+Source: ontology.ttl
+Entities: 57
 Properties: rdfs:label, rdfs:comment
 
-Language   rdfs:label  rdfs:comment  Overall     Status
--------------------------------------------------------
-en (base)  6/8 (75%)   2/2 (100%)    8/10 (80%)  ⚠ 2 pending
-de         5/8 (63%)   1/2 (50%)     6/10 (60%)  ✗ 4 pending
-fr         2/8 (25%)   0/2 (0%)      2/10 (20%)  ✗ 8 pending
-
-⚠ 1 entity has more than one de value for a property that takes one per language:
-  - Cottage rdfs:label
+Language    rdfs:label  rdfs:comment  Overall  Status
+--------    ----------  ------------  -------  ------
+en (base)   100%        89%           94%      ✓ Complete
+de          92%         45%           68%      ⚠ 14 pending
+fr          78%         12%           45%      ⚠ 58 pending
+es          0%          0%            0%       ✗ Not started
 ```
-
-The base row is 6/8 because `ex:Tower` is labelled only in German and `ex:grade` only `@und`;
-`ex:Listing`'s untagged label counts as English. `ex:Cottage`'s two German labels count once.
 
 ### `localise init`
 
@@ -297,9 +160,6 @@ Creates an empty translation file for a new language. This is equivalent to `ext
 ```bash
 rdf-construct localise init ontology.ttl --language ja -o translations/ja.yml
 ```
-
-It takes `-l`, `-o`, `--source-language` and `--overwrite`, and refuses to replace a file holding
-finished translations exactly as `extract` does.
 
 ### `localise config`
 
@@ -382,9 +242,6 @@ summary:
   coverage: "50.0%"
 ```
 
-Each `property:` is one of the six CURIEs in [Naming Properties](#naming-properties) or a full
-IRI.
-
 ### Translation Status Values
 
 | Status | Meaning |
@@ -393,26 +250,6 @@ IRI.
 | `needs_review` | Translation needs verification |
 | `translated` | Translation complete |
 | `approved` | Reviewed and confirmed |
-
-### Quoting: YAML reads some text as other values
-
-YAML reads an unquoted `Yes`, `No`, `On`, `Off`, `true` or `false` as a boolean, and a number as
-a number: `0123` becomes 83 and `1.50` becomes 1.5. The word that was typed cannot be recovered
-from either, so `merge` refuses such a translation, at exit 2, with nothing written, and names
-where it is:
-
-```text
-Error: de.yml: entity 5 (http://example.org/heritage#Listing), label 1 (rdfs:label): translation reads as true, not text: YAML reads an unquoted yes, no, on, off, true or false that way. Quote the text, e.g. "Yes"
-```
-
-Quote it: `translation: "Yes"`. The same holds for `target_language: no` (Norwegian): write
-`'no'`. A `translation:` left blank is untranslated, like `''`, and is skipped.
-
-`merge` reads the whole file before writing anything. A missing `uri`, `property` or `source`, a
-`status` that is not one of the four, or a file that is empty or not a translation file is
-refused the same way, and every unreadable value in the file is listed, so one run finds them
-all. `generated`, `tool`, `source_file`, `type`, `notes` and `summary` are for people and never
-reach the ontology, so a value of the wrong type there is ignored.
 
 ### Notes Field
 
@@ -469,16 +306,6 @@ Use the config file:
 
 ```bash
 rdf-construct localise extract ontology.ttl -l de -c localise.yml
-```
-
-Each value must be the type shown: `properties` and `targets` are lists (a single value is
-refused, not read as a list of one, since `rdfs:label, skos:prefLabel` would become one property
-that matches nothing), a switch is `true` or `false` unquoted (`'false'` is text, and is refused),
-and a language is text (`'no'`, quoted). A key written with no value takes its default. A value of
-the wrong type is refused at exit 2, naming the file and the key:
-
-```text
-Error: localise.yml: properties must be a list, not the single value 'rdfs:label'; write it as a list: properties: [rdfs:label]
 ```
 
 ## Workflow Examples
@@ -564,15 +391,15 @@ rdf-construct localise report ontology.ttl -l en,de,fr \
 
 ### 5. Handle Untagged Literals
 
-The extractor treats literals without language tags as the source language. If your ontology uses untagged English literals, they will be extracted for translation. A literal tagged `@und` ("undetermined") matches no language, so it is never extracted; see [Language Tags](#language-tags-and-which-terms-are-translated).
+The extractor treats literals without language tags as the source language. If your ontology uses untagged English literals, they will be extracted for translation.
 
 ## Exit Codes
 
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | Completed with findings: `merge` found translated entities that are not in the ontology; `extract`, `init` or `report` was given a language that matched no literal while a related tag did |
-| 2 | Input refused or run failed (invalid options or config, a malformed, missing or blank language tag, a target language that is the source language, file not found, parse error); `extract` or `init` asked to replace a file holding finished translations without `--overwrite`, or a file that is not a translation file at all; a translation file or config value of the wrong type; a property whose prefix is not bound |
+| 1 | Success with warnings (some translations skipped) |
+| 2 | Error (file not found, invalid format) |
 
 ## Related Commands
 

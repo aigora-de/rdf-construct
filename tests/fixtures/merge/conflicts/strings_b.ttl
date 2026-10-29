@@ -1,7 +1,0 @@
-@prefix ex: <http://example.org/> .
-@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-
-# See strings_a.ttl.
-ex:S rdfs:label "Building"^^xsd:string .
-ex:W rdfs:label "Partition"^^xsd:string .

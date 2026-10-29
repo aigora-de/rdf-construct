@@ -24,7 +24,7 @@ Be respectful, constructive, and professional. We're all here to build better RD
 ### Labels and Milestones
 
 A minimal label set: `bug`, `enhancement`, `documentation`, `question`, `chore`,
-`good-first-issue`, `backlog`. Add `breaking` when a change affects the public API.
+`good-first-issue`, `backlog`. Add `breaking-change` when a change affects the public API.
 
 Milestones group related issues into a release. A feature developed across several issues and PRs
 shares one milestone (e.g. `v0.5.0 - Entity-type taxonomy in docs`), which makes it clear what is
@@ -99,13 +99,6 @@ def example_function(graph: Graph, subjects: set[URIRef]) -> list[URIRef]:
 - Use descriptive test names: `test_topo_sort_respects_hierarchy`
 - Use fixtures for common test data
 - Test edge cases (empty sets, cycles, etc.)
-- A fix for output that misrepresents its input asserts the command's contract with
-  `rdf_construct.core.verify`; its module docstring has the worked example, and
-  `tests/test_post_write.py` the xfail marker your fix removes
-- A fix for output that differs between runs proves it with `tests/determinism.py`, which runs
-  the command in separate processes under six `PYTHONHASHSEED` values, or over two statement
-  orders. An in-process test passes on the broken code. Its module docstring has the worked
-  example, and `tests/test_determinism.py` the xfail marker your fix removes
 
 ### Commits
 
@@ -219,9 +212,6 @@ If the black gate fails, `poetry run black .` fixes it; the usual cause is not h
 1. Run `scripts/ci-local.sh` and ensure the gate is green
 2. Update documentation as needed
 3. Add entry to CHANGELOG.md under "Unreleased"
-   - If the PR closes a `breaking` issue or changes output, also add or amend its row in
-     [`docs/MIGRATION_v0.7.0.md`](docs/MIGRATION_v0.7.0.md) in the same PR. The note is built as
-     fixes land, not reconstructed at release time.
 4. Reference related issues in the PR description
 5. Wait for review - maintainers will provide feedback
 6. Make requested changes if needed
@@ -252,11 +242,6 @@ making them:
 2. Date the CHANGELOG entry, empty `[Unreleased]`, add the version's `compare/…` link to the
    footer, and move the `[Unreleased]` link on to the new version
 3. Update the version where prose states it — `README.md` and `CLAUDE.md`
-4. Exercise the release against realistic ontologies. `tests/test_cli_smoke.py` already runs every
-   command over the three pinned IES files in [`tests/fixtures/ies/`](tests/fixtures/ies/README.md)
-   and checks that nothing crashes. It cannot tell whether the output is right, so read the output
-   of anything new or changed since the last release. The files were not written for this tool,
-   which is why they find what the toy fixtures cannot
 
 Then:
 

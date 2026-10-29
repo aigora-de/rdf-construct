@@ -55,14 +55,12 @@ class TripleChange:
         object: The object of the changed triple.
         is_addition: True if added, False if removed.
         category: Semantic category of the predicate.
-        turtle: The object written inline as Turtle, when it is a blank-node structure.
     """
 
     predicate: URIRef
     object: Node
     is_addition: bool
     category: PredicateCategory = PredicateCategory.OTHER
-    turtle: str | None = None
 
     def __post_init__(self):
         """Categorise the predicate if not already done."""
@@ -82,9 +80,6 @@ class EntityChange:
         added_triples: List of triples added to this entity.
         removed_triples: List of triples removed from this entity.
         superclasses: Superclasses (for classes) or None.
-        added_structures: Blank-node structures about this entity that were added, written as
-            Turtle: an axiom annotation, a reified statement, or a structure shared or cyclic.
-        removed_structures: The same, removed.
     """
 
     uri: URIRef | BNode
@@ -94,8 +89,6 @@ class EntityChange:
     added_triples: list[TripleChange] = field(default_factory=list)
     removed_triples: list[TripleChange] = field(default_factory=list)
     superclasses: list[URIRef] | None = None
-    added_structures: list[str] = field(default_factory=list)
-    removed_structures: list[str] = field(default_factory=list)
 
     @property
     def is_blank_node(self) -> bool:
@@ -109,43 +102,6 @@ class EntityChange:
 
 
 @dataclass
-class UncomparedStructure:
-    """A blank-node structure too large to compare, so its changes, if any, are not known.
-
-    A structure that is not a tree is compared with ``rdflib.compare``, whose cost grows steeply
-    with the structure's size, so one above the limit is set aside instead (#143).
-
-    Attributes:
-        source: The file the structure is in.
-        blank_nodes: How many blank nodes it has.
-        limit: The most blank nodes a structure that is not a tree is compared with.
-        under: Where it hangs, as ``subject predicate``, or None if nothing refers to it.
-        self_same_as: True if any of its blank nodes is ``owl:sameAs`` itself.
-    """
-
-    source: str
-    blank_nodes: int
-    limit: int
-    under: str | None = None
-    self_same_as: bool = False
-
-    def describe(self) -> str:
-        """Say what was not compared and what to do about it."""
-        where = f", under {self.under}" if self.under else ""
-        text = (
-            f"A blank-node structure in {self.source} was not compared: it is not a tree, and it "
-            f"has {self.blank_nodes:,} blank nodes, over the limit of {self.limit:,}{where}. "
-            "Its changes, if any, are not shown."
-        )
-        if self.self_same_as:
-            text += (
-                " Each of its blank nodes is owl:sameAs itself, which an OWL-RL closure adds;"
-                " diff the asserted files instead."
-            )
-        return text
-
-
-@dataclass
 class GraphDiff:
     """Complete result of comparing two RDF graphs.
 
@@ -155,10 +111,7 @@ class GraphDiff:
         added: Entities that exist only in the new graph.
         removed: Entities that exist only in the old graph.
         modified: Entities that exist in both but have changes.
-        added_structures: Blank-node structures that belong to no named entity, added, written
-            as Turtle.
-        removed_structures: The same, removed.
-        uncompared: Blank-node structures too large to compare.
+        blank_node_warning: True if blank nodes were encountered.
     """
 
     old_path: str
@@ -166,39 +119,12 @@ class GraphDiff:
     added: list[EntityChange] = field(default_factory=list)
     removed: list[EntityChange] = field(default_factory=list)
     modified: list[EntityChange] = field(default_factory=list)
-    added_structures: list[str] = field(default_factory=list)
-    removed_structures: list[str] = field(default_factory=list)
-    uncompared: list[UncomparedStructure] = field(default_factory=list)
-
-    @property
-    def blank_node_warning(self) -> bool:
-        """True if a blank-node structure was not compared, so its changes are not known.
-
-        Derived from :attr:`uncompared`, which holds what the notes say, so the two cannot
-        disagree.
-        """
-        return bool(self.uncompared)
+    blank_node_warning: bool = False
 
     @property
     def is_identical(self) -> bool:
-        """Check if graphs are semantically identical.
-
-        Never while a blank-node structure changed or could not be compared (#143).
-        """
-        return (
-            not self.added
-            and not self.removed
-            and not self.modified
-            and not self.added_structures
-            and not self.removed_structures
-            and not self.uncompared
-        )
-
-    @property
-    def notes(self) -> list[str]:
-        """What a reader must be told before any verdict: the changes that cannot be described."""
-        # A file compared with itself would say the same thing twice
-        return list(dict.fromkeys(structure.describe() for structure in self.uncompared))
+        """Check if graphs are semantically identical."""
+        return not self.added and not self.removed and not self.modified
 
     @property
     def summary(self) -> dict[str, int]:
@@ -207,7 +133,6 @@ class GraphDiff:
             "added": len(self.added),
             "removed": len(self.removed),
             "modified": len(self.modified),
-            "structures": len(self.added_structures) + len(self.removed_structures),
         }
 
     def entities_by_type(self, change_type: ChangeType) -> dict[EntityType, list[EntityChange]]:

@@ -1,5 +1,0 @@
-@prefix : <http://example.org/ontology#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
-
-# diagram.puml draws Dog as a class; here it is a property, so a merge reports a clash (#417)
-:Dog a owl:ObjectProperty, owl:TransitiveProperty .

@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 
 from rdflib import Graph
 
-from rdf_construct.core.outdir import mark_output_dir
 from rdf_construct.docs.config import DocsConfig, load_docs_config
 from rdf_construct.docs.extractors import ExtractedEntities, extract_all
 from rdf_construct.docs.search import generate_search_index, write_search_index
@@ -81,9 +80,6 @@ class DocsGenerator:
     def generate(self, graph: Graph) -> GenerationResult:
         """Generate documentation from an RDF graph.
 
-        The output directory is marked as ``docs``'s own with a ``.rdf-construct`` file, written
-        just before the first page (#261, see ``rdf_construct.core.outdir``).
-
         Args:
             graph: RDF graph to generate documentation from.
 
@@ -99,9 +95,8 @@ class DocsGenerator:
         if self.config.description:
             entities.ontology.description = self.config.description
 
-        # Create output directory, and mark it as docs' own before the first file (#261)
+        # Create output directory
         self.config.output_dir.mkdir(parents=True, exist_ok=True)
-        mark_output_dir(self.config.output_dir, "docs")
 
         result = GenerationResult(output_dir=self.config.output_dir)
 

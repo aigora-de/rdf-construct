@@ -1,6 +1,0 @@
-# The empty prefix names no module, so the namespace's last segment does: ontology.ttl.
-@prefix : <http://example.org/ontology#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
-
-:Thing a owl:Class .
-:relatesTo a owl:ObjectProperty .

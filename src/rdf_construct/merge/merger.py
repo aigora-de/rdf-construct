@@ -15,9 +15,6 @@ from typing import TextIO
 from rdflib import Graph, URIRef, Namespace
 from rdflib.namespace import RDF, RDFS, OWL
 
-from rdf_construct.core.blank_nodes import label_by_content
-from rdf_construct.core.predicate_tiers import PredicateTier
-from rdf_construct.core.utils import rebase_iri
 from rdf_construct.merge.config import (
     MergeConfig,
     SourceConfig,
@@ -87,10 +84,7 @@ class OntologyMerger:
             config: Merge configuration
         """
         self.config = config
-        self.detector = ConflictDetector(
-            ignore_predicates=config.conflicts.ignore_predicates,
-            predicate_tiers=config.conflicts.predicate_tiers,
-        )
+        self.detector = ConflictDetector(ignore_predicates=config.conflicts.ignore_predicates)
 
     def merge(self) -> MergeResult:
         """Execute the merge operation.
@@ -172,9 +166,6 @@ class OntologyMerger:
         if src_config.namespace_remap:
             graph = self._remap_namespaces(graph, src_config.namespace_remap)
 
-        # Label blank nodes by content, so a structure two sources share is one node (#170)
-        graph = label_by_content(graph)
-
         return SourceGraph(
             graph=graph,
             path=str(src_config.path),
@@ -196,14 +187,11 @@ class OntologyMerger:
 
         new_graph = Graph()
 
-        # Copy namespace bindings, moving each one the same way as the IRIs in it
+        # Copy namespace bindings
         for prefix, ns in graph.namespace_manager.namespaces():
             ns_str = str(ns)
-            for old_ns, new_ns in remappings.items():
-                rebased = rebase_iri(ns_str, old_ns, new_ns)
-                if rebased is not None:
-                    new_graph.bind(prefix, Namespace(rebased))
-                    break
+            if ns_str in remappings:
+                new_graph.bind(prefix, Namespace(remappings[ns_str]))
             else:
                 new_graph.bind(prefix, ns)
 
@@ -228,9 +216,8 @@ class OntologyMerger:
         """
         uri_str = str(uri)
         for old_ns, new_ns in remappings.items():
-            rebased = rebase_iri(uri_str, old_ns, new_ns)
-            if rebased is not None:
-                return URIRef(rebased)
+            if uri_str.startswith(old_ns):
+                return URIRef(uri_str.replace(old_ns, new_ns, 1))
         return uri
 
     def _resolve_conflicts(self, conflicts: list[Conflict], result: MergeResult) -> None:
@@ -249,9 +236,7 @@ class OntologyMerger:
                 conflict.resolve_by_first()
             elif strategy == ConflictStrategy.LAST:
                 conflict.resolve_by_last()
-            elif conflict.tier is not PredicateTier.LOAD_BEARING:
-                conflict.unpicked = "--strategy mark_all marks every conflict"
-            # A load-bearing conflict is never resolved, under any strategy
+            # MARK_ALL leaves conflicts unresolved
 
             if conflict.is_resolved:
                 result.resolved_conflicts.append(conflict)
@@ -286,11 +271,6 @@ class OntologyMerger:
         for source in sources:
             for triple in source.graph:
                 merged.add(triple)
-
-        # Remove the values each resolution discarded (#169)
-        for conflict in result.resolved_conflicts:
-            for cv in conflict.discarded:
-                merged.remove((conflict.subject, conflict.predicate, cv.value))
 
         # Handle owl:imports
         merged = self._handle_imports(merged, sources)

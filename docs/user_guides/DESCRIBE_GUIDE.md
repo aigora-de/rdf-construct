@@ -292,7 +292,7 @@ Brief mode is faster for large ontologies or when you only need the basics.
 
 | Option | Description |
 |--------|-------------|
-| `-o, --output FILE` | Write output to file instead of stdout. Refused (exit 2) if it names the input |
+| `-o, --output FILE` | Write output to file instead of stdout |
 | `-f, --format FORMAT` | Output format: `text` (default), `json`, `markdown`, `md` |
 | `-b, --brief` | Quick overview (metadata + metrics + profile only) |
 | `--no-resolve` | Skip import resolution (no network requests) |

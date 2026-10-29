@@ -278,7 +278,7 @@ def deprecate_file(
         DeprecationResult with statistics.
     """
     # Load source graph
-    graph = Graph(bind_namespaces="core")
+    graph = Graph()
     try:
         graph.parse(source_path.as_posix())
     except Exception as e:
