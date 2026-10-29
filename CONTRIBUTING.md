@@ -33,7 +33,8 @@ required before that release is ready.
 ### Contributing Code
 
 1. **Fork and clone** the repository
-2. **Create a branch** for your feature/fix — see [Branches](#branches) for the naming convention
+2. **Create a branch** for your feature/fix from the release branch, not `main` — see
+   [Branches](#branches) for which one and the naming convention
 3. **Install dependencies**: `poetry install --with dev`
 4. **Make your changes** following the code standards below
 5. **Add tests** for new functionality
@@ -49,7 +50,8 @@ required before that release is ready.
 
 | Type | Purpose | Example |
 |------|---------|---------|
-| `main` | Stable, release-ready code | — |
+| `main` | The last release: what PyPI has | — |
+| `release/v*` | The next release: where work lands | `release/v0.7.0` |
 | `dev/*` | Feature development | `dev/shacl-generation`, `dev/merge-tool-23` |
 | `fix/*` | Bug fixes | `fix/blank-node-handling`, `fix/cli-crash-45` |
 | `refactor/*` | Code restructuring (no new features) | `refactor/serializer-module` |
@@ -57,8 +59,18 @@ required before that release is ready.
 | `chore/*` | Tooling, process, repo hygiene | `chore/routed-memories-73` |
 | `experiment/*` | Exploratory work (may be discarded) | `experiment/sparql-support` |
 
-`main` is always deployable — never commit directly to it except for trivial fixes. Branch from
-`main`, and delete the branch once it is merged.
+`main` changes only when a release is cut, so it always matches the latest version on PyPI. Work
+for the next release lands on its release branch, and reaches `main` when that release ships.
+
+**Branch from the release branch, and open your PR against it.** That is the release whose
+milestone your issue is in; if you are unsure, the newest one
+(`git branch -r --list 'origin/release/*'`). A PR opened against `main` is retargeted, and nothing
+is lost. Delete your branch once it is merged.
+
+Once a version ships, its patch line is a new release branch from its tag: `release/v0.7.1` from
+`v0.7.0`. A fix needed on both the patch line and the next minor lands on the patch branch, which
+is then merged forward into the next release branch, so the next release still contains every fix
+before it.
 
 ## Code Standards
 
@@ -164,6 +176,7 @@ feat!: rename --output to --out (breaking change)
 # Setup
 git clone https://github.com/aigora-de/rdf-construct.git
 cd rdf-construct
+git branch -r --list 'origin/release/*'   # switch to the one you are working towards — see Branches
 poetry install --with dev
 pre-commit install
 
@@ -223,9 +236,15 @@ If the black gate fails, `poetry run black .` fixes it; the usual cause is not h
      [`docs/MIGRATION_v0.7.0.md`](docs/MIGRATION_v0.7.0.md) in the same PR. The note is built as
      fixes land, not reconstructed at release time.
 4. Reference related issues in the PR description
-5. Wait for review - maintainers will provide feedback
-6. Make requested changes if needed
-7. Once approved, maintainers will merge
+5. Open the PR against the release branch, not `main`
+6. Wait for review - maintainers will provide feedback
+7. Make requested changes if needed
+8. Once approved, maintainers will merge it into the release branch. It reaches `main` and PyPI
+   when that release is cut
+
+GitHub closes the issues a PR names (`Closes #N`) only when it merges into the default branch,
+`main`, so for a PR merged into a release branch, the maintainer closes them with
+`scripts/close-issues.sh <PR>`.
 
 **PR title:** should read as a changelog entry — clear, imperative, concise.
 
@@ -243,8 +262,8 @@ security fix. Partial features are not released.
 
 **`scripts/release.sh` runs the release**, as `scripts/ci-local.sh` runs the pre-PR checks.
 
-Prepare the release by hand — these are judgement calls, so the script checks them rather than
-making them:
+Prepare the release by hand, on its release branch — these are judgement calls, so the script
+checks them rather than making them:
 
 1. Bump the version in `pyproject.toml` **and** `src/rdf_construct/__init__.py`, following
    [SemVer](https://semver.org/): MAJOR for breaking changes, MINOR for backward-compatible
@@ -258,14 +277,30 @@ making them:
    of anything new or changed since the last release. The files were not written for this tool,
    which is why they find what the toy fixtures cannot
 
-Then:
+Then, on the release branch, check it, and fast-forward `main` to it. Here the release is v0.7.0:
 
 ```bash
+scripts/release.sh --check   # pre-flight on release/v0.7.0; changes nothing
+git switch main
+git merge --ff-only origin/release/v0.7.0
+git push origin main
 scripts/release.sh --check   # changes nothing; tells you what is not ready
 scripts/release.sh           # clean build, verify the wheel, tag, push, dry run
 poetry publish               # yours to run — see below
 scripts/release.sh --post    # GitHub release from the CHANGELOG, close the milestone
 ```
+
+`main` only ever fast-forwards: a repository rule refuses any other push to it. The release
+branch is done with once `main` has reached it. The patch line and the next minor each get a
+new release branch from the tag (see [Branches](#branches)).
+
+Between releases, `main` changes only by exception: a fix to these contributor instructions that
+cannot wait for the release. Such a commit is merged forward into the release branch straight
+away, with an ordinary merge, so `main` stays an ancestor of it. If the pre-flight reports that
+`main` cannot fast-forward, one was missed: merge `origin/main` into the release branch and
+resolve it there. Never use `git merge -s ours` for this, because it discards whatever `main` holds
+that the branch lacks. It was used once, in `34c155f`, to absorb `7257eb9`, the commit that
+restored `main` to v0.6.0 when this branching began.
 
 The script refuses rather than assists: every check names what to fix and it never edits a file
 to make itself pass. It also stops short of publishing. **A version can never be replaced on
@@ -275,7 +310,9 @@ It builds *before* it tags, and tags the exact commit it built. A pushed tag can
 retracted once anyone has fetched it, so nothing reaches origin until the artefact exists and has
 been proven to work.
 
-`--check` verifies: `main`, clean, in sync; the `ci-local.sh` gate; that the version agrees across
+`--check` verifies: on `main` (or, as a pre-flight, on the release branch), clean, in sync, and
+`main` is the release branch's tip (or, on the release branch, can fast-forward to it); the
+`ci-local.sh` gate; that the version agrees across
 `pyproject.toml`, `__init__.py`, `CHANGELOG.md`, `README.md` and `CLAUDE.md`; that the CHANGELOG's
 top entry is dated and `[Unreleased]` is empty; and that the tag does not already exist. After
 building it installs the wheel into a throwaway virtualenv and asks it for `--version`, because a
