@@ -516,3 +516,19 @@ def test_preserve_keeps_every_translation_of_a_repeatable_property(tmp_path: Pat
     assert "Added:           1" in result.output and "Skipped (exists): 1" in result.output
     values = set(Graph().parse(out).objects(URIRef(EX + "Building"), None))
     assert {Literal("Bauwerk", lang="de"), Literal("Struktur", lang="de")} <= values
+
+
+# --- #163: a written report is plain UTF-8 ---------------------------------------------------
+
+
+def test_the_written_report_is_utf8_and_plain(tmp_path: Path) -> None:
+    # `-o` wrote whatever the platform's default encoding made of the table's glyphs, and
+    # wrote the text formatter's ANSI escapes unless `--no-colour` was also given (#163)
+    src = ttl(tmp_path, 'ex:A a owl:Class ; rdfs:label "A"@en .')
+    out = tmp_path / "coverage-report.txt"
+    result = run("localise", "report", src, "-l", "en,de", "-o", out)
+    assert result.exit_code == 0, result.output
+    text = out.read_text(encoding="utf-8")
+    assert "\u2014" in text  # the 0/0 em dash, a multi-byte glyph the platform may not encode
+    assert "\033[" not in text  # coloured status text belongs to stdout, not to a written file
+    assert "✓ Complete" in text
