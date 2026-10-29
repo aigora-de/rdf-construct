@@ -65,12 +65,19 @@ for the next release lands on its release branch, and reaches `main` when that r
 **Branch from the release branch, and open your PR against it.** That is the release whose
 milestone your issue is in; if you are unsure, the newest one
 (`git branch -r --list 'origin/release/*'`). A PR opened against `main` is retargeted, and nothing
-is lost. Delete your branch once it is merged.
+is lost: a maintainer runs `scripts/retarget-prs.sh`, which moves it to the release branch of its
+issue's milestone, or to the newest release branch if that milestone has none. Delete your branch
+once it is merged.
 
-Once a version ships, its patch line is a new release branch from its tag: `release/v0.7.1` from
-`v0.7.0`. A fix needed on both the patch line and the next minor lands on the patch branch, which
-is then merged forward into the next release branch, so the next release still contains every fix
-before it.
+A patch release is a maintainer's decision. To make one, open its milestone and cut its release
+branch from `main`, which holds the release being patched: `release/v0.6.1` from `main` while
+`main` is v0.6.0. Cut it from `main`, not from the tag, so that `main` can fast-forward to it. A fix
+needed on both the patch line and the next minor lands on the patch branch. Once the patch is
+released, `main` is merged forward into the next release branch, so the next release still
+contains every fix before it. Expect that merge to conflict when the next release has reworked the
+same code. Resolve it there, keeping the next release's version where it already has the fix, and
+check that the bug is gone on that branch too. The patch's version strings and CHANGELOG entry come
+forward with it. That is right: the next release bumps from them as usual.
 
 ## Code Standards
 
@@ -292,7 +299,10 @@ scripts/release.sh --post    # GitHub release from the CHANGELOG, close the mile
 
 `main` only ever fast-forwards: a repository rule refuses any other push to it. The release
 branch is done with once `main` has reached it. The patch line and the next minor each get a
-new release branch from the tag (see [Branches](#branches)).
+new release branch from `main` (see [Branches](#branches)).
+
+A patch release moves `main` while the next release's branch is still open, so merge `main`
+forward into that branch straight after it.
 
 Between releases, `main` changes only by exception: a fix to these contributor instructions that
 cannot wait for the release. Such a commit is merged forward into the release branch straight
