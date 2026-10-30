@@ -4,8 +4,18 @@ v0.7.0 breaks things deliberately, and does it once. The
 [#126 audit](https://github.com/aigora-de/rdf-construct/issues/126) walked every command against
 its own documentation and found behaviour that is silently wrong: an exit code of 1 that means
 both "input rejected" and "completed with findings", command-line defaults that quietly overwrite
-what a configuration file says, output written where nobody asked for it. Most of those fixes cannot land without changing what an existing script sees. Rather than
-spread that across several releases, they ship together, behind one version and this one note.
+what a configuration file says, output written where nobody asked for it. Most of those fixes cannot land without changing what an existing script sees, so nearly all of
+them ship here, behind one version and this one note.
+
+A few follow in v0.8.0, with a note of their own:
+- corrections to the figures a report shows: `describe`'s metrics ([#215](https://github.com/aigora-de/rdf-construct/issues/215), [#216](https://github.com/aigora-de/rdf-construct/issues/216), [#217](https://github.com/aigora-de/rdf-construct/issues/217),
+  [#218](https://github.com/aigora-de/rdf-construct/issues/218), [#219](https://github.com/aigora-de/rdf-construct/issues/219), [#222](https://github.com/aigora-de/rdf-construct/issues/222)) and `stats`' categories ([#139](https://github.com/aigora-de/rdf-construct/issues/139), [#141](https://github.com/aigora-de/rdf-construct/issues/141));
+- `diff`'s text and markdown rendering ([#147](https://github.com/aigora-de/rdf-construct/issues/147));
+- the `docs` JSON ([#236](https://github.com/aigora-de/rdf-construct/issues/236), [#253](https://github.com/aigora-de/rdf-construct/issues/253), [#258](https://github.com/aigora-de/rdf-construct/issues/258));
+- how `lint`, `describe`, `order` and `stats` classify a term that has an `rdfs:domain`,
+  `rdfs:range` or `rdfs:subPropertyOf` but no property type ([#297](https://github.com/aigora-de/rdf-construct/issues/297)).
+
+A 0.7.x patch never changes what a correct run does.
 
 The plan is tracking issue [#312](https://github.com/aigora-de/rdf-construct/issues/312), and the
 work is milestone
