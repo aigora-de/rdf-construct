@@ -2226,23 +2226,47 @@ def puml2rdf(
         click.secho("Parse warnings:", fg="yellow", err=True)
         # Lines not understood, and lines outside the diagram (#400), are summarised by number
         folded: dict[str, list[int]] = {"not-understood": [], "outside-diagram": []}
+        # So are boxes drawn as properties or individuals, by kind, and lines naming one (#395)
+        boxes: dict[str, list[int]] = {
+            kind: []
+            for kind in (
+                "object property",
+                "datatype property",
+                "annotation property",
+                "property",
+                "individual",
+                "relationship",
+            )
+        }
         for parse_warning in parse_result.warnings:
-            if parse_warning.code in folded and parse_warning.line_number is not None:
+            if parse_warning.line_number is None:
+                click.echo(f"  {parse_warning}", err=True)
+            elif parse_warning.code in folded:
                 folded[parse_warning.code].append(parse_warning.line_number)
+            elif parse_warning.kind in boxes:
+                boxes[parse_warning.kind].append(parse_warning.line_number)
             else:
                 click.echo(f"  {parse_warning}", err=True)
-        for code, why in (
-            ("not-understood", "not understood"),
-            ("outside-diagram", "outside @startuml \u2026 @enduml"),
-        ):
-            numbers = folded[code]
+        summaries = [
+            (folded["not-understood"], "line", "lines", "not understood"),
+            (folded["outside-diagram"], "line", "lines", "outside @startuml \u2026 @enduml"),
+        ]
+        summaries.extend(
+            (numbers, f"{kind} box", f"{kind} boxes", "not converted, only classes are")
+            for kind, numbers in boxes.items()
+            if kind != "relationship"
+        )
+        summaries.append(
+            (boxes["relationship"], "line", "lines", "naming a box that is not converted")
+        )
+        for numbers, one, many, why in summaries:
             if not numbers:
                 continue
             shown = ", ".join(str(number) for number in numbers[:10])
             if len(numbers) > 10:
                 shown += f", … {len(numbers) - 10} more"
             click.echo(
-                f"  \u26a0 {len(numbers)} line{'s' if len(numbers) != 1 else ''} {why} "
+                f"  \u26a0 {len(numbers)} {many if len(numbers) != 1 else one} {why} "
                 f"({shown}) \u2014 {'they are' if len(numbers) != 1 else 'it is'} not in the output.",
                 err=True,
             )

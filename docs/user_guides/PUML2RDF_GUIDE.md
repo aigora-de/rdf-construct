@@ -404,7 +404,7 @@ bld:Wall a owl:Class ;
 |---|---|
 | The output is written in `-f`'s format (Turtle by default), whatever `-o`'s extension. Pass `-f xml` to merge into a `.rdf` file in place, or the next run cannot read it. | [#162](https://github.com/aigora-de/rdf-construct/issues/162) |
 | A diagram that `uml` drew has no packages, so its terms are minted in another namespace and match nothing in the ontology the diagram came from. Each merge adds a second copy. | to be filed |
-| `uml`'s property and individual boxes are read as classes, so merging its diagram back reports a clash for every property. | [#395](https://github.com/aigora-de/rdf-construct/issues/395) |
+| `uml`'s property and individual boxes, and the lines naming them, are dropped and named, not read back as properties and individuals. A merge neither adds nor changes them, and their `rdfs:subPropertyOf`, domain and range are not compared with the ontology's. | [#395](https://github.com/aigora-de/rdf-construct/issues/395) |
 | A domain or range the diagram does not draw, a blank-node one included, is kept beside the diagram's, and RDFS reads several as their intersection: an ontology's `rdfs:range bld:Storey` and a diagram's `bld:Floor` make the range things that are both. Nothing is reported. | — |
 | A merge can create an `rdfs:subClassOf` cycle without saying so. | — |
 
@@ -434,6 +434,13 @@ rdf-construct from-uml design.puml --validate
   `annotation`, `entity`, `struct`, `abstract Foo` without `class`, realisation (`..|>`) and
   dependency (`..>`). So are `extends` and `implements` on a class line: the class is converted,
   its superclass is not; write `Car --|> Base` instead.
+- A class box whose stereotype says it is a property or an individual is named as dropped, not
+  converted to a class: the `uml` command's `<< (O, #FFFFFF) owl:ObjectProperty >>`, `(D, …)`,
+  `(A, …)`, `(P, …)` and `(I, …)` spots, its ODM names (`<<objectProperty>>`,
+  `<<datatypeProperty, functionalProperty>>`, `<<individual: ex:Dog>>` and the rest), and a
+  property type or `owl:NamedIndividual` written as `<<owl:ObjectProperty>>`. A relationship
+  naming such a box is dropped with it. The CLI counts them by kind:
+  `⚠ 3 object property boxes not converted, only classes are (14, 15, 17) — they are not in the output.`
 - A diagram with no classes or relationships is converted with a warning.
 
 Given `design.puml`:
@@ -592,6 +599,8 @@ The following PlantUML features are not currently supported:
 
 - Interface declarations (`interface`), reported as not converted
 - Enum declarations (`enum`), reported as not converted
+- Property and individual boxes (`<<objectProperty>>`, `<< (O, #FFFFFF) owl:ObjectProperty >>`,
+  `<<individual>>`), reported as not converted
 - Method declarations in classes
 - Composition/aggregation semantic distinction (treated as associations)
 - Generic types (`List<String>`)
