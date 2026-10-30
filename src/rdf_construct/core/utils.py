@@ -1,6 +1,6 @@
 """Utilities for handling prefixes, CURIEs, and namespace operations."""
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Container, Iterable, Mapping
 from typing import Optional
 
 from rdflib import Graph, Namespace, URIRef
@@ -120,19 +120,64 @@ def resolve_curie(prefixes: Mapping[str, str], text: str) -> URIRef:
     raise CurieError(text, None, prefixes)
 
 
-_NAMESPACE_DELIMITERS = ("#", "/", ":")
+def _authority_span(iri: str) -> tuple[int, int] | None:
+    """Where an IRI's authority starts and ends, or None if it has none.
+
+    A hierarchical IRI (``scheme://…``) has an authority from after the ``//`` up to the first
+    ``/``, ``?`` or ``#``. The authority names one server and is not divided: a ``:`` inside it
+    starts a port or ends user information, or belongs to an IPv6 literal (``http://[::1]/``),
+    so no namespace boundary falls within it (#423). A non-hierarchical IRI such as ``urn:`` or
+    ``tag:`` has no authority, and every ``:`` in it is a boundary.
+
+    Args:
+        iri: The IRI.
+
+    Returns:
+        The start and end offsets of the authority, or None.
+    """
+    colon = iri.find(":")
+    if colon <= 0 or not iri.startswith("//", colon + 1):
+        return None
+    start = colon + 3
+    ends = [j for j in (iri.find(ch, start) for ch in "/?#") if j != -1]
+    return start, min(ends, default=len(iri))
+
+
+def _contains_at(iri: str, k: int, authority: tuple[int, int] | None) -> bool:
+    """Whether the namespace ``iri[:k]`` contains `iri`: the boundary rule, in one place.
+
+    Args:
+        iri: The IRI.
+        k: The length of the namespace, a prefix of `iri`.
+        authority: The IRI's authority span, from `_authority_span`.
+
+    Returns:
+        True if the namespace of length `k` contains `iri`.
+    """
+    if k <= 0 or k > len(iri):
+        return False
+    if k == len(iri):
+        return True
+    if authority is not None and authority[0] < k < authority[1]:
+        return False
+    return not iri[k - 1].isalnum() or iri[k] in "#/:"
 
 
 def in_namespace(iri: str, namespace: str) -> bool:
     """Whether an IRI falls within a namespace, matched at a boundary.
 
-    The delimiters are ``#``, ``/`` and ``:``, the last for URN- and ``tag:``-style
-    namespaces. A namespace ending in a delimiter already names its boundary, so it matches as a
-    plain prefix: ``http://example.org/`` takes the whole subtree, and ``urn:old:`` takes
-    ``urn:old:A`` but not ``urn:older:C``. Otherwise the match must end where the namespace does,
-    or at a following delimiter. So ``http://example.org/ont`` takes ``…/ont`` itself
+    A namespace that ends in anything but a letter or a digit names its own boundary, so it
+    matches as a plain prefix: ``http://example.org/`` takes the whole subtree, ``urn:old:``
+    takes ``urn:old:A`` but not ``urn:older:C``, and a stem such as OBO's
+    ``http://purl.obolibrary.org/obo/GO_`` or ``…/items?id=`` takes the terms that continue it
+    (#422). A namespace that ends in a letter or a digit matches only where the IRI ends, or at a
+    following ``#``, ``/`` or ``:``. So ``http://example.org/ont`` takes ``…/ont`` itself
     (typically the ontology IRI), ``…/ont#One`` and ``…/ont/extra#Three``, but not
     ``…/ontology#Two``. To name one namespace exactly, give it with its delimiter (``…/ont#``).
+
+    An IRI's authority is not divided: a namespace that ends within it takes only the IRI equal
+    to it. So ``http://example.org`` does not take ``http://example.org:8080/…``, which is
+    another server, and neither does ``http://example.org:`` (#423).
 
     Args:
         iri: The IRI to test.
@@ -143,10 +188,7 @@ def in_namespace(iri: str, namespace: str) -> bool:
     """
     if not namespace or not iri.startswith(namespace):
         return False
-    if namespace.endswith(_NAMESPACE_DELIMITERS):
-        return True
-    rest = iri[len(namespace) :]
-    return rest == "" or rest.startswith(_NAMESPACE_DELIMITERS)
+    return _contains_at(iri, len(namespace), _authority_span(iri))
 
 
 def rebase_iri(iri: str, old_namespace: str, new_namespace: str) -> str | None:
@@ -163,6 +205,77 @@ def rebase_iri(iri: str, old_namespace: str, new_namespace: str) -> str | None:
     if not in_namespace(iri, old_namespace):
         return None
     return new_namespace + iri[len(old_namespace) :]
+
+
+def claiming_namespace(iri: str, namespaces: Container[str]) -> str | None:
+    """The longest of `namespaces` that contains `iri`, matched as `in_namespace` does.
+
+    A namespace can only contain `iri` if it is `iri` itself, or ends just before or just after
+    one of its characters that is not a letter or a digit, so only those prefixes are looked up.
+    The cost follows the length of the IRI rather than the number of namespaces, and the answer
+    is independent of the order they were declared in (#177, #424).
+
+    Args:
+        iri: The IRI to place.
+        namespaces: The candidate namespaces.
+
+    Returns:
+        The longest namespace containing `iri`, or None if none does.
+    """
+    if iri in namespaces:
+        return iri
+    authority = _authority_span(iri)
+    best: str | None = None
+    for i, ch in enumerate(iri):
+        if ch.isalnum():
+            continue
+        for k in (i, i + 1):
+            candidate = iri[:k]
+            if candidate in namespaces and _contains_at(iri, k, authority):
+                best = candidate
+    return best
+
+
+def rebase_by_rules(iri: str, rules: Mapping[str, str]) -> str | None:
+    """Move an IRI by the longest namespace rule that contains it.
+
+    Every command that moves IRIs by namespace (`merge`'s remap, data migration and
+    `refactor rename`) goes through this, so the order of the rules never matters (#424). It is
+    one pass: an IRI moves at most once, and is never moved again by the rule its new IRI falls
+    within.
+
+    Args:
+        iri: The IRI to move.
+        rules: Old namespace to new namespace.
+
+    Returns:
+        The rebased IRI, or None if no rule's namespace contains `iri`.
+    """
+    old_namespace = claiming_namespace(iri, rules)
+    if old_namespace is None:
+        return None
+    return rules[old_namespace] + iri[len(old_namespace) :]
+
+
+def nested_rules(rules: Iterable[str]) -> list[tuple[str, str]]:
+    """The pairs of rule namespaces where one lies within the other.
+
+    Where rules nest, the longer one wins for the IRIs within it (`rebase_by_rules`); a command
+    names each pair so that the precedence is visible (#424).
+
+    Args:
+        rules: The rules' old namespaces.
+
+    Returns:
+        ``(inner, outer)`` pairs, sorted.
+    """
+    namespaces = sorted(set(rules))
+    return sorted(
+        (inner, outer)
+        for inner in namespaces
+        for outer in namespaces
+        if inner != outer and in_namespace(inner, outer)
+    )
 
 
 def rebind_prefixes(graph: Graph, ordered_prefixes: list[str], prefix_map: dict[str, str]) -> None:

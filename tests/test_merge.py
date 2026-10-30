@@ -743,5 +743,113 @@ class TestNamespaceBoundary:
         }
 
 
+NESTED = dedent(
+    """
+    @prefix core: <http://e.org/core/> .
+    @prefix sub: <http://e.org/core/sub/> .
+    @prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+    core:A a owl:Class .
+    sub:B a owl:Class .
+    """
+).strip()
+
+NESTED_RULES = {
+    "http://e.org/core/": "http://n.org/core/",
+    "http://e.org/core/sub/": "http://n.org/sub/",
+}
+
+
+class TestLongestRule:
+    """Overlapping remap rules resolve by the longest match, not key order (#424)."""
+
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_merge_remap_moves_bindings_and_terms_by_the_same_rule(self, temp_dir, reverse):
+        path = temp_dir / "nested.ttl"
+        path.write_text(NESTED)
+        rules = dict(reversed(NESTED_RULES.items())) if reverse else dict(NESTED_RULES)
+        config = MergeConfig(
+            sources=[SourceConfig(path=path, priority=1, namespace_remap=rules)], output=None
+        )
+        result = OntologyMerger(config).merge()
+        assert result.success
+
+        merged = result.merged_graph
+        bindings = {p: str(ns) for p, ns in merged.namespaces()}
+        assert bindings["core"] == "http://n.org/core/"
+        assert bindings["sub"] == "http://n.org/sub/"
+        assert (URIRef("http://n.org/core/A"), RDF.type, OWL.Class) in merged
+        assert (URIRef("http://n.org/sub/B"), RDF.type, OWL.Class) in merged
+        assert len(merged) == 2
+
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_migrator_namespace_map_takes_the_longest_rule(self, reverse):
+        data = Graph().parse(data=NESTED, format="turtle")
+        rules = dict(reversed(NESTED_RULES.items())) if reverse else dict(NESTED_RULES)
+        uri_map = DataMigrator().build_uri_map_from_namespaces(data, rules)
+        assert uri_map == {
+            URIRef("http://e.org/core/A"): URIRef("http://n.org/core/A"),
+            URIRef("http://e.org/core/sub/B"): URIRef("http://n.org/sub/B"),
+        }
+
+    def test_merge_remap_moves_a_stem(self, temp_dir):
+        """A namespace ending in a stem character matches the terms that continue it (#422)."""
+        path = temp_dir / "obo.ttl"
+        path.write_text(
+            "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n"
+            "<http://purl.obolibrary.org/obo/GO_0008150> a owl:Class .\n"
+            "<http://purl.obolibrary.org/obo/CL_0000000> a owl:Class .\n"
+        )
+        remap = {"http://purl.obolibrary.org/obo/GO_": "http://example.org/go/"}
+        config = MergeConfig(
+            sources=[SourceConfig(path=path, priority=1, namespace_remap=remap)], output=None
+        )
+        result = OntologyMerger(config).merge()
+        assert result.success
+        merged = result.merged_graph
+        assert (URIRef("http://example.org/go/0008150"), RDF.type, OWL.Class) in merged
+        assert (URIRef("http://purl.obolibrary.org/obo/CL_0000000"), RDF.type, OWL.Class) in merged
+
+    def test_merge_remap_leaves_another_port(self, temp_dir):
+        """``http://example.org`` does not contain ``http://example.org:8080/…`` (#423)."""
+        path = temp_dir / "port.ttl"
+        path.write_text(
+            "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n"
+            "<http://example.org:8080/a#X> a owl:Class .\n"
+            "<http://example.org/ont#Y> a owl:Class .\n"
+        )
+        remap = {"http://example.org": "http://example.net"}
+        config = MergeConfig(
+            sources=[SourceConfig(path=path, priority=1, namespace_remap=remap)], output=None
+        )
+        result = OntologyMerger(config).merge()
+        assert result.success
+        merged = result.merged_graph
+        assert (URIRef("http://example.org:8080/a#X"), RDF.type, OWL.Class) in merged
+        assert (URIRef("http://example.net/ont#Y"), RDF.type, OWL.Class) in merged
+
+    def test_merge_cli_names_nested_rules(self, temp_dir):
+        from click.testing import CliRunner
+
+        from rdf_construct.cli import cli
+        from tests.test_cli_smoke import assert_no_crash
+
+        src = temp_dir / "nested.ttl"
+        src.write_text(NESTED)
+        out = temp_dir / "merged.ttl"
+        lines = "".join(f'        "{old}": "{new}"\n' for old, new in NESTED_RULES.items())
+        cfg = temp_dir / "merge.yml"
+        cfg.write_text(f"sources:\n  - path: {src}\n    namespace_remap:\n{lines}")
+        result = CliRunner().invoke(cli, ["merge", "-c", str(cfg), "-o", str(out)])
+        assert_no_crash(result)
+        assert result.exit_code == 0, result.output
+        assert (
+            "Note: http://e.org/core/sub/ lies within http://e.org/core/; each IRI moves by the "
+            "longest rule that contains it."
+        ) in result.stderr
+        merged = Graph().parse(out)
+        assert (URIRef("http://n.org/sub/B"), RDF.type, OWL.Class) in merged
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

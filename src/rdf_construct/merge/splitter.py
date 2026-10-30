@@ -10,7 +10,7 @@ This module provides the OntologySplitter class that:
 """
 
 import re
-from collections.abc import Container, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -26,7 +26,7 @@ from rdf_construct.core.outdir import OUTPUT_MARKER, mark_output_dir
 from rdf_construct.core.output_paths import PlannedOutput, colliding_outputs, outputs_over_inputs
 from rdf_construct.core.provenance import WAS_DERIVED_FROM, derivation_targets, stamp_derivation
 from rdf_construct.core.serialiser import bnode_closure
-from rdf_construct.core.utils import CurieError, in_namespace, resolve_curie
+from rdf_construct.core.utils import CurieError, claiming_namespace, in_namespace, resolve_curie
 from rdf_construct.core.vocab import ALL_PROPERTY_TYPES, CLASS_TYPES
 
 
@@ -80,30 +80,6 @@ def _derived_namespace(iri: str) -> str:
     """
     cut = max(iri.rfind(d) for d in _NAMESPACE_DELIMITERS)
     return iri[: cut + 1] if cut >= 0 else iri
-
-
-def _claiming_namespace(iri: str, namespaces: Container[str]) -> str | None:
-    """The longest of `namespaces` that contains `iri`, matched as `core.utils.in_namespace` does.
-
-    Every namespace that can contain an IRI is the IRI itself, or the IRI cut just before or just
-    after one of its delimiters, so the candidates are looked up rather than tested one by one.
-    That keeps the claim linear in the length of the IRI whatever the number of namespaces, and
-    independent of the order they were declared in (#177).
-
-    Args:
-        iri: The IRI to place.
-        namespaces: The candidate namespaces.
-
-    Returns:
-        The longest namespace containing `iri`, or None if none does.
-    """
-    best = iri if iri in namespaces else None
-    for i, ch in enumerate(iri):
-        if ch in _NAMESPACE_DELIMITERS:
-            for candidate in (iri[: i + 1], iri[:i]):
-                if candidate in namespaces and (best is None or len(candidate) > len(best)):
-                    best = candidate
-    return best
 
 
 def _fallback_name(namespace: str) -> str:
@@ -849,7 +825,7 @@ class OntologySplitter:
         self.namespace_owner = namespace_owner
         owned: dict[str, list[URIRef]] = {}
         for entity in all_entities:
-            ns_claim = _claiming_namespace(str(entity), namespace_owner)
+            ns_claim = claiming_namespace(str(entity), namespace_owner)
             if ns_claim is not None:
                 owned.setdefault(namespace_owner[ns_claim], []).append(entity)
 
@@ -928,7 +904,7 @@ class OntologySplitter:
 
     def _namespace_module(self, subject: URIRef) -> str | None:
         """The module whose namespace claims `subject`, as `_assign_entities` claims entities."""
-        claim = _claiming_namespace(str(subject), self.namespace_owner)
+        claim = claiming_namespace(str(subject), self.namespace_owner)
         return self.namespace_owner[claim] if claim is not None else None
 
     def _route_residue(self, assignments: dict[str, set[URIRef]], result: SplitResult) -> None:
@@ -1697,7 +1673,7 @@ def split_by_namespace(
     used: set[str] = set()
     for entity in select_classes(graph) | select_properties(graph) | schemes:
         iri = str(entity)
-        namespace = _claiming_namespace(iri, declared) or _derived_namespace(iri)
+        namespace = claiming_namespace(iri, declared) or _derived_namespace(iri)
         if not is_borrowed(namespace, ontologies):
             used.add(namespace)
 

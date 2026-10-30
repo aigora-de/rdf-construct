@@ -36,6 +36,7 @@ from rdf_construct.core import (
     expand_curie,
     CurieError,
     missing_triples,
+    nested_rules,
     stamp_extract,
 )
 from rdf_construct.core.formats import (
@@ -3089,6 +3090,7 @@ def merge(
 
     # Execute merge
     click.echo("Merging ontologies...")
+    _note_nested_rules(*(src.namespace_remap for src in config.sources))
 
     merger = OntologyMerger(config)
     result = merger.merge()
@@ -3523,6 +3525,24 @@ def refactor():
     pass
 
 
+def _note_nested_rules(*rule_sets: dict[str, str]) -> None:
+    """Name each pair of namespace rules where one lies within the other (#424).
+
+    The longer rule wins for the IRIs within it, whatever order the rules were given in. Pairs
+    are found within each rule set and named once, however many sets repeat them.
+
+    Args:
+        rule_sets: Old namespace to new namespace, one mapping per set of rules.
+    """
+    pairs = {pair for rules in rule_sets for pair in nested_rules(rules)}
+    for inner, outer in sorted(pairs):
+        click.echo(
+            f"Note: {inner} lies within {outer}; each IRI moves by the longest rule "
+            "that contains it.",
+            err=True,
+        )
+
+
 def _load_refactor_sources(paths: list[Path]) -> list[tuple[Path, Graph]]:
     """Parse each refactor source, keeping the prefixes the file declares.
 
@@ -3884,6 +3904,7 @@ def refactor_rename(
             "No renames specified. Use --from/--to, --from-namespace/--to-namespace, "
             "or provide a config file."
         )
+    _note_nested_rules(config.rename.namespaces)
 
     # One output file cannot hold the results of several sources: each would replace the
     # last (#411).

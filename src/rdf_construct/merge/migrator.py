@@ -14,7 +14,7 @@ from typing import Any
 from rdflib import Graph, URIRef, Literal, BNode
 from rdflib.namespace import RDF
 
-from rdf_construct.core.utils import rebase_iri
+from rdf_construct.core.utils import rebase_by_rules
 from rdf_construct.merge.config import MigrationRule, DataMigrationConfig
 from rdf_construct.merge.rules import RuleEngine
 
@@ -275,12 +275,9 @@ class DataMigrator:
 
         # Build substitution map
         for uri in all_uris:
-            uri_str = str(uri)
-            for old_ns, new_ns in namespace_remaps.items():
-                new_uri_str = rebase_iri(uri_str, old_ns, new_ns)
-                if new_uri_str is not None:
-                    uri_map[uri] = URIRef(new_uri_str)
-                    break
+            new_uri_str = rebase_by_rules(str(uri), namespace_remaps)
+            if new_uri_str is not None:
+                uri_map[uri] = URIRef(new_uri_str)
 
         return uri_map
 

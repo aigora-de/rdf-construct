@@ -48,10 +48,13 @@ from .default_order import (
 )
 from .utils import (
     CurieError,
+    claiming_namespace,
     expand_curie,
     extract_prefix_map,
     in_namespace,
+    nested_rules,
     qname_sort_key,
+    rebase_by_rules,
     rebase_iri,
     rebind_prefixes,
     resolve_curie,
@@ -117,10 +120,13 @@ __all__ = [
     "IncompleteSubjectOrderError",
     # Utils
     "CurieError",
+    "claiming_namespace",
     "expand_curie",
     "extract_prefix_map",
     "in_namespace",
+    "nested_rules",
     "qname_sort_key",
+    "rebase_by_rules",
     "rebase_iri",
     "rebind_prefixes",
     "resolve_curie",
