@@ -16,7 +16,7 @@ from typing import Any
 
 from rdflib import Graph, URIRef, Literal, BNode
 
-from rdf_construct.core.utils import rebase_iri
+from rdf_construct.core.utils import rebase_by_rules
 from rdf_construct.refactor.config import RenameConfig, RenameMapping
 
 
@@ -136,12 +136,7 @@ class OntologyRenamer:
 
         for prefix, ns in graph.namespace_manager.namespaces():
             ns_str = str(ns)
-            new_ns_str = ns_str
-            for old_ns, new_ns in old_ns_to_new.items():
-                rebased = rebase_iri(ns_str, old_ns, new_ns)
-                if rebased is not None:
-                    new_ns_str = rebased
-                    break
+            new_ns_str = rebase_by_rules(ns_str, old_ns_to_new) or ns_str
             renamed_graph.bind(prefix, new_ns_str, override=True)
 
         # Process each triple

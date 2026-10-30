@@ -15,7 +15,7 @@ from typing import Any, Literal
 import yaml
 from rdflib import Graph, URIRef
 
-from rdf_construct.core.utils import CurieError, rebase_iri, resolve_curie
+from rdf_construct.core.utils import CurieError, rebase_by_rules, resolve_curie
 
 
 class AmbiguousCurieError(ValueError):
@@ -126,16 +126,13 @@ class RenameConfig:
 
             # Apply namespace mappings
             for uri in all_uris:
-                uri_str = str(uri)
-                for old_ns, new_ns in self.namespaces.items():
-                    new_uri_str = rebase_iri(uri_str, old_ns, new_ns)
-                    if new_uri_str is not None:
-                        mappings[uri] = RenameMapping(
-                            from_uri=uri,
-                            to_uri=URIRef(new_uri_str),
-                            source="namespace",
-                        )
-                        break
+                new_uri_str = rebase_by_rules(str(uri), self.namespaces)
+                if new_uri_str is not None:
+                    mappings[uri] = RenameMapping(
+                        from_uri=uri,
+                        to_uri=URIRef(new_uri_str),
+                        source="namespace",
+                    )
 
         # Phase 2: Apply explicit entity mappings (override namespace)
         for old_uri_str, new_uri_str in self.entities.items():

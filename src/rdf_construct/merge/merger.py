@@ -17,7 +17,7 @@ from rdflib.namespace import RDF, RDFS, OWL
 
 from rdf_construct.core.blank_nodes import label_by_content
 from rdf_construct.core.predicate_tiers import PredicateTier
-from rdf_construct.core.utils import rebase_iri
+from rdf_construct.core.utils import rebase_by_rules
 from rdf_construct.merge.config import (
     MergeConfig,
     SourceConfig,
@@ -199,13 +199,8 @@ class OntologyMerger:
         # Copy namespace bindings, moving each one the same way as the IRIs in it
         for prefix, ns in graph.namespace_manager.namespaces():
             ns_str = str(ns)
-            for old_ns, new_ns in remappings.items():
-                rebased = rebase_iri(ns_str, old_ns, new_ns)
-                if rebased is not None:
-                    new_graph.bind(prefix, Namespace(rebased))
-                    break
-            else:
-                new_graph.bind(prefix, ns)
+            rebased = rebase_by_rules(ns_str, remappings)
+            new_graph.bind(prefix, ns if rebased is None else Namespace(rebased))
 
         # Remap triples
         for s, p, o in graph:
@@ -226,12 +221,8 @@ class OntologyMerger:
         Returns:
             Remapped URI or original if no mapping applies
         """
-        uri_str = str(uri)
-        for old_ns, new_ns in remappings.items():
-            rebased = rebase_iri(uri_str, old_ns, new_ns)
-            if rebased is not None:
-                return URIRef(rebased)
-        return uri
+        rebased = rebase_by_rules(str(uri), remappings)
+        return uri if rebased is None else URIRef(rebased)
 
     def _resolve_conflicts(self, conflicts: list[Conflict], result: MergeResult) -> None:
         """Resolve conflicts according to configured strategy.

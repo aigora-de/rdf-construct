@@ -41,7 +41,7 @@ rdf-construct refactor rename ontology.ttl \
 |--------|-------------|
 | `--from URI` | Single URI or CURIE to rename |
 | `--to URI` | New URI or CURIE for single rename |
-| `--from-namespace NS` | Old namespace for bulk rename, matched at a `#`, `/` or `:` boundary |
+| `--from-namespace NS` | Old namespace for bulk rename, matched at a namespace boundary (below) |
 | `--to-namespace NS` | New namespace for bulk rename |
 | `-c, --config FILE` | YAML configuration file |
 | `-o, --output PATH` | Output file or directory |
@@ -118,10 +118,24 @@ A bare `urn:isbn:0451450523` reads as a CURIE whose `urn:` prefix is missing.
 | `http://example.org/ont#` | moved | kept | kept | kept |
 | `http://example.org/` | moved | moved | moved | moved |
 
-A namespace that ends in `#`, `/` or `:` matches everything that starts with it. One without a
-delimiter matches only where the next character is `#`, `/` or `:`, or where the IRI ends. So
-URN-style namespaces work either way: `urn:old:` and `urn:old` both move `urn:old:A`, and neither
-moves `urn:older:C`.
+A namespace that ends in anything but a letter or a digit matches everything that starts with it:
+`#`, `/` and `:`, and also a stem such as OBO's `http://purl.obolibrary.org/obo/GO_`, which moves
+`GO_0008150`, or `http://example.org/items?id=`. One that ends in a letter or a digit matches
+only where the next character is `#`, `/` or `:`, or where the IRI ends. So URN-style namespaces
+work either way: `urn:old:` and `urn:old` both move `urn:old:A`, and neither moves `urn:older:C`.
+
+An IRI's authority (its host, port and user information) is never divided. `http://example.org`
+moves `http://example.org/ont#Y` but not `http://example.org:8080/a#X`, which is another server;
+to move that one, name its port: `http://example.org:8080`.
+
+When a config's `namespaces` overlap, each IRI moves by the **longest** rule that contains it,
+whatever order the rules are written in, and moves once: an IRI is never moved again by a rule
+its new IRI falls within. A prefix binding moves by the same rule as the terms in it. The run
+names each pair of rules where one lies within the other:
+
+```text
+Note: http://e.org/core/sub/ lies within http://e.org/core/; each IRI moves by the longest rule that contains it.
+```
 
 ### With Data Migration
 

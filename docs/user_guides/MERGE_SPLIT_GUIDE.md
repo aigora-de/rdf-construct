@@ -315,9 +315,15 @@ sources:
       "http://old.example.org/": "http://example.org/"
 ```
 
-A key ending in `#`, `/` or `:` matches every IRI that starts with it. A key without one matches
-only at a namespace boundary: `http://example.org/ont` remaps `…/ont#One` and `…/ont/extra#Three`, but
-not `…/ontology#Two`. Prefix bindings move with the namespaces they name.
+A key ending in anything but a letter or a digit matches every IRI that starts with it: `#`, `/`
+and `:`, and also a stem such as OBO's `http://purl.obolibrary.org/obo/GO_`. A key ending in a
+letter or a digit matches only at a namespace boundary: `http://example.org/ont` remaps
+`…/ont#One` and `…/ont/extra#Three`, but not `…/ontology#Two`. An IRI's authority is never
+divided, so `http://example.org` does not remap `http://example.org:8080/…`. Prefix bindings move
+with the namespaces they name.
+
+When keys overlap, each IRI moves by the **longest** key that contains it, whatever order they are
+written in, and moves once. `merge` names each pair of keys where one lies within the other.
 
 #### Preferred Prefixes
 
@@ -617,7 +623,7 @@ If your ontology uses distinct namespaces for different domains (e.g., `org:`, `
 How modules are found and named:
 
 - **A module is a namespace that the source's classes and properties actually use.** A prefix you declare but never use makes no module, and neither do rdflib's built-in prefixes. An empty file gives no modules.
-- **An entity belongs to the longest declared namespace that contains it.** With `env:` bound to `…/env/` and `building:` to `…/env/building/`, `building:Door` goes to `building.ttl` and `env:Thing` to `env.ttl`. An IRI under `env:` in a path nobody declared, such as `…/env/x/Y`, stays with `env`.
+- **An entity belongs to the longest declared namespace that contains it.** With `env:` bound to `…/env/` and `building:` to `…/env/building/`, `building:Door` goes to `building.ttl` and `env:Thing` to `env.ttl`. An IRI under `env:` in a path nobody declared, such as `…/env/x/Y`, stays with `env`. Namespaces are matched as `merge`'s `namespace_remap` keys are, so a prefix bound to a stem such as `GO:` → `…/obo/GO_` makes a module of its own.
 - **An entity under no declared namespace** belongs to the namespace its own IRI implies: everything up to its last `#`, `/` or `:`.
 - **A module is named after the prefix your file declares** for its namespace, as written, so `org:` gives `org.ttl` even though rdflib binds `org` to another vocabulary. The name is used for the file, the manifest `name:` and every dependency entry.
 - **Where there is no prefix,** the name comes from the namespace's last path segment: N-Triples, an undeclared namespace, or the empty prefix `:`. `http://example.org/ontology#` gives `ontology.ttl`.
