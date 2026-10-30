@@ -4,8 +4,17 @@ v0.7.0 breaks things deliberately, and does it once. The
 [#126 audit](https://github.com/aigora-de/rdf-construct/issues/126) walked every command against
 its own documentation and found behaviour that is silently wrong: an exit code of 1 that means
 both "input rejected" and "completed with findings", command-line defaults that quietly overwrite
-what a configuration file says, output written where nobody asked for it. Most of those fixes cannot land without changing what an existing script sees. Rather than
-spread that across several releases, they ship together, behind one version and this one note.
+what a configuration file says, output written where nobody asked for it. Most of those fixes cannot land without changing what an existing script sees, so nearly all of
+them ship here, behind one version and this one note.
+
+A few follow in v0.8.0, with a note of their own:
+- corrections to the figures a report shows (`describe`'s metrics, `stats`' categories);
+- `diff`'s text and markdown rendering;
+- the `docs` JSON;
+- how `lint`, `describe`, `order` and `stats` classify a property that has an `rdfs:domain` but
+  no property type.
+
+A 0.7.x patch never changes what a correct run does.
 
 The plan is tracking issue [#312](https://github.com/aigora-de/rdf-construct/issues/312), and the
 work is milestone
