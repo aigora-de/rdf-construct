@@ -8,11 +8,12 @@ what a configuration file says, output written where nobody asked for it. Most o
 them ship here, behind one version and this one note.
 
 A few follow in v0.8.0, with a note of their own:
-- corrections to the figures a report shows (`describe`'s metrics, `stats`' categories);
-- `diff`'s text and markdown rendering;
-- the `docs` JSON;
-- how `lint`, `describe`, `order` and `stats` classify a property that has an `rdfs:domain` but
-  no property type.
+- corrections to the figures a report shows: `describe`'s metrics ([#215](https://github.com/aigora-de/rdf-construct/issues/215), [#216](https://github.com/aigora-de/rdf-construct/issues/216), [#217](https://github.com/aigora-de/rdf-construct/issues/217),
+  [#218](https://github.com/aigora-de/rdf-construct/issues/218), [#219](https://github.com/aigora-de/rdf-construct/issues/219), [#222](https://github.com/aigora-de/rdf-construct/issues/222)) and `stats`' categories ([#139](https://github.com/aigora-de/rdf-construct/issues/139), [#141](https://github.com/aigora-de/rdf-construct/issues/141));
+- `diff`'s text and markdown rendering ([#147](https://github.com/aigora-de/rdf-construct/issues/147));
+- the `docs` JSON ([#236](https://github.com/aigora-de/rdf-construct/issues/236), [#253](https://github.com/aigora-de/rdf-construct/issues/253), [#258](https://github.com/aigora-de/rdf-construct/issues/258));
+- how `lint`, `describe`, `order` and `stats` classify a term that has an `rdfs:domain`,
+  `rdfs:range` or `rdfs:subPropertyOf` but no property type ([#297](https://github.com/aigora-de/rdf-construct/issues/297)).
 
 A 0.7.x patch never changes what a correct run does.
 
