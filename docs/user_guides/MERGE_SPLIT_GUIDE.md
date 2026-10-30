@@ -565,7 +565,7 @@ rdf-construct split SOURCE [OPTIONS]
 | `-c, --config PATH` | YAML configuration file | - |
 | `--by-namespace` | Auto-detect modules from namespaces | `False` |
 | `--migrate-data PATH` | Data file(s) to split (repeatable) | - |
-| `--data-output PATH` | Output directory for split data | - |
+| `--data-output PATH` | Output directory for split data | the config's `split_data: output_dir`, else the output directory |
 | `--unmatched` | What to do with unmatched subjects: `common` (collect them in one module) or `error` (refuse the run) | `common` |
 | `--common-name` | Name of the module that collects unmatched subjects | `unmatched` |
 | `--no-manifest` | Don't generate manifest.yml | `False` |
@@ -579,7 +579,7 @@ rdf-construct split SOURCE [OPTIONS]
 |------|---------|
 | 0 | Split successful |
 | 1 | Split successful, with unmatched subjects in their own module, or a module that could not be given an ontology IRI |
-| 2 | Input refused or run failed (invalid options or config, file not found, parse error, `--unmatched error` with unmatched subjects, an unmatched module whose name another module already has) |
+| 2 | Input refused or run failed (invalid options or config, file not found, parse error, `--unmatched error` with unmatched subjects, an unmatched module whose name another module already has, outputs that clash or leave their directory; see [Where Module Files Go](#where-module-files-go)) |
 
 ### When `modules/` already holds other files
 
@@ -685,6 +685,31 @@ split:
 
   generate_manifest: true
 ```
+
+### Where Module Files Go
+
+Each `output:` is a path relative to `output_dir`; a subdirectory such as `core/core.ttl` is
+created. Before it reads the source, `split` checks every file it could write: the modules, the
+unmatched module, `manifest.yml`, its `.rdf-construct` marker and, with data, each
+`prefix` + module name + `.ttl`. A run is refused at exit 2, with nothing written and every
+problem listed, when ([#413](https://github.com/aigora-de/rdf-construct/issues/413)):
+
+- an output is an absolute path, or resolves outside its directory (`../x.ttl`, or through a
+  symbolic link): move `output_dir` up instead;
+- two of them are one file, compared without case, so `A.ttl` and `a.ttl` clash on every system;
+- an output is `manifest.yml` (unless `--no-manifest`) or `.rdf-construct`;
+- an output is the source, a data file or the config;
+- two modules share a `name:`, compared without case, or the unmatched module's name or output is
+  another module's. This is checked whenever the strategy is `common`, whether or not anything
+  ends up unmatched.
+
+```
+Error: Nothing was written:
+  module 'core' (output: ../core.ttl) is outside output_dir (modules): it resolves to /work/core.ttl. Give a path inside it, or move output_dir up.
+  module 'org' (output: same.ttl) and module 'building' (output: same.ttl) name one file, modules/same.ttl. Choose different paths.
+```
+
+`--dry-run` is refused the same way, and `--overwrite` permits none of it.
 
 ### Include Descendants
 
@@ -873,6 +898,9 @@ Instances are assigned to modules based on their `rdf:type`:
 
 - Instance of `org:Company` → `data_organisation.ttl`
 - Instance of `building:Floor` → `data_building.ttl`
+
+Without `--data-output`, data goes to the config's `split_data: output_dir`, or else to the
+directory the modules go to. The config's `prefix` applies with `--migrate-data` too.
 
 Configuration:
 

@@ -22,7 +22,8 @@ from rdflib.namespace import RDF, RDFS, OWL, SKOS
 from rdflib.term import Node
 
 from rdf_construct.core.blank_nodes import component_digest
-from rdf_construct.core.outdir import mark_output_dir
+from rdf_construct.core.outdir import OUTPUT_MARKER, mark_output_dir
+from rdf_construct.core.output_paths import PlannedOutput, colliding_outputs, outputs_over_inputs
 from rdf_construct.core.provenance import WAS_DERIVED_FROM, derivation_targets, stamp_derivation
 from rdf_construct.core.serialiser import bnode_closure
 from rdf_construct.core.utils import CurieError, in_namespace, resolve_curie
@@ -404,6 +405,211 @@ class SplitConfig:
         )
 
 
+MANIFEST_NAME = "manifest.yml"
+"""The manifest's file name, in the output directory."""
+
+
+class SplitOutputError(ValueError):
+    """A split whose outputs collide, leave their directory or replace an input (#413).
+
+    Raised before the source is parsed, so nothing has been written.
+
+    Attributes:
+        problems: Every problem the plan found, one line each.
+    """
+
+    def __init__(self, problems: list[str]) -> None:
+        self.problems = problems
+        super().__init__("Nothing was written:\n  " + "\n  ".join(problems))
+
+
+@dataclass(frozen=True)
+class _PlannedFile:
+    """A file a split means to write, as the config gives it.
+
+    Attributes:
+        label: What the file is, as a refusal names it.
+        given: The path as written, relative to ``directory``.
+        directory: The directory it must stay inside.
+        directory_key: What names ``directory`` (``output_dir``, the data directory), for the
+            advice.
+    """
+
+    label: str
+    given: str
+    directory: Path
+    directory_key: str
+
+    @property
+    def path(self) -> Path:
+        """Where the file is written."""
+        return self.directory / self.given
+
+
+def data_output_dir(config: SplitConfig) -> Path:
+    """The directory data modules are written to: ``split_data``'s own, else ``output_dir``.
+
+    Args:
+        config: Split configuration.
+
+    Returns:
+        The data directory.
+    """
+    if config.split_data and config.split_data.output_dir:
+        return config.split_data.output_dir
+    return config.output_dir
+
+
+def _plan_files(config: SplitConfig, problems: list[str]) -> list[_PlannedFile]:
+    """Work out every file the split could write, refusing names that clash (#382, #413).
+
+    The plan is the worst case, made from the config alone: the unmatched module whenever the
+    strategy is ``common``, and a data file for every module whenever data is given. A config
+    that is wrong is wrong whatever the source holds.
+
+    Two modules with one name are one module to the splitter: their subjects merge, and they
+    share an ontology IRI and a data file. A name is compared without case, as the data file
+    named after it is. A module refused by name is not planned further, so each mistake is
+    reported once.
+
+    Args:
+        config: Split configuration.
+        problems: Where a name clash is reported.
+
+    Returns:
+        The planned files, in the order they would be written.
+    """
+    out = config.output_dir
+    files: list[_PlannedFile] = []
+    names: dict[str, ModuleDefinition] = {}
+    for module in config.modules:
+        first = names.setdefault(module.name.casefold(), module)
+        if first is not module:
+            problems.append(
+                f"Modules {first.name!r} and {module.name!r} share a name, so they would be "
+                "written as one module. Rename one."
+            )
+            continue
+        files.append(
+            _PlannedFile(
+                f"module {module.name!r} (output: {module.output})",
+                module.output,
+                out,
+                "output_dir",
+            )
+        )
+
+    unmatched = config.unmatched
+    common = unmatched.strategy == "common"
+    if common:
+        for module in names.values():
+            if (
+                module.name.casefold() == unmatched.common_module.casefold()
+                or module.output.casefold() == unmatched.common_output.casefold()
+            ):
+                problems.append(
+                    f"The unmatched module {unmatched.common_module!r} "
+                    f"({unmatched.common_output}) would overwrite module {module.name!r} "
+                    f"({module.output}). Give the unmatched module another name with "
+                    "--common-name or unmatched: module:."
+                )
+                common = False
+                break
+    if common:
+        files.append(
+            _PlannedFile(
+                f"the unmatched module {unmatched.common_module!r} "
+                f"(output: {unmatched.common_output})",
+                unmatched.common_output,
+                out,
+                "output_dir",
+            )
+        )
+
+    if config.generate_manifest:
+        files.append(
+            _PlannedFile(f"the manifest ({MANIFEST_NAME})", MANIFEST_NAME, out, "output_dir")
+        )
+    files.append(
+        _PlannedFile(f"split's marker ({OUTPUT_MARKER})", OUTPUT_MARKER, out, "output_dir")
+    )
+
+    if config.split_data and config.split_data.sources:
+        prefix = config.split_data.prefix
+        data_dir = data_output_dir(config)
+        data_names = [module.name for module in names.values()]
+        if common:
+            data_names.append(unmatched.common_module)
+        for name in data_names:
+            files.append(
+                _PlannedFile(
+                    f"the data file for module {name!r} ({prefix}{name}.ttl: prefix + name)",
+                    f"{prefix}{name}.ttl",
+                    data_dir,
+                    "the data directory",
+                )
+            )
+    return files
+
+
+def check_split_outputs(config: SplitConfig, inputs: Sequence[Path] = ()) -> None:
+    """Refuse a split whose outputs would collide, leave their directory or replace an input.
+
+    Call it before the source is parsed (#413). Every file the split could write is planned
+    from the config: each module's ``output:``, the unmatched module's, the manifest, the
+    ``.rdf-construct`` marker and the data files. Each must be a relative path that resolves
+    inside its directory, symbolic links followed; no two may be one file
+    (``core.output_paths``, so ``A.ttl`` and ``a.ttl`` collide); and none may be an input.
+    ``--overwrite`` permits none of these: it only lets a run into a default directory that
+    holds other files (#261).
+
+    Args:
+        config: Split configuration, with every command-line override applied.
+        inputs: Files the run reads besides the source and the data, such as the config file.
+
+    Raises:
+        SplitOutputError: Listing every problem found.
+    """
+    problems: list[str] = []
+    files: list[_PlannedFile] = []
+    for planned in _plan_files(config, problems):
+        if Path(planned.given).is_absolute():
+            problems.append(
+                f"{planned.label} is an absolute path. Give a path inside "
+                f"{planned.directory_key} ({planned.directory})."
+            )
+            continue
+        base = planned.directory.resolve()
+        resolved = planned.path.resolve()
+        if resolved == base or not resolved.is_relative_to(base):
+            problems.append(
+                f"{planned.label} is outside {planned.directory_key} ({planned.directory}): it "
+                f"resolves to {resolved}. Give a path inside it, or move "
+                f"{planned.directory_key} up."
+            )
+            continue
+        if resolved.is_dir():
+            problems.append(f"{planned.label} names a directory, {planned.path}.")
+            continue
+        files.append(planned)
+
+    outputs = [PlannedOutput(planned.path) for planned in files]
+    # Two files on one path are equal PlannedOutputs, so each is told apart by identity
+    labels = {id(output): planned.label for output, planned in zip(outputs, files, strict=True)}
+    for group in colliding_outputs(outputs):
+        named = " and ".join(labels[id(output)] for output in group)
+        problems.append(f"{named} name one file, {group[0].path}. Choose different paths.")
+
+    read = [config.source, *(config.split_data.sources if config.split_data else []), *inputs]
+    for output, existing in outputs_over_inputs(outputs, read):
+        problems.append(
+            f"{labels[id(output)]} would replace the input {existing}. Choose another path."
+        )
+
+    if problems:
+        raise SplitOutputError(problems)
+
+
 @dataclass
 class ModuleStats:
     """Statistics for a single module.
@@ -516,7 +722,12 @@ class OntologySplitter:
 
         Returns:
             SplitResult with module graphs and statistics.
+
+        Raises:
+            SplitOutputError: When the config's outputs collide, leave their directory or would
+                replace an input, before the source is parsed (#413).
         """
+        check_split_outputs(self.config)
         result = SplitResult()
 
         # Load source ontology
@@ -540,7 +751,7 @@ class OntologySplitter:
         # Route everything that is not a class or a property (#176)
         self._route_residue(assignments, result)
 
-        # Refuse an unmatched module that would overwrite another (#382), before anything is built
+        # Refuse unmatched subjects the strategy does not allow, before anything is built
         if result.unmatched_entities:
             self._check_unmatched(result)
             if not result.success:
@@ -828,7 +1039,10 @@ class OntologySplitter:
             self._unmatch(root, label, reason, result)
 
     def _check_unmatched(self, result: SplitResult) -> None:
-        """Refuse an unmatched module that is not allowed, or would overwrite another (#382).
+        """Refuse unmatched subjects when the strategy is ``error``.
+
+        An unmatched module that would overwrite another (#382) is refused before the parse,
+        by `check_split_outputs`.
 
         Args:
             result: SplitResult with unmatched entities, marked as failed if refused.
@@ -842,21 +1056,6 @@ class OntologySplitter:
                 + ", ".join(labels[:5])
                 + ("..." if len(labels) > 5 else "")
             )
-            return
-
-        for module in self.config.modules:
-            if (
-                module.name.casefold() == unmatched.common_module.casefold()
-                or module.output.casefold() == unmatched.common_output.casefold()
-            ):
-                result.success = False
-                result.error = (
-                    f"The unmatched module {unmatched.common_module!r} "
-                    f"({unmatched.common_output}) would overwrite module {module.name!r} "
-                    f"({module.output}). Give the unmatched module another name with "
-                    "--common-name or unmatched: module:."
-                )
-                return
 
     def _expand_curie(self, curie: str) -> URIRef:
         """Expand a CURIE to a full URI using the source graph's namespace bindings.
@@ -1314,30 +1513,34 @@ class OntologySplitter:
         self.config.output_dir.mkdir(parents=True, exist_ok=True)
         mark_output_dir(self.config.output_dir, "split")
 
-        # Write module files
+        # Write module files. check_split_outputs approved each resolved path, inside its
+        # directory, so that is the path written: sub/../x.ttl needs no sub/, and leaves none
         for module in self.config.modules:
             if module.name in result.modules:
-                output_path = self.config.output_dir / module.output
+                output_path = (self.config.output_dir / module.output).resolve()
+                output_path.parent.mkdir(parents=True, exist_ok=True)
                 result.modules[module.name].serialize(
                     destination=output_path.as_posix(), format="turtle"
                 )
 
         # Write common module
         if self._has_common_module(result):
-            output_path = self.config.output_dir / self.config.unmatched.common_output
+            output_path = (self.config.output_dir / self.config.unmatched.common_output).resolve()
+            output_path.parent.mkdir(parents=True, exist_ok=True)
             result.modules[self.config.unmatched.common_module].serialize(
                 destination=output_path.as_posix(), format="turtle"
             )
 
         # Write data modules, creating their directory only if there is data to write
         if any(len(g) for g in result.data_modules.values()) and self.config.split_data:
-            data_dir = self.config.split_data.output_dir or self.config.output_dir
+            data_dir = data_output_dir(self.config)
             data_dir.mkdir(parents=True, exist_ok=True)
 
             for module_name, graph in result.data_modules.items():
                 if len(graph) > 0:
                     prefix = self.config.split_data.prefix
-                    output_path = data_dir / f"{prefix}{module_name}.ttl"
+                    output_path = (data_dir / f"{prefix}{module_name}.ttl").resolve()
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
                     graph.serialize(destination=output_path.as_posix(), format="turtle")
 
     def write_manifest(self, result: SplitResult) -> None:
@@ -1378,7 +1581,7 @@ class OntologySplitter:
         if dep_lines:
             manifest["dependency_graph"] = dep_lines
 
-        manifest_path = self.config.output_dir / "manifest.yml"
+        manifest_path = self.config.output_dir / MANIFEST_NAME
         with open(manifest_path, "w") as f:
             yaml.safe_dump(manifest, f, default_flow_style=False, sort_keys=False)
 

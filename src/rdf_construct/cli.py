@@ -121,6 +121,8 @@ from rdf_construct.merge import (
     ModuleDefinition,
     UnmatchedStrategy,
     SplitDataConfig,
+    SplitOutputError,
+    check_split_outputs,
     split_by_namespace,
     create_default_split_config,
 )
@@ -3184,7 +3186,10 @@ def merge(
 @click.option(
     "--data-output",
     type=click.Path(path_type=Path),
-    help="Output directory for split data files",
+    help=(
+        "Output directory for split data files "
+        "(default: the config's split_data output_dir, else the output directory)"
+    ),
 )
 @click.option(
     "--unmatched",
@@ -3285,16 +3290,19 @@ def split(
         check_default_output_dir(output_dir, "output_dir", "split", overwrite=overwrite)
         click.echo(f"Splitting {source.name} by namespace...")
 
-        result = split_by_namespace(
-            source,
-            output_dir,
-            dry_run=dry_run,
-            unmatched=UnmatchedStrategy(
-                strategy=unmatched,
-                common_module=common_name,
-                common_output=f"{common_name}.ttl",
-            ),
-        )
+        try:
+            result = split_by_namespace(
+                source,
+                output_dir,
+                dry_run=dry_run,
+                unmatched=UnmatchedStrategy(
+                    strategy=unmatched,
+                    common_module=common_name,
+                    common_output=f"{common_name}.ttl",
+                ),
+            )
+        except SplitOutputError as e:
+            raise Refusal(str(e)) from e
 
         if not result.success:
             click.secho(f"\u2717 Split failed: {result.error}", fg="red", err=True)
@@ -3341,12 +3349,14 @@ def split(
             dry_run=dry_run,
         )
 
-    # Add data migration config if specified
+    # Add data migration config if specified: --data-output, else the config's data directory,
+    # else the output directory actually used; the config's prefix still applies (#413)
     if migrate_data:
+        configured = config.split_data
         config.split_data = SplitDataConfig(
             sources=list(migrate_data),
-            output_dir=data_output if data_output else output_dir,
-            prefix="data_",
+            output_dir=data_output or (configured.output_dir if configured else None),
+            prefix=configured.prefix if configured else "data_",
         )
 
     # Override the config's unmatched strategy only with what was given (#291)
@@ -3364,6 +3374,12 @@ def split(
         overwrite=overwrite,
         named=config.output_dir_named and not flag_given("output_dir"),
     )
+
+    # Every file the split could write, planned against its inputs before the parse (#413)
+    try:
+        check_split_outputs(config, [config_file] if config_file else [])
+    except SplitOutputError as e:
+        raise Refusal(str(e)) from e
 
     # Execute split
     click.echo(f"Splitting {source.name}...")
