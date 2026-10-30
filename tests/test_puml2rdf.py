@@ -3,6 +3,8 @@
 Tests cover parsing, conversion, validation, and merging functionality.
 """
 
+import re
+
 import pytest
 from pathlib import Path
 from textwrap import dedent
@@ -1572,6 +1574,196 @@ class TestLineBreaks:
 
         assert error.line_number == 3
         assert error.line_content.startswith('package "http://example.org/mine#" as owl')
+
+
+class TestPropertyAndIndividualBoxes:
+    """A box drawn as a property or an individual is named, not converted to a class (#395)."""
+
+    @pytest.mark.parametrize(
+        ("line", "kind"),
+        [
+            # The default rendering's spots, as `uml` writes them
+            ("class ex.eats << (O, #FFFFFF) owl:ObjectProperty >> #CCCCCC", "object property"),
+            (
+                "class ex.weight << (D, #FFFFFF) owl:DatatypeProperty >> #CCCCCC",
+                "datatype property",
+            ),
+            (
+                "class ex.note << (A, #FFFFFF) owl:AnnotationProperty >> #CCCCCC",
+                "annotation property",
+            ),
+            ("class ex.manages << (P, #FFFFFF) rdf:Property >> #CCCCCC", "property"),
+            ('class "Fido" as ex.Fido << (I, #FFFFFF) ex:Dog >>', "individual"),
+            ("class ex.Fido  (I, #FFFFFF) <<owl:NamedIndividual>>", "individual"),
+            # ODM's names, a characteristic after the first included
+            ('class "eats" as ex.eats <<objectProperty>> #CCCCCC', "object property"),
+            ("class ex.knows <<objectProperty, symmetricProperty>> #CCCCCC", "object property"),
+            ("class ex.id <<datatypeProperty, functionalProperty>> #CCCCCC", "datatype property"),
+            ("class ex.note <<annotationProperty>>", "annotation property"),
+            ("class ex.manages <<rdfProperty>>", "property"),
+            ("class ex.ancestor <<transitiveProperty>>", "object property"),
+            ("class ex.Fido <<individual: ex:Dog>>", "individual"),
+            ("class ex.Fido <<individual>>", "individual"),
+            # Written by hand, as a prefixed type name
+            ("class ex.eats <<owl:ObjectProperty>>", "object property"),
+            ("class ex.ancestor <<owl:TransitiveProperty>>", "object property"),
+            ("class ex.id <<owl:FunctionalProperty>>", "property"),
+            ("class ex.Fido <<owl:NamedIndividual>>", "individual"),
+        ],
+    )
+    def test_box_is_named_and_not_a_class(self, line: str, kind: str) -> None:
+        """The box is not in the model, and its line is named with what it was drawn as."""
+        result = PlantUMLParser().parse(f"@startuml\nclass ex.Dog\n{line}\n@enduml\n")
+
+        assert [cls.name for cls in result.model.classes] == ["Dog"]
+        [warning] = result.warnings
+        name = re.search(r"(?:as\s+|class\s+)(ex\.\w+)", line)
+        assert name is not None
+        assert warning.line_number == 3
+        assert warning.code == "unmodelled"
+        assert warning.kind == kind
+        assert warning.message == (
+            f"{kind} {name.group(1)} is not converted: only classes are, "
+            f"so {name.group(1)} is not in the output"
+        )
+        assert warning.line_content == line.strip()
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "class ex.Animal << (C, #FFFFFF) owl:Class >>",
+            "class ex.Animal << (C, #FFFFFF) rdfs:Class >>",
+            'class "Animal" as ex.Animal <<owlClass>>',
+            "class ex.Animal <<rdfsClass>>",
+            "class ex.Animal <<owl:Class>>",
+            "class ex.Animal <<foo>>",
+            "class ex.Animal <<abstract>>",
+            "class ex.Animal << (E, #FF7700) Entity >>",
+        ],
+    )
+    def test_class_box_still_converts(self, line: str) -> None:
+        """A class's stereotype, or one that does not say, leaves the box a class."""
+        result = PlantUMLParser().parse(f"@startuml\n{line}\n@enduml\n")
+
+        assert [cls.name for cls in result.model.classes] == ["Animal"]
+        assert result.warnings == []
+
+    def test_cli_writes_no_class_for_them(self, tmp_path: Path) -> None:
+        """Only the class is written, at exit 0; --strict refuses the run and writes nothing."""
+        text = dedent(
+            """\
+            @startuml
+            class Dog
+            class "eats" as eats <<objectProperty>> #CCCCCC
+            class "Fido" as Fido << (I, #FFFFFF) Dog >>
+            @enduml
+            """
+        )
+        result = _run(tmp_path, text)
+
+        assert result.exit_code == 0, result.output
+        graph = Graph().parse(tmp_path / "diagram.ttl")
+        assert [str(c).rsplit("#", 1)[-1] for c in graph.subjects(RDF.type, OWL.Class)] == ["Dog"]
+        assert "1 object property box not converted, only classes are (3)" in result.output
+        assert "1 individual box not converted, only classes are (4)" in result.output
+
+        (tmp_path / "diagram.ttl").unlink()
+        strict = _run(tmp_path, text, "--strict")
+        assert strict.exit_code == 1, strict.output
+        assert _wrote_nothing(tmp_path)
+
+    def test_many_boxes_are_folded_by_kind(self, tmp_path: Path) -> None:
+        """Each kind is one line in the CLI, however many boxes there are."""
+        boxes = "".join(f"class p{n} <<objectProperty>>\n" for n in range(12))
+        result = _run(tmp_path, f"@startuml\nclass A\n{boxes}@enduml\n")
+
+        assert result.exit_code == 0, result.output
+        assert (
+            "⚠ 12 object property boxes not converted, only classes are "
+            "(3, 4, 5, 6, 7, 8, 9, 10, 11, 12, … 2 more) — they are not in the output."
+        ) in result.output
+        assert "p0 is not converted" not in result.output
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "Fido --|> Dog",
+            "Dog <|-- Fido",
+            "Dog --> Fido : owns",
+            "Fido -u-|> Dog : <<rdfs:subClassOf>>",
+        ],
+    )
+    def test_line_naming_a_box_is_named_not_refused(self, tmp_path: Path, line: str) -> None:
+        """A relationship to a dropped box is dropped with it, not left to name an undeclared class."""
+        text = f"@startuml\nclass Dog\nclass Fido <<individual: Dog>>\n{line}\n@enduml\n"
+        result = PlantUMLParser().parse(text)
+
+        assert result.model.relationships == []
+        [box, named] = result.warnings
+        assert box.kind == "individual"
+        assert named.code == "unmodelled"
+        assert named.kind == "relationship"
+        assert named.line_number == 4
+        assert named.message == (
+            f"{line} names individual Fido, which is not converted, "
+            "so this line is not in the output"
+        )
+
+        cli_result = _run(tmp_path, text)
+        assert cli_result.exit_code == 0, cli_result.output
+        assert "1 line naming a box that is not converted (4)" in cli_result.output
+
+    def test_punned_term_keeps_its_class(self) -> None:
+        """A name with a class box too, as a punned term has, is still the class (IES)."""
+        text = dedent(
+            """\
+            @startuml
+            class ex.Flow << (C, #FFFFFF) rdfs:Class >>
+            class ex.WoodFlow << (C, #FFFFFF) rdfs:Class >>
+            class ex.WoodFlow << (I, #FFFFFF) ex:ClassOfFlow >>
+            ex.WoodFlow -u-|> ex.Flow : <<rdfs:subClassOf>>
+            @enduml
+            """
+        )
+        result = PlantUMLParser().parse(text)
+
+        assert [cls.name for cls in result.model.classes] == ["Flow", "WoodFlow"]
+        assert [(r.source, r.target) for r in result.model.relationships] == [
+            ("ex.WoodFlow", "ex.Flow")
+        ]
+        assert [w.kind for w in result.warnings] == ["individual"]
+        assert not validate_puml(result.model).has_errors
+
+    @pytest.mark.parametrize("mode", ["default", "odm"])
+    def test_uml_output_converts_only_its_classes(self, mode: str) -> None:
+        """Over `uml`'s own diagrams, every class box converts and nothing else does."""
+        from rdf_construct.uml import collect_diagram_entities, load_uml_config, render_plantuml
+        from rdf_construct.uml.odm_renderer import render_odm_plantuml
+
+        examples = Path(__file__).parent.parent / "examples"
+        config = load_uml_config(examples / "uml" / "uml_contexts.yml")
+        render = render_plantuml if mode == "default" else render_odm_plantuml
+        class_box = re.compile(
+            r'^class\s+(?:"[^"]*"\s+as\s+)?([\w.]+)\s.*(?:\(C, |<<(?:owlClass|rdfsClass)>>)'
+        )
+        for source, context in [
+            ("animal_ontology.ttl", "full"),
+            ("organisation_ontology.ttl", "full"),
+        ]:
+            graph = Graph().parse(examples / source)
+            entities = collect_diagram_entities(
+                graph, config.get_context(context), config.defaults.get("selectors", {})
+            )
+            diagram = render(graph, entities)
+            classes = {m.group(1) for line in diagram.splitlines() if (m := class_box.match(line))}
+            boxes = len(re.findall(r"^class\s", diagram, re.MULTILINE))
+
+            result = PlantUMLParser().parse(diagram)
+
+            assert {cls.qualified_name for cls in result.model.classes} == classes
+            dropped = [w for w in result.warnings if w.kind and w.kind != "relationship"]
+            assert len(dropped) == boxes - len(classes) > 0
+            assert not validate_puml(result.model).has_errors
 
 
 def test_parse_warning_is_exported() -> None:

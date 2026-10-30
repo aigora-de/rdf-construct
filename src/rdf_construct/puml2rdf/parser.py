@@ -17,8 +17,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from rdflib import Graph
+from rdflib import RDF, RDFS, Graph, URIRef
+from rdflib.namespace import OWL
 
+from rdf_construct.core.vocab import (
+    ALL_PROPERTY_TYPES,
+    ANNOTATION_PROPERTY_TYPES,
+    DATATYPE_PROPERTY_TYPES,
+    OBJECT_PROPERTY_TYPES,
+)
 from rdf_construct.puml2rdf.model import (
     PumlAttribute,
     PumlClass,
@@ -28,6 +35,7 @@ from rdf_construct.puml2rdf.model import (
     PumlRelationship,
     RelationshipType,
 )
+from rdf_construct.uml.odm_renderer import ODM_INDIVIDUAL_STEREOTYPE, ODM_PROPERTY_STEREOTYPES
 
 # A URI starts with a scheme, so `urn:` counts as well as `http:` (#150).
 URI_SCHEME_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
@@ -90,6 +98,71 @@ BARE_ABSTRACT_PATTERN = re.compile(r'^\s*abstract\s+(?!class\b)("[^"]+"|[\w.]+)'
 REALISATION_PATTERN = re.compile(r"\.\.\|>|<\|\.\.")
 DEPENDENCY_PATTERN = re.compile(r"\.\.>|<\.\.")
 
+# A class box `uml` draws for a property or an individual is not converted (#395). The default
+# rendering marks it with a spot, `(O, #FFFFFF)`, inside or outside `<< >>`; ODM with the first
+# stereotype name, `<<objectProperty, functionalProperty>>`; either may be a prefixed type name.
+BOX_SPOT_PATTERN = re.compile(r"\(\s*([A-Za-z])\s*,[^)]*\)")
+BOX_STEREOTYPE_PATTERN = re.compile(r"<<\s*(\w+(?::\w+)?)")
+SPOT_KINDS = {
+    "O": "object property",
+    "D": "datatype property",
+    "A": "annotation property",
+    "P": "property",
+    "I": "individual",
+}
+STEREOTYPE_NAMESPACES = {"owl": OWL, "rdf": RDF, "rdfs": RDFS}
+
+
+def _property_kind(type_iri: URIRef) -> str:
+    """Name the kind of property *type_iri* declares, by :mod:`rdf_construct.core.vocab`."""
+    if type_iri in OBJECT_PROPERTY_TYPES:
+        return "object property"
+    if type_iri in DATATYPE_PROPERTY_TYPES:
+        return "datatype property"
+    if type_iri in ANNOTATION_PROPERTY_TYPES:
+        return "annotation property"
+    return "property"
+
+
+# Every name ODM draws a property with is a property; the IRI it stands for gives the kind
+ODM_BOX_KINDS = {
+    name: _property_kind(URIRef(iri)) for iri, name in ODM_PROPERTY_STEREOTYPES.items()
+}
+ODM_BOX_KINDS[ODM_INDIVIDUAL_STEREOTYPE] = "individual"
+
+
+def _box_kind(stereotype: str) -> str | None:
+    """Name what a class box's stereotype says it is, if that is not a class (#395).
+
+    Args:
+        stereotype: The declaration's text after the box's name.
+
+    Returns:
+        ``object property``, ``datatype property``, ``annotation property``, ``property`` or
+        ``individual``; or None for a class, or a stereotype that does not say.
+    """
+    spot = BOX_SPOT_PATTERN.search(stereotype)
+    if spot:
+        return SPOT_KINDS.get(spot.group(1).upper())
+    first = BOX_STEREOTYPE_PATTERN.search(stereotype)
+    if first is None:
+        return None
+    name = first.group(1)
+    if name in ODM_BOX_KINDS:
+        return ODM_BOX_KINDS[name]
+    prefix, _, local = name.partition(":")
+    if prefix == ODM_INDIVIDUAL_STEREOTYPE:
+        return "individual"
+    namespace = STEREOTYPE_NAMESPACES.get(prefix)
+    if namespace is None or not local:
+        return None
+    iri = namespace[local]
+    if iri in ALL_PROPERTY_TYPES:
+        return _property_kind(iri)
+    if iri == OWL.NamedIndividual:
+        return "individual"
+    return None
+
 
 def parse_dotted_name(dotted: str) -> tuple[Optional[str], str]:
     """Split a dotted name into package and local name.
@@ -130,12 +203,17 @@ class ParseWarning:
         line_content: The actual line content
         code: What kind it is: ``not-understood``, ``unmodelled``, ``note-unknown-class``,
             ``empty-diagram`` or ``derived-prefix``
+        kind: For an ``unmodelled`` box that is not a class, what it was drawn as
+            (``object property``, ``datatype property``, ``annotation property``,
+            ``property`` or ``individual``), or ``relationship`` for a line naming one (#395);
+            otherwise empty
     """
 
     line_number: int | None
     message: str
     line_content: str = ""
     code: str = "not-understood"
+    kind: str = ""
 
     def __str__(self) -> str:
         if self.line_number is None:
@@ -273,6 +351,7 @@ class PlantUMLParser:
         self._warnings: list[ParseWarning] = []
         self._notes: list[ParseWarning] = []
         self._consumed: list[tuple[int, int]] = []
+        self._dropped: dict[str, str] = {}
         self._current_package: Optional[str] = None
         self._package_stack: list[str] = []
 
@@ -289,6 +368,7 @@ class PlantUMLParser:
         self._warnings = []
         self._notes = []
         self._consumed = []
+        self._dropped = {}
 
         model = PumlModel()
 
@@ -820,13 +900,37 @@ class PlantUMLParser:
             stereotype = match.group(6)
             body = match.group(7) or ""
 
-            # Parse attributes from body
-            attributes = self._parse_attributes(body)
-
             # Package from dotted name takes precedence over positional package
             if package is None:
                 pos = match.start()
                 package = self._find_package_at_position(pos, package_map)
+
+            # A box drawn as a property or an individual is named, not converted (#395)
+            named = next(group for group in (3, 4, 5) if match.group(group))
+            line_end = content.find("\n", match.end(named))
+            declared = content[match.end(named) : len(content) if line_end == -1 else line_end]
+            kind = _box_kind(declared.split("{", 1)[0])
+            if kind is not None:
+                written = match.group(named)
+                start = match.start(named)
+                line = content.count("\n", 0, start) + 1
+                text = content[content.rfind("\n", 0, start) + 1 : match.end(named)] + declared
+                self._warnings.append(
+                    ParseWarning(
+                        line,
+                        f"{kind} {written} is not converted: only classes are, "
+                        f"so {written} is not in the output",
+                        line_content=text.strip(),
+                        code="unmodelled",
+                        kind=kind,
+                    )
+                )
+                for dropped in (written, name, f"{package}.{name}" if package else name):
+                    self._dropped.setdefault(dropped, kind)
+                continue
+
+            # Parse attributes from body
+            attributes = self._parse_attributes(body)
 
             classes.append(
                 PumlClass(
@@ -838,6 +942,11 @@ class PlantUMLParser:
                     display_name=display_name,
                 )
             )
+
+        # A name a class box also declares, as a punned term's is, still names the class
+        for cls in classes:
+            self._dropped.pop(cls.name, None)
+            self._dropped.pop(cls.qualified_name, None)
 
         return classes
 
@@ -905,6 +1014,8 @@ class PlantUMLParser:
             if left_head and not right_head:
                 # <|-- pattern: target extends source
                 self._consume(match)
+                if self._names_dropped(content, match, source_full, target_full):
+                    continue
                 relationships.append(
                     PumlRelationship(
                         source=target_full,  # Keep full qualified name for lookup
@@ -915,6 +1026,8 @@ class PlantUMLParser:
             elif right_head and not left_head:
                 # --|> pattern: source extends target
                 self._consume(match)
+                if self._names_dropped(content, match, source_full, target_full):
+                    continue
                 relationships.append(
                     PumlRelationship(
                         source=source_full,
@@ -952,6 +1065,8 @@ class PlantUMLParser:
             if "|" in str(target_marker) or "|" in str(source_marker):
                 continue
             self._consume(match)
+            if self._names_dropped(content, match, source, target):
+                continue
 
             # Determine relationship type
             if source_marker == "*" or target_marker == "*":
@@ -976,6 +1091,38 @@ class PlantUMLParser:
             )
 
         return relationships
+
+    def _names_dropped(self, content: str, match: re.Match[str], *ends: str) -> bool:
+        """Name a relationship to a box that is not converted, and say whether there was one.
+
+        A box drawn as a property or an individual is not in the output (#395), so a line
+        naming one is not either; kept, it would name an undeclared class and refuse the file.
+
+        Args:
+            content: The text the passes read.
+            match: The relationship's match.
+            ends: The names at either end, as the line writes them.
+
+        Returns:
+            True if an end names a box that is not converted, with an ``unmodelled`` warning.
+        """
+        end = next((name for name in ends if name in self._dropped), None)
+        if end is None:
+            return False
+        start = match.start() + len(match.group(0)) - len(match.group(0).lstrip())
+        line_end = content.find("\n", start)
+        text = content[start : len(content) if line_end == -1 else line_end].strip()
+        self._warnings.append(
+            ParseWarning(
+                content.count("\n", 0, start) + 1,
+                f"{text} names {self._dropped[end]} {end}, which is not converted, "
+                f"so this line is not in the output",
+                line_content=text,
+                code="unmodelled",
+                kind="relationship",
+            )
+        )
+        return True
 
     def _parse_notes(self, content: str) -> list[PumlNote]:
         """Extract note definitions from content."""
