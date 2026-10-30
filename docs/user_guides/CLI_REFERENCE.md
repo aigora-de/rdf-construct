@@ -751,7 +751,7 @@ rdf-construct split SOURCE [OPTIONS]
 - `-c, --config PATH`: YAML configuration file
 - `--by-namespace`: Auto-detect modules from namespaces
 - `--migrate-data PATH`: Data file(s) to split by instance type (can specify multiple)
-- `--data-output PATH`: Output directory for split data files
+- `--data-output PATH`: Output directory for split data files (default: the config's `split_data: output_dir`, else the output directory)
 - `--unmatched STRATEGY`: Strategy for unmatched subjects: `common` (collect them in one module) or `error` (refuse the run) (default: common)
 - `--common-name NAME`: Name for the module that collects unmatched subjects (default: `unmatched`)
 - `--no-manifest`: Don't generate manifest.yml

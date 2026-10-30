@@ -440,6 +440,30 @@ THREE_STATES = [
     ),
     _row(
         Row(
+            "split",
+            "refused",
+            ("split", MONOLITH, "-c", str(SMOKE / "split_shared_output.yml"), "-o", "@tmp/split"),
+        ),
+        label="shared-output",
+    ),
+    _row(
+        Row(
+            "split",
+            "refused",
+            (
+                "split",
+                "@tmp/split_monolith.ttl",
+                "-c",
+                str(SMOKE / "split_over_source.yml"),
+                "-o",
+                "@tmp/",
+            ),
+            copied=(MONOLITH,),
+        ),
+        label="over-source",
+    ),
+    _row(
+        Row(
             "refactor rename",
             "clean",
             (

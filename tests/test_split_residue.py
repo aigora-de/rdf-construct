@@ -35,6 +35,7 @@ from rdf_construct.merge.splitter import (
     ModuleDefinition,
     OntologySplitter,
     SplitConfig,
+    SplitOutputError,
     UnmatchedStrategy,
     is_borrowed,
     select_classes,
@@ -228,10 +229,8 @@ def test_a_clash_is_compared_without_case(tmp_path: Path) -> None:
         modules=[ModuleDefinition(name="Common", output="Common.ttl", namespaces=[EX])],
         unmatched=UnmatchedStrategy(common_module="common", common_output="common.ttl"),
     )
-    result = OntologySplitter(config).split()
-
-    assert not result.success
-    assert "would overwrite module 'Common'" in (result.error or "")
+    with pytest.raises(SplitOutputError, match="would overwrite module 'Common'"):
+        OntologySplitter(config).split()
 
 
 # ---------------------------------------------------------------------------

@@ -106,7 +106,9 @@ from rdf_construct.merge.splitter import (
     ModuleDefinition,
     UnmatchedStrategy,
     SplitDataConfig,
+    SplitOutputError,
     ModuleStats,
+    check_split_outputs,
     split_by_namespace,
     create_default_split_config,
 )
@@ -159,6 +161,8 @@ __all__ = [
     "ModuleDefinition",
     "UnmatchedStrategy",
     "SplitDataConfig",
+    "SplitOutputError",
+    "check_split_outputs",
     "ModuleStats",
     "split_by_namespace",
     "create_default_split_config",
