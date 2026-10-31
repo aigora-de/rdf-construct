@@ -387,6 +387,42 @@ class TestInlineBnodeRoundTrip:
             g_orig, g_rt
         ), f"Round-trip produced a non-isomorphic graph.\nOutput was:\n{content}"
 
+    def test_nested_blocks_under_several_objects_are_indented_one_level_deeper(
+        self, tmp_path
+    ) -> None:
+        """Inline blocks listed under one predicate nest from their own line (#343).
+
+        Each object of a multi-object predicate sits on its own line, one level
+        deeper than a single object would, so a block there opens at that depth,
+        its predicates sit one level further in, and its ``]`` closes back at it.
+        """
+        source = """
+            @prefix ex: <http://example.org/ont#> .
+
+            ex:Thing ex:q [
+                ex:r [ ex:a "one" ] , [ ex:a "two" ] ;
+            ] .
+        """
+        g_orig = _parse(source)
+        content = _serialise(g_orig, [EX.Thing], tmp_path)
+
+        expected = dedent(
+            """\
+            ex:Thing
+                ex:q [
+                    ex:r
+                        [
+                            ex:a "one"
+                        ] ,
+                        [
+                            ex:a "two"
+                        ]
+                ] .
+            """
+        )
+        assert expected in content, f"Output was:\n{content}"
+        assert isomorphic(g_orig, _parse(content))
+
 
 # ---------------------------------------------------------------------------
 # Predicate ordering inside inline blank nodes

@@ -224,8 +224,10 @@ def _format_inline_bnode(
             block_lines.append(f"{inner_pad}{pred_str}")
             for j, obj in enumerate(objects_sorted):
                 if isinstance(obj, BNode) and obj in inline_bnodes:
+                    # Each object is on its own line at obj_pad, one level deeper than a
+                    # single object, so its block nests from there.
                     obj_str = _format_inline_bnode(
-                        graph, obj, inline_bnodes, predicate_order, indent + 1
+                        graph, obj, inline_bnodes, predicate_order, indent + 2
                     )
                 else:
                     obj_str = format_term(graph, obj)
