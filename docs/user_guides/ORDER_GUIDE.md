@@ -493,8 +493,7 @@ it is still growing three releases from now, that is the signal, not the table.
 | Issue | Behaviour today |
 |---|---|
 | [#238](https://github.com/aigora-de/rdf-construct/issues/238) | `prefix_order` does not change the order prefixes are emitted in; output is always alphabetical. `defaults.preserve_prefix_order` has no observable effect either. |
-| [#239](https://github.com/aigora-de/rdf-construct/issues/239) | A source prefix that collides with one rdflib binds by default — `org`, `dc`, `foaf`, `skos`, `time`, `geo`, `prov`, `dcat` and others — is **renamed** in the output, so `@prefix org:` comes back as `@prefix org1:`. The graph is unchanged and isomorphic; the CURIEs in the file are not. `lib:` in these examples is unaffected. |
-| [#241](https://github.com/aigora-de/rdf-construct/issues/241) | A `roots:` entry that does not resolve, or that names a term absent from the ontology, is skipped with no message. Combined with #239 this bites: a `roots:` written with your source's own prefix can resolve somewhere else entirely. |
+| [#241](https://github.com/aigora-de/rdf-construct/issues/241) | A `roots:` entry that does not resolve, or that names a term absent from the ontology, is skipped with no message. |
 | [#243](https://github.com/aigora-de/rdf-construct/issues/243) | Eleven keys accepted in profiles and sections are read by nothing: `tie_breaker`, `comment_blocks`, `bnode_strategy`, `anchors`, `after_anchors`, `cluster`, `within_level`, `group_by`, `group_order`, `explicit_group_sequence`, `within_group_tie`. They appear in `examples/order/sample_profile.yml` and `examples/order/ies_profile.yml`, where they make two profiles byte-identical to two others. **`examples/order/ordering.yml`, used throughout this guide, contains only keys that work.** |
 | [#247](https://github.com/aigora-de/rdf-construct/issues/247) | A `selectors:` value beginning `FILTER` is matched by prefix only; the expression is never parsed, and such a selector claims every individual regardless of what it says. |
 | [#245](https://github.com/aigora-de/rdf-construct/issues/245) / [#262](https://github.com/aigora-de/rdf-construct/issues/262) | A section containing **only** properties declared by an OWL characteristic is sorted over `rdfs:subClassOf` rather than `rdfs:subPropertyOf`, so its hierarchy is ignored; and such terms are given the individuals' `predicate_order` specification. A mixed section, like the ones in this guide, is unaffected. |
@@ -526,7 +525,7 @@ from rdf_construct.core import (
 config = OrderingConfig(Path("examples/order/ordering.yml"))
 profile = config.get_profile("hierarchy")
 
-graph = Graph(bind_namespaces="none")
+graph = Graph(bind_namespaces="core")
 graph.parse("examples/order/library.ttl", format="turtle")
 
 ordered: list = []
@@ -560,9 +559,9 @@ print(f"Wrote library-hierarchy.ttl with {len(ordered)} subjects")
 Wrote library-hierarchy.ttl with 17 subjects
 ```
 
-Two things worth copying from it: parse with `bind_namespaces="none"`, or rdflib's well-known
-prefixes will displace your own (#239); and run `bnode_closure` before serialising, or a filtering
-selection can strip the interior of a class expression.
+Two things worth copying from it: parse with `bind_namespaces="core"`, as `order` does, or
+rdflib's well-known prefixes will displace your own (#239); and run `bnode_closure` before
+serialising, or a filtering selection can strip the interior of a class expression.
 
 That the snippet is this long is itself a finding rather than a style choice — there is no public
 "order this graph with this profile" entry point, so a library user has to re-derive the section

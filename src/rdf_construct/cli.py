@@ -845,7 +845,10 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
 
     # Parse source RDF
     click.echo(f"Loading {source}...")
-    graph = Graph()
+    # The source's own prefixes plus rdf, rdfs, owl, xsd and xml, never rdflib's extended
+    # table: under that table a source's `org:` or `dc:` comes back as `org1:` (#239). It is
+    # also what `roots:` and `predicate_order` CURIEs resolve against.
+    graph = Graph(bind_namespaces="core")
     graph.parse(source.as_posix(), format="turtle")
     prefix_map = extract_prefix_map(graph)
 

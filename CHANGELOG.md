@@ -227,6 +227,16 @@ change, and what to do about it, is listed command by command in the
   IRI, as an IRI or a CURIE of the source's prefixes.
 
 ### Changed
+- **`order` keeps the source's own prefixes** (#239). It parsed into a bare
+  `Graph()`, whose default bindings pushed a source's `org:`, `dc:`, `foaf:`,
+  `skos:`, `prov:` and the like to `org1:` and so on: the graph was the same,
+  but every CURIE in the file changed. The source is now read with
+  `bind_namespaces="core"`, its own prefixes plus `rdf`, `rdfs`, `owl`, `xsd`
+  and `xml`. A namespace the source uses but never declares, outside those
+  five, is written as a full IRI rather than with a prefix from rdflib's table,
+  and `roots:` and `predicate_order` CURIEs resolve against the same bindings,
+  so `roots: org:Team` names the source's own term. A source that redefines
+  `owl:` or another core prefix still has its own renamed.
 - **`order` refuses a `sort:` mode it does not recognise** (#242). A typo, the
   natural-looking `topo`, or an empty `sort:` meant alphabetical order, silently,
   at exit 0, which switched hierarchy ordering off with nothing to show for it;
