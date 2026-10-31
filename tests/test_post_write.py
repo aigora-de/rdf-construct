@@ -36,6 +36,7 @@ FIXTURES = REPO / "tests" / "fixtures"
 ANIMAL = EXAMPLES / "animal_ontology.ttl"
 LIBRARY = EXAMPLES / "order" / "library.ttl"
 IES_SMALL = FIXTURES / "ies" / "ies-env-building-classification.ttl"
+MULTI_BNODE = FIXTURES / "order" / "multi_object_bnode.ttl"
 DOCS_SOURCE = FIXTURES / "docs" / "skos_vocabulary.ttl"
 
 EXO = Namespace("http://example.org/")
@@ -96,6 +97,9 @@ def test_cast_is_isomorphic(source: Path, fmt: str, tmp_path, monkeypatch):
         (LIBRARY, EXAMPLES / "order" / "ordering.yml", "alpha"),
         (LIBRARY, EXAMPLES / "order" / "ordering.yml", "hierarchy"),
         (LIBRARY, EXAMPLES / "order" / "ordering.yml", "anchored"),
+        # An inline bnode with several objects for one predicate (#343). Every
+        # subject is claimed by `alpha`, so the contract applies.
+        (MULTI_BNODE, EXAMPLES / "order" / "ordering.yml", "alpha"),
         (IES_SMALL, EXAMPLES / "order" / "ies_profile.yml", "alpha"),
         (IES_SMALL, EXAMPLES / "order" / "ies_profile.yml", "logical_topo"),
         (IES_SMALL, EXAMPLES / "order" / "ies_profile.yml", "props_by_domain"),

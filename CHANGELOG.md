@@ -389,6 +389,15 @@ change, and what to do about it, is listed command by command in the
   counts entity and property pairs. The CLI output is unchanged.
 
 ### Fixed
+- **An inline blank node with several objects for one predicate is valid
+  Turtle again** (#343). `order` wrote the predicate again before every object
+  after the comma, and the grammar expects another object there, so rdflib
+  refused the file the command had just written. A restriction carrying two
+  comments reproduced it, and so did every RDFS- or OWL-RL-closed graph, where
+  entailment gives each blank node `a rdfs:Resource` beside its own type. The
+  predicate is now written once and the objects follow as a comma-separated
+  list, as the top-level writer already did. Inline blocks with one object per
+  predicate are unchanged.
 - **`diff` compares blank nodes by structure, in both directions** (#143). It
   compared triples by the labels rdflib gives blank nodes at parse time, and
   then skipped every blank-node subject. So any file with an `owl:Restriction`
