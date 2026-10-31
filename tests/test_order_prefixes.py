@@ -353,3 +353,25 @@ def test_no_prefix_order_is_the_alphabetical_order(path: Path):
     assert serialise_turtle_str(section, subjects, prefix_order=None) == default
     assert serialise_turtle_str(section, subjects, prefix_order=[]) == default
     assert serialise_turtle_str(section, subjects, prefix_order=alphabetical) == default
+
+
+@pytest.mark.parametrize(
+    "value",
+    ['"rdf, owl"', "owl ex", "{owl: 1, ex: 2}", "[1, 2]", "[[owl]]", "42"],
+    ids=["string", "bare-string", "mapping", "ints", "nested", "int"],
+)
+def test_prefix_order_that_is_not_a_list_of_names_is_refused(tmp_path: Path, value: str):
+    """A string would be read a character at a time, moving any one-letter prefix to the top;
+    ``42`` crashed after the output directory was marked. Refused before anything is read."""
+    result, out = _run(tmp_path, SIX, f"prefix_order: {value}\n" + CONFIG)
+    assert result.exit_code == 2, result.output
+    assert "prefix_order: expected a list of prefix names" in result.output
+    assert "Traceback" not in result.output
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("value", ["null", "[]"])
+def test_a_missing_or_empty_prefix_order_is_alphabetical(tmp_path: Path, value: str):
+    result, out = _run(tmp_path, SIX, f"prefix_order: {value}\n" + CONFIG)
+    assert result.exit_code == 0, result.output
+    assert _prefix_lines(_written(out)) == ["aa:", "ex:", "owl:", "rdf:", "rdfs:", "zz:"]

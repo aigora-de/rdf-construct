@@ -834,6 +834,13 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
 
     # Every requested section's select: and sort: too, for the same reason (#242).
     problems = _check_order_sections(ordering_config, profiles_to_gen)
+    # And prefix_order's shape: a string would be read a character at a time (#238).
+    prefix_order: Any = ordering_config.prefix_order  # a YAML value, not yet checked
+    if not isinstance(prefix_order, list) or not all(isinstance(p, str) for p in prefix_order):
+        problems.append(
+            "prefix_order: expected a list of prefix names, such as [rdf, rdfs, owl];"
+            f" got {prefix_order!r}"
+        )
     if problems:
         raise Refusal("Nothing was written:\n  " + "\n  ".join(problems))
 

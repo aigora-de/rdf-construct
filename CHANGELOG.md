@@ -232,8 +232,10 @@ change, and what to do about it, is listed command by command in the
   key and `defaults.preserve_prefix_order` both did nothing. The prefixes
   `prefix_order` lists are now declared first, in its order, then the rest
   alphabetically; a listed prefix the output does not use is skipped, and one
-  listed twice keeps its first place. `preserve_prefix_order` is removed (a
-  configuration that still sets it is not refused). `serialise_turtle` and
+  listed twice keeps its first place. A `prefix_order` that is not a list of
+  names, such as `prefix_order: rdf, owl`, is refused at exit 2 before
+  anything is written. `preserve_prefix_order` is removed (a configuration
+  that still sets it is not refused). `serialise_turtle` and
   `serialise_turtle_str` take a `prefix_order` argument; without it, prefixes
   are still written alphabetically.
 - **The empty prefix is declared** (#455). A source's `@prefix : <…>` was left

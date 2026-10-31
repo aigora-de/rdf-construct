@@ -1,0 +1,8 @@
+# prefix_order written as one string, not a list (#238): read a character at a time, it would
+# move any one-letter prefix to the top. It is refused before anything is written. The smoke
+# row passes -o @tmp/order.
+prefix_order: rdf, rdfs, owl
+profiles:
+  good:
+    sections:
+      - classes: {sort: topological}

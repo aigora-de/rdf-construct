@@ -460,8 +460,9 @@ top, `classes-only` begins:
 ```
 
 A listed prefix the output does not use, or that the source never declares, is skipped without a
-message, and a prefix listed twice keeps its first place. The order is presentation only: it
-changes no triple. `defaults.preserve_prefix_order`, which earlier configurations set, has been
+message, and a prefix listed twice keeps its first place. Anything but a list of names, such as
+`prefix_order: rdf, owl`, is refused at exit 2 before anything is written. The order is
+presentation only: it changes no triple. `defaults.preserve_prefix_order`, which earlier configurations set, has been
 removed; it never had an effect, and a configuration that still sets it is not refused.
 
 ## Hierarchy cycles
