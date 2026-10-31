@@ -398,6 +398,18 @@ change, and what to do about it, is listed command by command in the
   predicate is now written once and the objects follow as a comma-separated
   list, as the top-level writer already did. Inline blocks with one object per
   predicate are unchanged.
+- **`order` no longer drops a cycle of blank nodes from its output** (#341). A
+  blank node is written inline when it is the object of exactly one triple, so
+  a cycle in which each member references only another member qualified every
+  member for inlining while no member was reachable from a written subject:
+  every triple in the cycle vanished without a word, exit 0. A self-referencing
+  blank node hit the same way, which matters for reasoner-closed graphs —
+  OWL-RL's `eq-ref` rule gives every root blank node (`owl:AllDisjointClasses`,
+  `owl:AllDifferent`, `owl:Axiom`) an `owl:sameAs` self-reference. A blank node
+  is now inlined only where a written block actually reaches it; a member of
+  an unreachable cycle is written as a top-level `_:label` block, breaking the
+  cycle once while everything it references stays inline. Graphs without such
+  a cycle serialise byte-identically.
 - **`diff` compares blank nodes by structure, in both directions** (#143). It
   compared triples by the labels rdflib gives blank nodes at parse time, and
   then skipped every blank-node subject. So any file with an `owl:Restriction`

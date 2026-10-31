@@ -453,3 +453,152 @@ class TestInlineBnodePredicateOrdering:
         assert (
             type_pos < value_pos
         ), "rdf:type should appear before ex:value inside the inline block"
+
+
+# ---------------------------------------------------------------------------
+# Cycles of blank nodes (#341)
+# ---------------------------------------------------------------------------
+
+
+class TestInlineBnodeCycles:
+    """A cycle of blank nodes each referenced once must survive serialisation.
+
+    Every member of such a cycle satisfies the single-arc and non-reification
+    conditions for inlining, so before #341 each was skipped at the top level
+    and none was ever reached from a written subject: the whole cycle vanished
+    without a word. One member must now be written as a top-level ``_:label``
+    block, breaking the cycle once while the others stay inline.
+    """
+
+    def test_two_bnode_cycle_round_trips(self, tmp_path) -> None:
+        """A two-node blank-node cycle is not dropped from the output."""
+        source = """
+            @prefix ex: <http://example.org/ont#> .
+
+            ex:a ex:p 1 .
+            _:a ex:next _:b .
+            _:b ex:next _:a .
+        """
+        g_orig = _parse(source)
+        subjects = list(dict.fromkeys(g_orig.subjects()))
+
+        content = _serialise(g_orig, subjects, tmp_path)
+        g_rt = _parse(content)
+
+        assert len(g_rt) == len(g_orig), (
+            f"Cycle triples were dropped: {len(g_orig)} in, {len(g_rt)} out.\n"
+            f"Output was:\n{content}"
+        )
+        assert isomorphic(
+            g_orig, g_rt
+        ), f"Round-trip produced a non-isomorphic graph.\nOutput was:\n{content}"
+
+    def test_cycle_breaks_once_others_stay_inline(self, tmp_path) -> None:
+        """Exactly one member of the cycle becomes a top-level block."""
+        source = """
+            @prefix ex: <http://example.org/ont#> .
+
+            ex:a ex:p 1 .
+            _:a ex:next _:b .
+            _:b ex:next _:a .
+        """
+        g_orig = _parse(source)
+        subjects = list(dict.fromkeys(g_orig.subjects()))
+
+        content = _serialise(g_orig, subjects, tmp_path)
+
+        # One top-level _:label subject block, one inline [ ... ] block.
+        top_level_bnodes = [
+            line
+            for line in content.splitlines()
+            if line.startswith("_:") and not line.startswith(" ")
+        ]
+        assert (
+            len(top_level_bnodes) == 1
+        ), f"Expected exactly one top-level blank-node block.\nOutput was:\n{content}"
+        assert (
+            "[" in content and "]" in content
+        ), f"The other cycle member should stay inline.\nOutput was:\n{content}"
+
+    def test_self_referencing_bnode_round_trips(self, tmp_path) -> None:
+        """A bnode whose only referrer is itself keeps its description.
+
+        OWL-RL's ``eq-ref`` rule materialises ``x owl:sameAs x`` for every
+        term, blank nodes included, so every root blank node of a
+        reasoner-closed graph (``owl:AllDisjointClasses``, ``owl:AllDifferent``,
+        ``owl:Axiom``) reaches serialisation in this shape.
+        """
+        source = """
+            @prefix ex: <http://example.org/ont#> .
+            @prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+            ex:A a owl:Class .
+            ex:B a owl:Class .
+            _:d a owl:AllDisjointClasses ;
+                owl:members ( ex:A ex:B ) ;
+                owl:sameAs _:d .
+        """
+        g_orig = _parse(source)
+        subjects = list(dict.fromkeys(g_orig.subjects()))
+
+        content = _serialise(g_orig, subjects, tmp_path)
+        g_rt = _parse(content)
+
+        assert len(g_rt) == len(g_orig), (
+            f"Self-referencing bnode triples were dropped: {len(g_orig)} in, "
+            f"{len(g_rt)} out.\nOutput was:\n{content}"
+        )
+        assert isomorphic(
+            g_orig, g_rt
+        ), f"Round-trip produced a non-isomorphic graph.\nOutput was:\n{content}"
+
+    def test_self_referencing_bnode_keeps_list_inline(self, tmp_path) -> None:
+        """The rdf:List held by a self-referencing bnode stays inline under it."""
+        source = """
+            @prefix ex: <http://example.org/ont#> .
+            @prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+            ex:A a owl:Class .
+            ex:B a owl:Class .
+            _:d a owl:AllDisjointClasses ;
+                owl:members ( ex:A ex:B ) ;
+                owl:sameAs _:d .
+        """
+        g_orig = _parse(source)
+        subjects = list(dict.fromkeys(g_orig.subjects()))
+
+        content = _serialise(g_orig, subjects, tmp_path)
+
+        # The self-referencing bnode is the cycle: it becomes the top-level
+        # block, and the list it holds renders inline inside that block.
+        top_level_bnodes = [
+            line
+            for line in content.splitlines()
+            if line.startswith("_:") and not line.startswith(" ")
+        ]
+        assert (
+            len(top_level_bnodes) == 1
+        ), f"Expected exactly one top-level blank-node block.\nOutput was:\n{content}"
+
+    def test_reachable_cycle_member_stays_inline(self, tmp_path) -> None:
+        """A cycle reached from a named subject round-trips unchanged.
+
+        The named subject's referrer has two incoming arcs, so it is a
+        top-level block; the other member has one and stays inline inside it.
+        """
+        source = """
+            @prefix ex: <http://example.org/ont#> .
+
+            ex:a ex:p _:a .
+            _:a ex:next _:b .
+            _:b ex:next _:a .
+        """
+        g_orig = _parse(source)
+        subjects = list(dict.fromkeys(g_orig.subjects()))
+
+        content = _serialise(g_orig, subjects, tmp_path)
+        g_rt = _parse(content)
+
+        assert isomorphic(
+            g_orig, g_rt
+        ), f"Round-trip produced a non-isomorphic graph.\nOutput was:\n{content}"
