@@ -77,9 +77,8 @@ def default_subject_order(graph: Graph) -> list[Node]:
         Every subject with triples, each exactly once, ready for ``serialise_turtle_str()``.
 
     Raises:
-        IncompleteSubjectOrderError: If the list would not write every triple. That is a bug
-            here, or the one input the serialiser cannot write (a cycle of blank nodes each
-            referenced once, which no subject can reach: #341).
+        IncompleteSubjectOrderError: If the list would not write every triple, which is a bug
+            here. A cycle of blank nodes each referenced once is written since #341.
     """
     ordered: list[Node] = []
     seen: set[Node] = set()

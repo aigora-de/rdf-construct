@@ -217,17 +217,18 @@ class TestGuard:
         with pytest.raises(IncompleteSubjectOrderError, match="more than once"):
             check_subject_order_complete(graph, [*order, EX.Car])
 
-    def test_blank_node_cycle_unreachable_fails_loudly(self) -> None:
-        """Two blank nodes referencing only each other are both inline, so neither is written.
+    def test_unreachable_blank_node_cycle_is_written(self) -> None:
+        """Two blank nodes referencing only each other: one is written at the top level (#341).
 
-        The serialiser drops them silently (#341); the default ordering refuses instead.
+        The guard used to refuse this, because the serialiser dropped both. Now the cycle is
+        broken once, the order is complete, and the output reads back as the source.
         """
         g = Graph()
         a, b = BNode(), BNode()
         g.add((a, EX.next, b))
         g.add((b, EX.next, a))
-        with pytest.raises(IncompleteSubjectOrderError):
-            default_subject_order(g)
+        text = serialise_turtle_str(g, default_subject_order(g))
+        assert isomorphic(Graph().parse(data=text, format="turtle"), g)
 
 
 class TestStringForm:

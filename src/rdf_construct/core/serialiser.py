@@ -5,6 +5,8 @@ which defeats semantic ordering. These custom serialisers respect
 the exact subject order provided.
 """
 
+from collections import deque
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -76,7 +78,7 @@ def collect_used_namespaces(
     return used_ns
 
 
-def collect_inline_bnodes(graph: Graph, subjects_ordered: list | None = None) -> set[BNode]:
+def collect_inline_bnodes(graph: Graph, subjects_ordered: list[Node] | None = None) -> set[BNode]:
     """Identify blank nodes eligible for inline ``[ \u2026 ]`` serialisation.
 
     A blank node is eligible if all three conditions hold:
@@ -135,13 +137,13 @@ def collect_inline_bnodes(graph: Graph, subjects_ordered: list | None = None) ->
     # Candidates forced to the top level because nothing written reaches
     # them: they become the blocks that break an unreachable cycle.
     promoted: set[BNode] = set()
-    visited: set[BNode] = set()
+    visited: set[Node] = set()
 
-    def _walk(seeds) -> None:
+    def _walk(seeds: Iterable[Node]) -> None:
         """Mark reachable candidates inline, walking from written blocks."""
-        queue = list(seeds)
+        queue = deque(seeds)
         while queue:
-            s = queue.pop(0)
+            s = queue.popleft()
             if s in visited:
                 continue
             visited.add(s)
