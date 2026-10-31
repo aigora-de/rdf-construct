@@ -1,0 +1,9 @@
+@prefix ex: <http://example.org/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# In RDF 1.1 "x" and "x"^^xsd:string are one term, though rdflib keeps them apart.
+# ex:S: "Building" here and "Building"^^xsd:string in strings_b are one value, so no conflict.
+# ex:W: "Wall" here and "Partition"^^xsd:string in strings_b still conflict.
+ex:S rdfs:label "Building" .
+ex:W rdfs:label "Wall" .

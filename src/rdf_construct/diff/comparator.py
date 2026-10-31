@@ -2,10 +2,13 @@
 
 The algorithm:
 1. Parse both graphs into rdflib Graph objects
-2. Compute triple sets: added = new - old, removed = old - new
-3. Group changes by subject
-4. Classify entities as added/removed/modified
-5. Determine entity types and extract metadata
+2. Label every blank node by its structure's content, so that a structure both graphs state is
+   the same in each (#143)
+3. Compute triple sets: added = new - old, removed = old - new
+4. Group changes by subject, attributing each changed blank-node structure to the named subject
+   it belongs to
+5. Classify entities as added/removed/modified
+6. Determine entity types and extract metadata
 """
 
 from collections import defaultdict
@@ -15,13 +18,22 @@ from rdflib import Graph, RDF, RDFS, URIRef, BNode, Literal
 from rdflib.namespace import OWL
 from rdflib.term import Node
 
+from rdf_construct.core.blank_nodes import blank_node_components, is_tree, label_by_content
+from rdf_construct.core.serialiser import format_term
 from rdf_construct.diff.change_types import (
     ChangeType,
     EntityChange,
     EntityType,
     GraphDiff,
     TripleChange,
+    UncomparedStructure,
 )
+from rdf_construct.diff.structures import describe_structures
+
+#: The most blank nodes a structure that is not a tree is compared with. ``rdflib.compare``
+#: canonicalises such a structure in time that grows steeply with its size: an 800-cell list whose
+#: cells are each ``owl:sameAs`` themselves took 6.4 s, and 5,000 cells take minutes.
+NON_TREE_LIMIT = 500
 
 
 def compare_graphs(
@@ -48,31 +60,56 @@ def compare_graphs(
     """
     ignore_predicates = ignore_predicates or set()
 
+    # Ignored predicates leave before blank nodes are labelled, so that a structure differing only
+    # in an ignored predicate is the same structure in both graphs
+    old_kept, old_uncompared = _set_aside(_without(old_graph, ignore_predicates), old_path)
+    new_kept, new_uncompared = _set_aside(_without(new_graph, ignore_predicates), new_path)
+
+    # Blank nodes are labelled by their structure's content, so a structure both graphs state has
+    # the same labels in each, and a changed one leaves whole, with the triple referring to it
+    old_labelled = label_by_content(old_kept)
+    new_labelled = label_by_content(new_kept)
+
     # Compute triple-level differences using set operations
-    old_triples = set(old_graph)
-    new_triples = set(new_graph)
+    old_triples = set(old_labelled)
+    new_triples = set(new_labelled)
 
     added_triples = new_triples - old_triples
     removed_triples = old_triples - new_triples
 
-    # Filter out ignored predicates
-    if ignore_predicates:
-        added_triples = {(s, p, o) for s, p, o in added_triples if p not in ignore_predicates}
-        removed_triples = {(s, p, o) for s, p, o in removed_triples if p not in ignore_predicates}
-
     # Group changes by subject
-    changes_by_subject: dict[Node, dict[str, list[tuple]]] = defaultdict(
-        lambda: {"added": [], "removed": []}
+    changes_by_subject: dict[Node, dict[str, list]] = defaultdict(
+        lambda: {"added": [], "removed": [], "added_structures": [], "removed_structures": []}
     )
+    ownerless: dict[str, list[str]] = {"added": [], "removed": []}
 
-    for s, p, o in added_triples:
-        changes_by_subject[s]["added"].append((p, o))
+    for key, triples, labelled in (
+        ("added", added_triples, new_labelled),
+        ("removed", removed_triples, old_labelled),
+    ):
+        is_addition = key == "added"
+        blank: list[tuple[Node, Node, Node]] = []
+        for s, p, o in triples:
+            if isinstance(s, BNode) or isinstance(o, BNode):
+                blank.append((s, p, o))
+            else:
+                changes_by_subject[s][key].append(
+                    TripleChange(predicate=p, object=o, is_addition=is_addition)
+                )
 
-    for s, p, o in removed_triples:
-        changes_by_subject[s]["removed"].append((p, o))
-
-    # Track if we encountered blank nodes
-    has_blank_nodes = any(isinstance(s, BNode) for s in changes_by_subject)
+        structures = describe_structures(blank, labelled)
+        for pointer in structures.pointers:
+            changes_by_subject[pointer.subject][key].append(
+                TripleChange(
+                    predicate=pointer.predicate,
+                    object=pointer.node,
+                    is_addition=is_addition,
+                    turtle=pointer.turtle,
+                )
+            )
+        for owner, text in structures.attached:
+            changes_by_subject[owner][f"{key}_structures"].append(text)
+        ownerless[key].extend(structures.ownerless)
 
     # All subjects in each graph (for determining new vs removed entities)
     old_subjects = {s for s, _, _ in old_graph}
@@ -84,10 +121,6 @@ def compare_graphs(
     modified_entities: list[EntityChange] = []
 
     for subject, changes in changes_by_subject.items():
-        # Skip blank nodes for deep analysis (just flag them)
-        if isinstance(subject, BNode):
-            continue
-
         subject_in_old = subject in old_subjects
         subject_in_new = subject in new_subjects
 
@@ -101,13 +134,10 @@ def compare_graphs(
             label = _get_label(old_graph, subject)
             superclasses = _get_superclasses(old_graph, subject)
 
-        # Create triple changes
-        added_triple_changes = [
-            TripleChange(predicate=p, object=o, is_addition=True) for p, o in changes["added"]
-        ]
-        removed_triple_changes = [
-            TripleChange(predicate=p, object=o, is_addition=False) for p, o in changes["removed"]
-        ]
+        added_triple_changes = changes["added"]
+        removed_triple_changes = changes["removed"]
+        added_structures = sorted(changes["added_structures"])
+        removed_structures = sorted(changes["removed_structures"])
 
         # Classify the entity change
         if not subject_in_old and subject_in_new:
@@ -120,6 +150,7 @@ def compare_graphs(
                 added_triples=added_triple_changes,
                 removed_triples=[],
                 superclasses=superclasses,
+                added_structures=added_structures,
             )
             added_entities.append(entity)
 
@@ -133,6 +164,7 @@ def compare_graphs(
                 added_triples=[],
                 removed_triples=removed_triple_changes,
                 superclasses=superclasses,
+                removed_structures=removed_structures,
             )
             removed_entities.append(entity)
 
@@ -146,6 +178,8 @@ def compare_graphs(
                 added_triples=added_triple_changes,
                 removed_triples=removed_triple_changes,
                 superclasses=superclasses,
+                added_structures=added_structures,
+                removed_structures=removed_structures,
             )
             modified_entities.append(entity)
 
@@ -160,8 +194,79 @@ def compare_graphs(
         added=added_entities,
         removed=removed_entities,
         modified=modified_entities,
-        blank_node_warning=has_blank_nodes,
+        added_structures=sorted(ownerless["added"]),
+        removed_structures=sorted(ownerless["removed"]),
+        uncompared=old_uncompared + new_uncompared,
     )
+
+
+def _without(graph: Graph, predicates: set[URIRef]) -> Graph:
+    """Return ``graph`` without the triples whose predicate is one of ``predicates``."""
+    if not predicates:
+        return graph
+    kept = Graph(bind_namespaces="none")
+    for prefix, namespace in graph.namespace_manager.namespaces():
+        kept.bind(prefix, namespace, override=True, replace=True)
+    for triple in graph:
+        if triple[1] not in predicates:
+            kept.add(triple)
+    return kept
+
+
+def _set_aside(graph: Graph, source: str) -> tuple[Graph, list[UncomparedStructure]]:
+    """Set aside each blank-node structure too large to compare.
+
+    Only a structure that is not a tree and has more than :data:`NON_TREE_LIMIT` blank nodes is
+    set aside. Every other structure is compared, cycles and shared nodes included.
+
+    Args:
+        graph: The graph to compare.
+        source: The file's display name, for the description.
+
+    Returns:
+        The graph without those structures, and a description of each.
+    """
+    blank_nodes = {t for triple in graph for t in (triple[0], triple[2]) if isinstance(t, BNode)}
+    if len(blank_nodes) <= NON_TREE_LIMIT:
+        return graph, []
+
+    aside: list[Graph] = []
+    uncompared: list[UncomparedStructure] = []
+    for component in blank_node_components(graph):
+        nodes = {t for triple in component for t in (triple[0], triple[2]) if isinstance(t, BNode)}
+        if len(nodes) <= NON_TREE_LIMIT or is_tree(component):
+            continue
+        aside.append(component)
+        refs = sorted(
+            f"{format_term(graph, s)} {format_term(graph, p)}"
+            for s, p, _ in component
+            if not isinstance(s, BNode)
+        )
+        under = None
+        if refs:
+            under = refs[0] if len(refs) == 1 else f"{refs[0]} and {len(refs) - 1} more"
+        uncompared.append(
+            UncomparedStructure(
+                source=source,
+                blank_nodes=len(nodes),
+                limit=NON_TREE_LIMIT,
+                under=under,
+                self_same_as=any(p == OWL.sameAs and s == o for s, p, o in component),
+            )
+        )
+
+    if not aside:
+        return graph, []
+
+    excluded = {triple for component in aside for triple in component}
+    kept = Graph(bind_namespaces="none")
+    for prefix, namespace in graph.namespace_manager.namespaces():
+        kept.bind(prefix, namespace, override=True, replace=True)
+    for triple in graph:
+        if triple not in excluded:
+            kept.add(triple)
+    uncompared.sort(key=lambda u: (u.under or "", u.blank_nodes))
+    return kept, uncompared
 
 
 def compare_files(

@@ -9,12 +9,19 @@ from pathlib import Path
 
 from rdflib import Graph, Literal, URIRef
 
+from rdf_construct.core.language_tags import canonical_case
+from rdf_construct.core.predicate_tiers import (
+    DEFAULT_PREDICATE_TIERS,
+    PredicateTier,
+    tier_of,
+)
 from rdf_construct.localise.config import (
     ExistingStrategy,
     MergeConfig,
     TranslationFile,
     TranslationStatus,
 )
+from rdf_construct.localise.properties import FILE_PREFIXES, resolve_property
 
 
 @dataclass
@@ -65,6 +72,12 @@ class TranslationMerger:
 
     The merger takes completed translation YAML files and adds the
     translations as new language-tagged literals to the ontology.
+
+    Language tags are compared without regard to case, so an existing ``@de`` label is found
+    for a file whose ``target_language`` is ``DE``, and every literal written carries the tag in
+    canonical case (``en-GB``) (#159). For a property that takes any number of values, such as
+    ``skos:altLabel``, ``preserve`` skips a translation only when that same text already exists
+    in the language, rather than whenever any value does.
     """
 
     def __init__(self, config: MergeConfig | None = None):
@@ -91,7 +104,7 @@ class TranslationMerger:
         """
         try:
             # Create a copy of the graph to work with
-            merged = Graph()
+            merged = Graph(bind_namespaces="core")
             for prefix, namespace in graph.namespaces():
                 merged.bind(prefix, namespace)
             for triple in graph:
@@ -99,7 +112,7 @@ class TranslationMerger:
 
             stats = MergeStats()
             warnings: list[str] = []
-            target_lang = translation_file.metadata.target_language
+            target_lang = canonical_case(translation_file.metadata.target_language)
 
             # Process each entity
             for entity in translation_file.entities:
@@ -123,13 +136,21 @@ class TranslationMerger:
                         stats.skipped_status += 1
                         continue
 
-                    # Expand property
-                    prop_uri = URIRef(self._expand_property(entry.property))
+                    # A translation file's CURIEs are the file format's, not the ontology's (#355)
+                    prop_uri = resolve_property(FILE_PREFIXES, entry.property)
 
                     # Check for existing translation
                     existing = self._get_existing_translation(
                         merged, entity_uri, prop_uri, target_lang
                     )
+
+                    if (
+                        existing
+                        and self.config.existing == ExistingStrategy.PRESERVE
+                        and tier_of(prop_uri, DEFAULT_PREDICATE_TIERS) is PredicateTier.REPEATABLE
+                    ):
+                        # Another value is another assertion: keep it only if it is this text
+                        existing = [t for t in existing if str(t[2]) == entry.translation]
 
                     if existing:
                         if self.config.existing == ExistingStrategy.PRESERVE:
@@ -175,7 +196,7 @@ class TranslationMerger:
             Combined MergeResult.
         """
         # Start with a copy
-        merged = Graph()
+        merged = Graph(bind_namespaces="core")
         for prefix, namespace in graph.namespaces():
             merged.bind(prefix, namespace)
         for triple in graph:
@@ -266,39 +287,19 @@ class TranslationMerger:
             language: Language code.
 
         Returns:
-            List of matching triples.
+            List of matching triples, whatever the case of their tags.
         """
         existing = []
 
         for obj in graph.objects(subject, predicate):
-            if isinstance(obj, Literal) and obj.language == language:
+            if (
+                isinstance(obj, Literal)
+                and obj.language
+                and obj.language.lower() == language.lower()
+            ):
                 existing.append((subject, predicate, obj))
 
         return existing
-
-    def _expand_property(self, prop: str) -> str:
-        """Expand a CURIE to full URI.
-
-        Args:
-            prop: Property string (CURIE or full URI).
-
-        Returns:
-            Full URI string.
-        """
-        prefixes = {
-            "rdfs:": "http://www.w3.org/2000/01/rdf-schema#",
-            "skos:": "http://www.w3.org/2004/02/skos/core#",
-            "owl:": "http://www.w3.org/2002/07/owl#",
-            "rdf:": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-            "dc:": "http://purl.org/dc/elements/1.1/",
-            "dcterms:": "http://purl.org/dc/terms/",
-        }
-
-        for prefix, namespace in prefixes.items():
-            if prop.startswith(prefix):
-                return namespace + prop[len(prefix) :]
-
-        return prop
 
 
 def merge_translations(
@@ -322,8 +323,8 @@ def merge_translations(
     Returns:
         MergeResult with merged graph.
     """
-    # Load graph
-    graph = Graph()
+    # Load graph: the source's own prefixes, plus rdf, rdfs, owl, xsd and xml (#355)
+    graph = Graph(bind_namespaces="core")
     graph.parse(source)
 
     # Load translation files

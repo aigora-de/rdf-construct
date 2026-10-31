@@ -178,22 +178,12 @@ def test_refactor_deprecate_keeps_every_input_triple(tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     "source",
     [
-        # Nothing is lost, but every module gains a fabricated header and file:// imports.
-        pytest.param(
-            EXAMPLES / "split" / "split_monolith.ttl",
-            id="monolith",
-            marks=pytest.mark.xfail(strict=True, reason="#178"),
-        ),
-        # Individuals, the header and blank-node interiors are lost (#176), and headers are
-        # fabricated (#178).
-        pytest.param(
-            IES_SMALL,
-            id="ies",
-            marks=pytest.mark.xfail(strict=True, reason="#176, #178"),
-        ),
+        pytest.param(EXAMPLES / "split" / "split_monolith.ttl", id="monolith"),
+        pytest.param(IES_SMALL, id="ies"),
     ],
 )
 def test_split_union_is_isomorphic(source: Path, tmp_path, monkeypatch):
+    """Headers aside (see ``CONTRACTS``): ``tests/test_split_residue.py`` checks each module's own."""
     out = tmp_path / "modules"
     _run(tmp_path, monkeypatch, "split", source, "--by-namespace", "-o", out)
     modules = [_parse(path) for path in sorted(out.glob("*.ttl"))]
@@ -204,16 +194,14 @@ def test_split_union_is_isomorphic(source: Path, tmp_path, monkeypatch):
 # merge: every source triple, minus the losers of resolved conflicts
 # ---------------------------------------------------------------------------
 
-# The losing values of the five conflicts `merge` reports as auto-resolved for core + conflicting
-# under the default `priority` strategy, where merge_conflicting.ttl has the higher priority. They
-# are named by hand so that the test does not depend on the merger's own conflict detection
-# (#193).
+# The losing values of core + conflicting under the default `priority` strategy, where
+# merge_conflicting.ttl has the higher priority. Only the two `@en` labels are picked between:
+# `rdfs:comment` is repeatable, so both comments stay, and the `rdfs:domain` and `rdfs:range`
+# conflicts are marked with both values kept (#169). They are named by hand so that the test does
+# not depend on the merger's own conflict detection (#193).
 MERGE_LOSERS: tuple[Triple, ...] = (
-    (EXO.hasName, RDFS.domain, EXO.Building),
     (EXO.hasName, RDFS.label, Literal("has name", lang="en")),
     (EXO.Building, RDFS.label, Literal("Building", lang="en")),
-    (EXO.Building, RDFS.comment, Literal("A constructed structure.", lang="en")),
-    (EXO.hasLocation, RDFS.range, EXO.Place),
 )
 
 
@@ -229,7 +217,14 @@ def test_merge_keeps_every_source_triple(tmp_path, monkeypatch):
     _assert_holds("merge", inputs=[_parse(s) for s in sources], outputs=[merged])
 
 
-@pytest.mark.xfail(strict=True, reason="#169")
+def test_merge_keeps_every_blank_node_structure(tmp_path, monkeypatch):
+    """Shared structures are written once (#170), and none of either source's is lost."""
+    blank_nodes = FIXTURES / "merge" / "blank_nodes"
+    sources = [blank_nodes / "core.ttl", blank_nodes / "module.ttl"]
+    merged = _merge(tmp_path, monkeypatch, sources)
+    _assert_holds("merge", inputs=[_parse(s) for s in sources], outputs=[merged])
+
+
 def test_merge_drops_the_losers_of_resolved_conflicts(tmp_path, monkeypatch):
     sources = [EXAMPLES / "merge" / "merge_core.ttl", EXAMPLES / "merge" / "merge_conflicting.ttl"]
     merged = _merge(tmp_path, monkeypatch, sources)

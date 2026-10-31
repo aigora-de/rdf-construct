@@ -1,0 +1,10 @@
+@prefix ex: <http://example.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+# The ontology header is #171's to merge, so its labels are not picked between yet.
+ex:ontology a owl:Ontology ; rdfs:label "Ontology A"@en .
+ex:A a owl:Class .

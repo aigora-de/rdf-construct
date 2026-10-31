@@ -1,0 +1,61 @@
+# What merging core.ttl with module.ttl must give, written by hand (#170).
+
+@prefix ex: <http://example.org/bn#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ex:pA a owl:ObjectProperty .
+ex:pZ a owl:ObjectProperty .
+ex:B a owl:Class .
+ex:C a owl:Class .
+
+# Once: both files state it.
+ex:A a owl:Class ;
+    rdfs:subClassOf [ a owl:Restriction ;
+        owl:onProperty ex:pA ;
+        owl:someValuesFrom ex:B ] .
+
+ex:F rdfs:subClassOf [ a owl:Restriction ;
+        owl:onProperty ex:pA ;
+        owl:someValuesFrom ex:B ] .
+
+ex:N rdfs:subClassOf [ a owl:Restriction ;
+        owl:onProperty ex:pA ;
+        owl:someValuesFrom [ owl:unionOf ( ex:B ex:C ) ] ] .
+
+ex:U owl:unionOf ( ex:B ex:C ) .
+
+[] a owl:AllDisjointClasses ;
+    owl:members ( ex:A ex:B ex:C ) .
+
+ex:alice foaf:knows _:bob .
+ex:carol foaf:knows _:bob .
+_:bob foaf:name "Bob" .
+
+# Twice: different subjects.
+ex:dave foaf:knows [ foaf:name "Eve" ] .
+ex:frank foaf:knows [ foaf:name "Eve" ] .
+
+# Twice: core.ttl has two copies.
+ex:D rdfs:subClassOf [ a owl:Restriction ;
+        owl:onProperty ex:pA ;
+        owl:someValuesFrom ex:C ],
+    [ a owl:Restriction ;
+        owl:onProperty ex:pA ;
+        owl:someValuesFrom ex:C ] .
+
+# Twice: different structures.
+ex:E rdfs:subClassOf [ a owl:Restriction ;
+        owl:onProperty ex:pZ ;
+        owl:someValuesFrom ex:B ],
+    [ a owl:Restriction ;
+        owl:onProperty ex:pZ ;
+        owl:someValuesFrom ex:B ;
+        rdfs:comment "Annotated in the module."@en ] .
+
+ex:V owl:unionOf ( ex:B ex:C ), ( ex:C ex:B ) .
+
+ex:Z rdfs:subClassOf [ a owl:Restriction ;
+        owl:onProperty ex:pZ ;
+        owl:allValuesFrom ex:B ] .

@@ -73,7 +73,7 @@ def _format_testcase(result: CQTestResult, verbose: bool) -> ET.Element:
         error = ET.SubElement(testcase, "error")
         if result.error:
             error.set("message", result.error)
-            error.set("type", "QueryError")
+            error.set("type", result.error_type)
             error.text = result.error
         else:
             error.set("message", "Unknown error")

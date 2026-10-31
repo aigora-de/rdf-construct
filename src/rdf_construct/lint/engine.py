@@ -9,17 +9,37 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Sequence
+from typing import Iterable, Sequence
 
 from rdflib import Graph, URIRef
 
 from rdf_construct.lint.rules import (
     get_all_rules,
     get_rule,
+    list_rules,
     LintIssue,
     RuleSpec,
     Severity,
 )
+
+
+def check_rule_ids(rule_ids: Iterable[str], where: str) -> None:
+    """Refuse any rule name the registry does not know (#203).
+
+    Args:
+        rule_ids: Rule names to check.
+        where: Where the names came from, for the message (e.g. ``--enable``).
+
+    Raises:
+        ValueError: If any name is not a registered rule.
+    """
+    known_rules = set(list_rules())
+    for rule_id in rule_ids:
+        if rule_id not in known_rules:
+            raise ValueError(
+                f"Unknown rule '{rule_id}' in {where}. "
+                f"Available rules: {', '.join(sorted(known_rules))}"
+            )
 
 
 def find_line_number(file_path: Path, entity: URIRef) -> int | None:
@@ -96,9 +116,18 @@ class LintConfig:
     def get_effective_rules(self) -> list[RuleSpec]:
         """Get the list of rules that should run based on config.
 
+        The level never changes which rules run, only their severity (#208).
+
         Returns:
             List of RuleSpec objects to execute.
+
+        Raises:
+            ValueError: If a rule name is unknown, or if no rule is left to run (#293).
         """
+        check_rule_ids(self.enabled_rules, "LintConfig.enabled_rules")
+        check_rule_ids(self.disabled_rules, "LintConfig.disabled_rules")
+        check_rule_ids(self.severity_overrides, "LintConfig.severity_overrides")
+
         all_rules = get_all_rules()
 
         # If specific rules enabled, use only those
@@ -110,13 +139,14 @@ class LintConfig:
         # Remove disabled rules
         rules = [r for r in rules if r.rule_id not in self.disabled_rules]
 
-        # Apply level filtering
-        if self.level == "relaxed":
-            # Relaxed: skip INFO-level rules
-            rules = [r for r in rules if r.default_severity != Severity.INFO]
-        elif self.level == "strict":
-            # Strict: all rules, but bump warnings to errors
-            pass  # No filtering, severity handled in get_effective_severity
+        # A run with no rules would report every file clean (#293)
+        if not rules:
+            enabled = ", ".join(sorted(self.enabled_rules)) or "all rules"
+            disabled = ", ".join(sorted(self.disabled_rules)) or "none"
+            raise ValueError(
+                f"No lint rules left to run: enabled {enabled}; disabled {disabled}. "
+                "A run with no rules would report every file clean."
+            )
 
         return rules
 
@@ -257,8 +287,12 @@ class LintEngine:
 
         Raises:
             FileNotFoundError: If file doesn't exist.
-            ValueError: If file can't be parsed.
+            ValueError: If file can't be parsed, or the rule selection is refused.
         """
+        # Resolve rules before reading the file, so a refused selection never
+        # depends on whether the file parses
+        rules = self.config.get_effective_rules()
+
         result = LintResult(file_path=file_path)
 
         # Load the graph
@@ -294,8 +328,6 @@ class LintEngine:
             return result
 
         # Run rules
-        rules = self.config.get_effective_rules()
-
         for rule in rules:
             try:
                 issues = rule.check_fn(graph)
