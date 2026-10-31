@@ -15,8 +15,11 @@ the same answer:
 ``prov:wasDerivedFrom`` rather than ``dcterms:source``, because ``docs`` already reads
 ``dcterms:source`` as metadata an author wrote. The property is declared as an
 ``owl:AnnotationProperty`` wherever it is used: an undeclared annotation property is itself
-outside OWL 2 DL. Not where the graph already gives it another property type, though: PROV-O
-itself declares it an ``owl:ObjectProperty``, and an IRI typed as both is outside OWL 2 DL too.
+outside OWL 2 DL. Not where the graph already gives it another *kind* of property, though:
+PROV-O itself declares it an ``owl:ObjectProperty``, and an IRI typed as both is outside
+OWL 2 DL too. A generic type (``rdf:Property``, ``owl:FunctionalProperty``,
+``owl:DeprecatedProperty``) does not say which kind it is, so it does not suppress the
+annotation declaration.
 A graph that leaves that declaration to an ``owl:imports`` is beyond what this module can see.
 
 **Who uses what.** ``order`` (#90) keeps the ontology IRI and calls :func:`stamp_extract`, which
@@ -43,7 +46,7 @@ from typing import TYPE_CHECKING
 from rdflib import RDF, Graph, URIRef
 from rdflib.namespace import OWL, PROV
 
-from .vocab import ALL_PROPERTY_TYPES
+from .vocab import KIND_SPECIFIC_PROPERTY_TYPES
 
 if TYPE_CHECKING:
     from rdflib.term import Node
@@ -117,7 +120,7 @@ def stamp_derivation(graph: Graph, subject: Node, targets: list[URIRef]) -> list
     """Record that ``subject`` was derived from each of ``targets``.
 
     Adds one ``prov:wasDerivedFrom`` per target, declares ``prov:wasDerivedFrom`` an
-    ``owl:AnnotationProperty`` unless ``graph`` already gives it a property type, and binds the
+    ``owl:AnnotationProperty`` unless ``graph`` gives it another kind of property, and binds the
     ``prov:`` prefix. A graph that already binds the PROV-O namespace keeps its own prefix for
     it, and one that binds ``prov:`` to something else keeps that binding: rdflib then picks
     another prefix for PROV-O. Does nothing when ``targets`` is empty.
@@ -135,7 +138,12 @@ def stamp_derivation(graph: Graph, subject: Node, targets: list[URIRef]) -> list
     added = [t for t in targets if (subject, WAS_DERIVED_FROM, t) not in graph]
     for target in added:
         graph.add((subject, WAS_DERIVED_FROM, target))
-    if not any(t in ALL_PROPERTY_TYPES for t in graph.objects(WAS_DERIVED_FROM, RDF.type)):
+    # A kind-specific type (object, datatype or annotation) already decides what the
+    # IRI is; a generic one (rdf:Property, owl:FunctionalProperty,
+    # owl:DeprecatedProperty) does not, so the stamp still declares the annotation
+    # property it needs (#426).
+    declared = set(graph.objects(WAS_DERIVED_FROM, RDF.type))
+    if not declared & KIND_SPECIFIC_PROPERTY_TYPES:
         graph.add((WAS_DERIVED_FROM, RDF.type, OWL.AnnotationProperty))
     graph.namespace_manager.bind(PROV_PREFIX, PROV, override=False, replace=False)
     return added

@@ -389,6 +389,14 @@ change, and what to do about it, is listed command by command in the
   counts entity and property pairs. The CLI output is unchanged.
 
 ### Fixed
+
+- **`order` declares the derivation stamp an `owl:AnnotationProperty` even when
+  the source types `prov:wasDerivedFrom` only generically** (#426). A source
+  that typed it `rdf:Property`, `owl:FunctionalProperty` or
+  `owl:DeprecatedProperty` suppressed the declaration, so the extract used the
+  stamp as an annotation without declaring it. Only a kind-specific type (an
+  object, datatype or annotation property) suppresses it now: an IRI typed as
+  both an annotation and another kind of property is outside OWL 2 DL.
 - **`diff` compares blank nodes by structure, in both directions** (#143). It
   compared triples by the labels rdflib gives blank nodes at parse time, and
   then skipped every blank-node subject. So any file with an `owl:Restriction`
