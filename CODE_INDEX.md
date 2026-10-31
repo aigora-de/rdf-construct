@@ -302,6 +302,7 @@ tests/
 - `descendants_of()` - find all descendants of a root
 - `sort_with_roots()` - root-based branch ordering
 - `sort_subjects()` - main sorting dispatcher
+- `normalise_sort_mode()` - check a mode against `SORT_MODES`; raises `UnknownSortModeError`
 
 **`core/serialiser.py`**
 - `format_term()` - format RDF terms as Turtle strings

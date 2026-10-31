@@ -142,6 +142,7 @@ Implementation:
 - `topo_sort_subset()`: Topological sort with Kahn's algorithm
 - `sort_with_roots()`: Root-based branch ordering
 - `sort_subjects()`: Main sorting interface
+- `normalise_sort_mode()`: Checks a mode against `SORT_MODES`, raising `UnknownSortModeError`
 - `descendants_of()`: Hierarchy traversal
 
 **Sort Modes**:
@@ -279,7 +280,7 @@ Implementation:
 ### Adding New Sort Modes
 
 1. Implement algorithm in `ordering.py`
-2. Update `sort_subjects()` dispatch
+2. Add the mode to `SORT_MODES` (anything not listed there is refused) and update `sort_subjects()` dispatch
 3. Add tests and examples
 
 ### Adding New Output Formats

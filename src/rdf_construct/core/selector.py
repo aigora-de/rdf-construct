@@ -68,6 +68,37 @@ def is_known_selector(selector_key: str, selectors: dict[str, str]) -> bool:
     return value in _SELECTOR_VALUES or value.startswith("FILTER")
 
 
+def unknown_selector_error(selector_key: str, selectors: dict[str, str]) -> UnknownSelectorError:
+    """Build the error for a selector key that ``select_subjects`` cannot resolve.
+
+    Shared by ``select_subjects`` and by callers that check a config before
+    any graph is loaded, so both name the problem in the same words. Call it
+    only for a key where ``is_known_selector`` is false.
+
+    Args:
+        selector_key: Key that does not resolve
+        selectors: Selector definitions from the ordering config
+
+    Returns:
+        The error, naming the key and what would have been accepted
+    """
+    known = ", ".join(BUILTIN_SELECTOR_KEYS)
+    defined = ", ".join(sorted(selectors)) or "none"
+    if selector_key in selectors:
+        raw = selectors[selector_key]
+        sel = raw.strip() if isinstance(raw, str) else ""
+        return UnknownSelectorError(
+            f"selector {selector_key!r} is defined in the config as {sel!r}, "
+            f"which is not a value this version understands. Accepted values: "
+            f"{', '.join(sorted(_SELECTOR_VALUES))}, or a string starting 'FILTER'. "
+            f"Built-in selector keys, usable without defining them: {known}"
+        )
+    return UnknownSelectorError(
+        f"unknown selector {selector_key!r}. Built-in selector keys: {known}. "
+        f"Defined in this config: {defined}"
+    )
+
+
 def _subjects_of_types(graph: Graph, types: frozenset[URIRef]) -> set[Node]:
     """Collect every subject declared with any of the given rdf:type values.
 
@@ -193,18 +224,6 @@ def select_subjects(graph: Graph, selector_key: str, selectors: dict[str, str]) 
         # section renders empty, the output is silently short, and the
         # unclaimed-subjects warning then names a section the user believes
         # they already have.
-        known = ", ".join(BUILTIN_SELECTOR_KEYS)
-        defined = ", ".join(sorted(selectors)) or "none"
-        if selector_key in selectors:
-            raise UnknownSelectorError(
-                f"selector {selector_key!r} is defined in the config as {sel!r}, "
-                f"which is not a value this version understands. Accepted values: "
-                f"{', '.join(sorted(_SELECTOR_VALUES))}, or a string starting 'FILTER'. "
-                f"Built-in selector keys, usable without defining them: {known}"
-            )
-        raise UnknownSelectorError(
-            f"unknown selector {selector_key!r}. Built-in selector keys: {known}. "
-            f"Defined in this config: {defined}"
-        )
+        raise unknown_selector_error(selector_key, selectors)
 
     return _without_owned_bnodes(graph, subjects)

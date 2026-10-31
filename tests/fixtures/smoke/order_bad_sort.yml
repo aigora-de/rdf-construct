@@ -1,0 +1,9 @@
+# A good profile, then one whose sort: mode is misspelt (#242). The refusal must come before
+# the first profile's file is written. The smoke row passes -o @tmp/order.
+profiles:
+  good:
+    sections:
+      - classes: {sort: topological}
+  misspelt:
+    sections:
+      - classes: {sort: topolgical}
