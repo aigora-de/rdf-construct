@@ -1,0 +1,68 @@
+# The built-in default ordering (#303). Every hierarchy here is named so that alphabetical
+# order puts a child before its parent: a sort over the wrong edge, or no sort at all, is
+# visible as a reversed pair.
+@prefix ex:   <http://example.org/order#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/order> a owl:Ontology ;
+    rdfs:label "Default ordering fixture"@en .
+
+# Classes: Antique ⊑ Car ⊑ Vehicle, the reverse of alphabetical.
+ex:Vehicle a owl:Class .
+ex:Car a owl:Class ;
+    rdfs:subClassOf ex:Vehicle ,
+        [ a owl:Restriction ; owl:onProperty ex:partOf ; owl:someValuesFrom ex:Vehicle ] .
+ex:Antique a owl:Class ;
+    rdfs:subClassOf ex:Car .
+
+# A cycle, one member also carrying a self-loop.
+ex:Loop1 a owl:Class ;
+    rdfs:subClassOf ex:Loop1 , ex:Loop2 .
+ex:Loop2 a owl:Class ;
+    rdfs:subClassOf ex:Loop1 .
+
+# Puns: a class that is also a named individual, and a class that is also an object property
+# (OWL Full). Each belongs to classes, and the second must not tip the class section into
+# rdfs:subPropertyOf (#245).
+ex:Species a owl:Class , owl:NamedIndividual .
+ex:Part a owl:Class , owl:ObjectProperty .
+
+# Object properties: partOf ⊑ relatedTo. The range is an anonymous class expression typed
+# owl:Class, which the classes section must not claim (#280).
+ex:relatedTo a owl:ObjectProperty .
+ex:partOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf ex:relatedTo ;
+    rdfs:range [ a owl:Class ; owl:unionOf ( ex:Car ex:Vehicle ) ] .
+
+# Datatype properties: length ⊑ size.
+ex:size a owl:DatatypeProperty .
+ex:length a owl:DatatypeProperty ;
+    rdfs:subPropertyOf ex:size .
+
+# Annotation properties: editorialNote ⊑ note.
+ex:note a owl:AnnotationProperty .
+ex:editorialNote a owl:AnnotationProperty ;
+    rdfs:subPropertyOf ex:note .
+
+# Properties of no inferable kind: code is declared only by a characteristic.
+ex:identifier a rdf:Property .
+ex:code a owl:FunctionalProperty ;
+    rdfs:subPropertyOf ex:identifier .
+
+# Individuals.
+ex:myCar a ex:Car ;
+    ex:length "4.2"^^xsd:decimal .
+ex:herbie a ex:Car , owl:NamedIndividual ;
+    ex:note "A Beetle."@en .
+
+# A named subject with no type: no section claims it.
+ex:untyped rdfs:label "untyped"@en .
+
+# Root blank nodes, reachable from no named subject.
+[] a owl:AllDisjointClasses ;
+    owl:members ( ex:Car ex:Loop1 ) .
+[] a owl:AllDifferent ;
+    owl:distinctMembers ( ex:herbie ex:myCar ) .

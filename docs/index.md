@@ -389,8 +389,4 @@ MIT License. See [LICENSE](../LICENSE) file.
 See [CHANGELOG.md](../CHANGELOG.md) for version history. Upgrading to v0.7.0? Every breaking
 change, and what to do about it, is in the [v0.7.0 migration note](MIGRATION_v0.7.0.md).
 
----
 
-## Archive
-
-Previous documentation versions are preserved in [docs/archive/](archive/) for reference.

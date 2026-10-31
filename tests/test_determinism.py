@@ -5,8 +5,9 @@ subprocesses, so this module measures before it adds: a command gets a case when
 one, or when it is a regression guard (``docs`` for #107, ``stats`` for #284).
 
 A case that fails today is ``xfail(strict=True)`` against the issue that explains it, and the fix
-for that issue removes the marker. ``order`` has no case yet. It is pinned after #280, so that the
-case pins the corrected behaviour (#264).
+for that issue removes the marker. ``order``'s case is a filtering profile that wrote a detached
+``_:n…`` stub, with a fresh label every run, until #280 was fixed, so it pins the corrected behaviour
+(#264).
 """
 
 from __future__ import annotations
@@ -45,8 +46,12 @@ if TYPE_CHECKING:
 
 FIXTURES = Path(__file__).parent / "fixtures" / "determinism"
 MERGE = EXAMPLES / "merge"
+MERGE_BLANK_NODES = Path(__file__).parent / "fixtures" / "merge" / "blank_nodes"
 IES_SMALL = Path(__file__).parent / "fixtures" / "ies" / "ies-env-building-classification.ttl"
 OWL_FULL = str(EXAMPLES / "describe" / "owl_full_example.ttl")
+PROVENANCE = Path(__file__).parent / "fixtures" / "provenance"
+DIFF_V1 = str(EXAMPLES / "diff" / "v1.ttl")
+DIFF_V2 = str(EXAMPLES / "diff" / "v2.ttl")
 
 # A leading "@out" makes an argument a path under the case's constant output directory.
 OUT = "@out"
@@ -85,6 +90,8 @@ CASES = [
     _case("docs", ANIMAL, "-f", "json", "-o", OUT, label="docs-json"),
     _case("describe", ANIMAL, "--no-colour", label="describe"),
     _case("diff", ANIMAL, SIMPLE, expect_exit=1, label="diff"),
+    _case("diff", DIFF_V1, DIFF_V2, expect_exit=1, label="diff-blank-nodes"),
+    _case("diff", DIFF_V1, DIFF_V2, "-f", "json", expect_exit=1, label="diff-blank-nodes-json"),
     _case(
         "merge",
         str(MERGE / "merge_core.ttl"),
@@ -92,6 +99,14 @@ CASES = [
         "-o",
         f"{OUT}/merged.ttl",
         label="merge",
+    ),
+    _case(
+        "merge",
+        str(MERGE_BLANK_NODES / "core.ttl"),
+        str(MERGE_BLANK_NODES / "module.ttl"),
+        "-o",
+        f"{OUT}/merged.ttl",
+        label="merge-blank-nodes",
     ),
     _case(
         "lint", str(EXAMPLES / "lint" / "example_lint_problematic.ttl"), expect_exit=1, label="lint"
@@ -108,6 +123,16 @@ CASES = [
         label="refactor-rename",
     ),
     _case("localise", "merge", ANIMAL, TRANSLATIONS, "-o", f"{OUT}/l.ttl", label="localise-merge"),
+    _case(
+        "order",
+        str(PROVENANCE / "derived.ttl"),
+        str(PROVENANCE / "derived.yml"),
+        "-p",
+        "classes_ignore",
+        "-o",
+        OUT,
+        label="order-filtering",
+    ),
     # Failing today, each against its issue.
     _case("cast", ANIMAL, "-f", "nt", xfail="#190", label="cast-nt"),
     _case(

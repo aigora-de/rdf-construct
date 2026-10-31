@@ -10,7 +10,7 @@ from typing import Any
 
 import yaml
 
-from rdf_construct.lint.engine import LintConfig
+from rdf_construct.lint.engine import LintConfig, check_rule_ids
 from rdf_construct.lint.rules import Severity, list_rules
 
 
@@ -77,7 +77,6 @@ def _parse_config(data: dict[str, Any], source: Path) -> LintConfig:
         ValueError: If configuration is invalid.
     """
     config = LintConfig()
-    known_rules = set(list_rules())
 
     # Parse level
     if "level" in data:
@@ -95,13 +94,8 @@ def _parse_config(data: dict[str, Any], source: Path) -> LintConfig:
         if not isinstance(enabled, list):
             raise ValueError(f"'enable' must be a list in {source}")
 
-        for rule_id in enabled:
-            if rule_id not in known_rules:
-                raise ValueError(
-                    f"Unknown rule '{rule_id}' in 'enable' section of {source}. "
-                    f"Available rules: {', '.join(sorted(known_rules))}"
-                )
-            config.enabled_rules.add(rule_id)
+        check_rule_ids(enabled, f"'enable' section of {source}")
+        config.enabled_rules.update(enabled)
 
     # Parse disabled rules
     if "disable" in data:
@@ -109,13 +103,8 @@ def _parse_config(data: dict[str, Any], source: Path) -> LintConfig:
         if not isinstance(disabled, list):
             raise ValueError(f"'disable' must be a list in {source}")
 
-        for rule_id in disabled:
-            if rule_id not in known_rules:
-                raise ValueError(
-                    f"Unknown rule '{rule_id}' in 'disable' section of {source}. "
-                    f"Available rules: {', '.join(sorted(known_rules))}"
-                )
-            config.disabled_rules.add(rule_id)
+        check_rule_ids(disabled, f"'disable' section of {source}")
+        config.disabled_rules.update(disabled)
 
     # Parse severity overrides
     if "severity" in data:
@@ -123,13 +112,9 @@ def _parse_config(data: dict[str, Any], source: Path) -> LintConfig:
         if not isinstance(severities, dict):
             raise ValueError(f"'severity' must be a mapping in {source}")
 
-        for rule_id, sev_str in severities.items():
-            if rule_id not in known_rules:
-                raise ValueError(
-                    f"Unknown rule '{rule_id}' in 'severity' section of {source}. "
-                    f"Available rules: {', '.join(sorted(known_rules))}"
-                )
+        check_rule_ids(severities, f"'severity' section of {source}")
 
+        for rule_id, sev_str in severities.items():
             try:
                 severity = Severity(sev_str)
             except ValueError:

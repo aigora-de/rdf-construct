@@ -101,8 +101,10 @@ class PumlPackage:
     Packages map to RDF namespaces in the generated ontology.
 
     Attributes:
-        name: Display name of the package
-        namespace_uri: The URI to use as the namespace (from 'as' clause)
+        name: Package name, which is also its prefix — the alias from the
+            ``as`` clause if there is one, a prefix derived from the URI for
+            a URI package with no alias, otherwise the quoted or unquoted name
+        namespace_uri: The URI to use as the namespace (the quoted URI)
         stereotype: Package stereotype (if any)
     """
 

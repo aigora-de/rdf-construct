@@ -39,6 +39,12 @@ def format_markdown(diff: GraphDiff, graph: Graph | None = None) -> str:
     lines.append(f"# Ontology Changes: {diff.old_path} → {diff.new_path}")
     lines.append("")
 
+    # Changes that cannot be described come before any verdict, so nothing can hide them (#143)
+    if diff.notes:
+        for note in diff.notes:
+            lines.append(f"> **Note:** {note}")
+            lines.append("")
+
     if diff.is_identical:
         lines.append("No semantic differences found.")
         return "\n".join(lines)
@@ -50,6 +56,11 @@ def format_markdown(diff: GraphDiff, graph: Graph | None = None) -> str:
     lines.append(f"- **{summary['added']}** entities added")
     lines.append(f"- **{summary['removed']}** entities removed")
     lines.append(f"- **{summary['modified']}** entities modified")
+    if summary["structures"]:
+        lines.append(
+            f"- **{len(diff.added_structures)}** blank-node structures added, "
+            f"**{len(diff.removed_structures)}** removed"
+        )
     lines.append("")
 
     # Added entities
@@ -74,14 +85,22 @@ def format_markdown(diff: GraphDiff, graph: Graph | None = None) -> str:
             lines.extend(_format_modified_entity_md(entity, graph))
         lines.append("")
 
-    # Blank node warning
-    if diff.blank_node_warning:
-        lines.append("---")
+    # Blank-node structures that belong to no named entity
+    if diff.added_structures or diff.removed_structures:
+        lines.append("## Blank-node structures")
         lines.append("")
-        lines.append(
-            "*Note: Blank node changes were detected but not fully analysed. "
-            "Consider skolemising blank nodes for detailed comparison.*"
-        )
+        if diff.added_structures:
+            lines.append("**Added:**")
+            lines.append("")
+            for text in diff.added_structures:
+                lines.append(f"- `{text}`")
+            lines.append("")
+        if diff.removed_structures:
+            lines.append("**Removed:**")
+            lines.append("")
+            for text in diff.removed_structures:
+                lines.append(f"- ~~`{text}`~~")
+            lines.append("")
 
     return "\n".join(lines)
 
@@ -141,23 +160,31 @@ def _format_modified_entity_md(entity: EntityChange, graph: Graph | None = None)
     lines.append("")
 
     # Additions
-    if entity.added_triples:
+    if entity.added_triples or entity.added_structures:
         lines.append("**Added:**")
         lines.append("")
         for change in entity.added_triples:
             pred_str = _format_uri(change.predicate, graph)
-            obj_str = _format_object(change.object, graph)
+            obj_str = (
+                f"`{change.turtle}`" if change.turtle else _format_object(change.object, graph)
+            )
             lines.append(f"- `{pred_str}` → {obj_str}")
+        for text in entity.added_structures:
+            lines.append(f"- `{text}`")
         lines.append("")
 
     # Removals
-    if entity.removed_triples:
+    if entity.removed_triples or entity.removed_structures:
         lines.append("**Removed:**")
         lines.append("")
         for change in entity.removed_triples:
             pred_str = _format_uri(change.predicate, graph)
-            obj_str = _format_object(change.object, graph)
+            obj_str = (
+                f"`{change.turtle}`" if change.turtle else _format_object(change.object, graph)
+            )
             lines.append(f"- ~~`{pred_str}` → {obj_str}~~")
+        for text in entity.removed_structures:
+            lines.append(f"- ~~`{text}`~~")
         lines.append("")
 
     return lines

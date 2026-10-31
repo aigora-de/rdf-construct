@@ -1,0 +1,14 @@
+# Two modules with one output: file, and a third that leaves the output directory (#413).
+# The smoke row overrides output_dir with -o @tmp/split.
+split:
+  output_dir: never-used/
+  modules:
+    - name: organisation
+      output: same.ttl
+      namespaces: ["http://example.org/ontology/org#"]
+    - name: building
+      output: same.ttl
+      namespaces: ["http://example.org/ontology/building#"]
+    - name: core
+      output: ../escaped.ttl
+      namespaces: ["http://example.org/ontology#"]

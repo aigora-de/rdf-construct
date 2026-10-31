@@ -15,6 +15,9 @@ from typing import Any
 import yaml
 from rdflib import URIRef
 
+from rdf_construct.core.predicate_tiers import PredicateTier, build_tiers
+from rdf_construct.core.utils import CurieError, resolve_curie
+
 
 class ConflictStrategy(Enum):
     """Strategy for resolving conflicting values."""
@@ -91,11 +94,14 @@ class ConflictConfig:
         strategy: How to resolve conflicts.
         report_path: Optional path to write conflict report.
         ignore_predicates: Predicates to ignore in conflict detection.
+        predicate_tiers: Tier name (repeatable, per_language, load_bearing) to the predicates
+            placed in it, over the defaults in `rdf_construct.core.predicate_tiers`.
     """
 
     strategy: ConflictStrategy = ConflictStrategy.PRIORITY
     report_path: Path | None = None
     ignore_predicates: set[str] = field(default_factory=set)
+    predicate_tiers: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass
@@ -262,10 +268,12 @@ class MergeConfig:
         # Parse conflicts
         conf_data = data.get("conflicts", {})
         strategy_str = conf_data.get("strategy", "priority").upper()
+        ignore_predicates, predicate_tiers = _parse_predicate_tiers(conf_data)
         conflicts = ConflictConfig(
             strategy=ConflictStrategy[strategy_str],
             report_path=Path(conf_data["report"]) if conf_data.get("report") else None,
-            ignore_predicates=set(conf_data.get("ignore_predicates", [])),
+            ignore_predicates=ignore_predicates,
+            predicate_tiers=predicate_tiers,
         )
 
         # Parse imports strategy
@@ -293,6 +301,60 @@ class MergeConfig:
             migrate_data=migrate_data,
             dry_run=data.get("dry_run", False),
         )
+
+
+def _predicate_iri(text: Any, key: str) -> str:
+    """Resolve one predicate in the conflicts config to an IRI.
+
+    Only IRIs are accepted for now: `merge` does not yet parse its sources with the project's
+    binding rule (#357), so there is no prefix table a CURIE could honestly be resolved against.
+    """
+    try:
+        return str(resolve_curie({}, str(text)))
+    except CurieError as e:
+        raise ValueError(
+            f"conflicts.{key}: {text!r} is not an IRI. Give the full IRI, as "
+            f"'http://www.w3.org/2000/01/rdf-schema#label' or "
+            f"'<http://www.w3.org/2000/01/rdf-schema#label>'; prefixed names are not "
+            f"resolved here yet"
+        ) from e
+
+
+def _parse_predicate_tiers(conf_data: dict[str, Any]) -> tuple[set[str], dict[str, list[str]]]:
+    """Read and check `ignore_predicates` and `predicate_tiers` from the conflicts section.
+
+    Raises:
+        ValueError: If a tier name is unknown, a predicate is not an IRI, or one predicate is
+            placed in two tiers.
+    """
+    ignore = {
+        _predicate_iri(p, "ignore_predicates") for p in conf_data.get("ignore_predicates") or []
+    }
+
+    raw = conf_data.get("predicate_tiers") or {}
+    if not isinstance(raw, dict):
+        raise ValueError("conflicts.predicate_tiers must map tier names to lists of predicates")
+    names = [t.value for t in PredicateTier]
+    tiers: dict[str, list[str]] = {}
+    for name, predicates in raw.items():
+        if name not in names:
+            raise ValueError(
+                f"conflicts.predicate_tiers: unknown tier {name!r}. Tiers: {', '.join(names)}"
+            )
+        if not isinstance(predicates, list):
+            raise ValueError(f"conflicts.predicate_tiers.{name} must be a list of predicates")
+        tiers[name] = [_predicate_iri(p, f"predicate_tiers.{name}") for p in predicates]
+
+    overrides: dict[PredicateTier, list[URIRef]] = {
+        PredicateTier.REPEATABLE: [URIRef(p) for p in sorted(ignore)]
+    }
+    for name, predicates in tiers.items():
+        overrides.setdefault(PredicateTier(name), []).extend(URIRef(p) for p in predicates)
+    try:
+        build_tiers(overrides)
+    except ValueError as e:
+        raise ValueError(f"conflicts: {e}; ignore_predicates counts as repeatable") from e
+    return ignore, tiers
 
 
 def load_merge_config(path: Path) -> MergeConfig:
@@ -338,6 +400,11 @@ namespaces:
 conflicts:
   strategy: priority  # priority, first, last, or mark_all
   # report: conflicts.md  # Optional conflict report
+  # Move a predicate into a tier, by full IRI. Unlisted predicates are repeatable.
+  # predicate_tiers:
+  #   repeatable: ["http://www.w3.org/2000/01/rdf-schema#label"]
+  #   per_language: ["http://purl.org/dc/terms/title"]
+  #   load_bearing: ["http://example.org/maxOccupancy"]
 
 # owl:imports handling
 imports: preserve  # preserve, remove, update, or merge

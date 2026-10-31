@@ -65,11 +65,11 @@ from rdf_construct.merge.conflicts import (
     Conflict,
     ConflictType,
     ConflictValue,
+    ConflictSource,
     ConflictDetector,
     SourceGraph,
     generate_conflict_marker,
     generate_conflict_end_marker,
-    filter_semantic_conflicts,
 )
 
 from rdf_construct.merge.merger import (
@@ -106,7 +106,9 @@ from rdf_construct.merge.splitter import (
     ModuleDefinition,
     UnmatchedStrategy,
     SplitDataConfig,
+    SplitOutputError,
     ModuleStats,
+    check_split_outputs,
     split_by_namespace,
     create_default_split_config,
 )
@@ -128,11 +130,11 @@ __all__ = [
     "Conflict",
     "ConflictType",
     "ConflictValue",
+    "ConflictSource",
     "ConflictDetector",
     "SourceGraph",
     "generate_conflict_marker",
     "generate_conflict_end_marker",
-    "filter_semantic_conflicts",
     # Merger
     "OntologyMerger",
     "MergeResult",
@@ -159,6 +161,8 @@ __all__ = [
     "ModuleDefinition",
     "UnmatchedStrategy",
     "SplitDataConfig",
+    "SplitOutputError",
+    "check_split_outputs",
     "ModuleStats",
     "split_by_namespace",
     "create_default_split_config",

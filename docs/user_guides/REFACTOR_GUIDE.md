@@ -39,14 +39,15 @@ rdf-construct refactor rename ontology.ttl \
 
 | Option | Description |
 |--------|-------------|
-| `--from URI` | Single URI to rename |
-| `--to URI` | New URI for single rename |
-| `--from-namespace NS` | Old namespace prefix for bulk rename |
-| `--to-namespace NS` | New namespace prefix for bulk rename |
+| `--from URI` | Single URI or CURIE to rename |
+| `--to URI` | New URI or CURIE for single rename |
+| `--from-namespace NS` | Old namespace for bulk rename, matched at a namespace boundary (below) |
+| `--to-namespace NS` | New namespace for bulk rename |
 | `-c, --config FILE` | YAML configuration file |
 | `-o, --output PATH` | Output file or directory |
 | `--migrate-data FILE` | Data files to migrate (repeatable) |
 | `--data-output PATH` | Output path for migrated data |
+| `--in-place` | Allow `-o` or `--data-output` to name an input, and rewrite it with its own result |
 | `--dry-run` | Preview changes without writing |
 | `--init` | Generate template configuration |
 
@@ -54,7 +55,87 @@ rdf-construct refactor rename ontology.ttl \
 
 1. **Subject, predicate, and object positions** are all renamed
 2. **Literals are NOT modified** - text mentioning old URIs in comments is preserved
-3. **Namespace bindings** are updated to reflect new namespaces
+3. **Namespace bindings** are updated to reflect new namespaces, and the source's own prefixes
+   are written back as declared (`org:` stays `org:`)
+
+### Where Output Goes
+
+`-o` names the output file for one source, or a directory for several, where each result keeps
+its source's file name. `--data-output` works the same way for the data files given to
+`--migrate-data`; without it, each migrated file is written beside its data file as
+`migrated_<name>`. A config file's `output:` names one file and `output_dir:` a directory; `-o`
+overrides both. Without `-o` or a config `output:`, a single source is renamed and nothing is
+written.
+
+Every output path is worked out, and every source and data file read, before anything is written.
+The run is refused at exit 2, with nothing written, when:
+
+- two outputs would be the same file: two sources, or two data files, with the same name written
+  into one directory (names that differ only in case count as the same), or a data output equal to
+  an ontology output;
+- an output would replace an input, unless `--in-place` is given and the input is the file the
+  output is made from;
+- a config's `output:` names one file for several sources;
+- a data file cannot be parsed.
+
+Paths are compared as files, so a symbolic link or a `..` reaches the same file it points at:
+
+```bash
+rdf-construct refactor rename examples/refactor/typos.ttl \
+    --from ex:Buiding --to ex:Building -o examples/refactor/typos.ttl
+```
+
+```
+Error: Nothing was written:
+  examples/refactor/typos.ttl is the input it is made from: writing it would replace that file. Pass --in-place to rewrite it, or choose another path.
+```
+
+With `--in-place`, each source named by `-o` (directly, or as the directory it is in) is rewritten
+with its own rename, and the data file named by `--data-output` with its own migration. Each one
+replaced is reported on stderr as `⚠ Replaced <path>`. An output that would replace a *different*
+input, such as `--data-output` naming the ontology, is refused even with `--in-place`.
+
+### CURIEs and Namespace Boundaries
+
+`--from`, `--to`, `--entity`, `--replaced-by` and the entity keys and values in a configuration
+file all accept a CURIE. A CURIE resolves against the prefixes the source file declares, plus
+`rdf`, `rdfs`, `owl`, `xsd` and `xml`. It never uses rdflib's built-in prefix table, so a file
+that declares its own `org:` gets its own `org:`, not the W3C Organization ontology.
+
+A prefix is refused at exit 2, before anything is written, when:
+
+- no source declares it (`ex:Building` in a file without `@prefix ex:`), or
+- two sources declare it with different namespaces.
+
+To give an IRI without `://`, such as a URN, write it in angle brackets: `<urn:isbn:0451450523>`.
+A bare `urn:isbn:0451450523` reads as a CURIE whose `urn:` prefix is missing.
+
+`--from-namespace` matches at a namespace boundary:
+
+| `--from-namespace` | `…/ont#One` | `…/ont/extra#Three` | `…/ont` (the IRI itself) | `…/ontology#Two` |
+|---|---|---|---|---|
+| `http://example.org/ont` | moved | moved | moved | kept |
+| `http://example.org/ont#` | moved | kept | kept | kept |
+| `http://example.org/` | moved | moved | moved | moved |
+
+A namespace that ends in anything but a letter or a digit matches everything that starts with it:
+`#`, `/` and `:`, and also a stem such as OBO's `http://purl.obolibrary.org/obo/GO_`, which moves
+`GO_0008150`, or `http://example.org/items?id=`. One that ends in a letter or a digit matches
+only where the next character is `#`, `/` or `:`, or where the IRI ends. So URN-style namespaces
+work either way: `urn:old:` and `urn:old` both move `urn:old:A`, and neither moves `urn:older:C`.
+
+An IRI's authority (its host, port and user information) is never divided. `http://example.org`
+moves `http://example.org/ont#Y` but not `http://example.org:8080/a#X`, which is another server;
+to move that one, name its port: `http://example.org:8080`.
+
+When a config's `namespaces` overlap, each IRI moves by the **longest** rule that contains it,
+whatever order the rules are written in, and moves once: an IRI is never moved again by a rule
+its new IRI falls within. A prefix binding moves by the same rule as the terms in it. The run
+names each pair of rules where one lies within the other:
+
+```text
+Note: http://e.org/core/sub/ lies within http://e.org/core/; each IRI moves by the longest rule that contains it.
+```
 
 ### With Data Migration
 
@@ -68,6 +149,15 @@ rdf-construct refactor rename ontology.ttl \
     --data-output updated-instances.ttl \
     -o fixed.ttl
 ```
+
+The data's rename map is built from the sources as they were read, so a rename written back over
+its own source (`-o ontology.ttl --in-place`) migrates the same data as one written elsewhere.
+Each renamed IRI moves wherever the data uses it: as a subject, as an object, or as a predicate.
+Renaming a property therefore moves every triple that uses it, and a namespace rename moves the
+data's properties in that namespace as well as its classes. The line printed for each data file
+counts every substitution. The shipped `examples/refactor/renames.yml` fixes four typos, one of them
+the property `ex:hasAddres`, and migrating `examples/refactor/instances.ttl` with it reports
+`Migrated instances.ttl: 7 changes`, two of them the `ex:hasAddres` triples.
 
 ### Configuration File
 
@@ -303,5 +393,5 @@ rdf-construct refactor deprecate ontology.ttl \
 
 ## See Also
 
-- [MERGE_GUIDE.md](MERGE_GUIDE.md) - Merging multiple ontology files
+- [MERGE_SPLIT_GUIDE.md](MERGE_SPLIT_GUIDE.md) - Merging multiple ontology files
 - [CLI_REFERENCE.md](CLI_REFERENCE.md) - Complete CLI documentation

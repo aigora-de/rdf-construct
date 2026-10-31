@@ -119,7 +119,7 @@ class PumlToRdfConverter:
             config: Conversion configuration options
         """
         self.config = config or ConversionConfig()
-        self._graph: Graph = Graph()
+        self._graph: Graph = Graph(bind_namespaces="core")
         self._namespaces: dict[str, Namespace] = {}
         self._class_uris: dict[str, URIRef] = {}
         self._property_uris: dict[str, URIRef] = {}
@@ -127,7 +127,7 @@ class PumlToRdfConverter:
 
     def convert(self, model: PumlModel) -> ConversionResult:
         """Convert a PlantUML model to an RDF graph."""
-        self._graph = Graph()
+        self._graph = Graph(bind_namespaces="core")
         self._namespaces = {}
         self._class_uris = {}
         self._property_uris = {}
@@ -173,7 +173,8 @@ class PumlToRdfConverter:
         for pkg in packages:
             if pkg.namespace_uri:
                 ns_uri = pkg.namespace_uri
-                if not ns_uri.endswith(("#", "/")):
+                # A URN namespace such as urn:example:building: already ends in its delimiter
+                if not ns_uri.endswith(("#", "/", ":")):
                     ns_uri += "#"
                 ns = Namespace(ns_uri)
                 self._namespaces[pkg.name] = ns
@@ -187,28 +188,6 @@ class PumlToRdfConverter:
             ns = Namespace(ns_uri)
             self._namespaces[prefix] = ns
             self._graph.bind(prefix, ns)
-
-    def _generate_prefix(self, name: str) -> str:
-        """Generate a namespace prefix from a package name.
-
-        Args:
-            name: Package name (may be a URI or display name)
-
-        Returns:
-            Short lowercase prefix string
-        """
-        # If it looks like a URI, extract the last segment
-        if "://" in name or name.startswith("http"):
-            # Extract meaningful part from URI
-            name = name.rstrip("#/")
-            if "/" in name:
-                name = name.rsplit("/", 1)[-1]
-            if "#" in name:
-                name = name.rsplit("#", 1)[-1]
-
-        # Clean and shorten
-        prefix = re.sub(r"[^a-zA-Z0-9]", "", name).lower()
-        return prefix[:10] if len(prefix) > 10 else prefix or "ns"
 
     def _create_ontology_header(self, model: PumlModel) -> None:
         """Create the owl:Ontology declaration."""
