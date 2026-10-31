@@ -2,7 +2,6 @@
 defaults:
   tie_breaker: qname_alpha
   comment_blocks: true         # allow emitting # section dividers
-  preserve_prefix_order: true  # enforce a declared prefix sequence
   bnode_strategy: skolem       # or "stable"
   unclaimed: warn              # subjects no section claims: warn | emit | ignore.
                                # Override per profile — set "ignore" on one that

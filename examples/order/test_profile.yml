@@ -7,7 +7,6 @@
 
 defaults:
   tie_breaker: qname_alpha
-  preserve_prefix_order: true
 
 prefix_order:
   - owl

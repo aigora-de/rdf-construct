@@ -227,6 +227,18 @@ change, and what to do about it, is listed command by command in the
   IRI, as an IRI or a CURIE of the source's prefixes.
 
 ### Changed
+- **`order` honours `prefix_order`** (#238). The serialiser sorted every
+  prefix alphabetically, undoing the order `prefix_order` had asked for, so the
+  key and `defaults.preserve_prefix_order` both did nothing. The prefixes
+  `prefix_order` lists are now declared first, in its order, then the rest
+  alphabetically; a listed prefix the output does not use is skipped, and one
+  listed twice keeps its first place. `preserve_prefix_order` is removed (a
+  configuration that still sets it is not refused). `serialise_turtle` and
+  `serialise_turtle_str` take a `prefix_order` argument; without it, prefixes
+  are still written alphabetically.
+- **The empty prefix is declared** (#455). A source's `@prefix : <…>` was left
+  out of the output while its terms were still written as `:A`, so the file
+  could not be read back.
 - **`order` keeps the source's own prefixes** (#239). It parsed into a bare
   `Graph()`, whose default bindings pushed a source's `org:`, `dc:`, `foaf:`,
   `skos:`, `prov:` and the like to `org1:` and so on: the graph was the same,

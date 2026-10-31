@@ -26,7 +26,6 @@ from rdf_construct.core import (
     bnode_closure,
     build_section_graph,
     extract_prefix_map,
-    rebind_prefixes,
     BUILTIN_SELECTOR_KEYS,
     UnknownSelectorError,
     UnknownSortModeError,
@@ -850,7 +849,6 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
     # also what `roots:` and `predicate_order` CURIEs resolve against.
     graph = Graph(bind_namespaces="core")
     graph.parse(source.as_posix(), format="turtle")
-    prefix_map = extract_prefix_map(graph)
 
     # Generate each profile
     for prof_name in profiles_to_gen:
@@ -960,18 +958,15 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
                 seen.add(WAS_DERIVED_FROM)
             _report_stamps(graph, out_graph, stamps, header_policies[prof_name])
 
-        # Rebind prefixes if configured
-        if ordering_config.defaults.get("preserve_prefix_order", True):
-            if ordering_config.prefix_order:
-                rebind_prefixes(out_graph, ordering_config.prefix_order, prefix_map)
-
         # Get predicate ordering for this profile
         predicate_order = ordering_config.get_predicate_order(prof_name)
 
-        # Serialise with predicate ordering
+        # Serialise with predicate ordering, declaring prefix_order's prefixes first (#238)
         out_file = outdir / f"{source.stem}-{prof_name}.ttl"
         mark_output_dir(outdir, "order")
-        serialise_turtle(out_graph, ordered_subjects, out_file, predicate_order)
+        serialise_turtle(
+            out_graph, ordered_subjects, out_file, predicate_order, ordering_config.prefix_order
+        )
         click.secho(f"  \u2713 {out_file}", fg="green")
 
     click.secho(f"\nConstructed {len(profiles_to_gen)} profile(s) in {outdir}/", fg="cyan")

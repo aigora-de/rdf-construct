@@ -6,6 +6,11 @@ source declaring its own ``org:``, ``dc:``, ``foaf:`` or ``skos:`` came back as
 ``org1:`` and so on: the graph was isomorphic, but every CURIE a reader sees had
 changed. The source is now parsed with ``bind_namespaces="core"``: its own
 prefixes plus rdf, rdfs, owl, xsd and xml.
+
+``prefix_order`` had no effect (issue #238): the serialiser sorted the
+prefixes alphabetically after ``rebind_prefixes`` had set up the declared
+sequence. It is now the serialiser's own ``prefix_order`` argument. And the
+empty prefix was never declared, so ``:A`` came out unreadable (issue #455).
 """
 
 import re
@@ -17,6 +22,7 @@ from rdflib import Graph
 from rdflib.compare import isomorphic
 
 from rdf_construct.cli import cli
+from rdf_construct.core import build_section_graph, serialise_turtle_str
 
 EXAMPLES = Path(__file__).parent.parent / "examples"
 
@@ -243,3 +249,107 @@ def test_a_roots_curie_resolves_against_the_source_prefix(tmp_path: Path):
     # The root's branch first, then the rest. Unresolved, the root would be skipped and
     # `org:Alpha` would lead.
     assert classes == ["org:Zone", "org:Bee", "org:Alpha"]
+
+
+#: Six prefixes, every one used, so the declared order is the whole story.
+SIX = """\
+@prefix zz: <http://example.org/zz#> .
+@prefix ex: <http://example.org/ex#> .
+@prefix aa: <http://example.org/aa#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+ex:A a owl:Class ; rdfs:seeAlso zz:x , aa:y .
+"""
+
+
+def _prefix_lines(text: str) -> list[str]:
+    return [line.split()[1] for line in text.splitlines() if line.startswith("@prefix ")]
+
+
+def _with_prefix_order(listed: str) -> str:
+    return f"prefix_order: {listed}\n" + CONFIG
+
+
+def test_prefix_order_puts_the_listed_prefixes_first(tmp_path: Path):
+    """Declared in non-alphabetical order, so alphabetical output cannot pass."""
+    result, out = _run(tmp_path, SIX, _with_prefix_order("[zz, owl, ex]"))
+    assert result.exit_code == 0, result.output
+    assert _prefix_lines(_written(out)) == ["zz:", "owl:", "ex:", "aa:", "rdf:", "rdfs:"]
+
+
+def test_without_prefix_order_prefixes_are_alphabetical(tmp_path: Path):
+    result, out = _run(tmp_path, SIX)
+    assert result.exit_code == 0, result.output
+    assert _prefix_lines(_written(out)) == ["aa:", "ex:", "owl:", "rdf:", "rdfs:", "zz:"]
+
+
+@pytest.mark.parametrize(
+    "listed",
+    ["[zz, skos, owl, ex]", "[zz, ghost, owl, ex]", "[zz, owl, zz, ex, owl]"],
+    ids=["declared-elsewhere-unused", "never-declared", "listed-twice"],
+)
+def test_prefix_order_edge_cases_are_silent(tmp_path: Path, listed: str):
+    """An unused or undeclared listed prefix is skipped; a repeated one keeps its first place."""
+    result, out = _run(tmp_path, SIX, _with_prefix_order(listed))
+    assert result.exit_code == 0, result.output
+    assert "skos" not in result.output and "ghost" not in result.output
+    text = _written(out)
+    assert _prefix_lines(text) == ["zz:", "owl:", "ex:", "aa:", "rdf:", "rdfs:"]
+    _assert_same_graph(SIX, text)
+
+
+def test_preserve_prefix_order_is_ignored(tmp_path: Path):
+    """Removed, not refused: every copied config carries it, and it never did anything."""
+    config = "defaults:\n  preserve_prefix_order: false\n" + _with_prefix_order("[zz, owl, ex]")
+    result, out = _run(tmp_path, SIX, config)
+    assert result.exit_code == 0, result.output
+    assert _prefix_lines(_written(out)) == ["zz:", "owl:", "ex:", "aa:", "rdf:", "rdfs:"]
+
+
+def test_prefix_order_applies_to_the_stamp_prefix(tmp_path: Path):
+    result, out = _run(tmp_path, STAMPED, _with_prefix_order("[prov, ex]"))
+    assert result.exit_code == 0, result.output
+    assert _prefix_lines(_written(out, "classes"))[:2] == ["prov:", "ex:"]
+
+
+def test_the_empty_prefix_is_declared(tmp_path: Path):
+    ontology = (
+        "@prefix : <http://example.org/ex#> .\n"
+        "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n"
+        ":B a owl:Class .\n"
+        ":A a owl:Class ; owl:equivalentClass :B .\n"
+    )
+    result, out = _run(tmp_path, ontology, _with_prefix_order("[owl, '']"))
+    assert result.exit_code == 0, result.output
+    text = _written(out)
+    assert _prefixes(text)[""] == "http://example.org/ex#"
+    assert _prefix_lines(text)[:2] == ["owl:", ":"]
+    _assert_same_graph(ontology, text)
+
+
+SERIALISER_FIXTURES = sorted(
+    path
+    for path in [
+        *(Path(__file__).parent / "fixtures").rglob("*.ttl"),
+        *EXAMPLES.rglob("*.ttl"),
+    ]
+    if "ies" not in path.parts  # large; the order runs above cover IES
+)
+
+
+@pytest.mark.parametrize("path", SERIALISER_FIXTURES, ids=lambda p: p.name)
+def test_no_prefix_order_is_the_alphabetical_order(path: Path):
+    """``prefix_order=None``, an empty list, and every bound prefix listed alphabetically all
+    write the same bytes: the argument changes the order only when it asks for another one."""
+    graph = Graph(bind_namespaces="core")
+    try:
+        graph.parse(path, format="turtle")
+    except Exception:
+        pytest.skip("not a Turtle fixture this serialiser is meant to read")
+    subjects = sorted({s for s, _, _ in graph}, key=str)
+    section = build_section_graph(graph, subjects)
+    default = serialise_turtle_str(section, subjects)
+    alphabetical = sorted(p for p, _ in section.namespace_manager.namespaces())
+    assert serialise_turtle_str(section, subjects, prefix_order=None) == default
+    assert serialise_turtle_str(section, subjects, prefix_order=[]) == default
+    assert serialise_turtle_str(section, subjects, prefix_order=alphabetical) == default
