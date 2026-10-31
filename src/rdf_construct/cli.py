@@ -29,10 +29,13 @@ from rdf_construct.core import (
     rebind_prefixes,
     BUILTIN_SELECTOR_KEYS,
     UnknownSelectorError,
+    UnknownSortModeError,
     is_known_selector,
+    normalise_sort_mode,
     select_subjects,
     serialise_turtle,
     sort_subjects,
+    unknown_selector_error,
     expand_curie,
     CurieError,
     missing_triples,
@@ -721,6 +724,44 @@ def _report_stamps(graph: Graph, out_graph: Graph, stamps: list[Stamp], header_k
                 click.secho(f"          {line}", fg="cyan")
 
 
+def _check_order_sections(ordering_config: OrderingConfig, profile_names: list[str]) -> list[str]:
+    """Find every section whose ``select:`` or ``sort:`` cannot be honoured.
+
+    Both depend on the config alone, so ``order`` checks them for every requested profile
+    before it parses the source or writes anything: a refusal found while generating the
+    second profile would leave the first one's file behind (#242). Sections are walked as
+    ``order`` walks them, and a missing ``sort:`` key means the default, ``qname_alpha``;
+    an explicit empty value does not.
+
+    Args:
+        ordering_config: The loaded ordering configuration
+        profile_names: The profiles about to be generated
+
+    Returns:
+        One line per problem, naming the profile and section; empty if there are none
+    """
+    problems: list[str] = []
+    for prof_name in profile_names:
+        for sec in ordering_config.get_profile(prof_name).sections:
+            if not isinstance(sec, dict) or not sec:
+                continue
+            sec_name, sec_cfg = next(iter(sec.items()))
+            if sec_name == "header":
+                continue
+            cfg: dict[str, Any] = sec_cfg or {}
+            where = f"profile '{prof_name}', section '{sec_name}'"
+            select_key: Any = cfg.get("select", sec_name)  # a YAML value, not yet checked
+            if not is_known_selector(select_key, ordering_config.selectors):
+                problems.append(
+                    f"{where}: {unknown_selector_error(select_key, ordering_config.selectors)}"
+                )
+            try:
+                normalise_sort_mode(cfg.get("sort", "qname_alpha"))
+            except UnknownSortModeError as exc:
+                problems.append(f"{where}: {exc}")
+    return problems
+
+
 @cli.command()
 @click.argument("source", type=click.Path(exists=True, path_type=Path))
 @click.argument("config", type=click.Path(exists=True, path_type=Path))
@@ -791,6 +832,11 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
         }
     except ValueError as exc:
         raise Refusal(str(exc)) from exc
+
+    # Every requested section's select: and sort: too, for the same reason (#242).
+    problems = _check_order_sections(ordering_config, profiles_to_gen)
+    if problems:
+        raise Refusal("Nothing was written:\n  " + "\n  ".join(problems))
 
     check_default_output_dir(outdir, "outdir", "order", overwrite=overwrite)
 

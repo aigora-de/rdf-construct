@@ -55,6 +55,7 @@ TRANSLATIONS = str(SMOKE / "translations_de.yml")
 GB_ONLY = str(REPO / "tests" / "fixtures" / "ies" / "ies-env-building-classification.ttl")
 MALFORMED_TTL = str(SMOKE / "malformed.ttl")
 MALFORMED_YAML = str(SMOKE / "malformed.yml")
+ORDER_BAD_SORT = str(SMOKE / "order_bad_sort.yml")
 
 # The exit-code convention decided on #286.
 STATE_CODE = {"clean": 0, "findings": 1, "refused": 2}
@@ -253,6 +254,10 @@ THREE_STATES = [
     _row(Row("cast", "refused", ("cast", ANIMAL, "-f", "nope"))),
     _row(Row("order", "clean", ("order", LIBRARY, ORDERING, "-o", "@tmp/order"))),
     _row(Row("order", "refused", ("order", LIBRARY, ORDERING, "-p", "nope", "-o", "@tmp/order"))),
+    _row(
+        Row("order", "refused", ("order", LIBRARY, ORDER_BAD_SORT, "-o", "@tmp/order")),
+        label="sort-mode",
+    ),
     _row(Row("profiles", "clean", ("profiles", ORDERING))),
     _row(Row("profiles", "refused", ("profiles", "@tmp/missing.yml"))),
     _row(Row("uml", "clean", ("uml", ANIMAL, "-C", UML_CONTEXTS, "-o", "@tmp/uml"))),

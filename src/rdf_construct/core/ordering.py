@@ -8,6 +8,43 @@ from rdflib.namespace import OWL
 
 from .utils import expand_curie, qname_sort_key
 
+#: Every ``sort:`` mode a profile section may name, in the order they are
+#: documented. ``qname_alpha`` is the same as ``alpha``, and
+#: ``topological_then_alpha`` the same as ``topological``: ties in a
+#: topological sort are already broken alphabetically. Matched ignoring case.
+SORT_MODES: tuple[str, ...] = ("alpha", "qname_alpha", "topological", "topological_then_alpha")
+
+_TOPOLOGICAL_MODES: tuple[str, ...] = ("topological", "topological_then_alpha")
+
+
+class UnknownSortModeError(ValueError):
+    """A sort mode that is not one of :data:`SORT_MODES`.
+
+    Raised rather than falling back to alphabetical order, because
+    alphabetical output looks exactly like a profile that worked: the
+    hierarchy order the profile asked for is silently lost. See issue #242.
+    """
+
+
+def normalise_sort_mode(mode: object) -> str:
+    """Return the canonical spelling of a sort mode, or refuse it.
+
+    Args:
+        mode: The value given for ``sort:``, from a profile or a caller
+
+    Returns:
+        The mode, lower-cased: one of :data:`SORT_MODES`
+
+    Raises:
+        UnknownSortModeError: If the value is not a string, is empty, or is not
+            one of :data:`SORT_MODES` in any case
+    """
+    if isinstance(mode, str) and mode.lower() in SORT_MODES:
+        return mode.lower()
+    raise UnknownSortModeError(
+        f"unknown sort mode {mode!r}. Accepted sort modes: {', '.join(SORT_MODES)}"
+    )
+
 
 def build_adjacency(
     graph: Graph, nodes: set, edge_predicate: URIRef
@@ -156,8 +193,11 @@ def sort_with_roots(graph: Graph, subjects: set, mode: str, roots_cfg: Optional[
 
     Returns:
         List of URIRefs in the specified order
+
+    Raises:
+        UnknownSortModeError: If ``mode`` is not one of :data:`SORT_MODES`
     """
-    mode = (mode or "qname_alpha").lower()
+    mode = normalise_sort_mode(mode)
 
     # Determine appropriate edge predicate based on subject types
     looks_like_props = any(
@@ -167,8 +207,8 @@ def sort_with_roots(graph: Graph, subjects: set, mode: str, roots_cfg: Optional[
     edge = RDFS.subPropertyOf if looks_like_props else RDFS.subClassOf
 
     # Fall back to simple topological if no roots or mode doesn't support them
-    if mode not in ("topological", "topological_then_alpha") or not roots_cfg:
-        if mode in ("topological", "topological_then_alpha"):
+    if mode not in _TOPOLOGICAL_MODES or not roots_cfg:
+        if mode in _TOPOLOGICAL_MODES:
             return topo_sort_subset(graph, subjects, edge)
         return sorted(subjects, key=lambda t: qname_sort_key(graph, t))
 
@@ -218,14 +258,13 @@ def sort_subjects(
 
     Returns:
         List of URIRefs in the specified order
+
+    Raises:
+        UnknownSortModeError: If ``sort_mode`` is not one of :data:`SORT_MODES`
     """
-    mode = (sort_mode or "qname_alpha").lower()
+    mode = normalise_sort_mode(sort_mode)
 
-    if mode in ("alpha", "qname_alpha"):
-        return sorted(subjects, key=lambda t: qname_sort_key(graph, t))
-
-    if mode in ("topological", "topological_then_alpha"):
+    if mode in _TOPOLOGICAL_MODES:
         return sort_with_roots(graph, subjects, mode, roots_cfg)
 
-    # Fallback to alphabetical
     return sorted(subjects, key=lambda t: qname_sort_key(graph, t))

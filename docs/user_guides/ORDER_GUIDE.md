@@ -234,16 +234,19 @@ it is emitted — but it is filed under individuals, which is not what it is. Gi
 ## Sorting
 
 `sort: alpha` (or `qname_alpha`) orders by qualified name. It is the right choice when the file's
-job is to produce small, readable diffs between versions.
+job is to produce small, readable diffs between versions. A section with no `sort:` key is sorted
+this way.
 
-`sort: topological` orders parents before children over `rdfs:subClassOf`, and super-properties
-before sub-properties over `rdfs:subPropertyOf`. Ties are broken alphabetically, so the output is
-deterministic — the same input always produces the same file, in any process.
+`sort: topological` (or `topological_then_alpha`, which is the same) orders parents before children
+over `rdfs:subClassOf`, and super-properties before sub-properties over `rdfs:subPropertyOf`. Ties
+are broken alphabetically, so the output is deterministic — the same input always produces the same
+file, in any process.
 
-> **Check the spelling.** Exactly four values are understood: `alpha`, `qname_alpha`, `topological`
-> and `topological_then_alpha`. Anything else — a typo, or the reasonable-looking `topo` — currently
-> means **alphabetical**, silently, at exit 0 ([#242](https://github.com/aigora-de/rdf-construct/issues/242)).
-> If a profile is not ordering the way you expect, this is the first thing to check.
+Those four values are the whole set, matched regardless of case. Anything else — a typo, the
+reasonable-looking `topo`, a number, or a `sort:` key left empty — is refused at exit 2, naming the
+profile, the section, the value and the four accepted modes. `order` checks every profile it is
+about to write, and every section's `select:` with it, before it reads the source, so a refusal
+leaves nothing behind: not even the files of the profiles that were fine.
 
 Which of the two hierarchy predicates a section uses is decided per section, from the types of the
 subjects it claimed. In practice: class sections walk `rdfs:subClassOf`, property sections walk
@@ -489,7 +492,6 @@ it is still growing three releases from now, that is the signal, not the table.
 
 | Issue | Behaviour today |
 |---|---|
-| [#242](https://github.com/aigora-de/rdf-construct/issues/242) | A `sort:` value the tool does not recognise **silently means alphabetical**. Only `alpha`, `qname_alpha`, `topological` and `topological_then_alpha` are understood — `topo` and a typo both give you alphabetical order at exit 0. If a profile is not ordering as expected, check this spelling first. |
 | [#238](https://github.com/aigora-de/rdf-construct/issues/238) | `prefix_order` does not change the order prefixes are emitted in; output is always alphabetical. `defaults.preserve_prefix_order` has no observable effect either. |
 | [#239](https://github.com/aigora-de/rdf-construct/issues/239) | A source prefix that collides with one rdflib binds by default — `org`, `dc`, `foaf`, `skos`, `time`, `geo`, `prov`, `dcat` and others — is **renamed** in the output, so `@prefix org:` comes back as `@prefix org1:`. The graph is unchanged and isomorphic; the CURIEs in the file are not. `lib:` in these examples is unaffected. |
 | [#241](https://github.com/aigora-de/rdf-construct/issues/241) | A `roots:` entry that does not resolve, or that names a term absent from the ontology, is skipped with no message. Combined with #239 this bites: a `roots:` written with your source's own prefix can resolve somewhere else entirely. |

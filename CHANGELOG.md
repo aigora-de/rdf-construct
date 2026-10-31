@@ -227,6 +227,17 @@ change, and what to do about it, is listed command by command in the
   IRI, as an IRI or a CURIE of the source's prefixes.
 
 ### Changed
+- **`order` refuses a `sort:` mode it does not recognise** (#242). A typo, the
+  natural-looking `topo`, or an empty `sort:` meant alphabetical order, silently,
+  at exit 0, which switched hierarchy ordering off with nothing to show for it;
+  a number, `true` or a list crashed. Each is now refused at exit 2, naming the
+  profile, the section, the value and the four accepted modes (`alpha`,
+  `qname_alpha`, `topological`, `topological_then_alpha`, in any case). A
+  section with no `sort:` key is still alphabetical. Every requested profile's
+  `sort:` and `select:` are checked before the source is read, so an unknown
+  selector in a later profile no longer leaves an earlier profile's file
+  behind. `sort_subjects` and `sort_with_roots` raise `UnknownSortModeError`, a
+  `ValueError`; `SORT_MODES` and `normalise_sort_mode` are new.
 - **An output that names an input, or another output, is refused** (#412).
   `stats`, `describe`, `diff`, `cq-test`, `shacl-gen`, `puml2rdf`,
   `localise report` and `localise merge` refuse an `-o` that names one of the

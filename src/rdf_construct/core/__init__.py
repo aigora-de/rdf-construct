@@ -1,6 +1,13 @@
 """Core RDF ordering and serialization functionality."""
 
-from .ordering import sort_subjects, topo_sort_subset, sort_with_roots
+from .ordering import (
+    SORT_MODES,
+    UnknownSortModeError,
+    normalise_sort_mode,
+    sort_subjects,
+    topo_sort_subset,
+    sort_with_roots,
+)
 from .profile import (
     DEFAULT_UNCLAIMED_POLICY,
     HEADER_SECTION,
@@ -14,6 +21,7 @@ from .selector import (
     UnknownSelectorError,
     is_known_selector,
     select_subjects,
+    unknown_selector_error,
 )
 from .vocab import (
     ALL_PROPERTY_TYPES,
@@ -76,6 +84,9 @@ __all__ = [
     "sort_subjects",
     "topo_sort_subset",
     "sort_with_roots",
+    "normalise_sort_mode",
+    "UnknownSortModeError",
+    "SORT_MODES",
     # Profile
     "OrderingConfig",
     "OrderingProfile",
@@ -87,6 +98,7 @@ __all__ = [
     "select_subjects",
     "is_known_selector",
     "UnknownSelectorError",
+    "unknown_selector_error",
     "BUILTIN_SELECTOR_KEYS",
     # Vocabulary
     "ALL_PROPERTY_TYPES",
