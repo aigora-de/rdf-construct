@@ -1,9 +1,15 @@
 """Core RDF ordering and serialization functionality."""
 
 from .ordering import (
+    HIERARCHY_PREDICATES,
     SORT_MODES,
+    TOPOLOGICAL_MODES,
+    InvalidRootError,
+    ResolvedRoot,
     UnknownSortModeError,
+    check_roots,
     normalise_sort_mode,
+    resolve_roots,
     sort_subjects,
     topo_sort_subset,
     sort_with_roots,
@@ -87,6 +93,12 @@ __all__ = [
     "normalise_sort_mode",
     "UnknownSortModeError",
     "SORT_MODES",
+    "TOPOLOGICAL_MODES",
+    "HIERARCHY_PREDICATES",
+    "InvalidRootError",
+    "ResolvedRoot",
+    "check_roots",
+    "resolve_roots",
     # Profile
     "OrderingConfig",
     "OrderingProfile",

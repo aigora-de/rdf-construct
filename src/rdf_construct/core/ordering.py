@@ -1,12 +1,13 @@
 """Ordering and sorting logic for RDF subjects."""
 
 import heapq
+from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Optional
 
-from rdflib import Graph, URIRef, RDF, RDFS
-from rdflib.namespace import OWL
+from rdflib import Graph, URIRef, RDFS
 
-from .utils import expand_curie, qname_sort_key
+from .utils import CurieError, extract_prefix_map, qname_sort_key, resolve_curie
 
 #: Every ``sort:`` mode a profile section may name, in the order they are
 #: documented. ``qname_alpha`` is the same as ``alpha``, and
@@ -14,7 +15,16 @@ from .utils import expand_curie, qname_sort_key
 #: topological sort are already broken alphabetically. Matched ignoring case.
 SORT_MODES: tuple[str, ...] = ("alpha", "qname_alpha", "topological", "topological_then_alpha")
 
-_TOPOLOGICAL_MODES: tuple[str, ...] = ("topological", "topological_then_alpha")
+#: The modes of :data:`SORT_MODES` that sort by hierarchy, and so take ``roots``.
+TOPOLOGICAL_MODES: tuple[str, ...] = ("topological", "topological_then_alpha")
+
+#: The hierarchy predicates a topological section is sorted over, together. RDFS gives
+#: ``rdfs:subClassOf`` a class at each end and ``rdfs:subPropertyOf`` a property at each end,
+#: so each links only like with like, and a term that is both a class and a property (a pun)
+#: keeps both hierarchies. Choosing one predicate per section by sniffing its members' types
+#: ignored characteristic-only, ``other_props`` and annotation-property hierarchies, and one
+#: punned class sent a whole class section alphabetical (#245).
+HIERARCHY_PREDICATES: tuple[URIRef, ...] = (RDFS.subClassOf, RDFS.subPropertyOf)
 
 
 class UnknownSortModeError(ValueError):
@@ -24,6 +34,96 @@ class UnknownSortModeError(ValueError):
     alphabetical output looks exactly like a profile that worked: the
     hierarchy order the profile asked for is silently lost. See issue #242.
     """
+
+
+class InvalidRootError(ValueError):
+    """A ``roots:`` value that is not a list of CURIEs and IRIs.
+
+    Raised for a value that is not a list (a single string would otherwise be read a
+    character at a time), an entry that is not a string, and an entry that is neither a
+    CURIE nor an IRI, such as ``Animal``. A root whose prefix the source does not declare
+    is not this error: a configuration shared between ontologies meets that legitimately,
+    so it is reported, not refused (#241).
+    """
+
+
+@dataclass(frozen=True)
+class ResolvedRoot:
+    """One ``roots:`` entry, resolved against a graph's prefixes.
+
+    Attributes:
+        text: The entry as written.
+        iri: The IRI it names, or None if its prefix is not declared.
+        error: Why it did not resolve, when ``iri`` is None.
+    """
+
+    text: str
+    iri: URIRef | None
+    error: CurieError | None = None
+
+
+def check_roots(roots: object) -> list[str]:
+    """Find what makes a ``roots:`` value unusable, without a graph.
+
+    Whether an entry is a CURIE or an IRI at all does not depend on the source's prefixes,
+    so this runs before anything is parsed or written. ``None`` and ``[]`` are fine.
+
+    Args:
+        roots: The value given for ``roots:``, from a profile section or a caller
+
+    Returns:
+        One message per problem; empty if there are none
+    """
+    if roots is None:
+        return []
+    if not isinstance(roots, list):
+        return [f"roots: expected a list of CURIEs or IRIs, such as [ex:Animal]; got {roots!r}"]
+    problems: list[str] = []
+    for entry in roots:
+        if not isinstance(entry, str):
+            problems.append(f"root {entry!r} is not a CURIE or an IRI: expected a string")
+            continue
+        try:
+            resolve_curie({}, entry)
+        except CurieError as exc:
+            if exc.prefix is None:
+                problems.append(
+                    f"root {entry!r} is not a CURIE or an IRI; write ex:Term, <http://…> "
+                    "or http://…"
+                )
+    return problems
+
+
+def resolve_roots(graph: Graph, roots: object) -> list[ResolvedRoot]:
+    """Resolve ``roots:`` entries against the prefixes the graph declares.
+
+    Each distinct entry once, in the order given. Resolution is ``resolve_curie``'s:
+    a bracketed or full IRI, or a CURIE whose prefix the graph binds, never rdflib's own
+    prefix table. Whether the IRI is in the graph is the caller's question.
+
+    Args:
+        graph: The graph whose prefixes the CURIEs use
+        roots: The ``roots:`` value
+
+    Returns:
+        One entry per distinct root; an undeclared prefix gives ``iri=None`` and its error
+
+    Raises:
+        InvalidRootError: If :func:`check_roots` finds a problem
+    """
+    problems = check_roots(roots)
+    if problems:
+        raise InvalidRootError("; ".join(problems))
+    if not isinstance(roots, list) or not roots:
+        return []
+    prefixes = extract_prefix_map(graph)
+    resolved: list[ResolvedRoot] = []
+    for text in dict.fromkeys(roots):
+        try:
+            resolved.append(ResolvedRoot(text, resolve_curie(prefixes, text)))
+        except CurieError as exc:
+            resolved.append(ResolvedRoot(text, None, exc))
+    return resolved
 
 
 def normalise_sort_mode(mode: object) -> str:
@@ -46,8 +146,15 @@ def normalise_sort_mode(mode: object) -> str:
     )
 
 
+def _edges(edge_predicate: URIRef | Sequence[URIRef]) -> tuple[URIRef, ...]:
+    """One predicate or several, as a tuple. A ``URIRef`` is a ``str``: never iterate it."""
+    if isinstance(edge_predicate, str):
+        return (URIRef(edge_predicate),)
+    return tuple(edge_predicate)
+
+
 def build_adjacency(
-    graph: Graph, nodes: set, edge_predicate: URIRef
+    graph: Graph, nodes: set, edge_predicate: URIRef | Sequence[URIRef]
 ) -> tuple[dict[URIRef, set[URIRef]], dict[URIRef, int]]:
     """Build adjacency list and indegree map for topological sorting.
 
@@ -58,7 +165,9 @@ def build_adjacency(
         graph: RDF graph containing the relationships
         nodes: Set of nodes to build adjacency for
         edge_predicate: Predicate defining parent-child relationship
-                       (typically rdfs:subClassOf or rdfs:subPropertyOf)
+                       (typically rdfs:subClassOf or rdfs:subPropertyOf), or several,
+                       such as :data:`HIERARCHY_PREDICATES`. A parent linked by more than
+                       one of them is counted once.
 
     Returns:
         Tuple of (adjacency dict, indegree dict) where:
@@ -69,17 +178,21 @@ def build_adjacency(
     indeg: dict[URIRef, int] = {n: 0 for n in nodes}
 
     for n in nodes:
-        for parent in graph.objects(n, edge_predicate):
-            # RDFS entailment (rdfs10, rdfs6) materialises n ⊑ n for every term;
-            # as an edge it would keep n and its subtree out of the sort (#339).
-            if parent in nodes and parent != n:
-                adj[parent].add(n)  # parent before child
-                indeg[n] += 1
+        for predicate in _edges(edge_predicate):
+            for parent in graph.objects(n, predicate):
+                # RDFS entailment (rdfs10, rdfs6) materialises n ⊑ n for every term;
+                # as an edge it would keep n and its subtree out of the sort (#339).
+                # A pun can reach the same parent by both predicates: one edge (#245).
+                if parent in nodes and parent != n:
+                    children = adj[parent]
+                    if n not in children:
+                        children.add(n)  # parent before child
+                        indeg[n] += 1
 
     return adj, indeg
 
 
-def topo_sort_subset(graph: Graph, nodes: set, edge_predicate: URIRef) -> list:
+def topo_sort_subset(graph: Graph, nodes: set, edge_predicate: URIRef | Sequence[URIRef]) -> list:
     """Topologically sort a subset of nodes using Kahn's algorithm.
 
     Sorts nodes so parents appear before children. Uses alphabetical
@@ -89,7 +202,7 @@ def topo_sort_subset(graph: Graph, nodes: set, edge_predicate: URIRef) -> list:
     Args:
         graph: RDF graph containing the relationships
         nodes: Set of nodes to sort
-        edge_predicate: Predicate defining parent-child relationship
+        edge_predicate: Predicate defining parent-child relationship, or several
 
     Returns:
         List of URIRefs in topological order
@@ -138,7 +251,9 @@ def topo_sort_subset(graph: Graph, nodes: set, edge_predicate: URIRef) -> list:
     return out
 
 
-def descendants_of(graph: Graph, root: URIRef, nodes: set, edge_predicate: URIRef) -> set:
+def descendants_of(
+    graph: Graph, root: URIRef, nodes: set[URIRef], edge_predicate: URIRef | Sequence[URIRef]
+) -> set:
     """Find all descendants of a root node within a set of nodes.
 
     Traverses the graph following child edges (subClassOf/subPropertyOf)
@@ -148,7 +263,7 @@ def descendants_of(graph: Graph, root: URIRef, nodes: set, edge_predicate: URIRe
         graph: RDF graph containing the relationships
         root: Root node to start traversal from
         nodes: Set of nodes to consider (search space)
-        edge_predicate: Predicate defining parent-child relationship
+        edge_predicate: Predicate defining parent-child relationship, or several
 
     Returns:
         Set of URIRefs reachable from root (including root itself if in nodes)
@@ -156,9 +271,10 @@ def descendants_of(graph: Graph, root: URIRef, nodes: set, edge_predicate: URIRe
     # Build parent->children map
     children: dict[URIRef, set[URIRef]] = {n: set() for n in nodes}
     for n in nodes:
-        for parent in graph.objects(n, edge_predicate):
-            if parent in nodes:
-                children[parent].add(n)
+        for predicate in _edges(edge_predicate):
+            for parent in graph.objects(n, predicate):
+                if parent in nodes:
+                    children[parent].add(n)
 
     reachable = set()
     stack = [root] if root in nodes else []
@@ -185,6 +301,13 @@ def sort_with_roots(graph: Graph, subjects: set, mode: str, roots_cfg: Optional[
     topologically. This creates a deterministic ordering that respects
     both hierarchy and explicit sequencing preferences.
 
+    The hierarchy is :data:`HIERARCHY_PREDICATES`, ``rdfs:subClassOf`` and
+    ``rdfs:subPropertyOf`` together, whatever the subjects are.
+
+    Roots are resolved by :func:`resolve_roots`. A root whose prefix the graph does not
+    declare, or that names no subject in ``subjects``, anchors nothing and is passed over;
+    :func:`resolve_roots` tells a caller which, so it can say so.
+
     Args:
         graph: RDF graph containing the relationships
         subjects: Set of subjects to sort
@@ -196,28 +319,20 @@ def sort_with_roots(graph: Graph, subjects: set, mode: str, roots_cfg: Optional[
 
     Raises:
         UnknownSortModeError: If ``mode`` is not one of :data:`SORT_MODES`
+        InvalidRootError: If ``roots_cfg`` is not a list of CURIEs and IRIs
     """
     mode = normalise_sort_mode(mode)
+    resolved = resolve_roots(graph, roots_cfg)
 
-    # Determine appropriate edge predicate based on subject types
-    looks_like_props = any(
-        (s, RDF.type, OWL.ObjectProperty) in graph or (s, RDF.type, OWL.DatatypeProperty) in graph
-        for s in subjects
-    )
-    edge = RDFS.subPropertyOf if looks_like_props else RDFS.subClassOf
+    edge = HIERARCHY_PREDICATES
 
     # Fall back to simple topological if no roots or mode doesn't support them
-    if mode not in _TOPOLOGICAL_MODES or not roots_cfg:
-        if mode in _TOPOLOGICAL_MODES:
+    if mode not in TOPOLOGICAL_MODES or not roots_cfg:
+        if mode in TOPOLOGICAL_MODES:
             return topo_sort_subset(graph, subjects, edge)
         return sorted(subjects, key=lambda t: qname_sort_key(graph, t))
 
-    # Expand roots to IRIs
-    root_iris: list[URIRef] = []
-    for r in roots_cfg:
-        iri = expand_curie(graph, r)
-        if iri is not None:
-            root_iris.append(iri)
+    root_iris = [root.iri for root in resolved if root.iri is not None]
 
     remaining: set = set(subjects)
     ordered: list = []
@@ -261,10 +376,14 @@ def sort_subjects(
 
     Raises:
         UnknownSortModeError: If ``sort_mode`` is not one of :data:`SORT_MODES`
+        InvalidRootError: If ``roots_cfg`` is not a list of CURIEs and IRIs
     """
     mode = normalise_sort_mode(sort_mode)
+    problems = check_roots(roots_cfg)
+    if problems:
+        raise InvalidRootError("; ".join(problems))
 
-    if mode in _TOPOLOGICAL_MODES:
+    if mode in TOPOLOGICAL_MODES:
         return sort_with_roots(graph, subjects, mode, roots_cfg)
 
     return sorted(subjects, key=lambda t: qname_sort_key(graph, t))

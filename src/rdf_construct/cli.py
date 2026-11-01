@@ -28,9 +28,12 @@ from rdf_construct.core import (
     extract_prefix_map,
     BUILTIN_SELECTOR_KEYS,
     UnknownSelectorError,
+    TOPOLOGICAL_MODES,
     UnknownSortModeError,
+    check_roots,
     is_known_selector,
     normalise_sort_mode,
+    resolve_roots,
     select_subjects,
     serialise_turtle,
     sort_subjects,
@@ -723,10 +726,85 @@ def _report_stamps(graph: Graph, out_graph: Graph, stamps: list[Stamp], header_k
                 click.secho(f"          {line}", fg="cyan")
 
 
-def _check_order_sections(ordering_config: OrderingConfig, profile_names: list[str]) -> list[str]:
-    """Find every section whose ``select:`` or ``sort:`` cannot be honoured.
+def _warn_roots(
+    graph: Graph,
+    where: str,
+    sort_mode: str,
+    roots: list[str],
+    selected: set[Node],
+    placed_by: dict[Node, str],
+) -> None:
+    """Report the ``roots:`` entries of one section that anchor nothing (#241).
 
-    Both depend on the config alone, so ``order`` checks them for every requested profile
+    A root may legitimately miss: a config shared between ontologies names roots that only
+    some of them have. So each is reported and the run carries on, exit 0. An entry that is
+    not a CURIE or an IRI at all was refused before anything was parsed.
+
+    Args:
+        graph: RDF graph being ordered
+        where: "profile 'p', section 's'", for the message
+        sort_mode: The section's ``sort:``, already checked
+        roots: The section's ``roots:``, already checked
+        selected: What the section's selector chose, before earlier sections took theirs
+        placed_by: The section that placed each subject already written
+    """
+    if normalise_sort_mode(sort_mode) not in TOPOLOGICAL_MODES:
+        click.secho(
+            f"  \u26a0 {where}: roots ignored \u2014 sort is {sort_mode!r}; only a topological"
+            " sort has branches to lead with.",
+            fg="yellow",
+            err=True,
+        )
+        return
+
+    # One line per root, except that roots sharing an undeclared prefix share a line: the
+    # list of declared prefixes is the same for each.
+    lines: list[str] = []
+    undeclared: dict[str, tuple[int, list[str], tuple[str, ...]]] = {}
+    ignored = 0
+    for root in resolve_roots(graph, roots):
+        if root.iri is None:
+            if root.error is None:
+                continue
+            ignored += 1
+            prefix = root.error.prefix or ""
+            if prefix not in undeclared:
+                undeclared[prefix] = (len(lines), [], root.error.bound)
+                lines.append("")
+            undeclared[prefix][1].append(root.text)
+            continue
+        named = f"{root.text} \u2192 {root.iri}"
+        iri = root.iri
+        if all(
+            pattern not in graph
+            for pattern in ((iri, None, None), (None, iri, None), (None, None, iri))
+        ):
+            lines.append(f"{named} \u2014 not in this ontology")
+        elif iri not in selected:
+            lines.append(f"{named} \u2014 in this ontology, but not selected by this section")
+        elif iri in placed_by:
+            lines.append(f"{named} \u2014 already placed by section '{placed_by[iri]}'")
+        else:
+            continue
+        ignored += 1
+    for prefix, (at, texts, bound) in undeclared.items():
+        declared = ", ".join(f"{p}:" for p in bound)
+        lines[at] = (
+            f"{', '.join(texts)} \u2014 prefix '{prefix}:' is not declared by this source"
+            f" (declared: {declared})"
+        )
+
+    if lines:
+        word = "root" if ignored == 1 else "roots"
+        click.secho(f"  \u26a0 {where}: {ignored} {word} ignored", fg="yellow", err=True)
+        for line in lines:
+            click.secho(f"      {line}", fg="yellow", err=True)
+
+
+def _check_order_sections(ordering_config: OrderingConfig, profile_names: list[str]) -> list[str]:
+    """Find every section whose ``select:``, ``sort:`` or ``roots:`` cannot be honoured.
+
+    All three depend on the config alone, so ``order`` checks them for every requested profile
     before it parses the source or writes anything: a refusal found while generating the
     second profile would leave the first one's file behind (#242). Sections are walked as
     ``order`` walks them, and a missing ``sort:`` key means the default, ``qname_alpha``;
@@ -758,6 +836,8 @@ def _check_order_sections(ordering_config: OrderingConfig, profile_names: list[s
                 normalise_sort_mode(cfg.get("sort", "qname_alpha"))
             except UnknownSortModeError as exc:
                 problems.append(f"{where}: {exc}")
+            # Whether a root is a CURIE or an IRI at all needs no prefixes (#241).
+            problems.extend(f"{where}: {problem}" for problem in check_roots(cfg.get("roots")))
     return problems
 
 
@@ -832,7 +912,7 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
     except ValueError as exc:
         raise Refusal(str(exc)) from exc
 
-    # Every requested section's select: and sort: too, for the same reason (#242).
+    # Every requested section's select:, sort: and roots: too, for the same reason (#242, #241).
     problems = _check_order_sections(ordering_config, profiles_to_gen)
     # And prefix_order's shape: a string would be read a character at a time (#238).
     prefix_order: Any = ordering_config.prefix_order  # a YAML value, not yet checked
@@ -864,6 +944,7 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
 
         ordered_subjects: list = []
         seen: set = set()
+        placed_by: dict[Node, str] = {}  # the section that placed each subject (#241)
 
         # The header is not a section's to lose (#90): without a header section it still
         # leads the file, and a profile omits it only by saying `header: false`. An omitted
@@ -890,6 +971,7 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
                 for s in ontology_subjects:
                     ordered_subjects.append(s)
                     seen.add(s)
+                    placed_by[s] = sec_name
                 continue
 
             # Regular sections
@@ -908,6 +990,15 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
                     err=True,
                 )
                 raise SystemExit(2)
+            if roots_cfg:
+                _warn_roots(
+                    graph,
+                    f"profile '{prof_name}', section '{sec_name}'",
+                    sort_mode,
+                    roots_cfg,
+                    set(chosen),
+                    placed_by,
+                )
             chosen = [s for s in chosen if s not in seen]
 
             ordered = sort_subjects(graph, set(chosen), sort_mode, roots_cfg)
@@ -916,6 +1007,7 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
                 if s not in seen:
                     ordered_subjects.append(s)
                     seen.add(s)
+                    placed_by[s] = sec_name
 
         # The stamp's property travels with the header it annotates (#90), as the source
         # describes it: a stamped extract read back through the same profile then loses
