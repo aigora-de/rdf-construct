@@ -92,10 +92,14 @@ class RenameConfig:
     Attributes:
         namespaces: Old namespace -> new namespace mappings.
         entities: Explicit old URI -> new URI mappings.
+        merge_entities: Let a rename merge two entities deliberately: onto an IRI that has
+            triples of its own, two renames onto one IRI, or an axiom made reflexive (#185).
+            Off, such a rename is refused.
     """
 
     namespaces: dict[str, str] = field(default_factory=dict)
     entities: dict[str, str] = field(default_factory=dict)
+    merge_entities: bool = False
 
     def build_mappings(self, graph: Graph) -> list[RenameMapping]:
         """Expand namespace rules to concrete URI mappings.
@@ -162,7 +166,11 @@ class RenameConfig:
             str(resolve_term(old, sources)): str(resolve_term(new, sources))
             for old, new in self.entities.items()
         }
-        return RenameConfig(namespaces=dict(self.namespaces), entities=entities)
+        return RenameConfig(
+            namespaces=dict(self.namespaces),
+            entities=entities,
+            merge_entities=self.merge_entities,
+        )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "RenameConfig":
@@ -173,10 +181,19 @@ class RenameConfig:
 
         Returns:
             RenameConfig instance.
+
+        Raises:
+            ValueError: If ``merge_entities`` is not true or false.
         """
+        merge_entities = data.get("merge_entities", False)
+        if not isinstance(merge_entities, bool):
+            raise ValueError(
+                f"rename: merge_entities must be true or false, not {merge_entities!r}"
+            )
         return cls(
             namespaces=data.get("namespaces", {}),
             entities=data.get("entities", {}),
+            merge_entities=merge_entities,
         )
 
 
@@ -408,6 +425,10 @@ rename:
     # Fix typos
     # "http://example.org/v2#Buiding": "http://example.org/v2#Building"
     # "http://example.org/v2#hasAddres": "http://example.org/v2#hasAddress"
+
+  # A rename onto an IRI that already has triples of its own is refused, because it would
+  # merge two entities. Set this to merge them deliberately (--merge-entities).
+  # merge_entities: false
 
 # Optional data migration
 # migrate_data:

@@ -181,12 +181,6 @@ RENAMES = [
         ),
         id="ies-class",
     ),
-    pytest.param(
-        ANIMAL,
-        ("--from", "http://example.org/animals#Animal", "--to", "http://example.org/animals#Bird"),
-        id="onto-existing-iri",
-        marks=pytest.mark.xfail(strict=True, reason="#185"),
-    ),
 ]
 
 

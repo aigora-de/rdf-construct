@@ -501,6 +501,24 @@ THREE_STATES = [
     ),
     _row(
         Row(
+            "refactor rename",
+            "refused",
+            (
+                "refactor",
+                "rename",
+                str(EXAMPLES / "refactor" / "typos.ttl"),
+                "--from",
+                "http://example.org/ont#Addres",
+                "--to",
+                "http://example.org/ont#Structure",
+                "-o",
+                "@tmp/r.ttl",
+            ),
+        ),
+        label="onto-existing-iri",
+    ),
+    _row(
+        Row(
             "refactor deprecate",
             "clean",
             (

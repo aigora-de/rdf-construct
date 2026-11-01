@@ -1,5 +1,6 @@
 """Command-line interface for rdf-construct."""
 
+import shlex
 import sys
 import traceback
 from collections.abc import Iterable, Sequence
@@ -147,8 +148,11 @@ from rdf_construct.refactor import (
     rename_file,
     rename_files,
     deprecate_file,
+    RenameCollision,
+    find_collisions,
+    find_references,
 )
-from rdf_construct.refactor.config import AmbiguousCurieError
+from rdf_construct.refactor.config import AmbiguousCurieError, RenameMapping
 from rdf_construct.merge import DataMigrator
 
 from rdf_construct.localise import (
@@ -3851,6 +3855,152 @@ def _check_rename_outputs(
     return replaced
 
 
+@dataclass
+class _RenameCollisions:
+    """What ``refactor rename`` would merge or connect, found before anything is written (#185).
+
+    Attributes:
+        problems: One line per collision in the sources or the data, naming the target, where
+            its triples are and what would merge into it.
+        notes: One ``Note:`` line per target that is only referenced, and per triple the
+            rename makes reflexive.
+        advice: What to do instead, filled in with the IRIs when there is one collision.
+    """
+
+    problems: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    advice: str = ""
+
+
+def _in_files(counts: list[tuple[Path, int]]) -> str:
+    """Name where a count was found: `` in a.ttl``, or `` (3 in a.ttl, 2 in b.ttl)``."""
+    if len(counts) == 1:
+        return f" in {counts[0][0]}"
+    return " (" + ", ".join(f"{n} in {path}" for path, n in counts) + ")"
+
+
+def _find_rename_collisions(
+    graphs: list[tuple[Path, Graph]],
+    data_graphs: list[tuple[Path, Graph]],
+    rename: RenameConfig,
+    uri_map: dict[URIRef, URIRef],
+) -> _RenameCollisions:
+    """Check every mapping in every file for a rename that would merge two entities (#185).
+
+    The sources are checked as one graph, so a target described in one source and renamed
+    onto from another is a collision: a split module set would describe it twice. Each data
+    file is checked on its own, against the rename map the data is migrated with.
+
+    Args:
+        graphs: Each source with its graph.
+        data_graphs: Each data file with its graph.
+        rename: The resolved rename configuration.
+        uri_map: The rename map the data is migrated with.
+
+    Returns:
+        The collisions, the notes and the advice.
+    """
+    union = graphs[0][1] if len(graphs) == 1 else Graph()
+    if len(graphs) > 1:
+        for _, graph in graphs:
+            union += graph
+    mappings = rename.build_mappings(union)
+    found = _RenameCollisions()
+
+    def own(target: URIRef, among: list[tuple[Path, Graph]]) -> list[tuple[Path, int]]:
+        counts = [(path, sum(1 for _ in g.triples((target, None, None)))) for path, g in among]
+        return [(path, n) for path, n in counts if n]
+
+    def located(collision: RenameCollision, among: list[tuple[Path, Graph]]) -> str:
+        if collision.kind == "described":
+            return _in_files(own(collision.target, among))
+        if collision.axiom is not None:
+            paths = [path for path, g in among if collision.axiom in g]
+            return " in " + ", ".join(str(path) for path in paths) if paths else ""
+        return ""
+
+    collisions = [(c, graphs) for c in find_collisions(union, mappings)]
+    data_mappings = [RenameMapping(old, new, "explicit") for old, new in uri_map.items()]
+    for data_path, data_graph in data_graphs:
+        data = [(data_path, data_graph)]
+        collisions.extend((c, data) for c in find_collisions(data_graph, data_mappings))
+    found.problems = [c.describe(located(c, among)) for c, among in collisions]
+
+    references, reflexive = find_references(union, mappings)
+    for reference in references:
+        counts = []
+        for path, g in graphs:
+            n = sum(1 for _ in g.triples((None, None, reference.target)))
+            n += sum(1 for _ in g.triples((None, reference.target, None)))
+            if n:
+                counts.append((path, n))
+        times = "time" if reference.count == 1 else "times"
+        found.notes.append(
+            f"Note: <{reference.target}> was already referenced {reference.count} {times}"
+            f"{_in_files(counts)}; those references now reach the renamed entity."
+        )
+    for triple in reflexive:
+        found.notes.append(f"Note: {triple.describe()}")
+
+    if len(collisions) == 1 and len(collisions[0][0].sources) == 1:
+        collision = collisions[0][0]
+        old = collision.sources[0]
+        # Deprecate where the old term is declared: always a source, never the data
+        files = [path for path, g in graphs if (old, None, None) in g] or [p for p, _ in graphs]
+        named = " ".join(shlex.quote(str(path)) for path in files)
+        found.advice = (
+            f"rdf-construct refactor deprecate {named} --entity {shlex.quote(str(old))} "
+            f"--replaced-by {shlex.quote(str(collision.target))}"
+        )
+    else:
+        found.advice = "rdf-construct refactor deprecate SOURCE --entity OLD --replaced-by NEW"
+    return found
+
+
+def _refuse_rename_collisions(found: _RenameCollisions) -> None:
+    """Refuse a rename that would merge two entities, naming every collision (#185).
+
+    Args:
+        found: The collisions, as ``_find_rename_collisions`` reported them.
+
+    Raises:
+        Refusal: When there is at least one collision.
+    """
+    if not found.problems:
+        return
+    n = len(found.problems)
+    count = (
+        "1 rename would merge two entities:"
+        if n == 1
+        else f"{n} renames would each merge two entities:"
+    )
+    raise Refusal(
+        "Nothing was written:\n  "
+        + "\n  ".join([count, *found.problems])
+        + "\nPass --merge-entities to merge them deliberately. To keep both, deprecate the "
+        + "old term instead:\n  "
+        + found.advice
+    )
+
+
+def _report_rename_collisions(found: _RenameCollisions, *, merging: bool, dry_run: bool) -> None:
+    """Print the notes, and each merge that ``--merge-entities`` lets through (#185).
+
+    Args:
+        found: The collisions, as ``_find_rename_collisions`` reported them.
+        merging: Whether merging is allowed, by the flag or the config's ``merge_entities``.
+            Without it the merges are not printed: the run is refused instead.
+        dry_run: Whether the merges are only previewed.
+    """
+    for note in found.notes:
+        click.echo(note, err=True)
+    if not merging:
+        return
+    lead = "Would merge (--merge-entities)" if dry_run else "Merged (--merge-entities)"
+    for problem in found.problems:
+        click.secho(f"\u26a0 {lead}: {problem}", fg="yellow", err=True)
+
+
 @refactor.command("rename")
 @click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
 @click.option(
@@ -3901,6 +4051,14 @@ def _check_rename_outputs(
     help="Allow -o or --data-output to name an input, and rewrite it with its own result.",
 )
 @click.option(
+    "--merge-entities",
+    is_flag=True,
+    help=(
+        "Allow a rename that merges two entities: onto an IRI that has triples of its own, "
+        "two renames onto one IRI, or an axiom made to contradict itself. Refused without it."
+    ),
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Preview changes without writing files.",
@@ -3928,6 +4086,7 @@ def refactor_rename(
     migrate_data: tuple[Path, ...],
     data_output: Path | None,
     in_place: bool,
+    merge_entities: bool,
     dry_run: bool,
     no_colour: bool,
     init_config: bool,
@@ -3941,10 +4100,17 @@ def refactor_rename(
     \b
     SOURCES: One or more RDF files to process (.ttl, .rdf, .owl)
 
+    A rename onto an IRI that already has triples of its own would merge two
+    entities, and is refused unless --merge-entities is given. So are two renames
+    onto one IRI, and a rename that makes an owl:disjointWith, owl:complementOf,
+    owl:propertyDisjointWith or owl:differentFrom axiom reflexive. A target that is
+    only referenced is renamed onto, and the run says so.
+
     \b
     Exit codes:
       0 - Success
-      2 - Input refused or run failed (invalid options or config, parse error, etc.)
+      2 - Input refused or run failed (invalid options or config, parse error,
+          a rename that would merge two entities, etc.)
 
     \b
     Examples:
@@ -4103,6 +4269,13 @@ def refactor_rename(
         planned, config, migrate_data, data_output, config_file, in_place
     )
 
+    # Every mapping in every file is checked before anything is written; a dry run shows
+    # its preview first (#185).
+    config.rename.merge_entities = config.rename.merge_entities or merge_entities
+    collisions = _find_rename_collisions(graphs, data_graphs, config.rename, uri_map)
+    if not dry_run and not config.rename.merge_entities:
+        _refuse_rename_collisions(collisions)
+
     # Execute rename
     formatter = RefactorTextFormatter(use_colour=not no_colour)
     renamer = OntologyRenamer()
@@ -4118,6 +4291,9 @@ def refactor_rename(
                     source_triples=len(graph),
                 )
             )
+        _report_rename_collisions(collisions, merging=config.rename.merge_entities, dry_run=True)
+        if not config.rename.merge_entities:
+            _refuse_rename_collisions(collisions)
         raise SystemExit(0)
 
     # Rename every source before writing any of them, so a failure leaves nothing behind.
@@ -4164,6 +4340,7 @@ def refactor_rename(
                             f"  \u26a0 Replaced {replaced[out_path]}", fg="yellow", err=True
                         )
 
+    _report_rename_collisions(collisions, merging=config.rename.merge_entities, dry_run=False)
     raise SystemExit(0)
 
 

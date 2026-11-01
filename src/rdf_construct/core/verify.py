@@ -183,7 +183,12 @@ CONTRACTS: Mapping[str, CommandContract] = MappingProxyType(
             CommandContract(
                 "refactor rename",
                 Contract.TRIPLE_COUNT,
-                note="Renaming onto an IRI that is already in use merges two entities (#185).",
+                note=(
+                    "Holds unless --merge-entities merges two entities, or one subject referenced "
+                    "both the old and the new IRI, whose two triples become one. A merge that "
+                    "keeps the count, such as a class renamed onto an individual, is refused by "
+                    "the collision check before anything is written, not seen here (#185)."
+                ),
             ),
             CommandContract(
                 "refactor deprecate",

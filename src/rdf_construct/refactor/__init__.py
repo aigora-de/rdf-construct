@@ -26,6 +26,13 @@ from rdf_construct.refactor.config import (
     create_default_rename_config,
     create_default_deprecation_config,
 )
+from rdf_construct.refactor.collisions import (
+    RenameCollision,
+    TargetReference,
+    ReflexiveTriple,
+    find_collisions,
+    find_references,
+)
 from rdf_construct.refactor.renamer import (
     OntologyRenamer,
     RenameResult,
@@ -60,6 +67,12 @@ __all__ = [
     "RenameStats",
     "rename_file",
     "rename_files",
+    # Collisions (#185)
+    "RenameCollision",
+    "TargetReference",
+    "ReflexiveTriple",
+    "find_collisions",
+    "find_references",
     # Deprecator
     "OntologyDeprecator",
     "DeprecationResult",
