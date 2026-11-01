@@ -2,11 +2,12 @@
 
 import heapq
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Optional
 
 from rdflib import Graph, URIRef, RDFS
 
-from .utils import expand_curie, qname_sort_key
+from .utils import CurieError, extract_prefix_map, qname_sort_key, resolve_curie
 
 #: Every ``sort:`` mode a profile section may name, in the order they are
 #: documented. ``qname_alpha`` is the same as ``alpha``, and
@@ -14,7 +15,8 @@ from .utils import expand_curie, qname_sort_key
 #: topological sort are already broken alphabetically. Matched ignoring case.
 SORT_MODES: tuple[str, ...] = ("alpha", "qname_alpha", "topological", "topological_then_alpha")
 
-_TOPOLOGICAL_MODES: tuple[str, ...] = ("topological", "topological_then_alpha")
+#: The modes of :data:`SORT_MODES` that sort by hierarchy, and so take ``roots``.
+TOPOLOGICAL_MODES: tuple[str, ...] = ("topological", "topological_then_alpha")
 
 #: The hierarchy predicates a topological section is sorted over, together. RDFS gives
 #: ``rdfs:subClassOf`` a class at each end and ``rdfs:subPropertyOf`` a property at each end,
@@ -32,6 +34,96 @@ class UnknownSortModeError(ValueError):
     alphabetical output looks exactly like a profile that worked: the
     hierarchy order the profile asked for is silently lost. See issue #242.
     """
+
+
+class InvalidRootError(ValueError):
+    """A ``roots:`` value that is not a list of CURIEs and IRIs.
+
+    Raised for a value that is not a list (a single string would otherwise be read a
+    character at a time), an entry that is not a string, and an entry that is neither a
+    CURIE nor an IRI, such as ``Animal``. A root whose prefix the source does not declare
+    is not this error: a configuration shared between ontologies meets that legitimately,
+    so it is reported, not refused (#241).
+    """
+
+
+@dataclass(frozen=True)
+class ResolvedRoot:
+    """One ``roots:`` entry, resolved against a graph's prefixes.
+
+    Attributes:
+        text: The entry as written.
+        iri: The IRI it names, or None if its prefix is not declared.
+        error: Why it did not resolve, when ``iri`` is None.
+    """
+
+    text: str
+    iri: URIRef | None
+    error: CurieError | None = None
+
+
+def check_roots(roots: object) -> list[str]:
+    """Find what makes a ``roots:`` value unusable, without a graph.
+
+    Whether an entry is a CURIE or an IRI at all does not depend on the source's prefixes,
+    so this runs before anything is parsed or written. ``None`` and ``[]`` are fine.
+
+    Args:
+        roots: The value given for ``roots:``, from a profile section or a caller
+
+    Returns:
+        One message per problem; empty if there are none
+    """
+    if roots is None:
+        return []
+    if not isinstance(roots, list):
+        return [f"roots: expected a list of CURIEs or IRIs, such as [ex:Animal]; got {roots!r}"]
+    problems: list[str] = []
+    for entry in roots:
+        if not isinstance(entry, str):
+            problems.append(f"root {entry!r} is not a CURIE or an IRI: expected a string")
+            continue
+        try:
+            resolve_curie({}, entry)
+        except CurieError as exc:
+            if exc.prefix is None:
+                problems.append(
+                    f"root {entry!r} is not a CURIE or an IRI; write ex:Term, <http://…> "
+                    "or http://…"
+                )
+    return problems
+
+
+def resolve_roots(graph: Graph, roots: object) -> list[ResolvedRoot]:
+    """Resolve ``roots:`` entries against the prefixes the graph declares.
+
+    Each distinct entry once, in the order given. Resolution is ``resolve_curie``'s:
+    a bracketed or full IRI, or a CURIE whose prefix the graph binds, never rdflib's own
+    prefix table. Whether the IRI is in the graph is the caller's question.
+
+    Args:
+        graph: The graph whose prefixes the CURIEs use
+        roots: The ``roots:`` value
+
+    Returns:
+        One entry per distinct root; an undeclared prefix gives ``iri=None`` and its error
+
+    Raises:
+        InvalidRootError: If :func:`check_roots` finds a problem
+    """
+    problems = check_roots(roots)
+    if problems:
+        raise InvalidRootError("; ".join(problems))
+    if not isinstance(roots, list) or not roots:
+        return []
+    prefixes = extract_prefix_map(graph)
+    resolved: list[ResolvedRoot] = []
+    for text in dict.fromkeys(roots):
+        try:
+            resolved.append(ResolvedRoot(text, resolve_curie(prefixes, text)))
+        except CurieError as exc:
+            resolved.append(ResolvedRoot(text, None, exc))
+    return resolved
 
 
 def normalise_sort_mode(mode: object) -> str:
@@ -212,6 +304,10 @@ def sort_with_roots(graph: Graph, subjects: set, mode: str, roots_cfg: Optional[
     The hierarchy is :data:`HIERARCHY_PREDICATES`, ``rdfs:subClassOf`` and
     ``rdfs:subPropertyOf`` together, whatever the subjects are.
 
+    Roots are resolved by :func:`resolve_roots`. A root whose prefix the graph does not
+    declare, or that names no subject in ``subjects``, anchors nothing and is passed over;
+    :func:`resolve_roots` tells a caller which, so it can say so.
+
     Args:
         graph: RDF graph containing the relationships
         subjects: Set of subjects to sort
@@ -223,23 +319,20 @@ def sort_with_roots(graph: Graph, subjects: set, mode: str, roots_cfg: Optional[
 
     Raises:
         UnknownSortModeError: If ``mode`` is not one of :data:`SORT_MODES`
+        InvalidRootError: If ``roots_cfg`` is not a list of CURIEs and IRIs
     """
     mode = normalise_sort_mode(mode)
+    resolved = resolve_roots(graph, roots_cfg)
 
     edge = HIERARCHY_PREDICATES
 
     # Fall back to simple topological if no roots or mode doesn't support them
-    if mode not in _TOPOLOGICAL_MODES or not roots_cfg:
-        if mode in _TOPOLOGICAL_MODES:
+    if mode not in TOPOLOGICAL_MODES or not roots_cfg:
+        if mode in TOPOLOGICAL_MODES:
             return topo_sort_subset(graph, subjects, edge)
         return sorted(subjects, key=lambda t: qname_sort_key(graph, t))
 
-    # Expand roots to IRIs
-    root_iris: list[URIRef] = []
-    for r in roots_cfg:
-        iri = expand_curie(graph, r)
-        if iri is not None:
-            root_iris.append(iri)
+    root_iris = [root.iri for root in resolved if root.iri is not None]
 
     remaining: set = set(subjects)
     ordered: list = []
@@ -283,10 +376,14 @@ def sort_subjects(
 
     Raises:
         UnknownSortModeError: If ``sort_mode`` is not one of :data:`SORT_MODES`
+        InvalidRootError: If ``roots_cfg`` is not a list of CURIEs and IRIs
     """
     mode = normalise_sort_mode(sort_mode)
+    problems = check_roots(roots_cfg)
+    if problems:
+        raise InvalidRootError("; ".join(problems))
 
-    if mode in _TOPOLOGICAL_MODES:
+    if mode in TOPOLOGICAL_MODES:
         return sort_with_roots(graph, subjects, mode, roots_cfg)
 
     return sorted(subjects, key=lambda t: qname_sort_key(graph, t))

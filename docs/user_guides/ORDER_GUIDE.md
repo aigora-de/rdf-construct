@@ -157,7 +157,7 @@ Three keys are read on a section, plus one special section name:
 |---|---|---|
 | `select` | the section's own name | Which selector to use |
 | `sort` | `qname_alpha` | `alpha`/`qname_alpha`, or `topological`/`topological_then_alpha` |
-| `roots` | none | CURIEs whose branches are emitted first, in the order listed |
+| `roots` | none | A list of CURIEs or IRIs whose branches are emitted first, in the order listed; topological sorts only. A root that anchors nothing is reported; one that is not a CURIE or an IRI is refused |
 
 `header: {}` is a section name with a fixed meaning: it places the `owl:Ontology` subjects, the
 ontology's own metadata, wherever the section stands. It takes no keys.
@@ -273,9 +273,43 @@ lib:Journal  lib:Work  lib:Article  lib:Book  lib:Anthology
 
 against `hierarchy`'s `lib:Work  lib:Article  lib:Book  lib:Anthology  lib:Journal`.
 
-**Root CURIEs are resolved against the prefixes of the parsed source file.** A root that does not
-resolve, or that resolves to a term the ontology does not contain, is skipped without a message —
-see [Known limitations](#known-limitations), because there is a trap here worth knowing about.
+**Roots are resolved against the prefixes the source file declares**, plus `rdf`, `rdfs`, `owl`,
+`xsd` and `xml`; never against rdflib's own table. Each may be a CURIE, an IRI in angle brackets
+(`<urn:x>`), or a full IRI (`http://…`). A root that is listed twice, or that sits inside an
+earlier root's branch, is already placed and changes nothing.
+
+A root can miss, and one configuration shared between ontologies legitimately does: `-p` is
+optional, so a run without it applies every profile to the source. So a root that anchors nothing
+is **reported on stderr, and the file is still written, at exit 0**. Run the guide's config
+against the other example ontology:
+
+```bash
+rdf-construct order examples/animal_ontology.ttl examples/order/ordering.yml -p anchored -o out/
+```
+
+```
+  ⚠ profile 'anchored', section 'classes': 1 root ignored
+      lib:Journal — prefix 'lib:' is not declared by this source (declared: ex:, owl:, rdf:, rdfs:, xml:, xsd:)
+```
+
+Each root that misses gets one line, for one of four reasons:
+
+| Line | Meaning |
+|---|---|
+| `org:Person, org:Department — prefix 'org:' is not declared by this source (declared: …)` | The source has no such prefix; roots that share it share the line. Declare it in the source, or this profile is for another ontology. |
+| `org:Organization → http://example.org/organisation#Organization — not in this ontology` | The prefix resolved; nothing in the source uses that IRI. Check the spelling. |
+| `ies:Element → … — in this ontology, but not selected by this section` | The term is there (an imported parent, say), but not among the subjects the section sorts. |
+| `ex:Part → … — already placed by section 'classes'` | An earlier section took the term, so this one never sees it. |
+
+`roots` on a section that is not sorted topologically is ignored and says so (`roots ignored — sort
+is 'alpha'`). A `roots` value that is not a list, an entry that is not a string, or one that is
+neither a CURIE nor an IRI (`Animal`) is refused at exit 2 before the source is read, so nothing is
+written:
+
+```
+Error: Nothing was written:
+  profile 'p', section 'classes': roots: expected a list of CURIEs or IRIs, such as [ex:Animal]; got 'lib:Journal'
+```
 
 ## Unclaimed subjects
 
@@ -529,7 +563,6 @@ it is still growing three releases from now, that is the signal, not the table.
 
 | Issue | Behaviour today |
 |---|---|
-| [#241](https://github.com/aigora-de/rdf-construct/issues/241) | A `roots:` entry that does not resolve, or that names a term absent from the ontology, is skipped with no message. |
 | [#243](https://github.com/aigora-de/rdf-construct/issues/243) | Eleven keys accepted in profiles and sections are read by nothing: `tie_breaker`, `comment_blocks`, `bnode_strategy`, `anchors`, `after_anchors`, `cluster`, `within_level`, `group_by`, `group_order`, `explicit_group_sequence`, `within_group_tie`. They appear in `examples/order/sample_profile.yml` and `examples/order/ies_profile.yml`, where they make two profiles byte-identical to two others. **`examples/order/ordering.yml`, used throughout this guide, contains only keys that work.** |
 | [#247](https://github.com/aigora-de/rdf-construct/issues/247) | A `selectors:` value beginning `FILTER` is matched by prefix only; the expression is never parsed, and such a selector claims every individual regardless of what it says. |
 | [#246](https://github.com/aigora-de/rdf-construct/issues/246) | `predicate_order` entries must be written as bare CURIEs. Full IRIs and `<bracketed IRIs>` are silently dropped, though `roots:` accepts all three forms. |

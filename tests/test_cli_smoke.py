@@ -57,6 +57,7 @@ MALFORMED_TTL = str(SMOKE / "malformed.ttl")
 MALFORMED_YAML = str(SMOKE / "malformed.yml")
 ORDER_BAD_SORT = str(SMOKE / "order_bad_sort.yml")
 ORDER_BAD_PREFIX_ORDER = str(SMOKE / "order_bad_prefix_order.yml")
+ORDER_BAD_ROOTS = str(SMOKE / "order_bad_roots.yml")
 
 # The exit-code convention decided on #286.
 STATE_CODE = {"clean": 0, "findings": 1, "refused": 2}
@@ -262,6 +263,10 @@ THREE_STATES = [
     _row(
         Row("order", "refused", ("order", LIBRARY, ORDER_BAD_PREFIX_ORDER, "-o", "@tmp/order")),
         label="prefix-order",
+    ),
+    _row(
+        Row("order", "refused", ("order", LIBRARY, ORDER_BAD_ROOTS, "-o", "@tmp/order")),
+        label="roots",
     ),
     _row(Row("profiles", "clean", ("profiles", ORDERING))),
     _row(Row("profiles", "refused", ("profiles", "@tmp/missing.yml"))),

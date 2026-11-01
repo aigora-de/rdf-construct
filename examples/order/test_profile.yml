@@ -2,8 +2,8 @@
 #
 # Configuration for testing rdf-construct with example ontologies
 # Use with:
-#   rdf-construct order examples/animal_ontology.ttl examples/test_profile.yml
-#   rdf-construct order examples/organisation_ontology.ttl examples/test_profile.yml
+#   rdf-construct order examples/animal_ontology.ttl examples/order/test_profile.yml
+#   rdf-construct order examples/organisation_ontology.ttl examples/order/test_profile.yml
 
 defaults:
   tie_breaker: qname_alpha
@@ -30,7 +30,7 @@ shared:
 
   # For organization ontology
   org_roots: &org_roots
-    - org:Organization
+    - org:Organisation
     - org:Person
     - org:Department
 

@@ -227,6 +227,17 @@ change, and what to do about it, is listed command by command in the
   IRI, as an IRI or a CURIE of the source's prefixes.
 
 ### Changed
+- **`order` reports a `roots:` entry that anchors nothing** (#241). A root
+  whose prefix the source does not declare, that is not in the ontology, that
+  its section does not select, or that an earlier section placed, was skipped
+  without a word. Each is now named on stderr, and the file is still written
+  at exit 0. A `roots:` that is not a list, or an entry that is not a CURIE or
+  an IRI, is refused at exit 2 before anything is written. Roots resolve with
+  `resolve_curie` against the source's own prefixes (`resolve_roots`,
+  `InvalidRootError`).
+- **`test_profile.yml`'s `org_topo` orders by its roots** (#240): its first
+  root is spelt `org:Organisation`, as the ontology spells it, and its header
+  names the file's real path.
 - **`sort: topological` follows both hierarchies in every section** (#245).
   The predicate was chosen per section by sniffing two types, so
   characteristic-only, `other_props` and annotation-property hierarchies were
