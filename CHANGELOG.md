@@ -150,6 +150,13 @@ of losing files at exit 0. See
 [`refactor`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#refactor)
 in the migration note.
 
+**`refactor rename` refuses to rename onto an IRI that already has triples of
+its own**, which previously merged the two entities silently; a target that is
+only referenced is renamed onto and reported. Pass `--merge-entities` to merge
+deliberately. See
+[`refactor`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#refactor)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
@@ -325,6 +332,20 @@ change, and what to do about it, is listed command by command in the
   overrides a config `output:`. `-o` naming a file with several sources is
   refused instead of crashing. The checks are in `core/output_paths.py`, which
   reports and never decides.
+- **`refactor rename` refuses to merge two entities by accident** (#185). A
+  rename onto an IRI that is a subject in any source, two renames onto one IRI,
+  and a rename that makes `owl:disjointWith`, `owl:propertyDisjointWith`,
+  `owl:complementOf` or `owl:differentFrom` reflexive are refused at exit 2 with
+  nothing written, every one listed with its file and triple count; `--dry-run`
+  previews, then refuses the same way. Each used to exit 0 with one entity where
+  there were two, sometimes with the triple count unchanged. Every source of a run
+  is checked together, and each `--migrate-data` file against the data's rename
+  map. A target that is only referenced is renamed onto, with a `Note:` naming
+  how often, and so is a rename that makes another triple reflexive. The new
+  `--merge-entities` flag, or `merge_entities: true` under `rename:`, merges
+  deliberately and names each merge. In the library, `OntologyRenamer.rename`
+  returns `success=False` with `collisions` listed and no graph, and
+  `rename_file` writes nothing, unless `RenameConfig(merge_entities=True)`.
 - **`split`'s unmatched module is called `unmatched` by default** (#382), not
   `common`, and a run whose unmatched module would take another module's name
   is refused at exit 2 instead of overwriting it. `--common-name common` keeps

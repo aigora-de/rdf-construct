@@ -48,6 +48,7 @@ rdf-construct refactor rename ontology.ttl \
 | `--migrate-data FILE` | Data files to migrate (repeatable) |
 | `--data-output PATH` | Output path for migrated data |
 | `--in-place` | Allow `-o` or `--data-output` to name an input, and rewrite it with its own result |
+| `--merge-entities` | Allow a rename that merges two entities (see [Renaming onto an Existing IRI](#renaming-onto-an-existing-iri)) |
 | `--dry-run` | Preview changes without writing |
 | `--init` | Generate template configuration |
 
@@ -137,6 +138,87 @@ names each pair of rules where one lies within the other:
 Note: http://e.org/core/sub/ lies within http://e.org/core/; each IRI moves by the longest rule that contains it.
 ```
 
+### Renaming onto an Existing IRI
+
+A rename onto an IRI that already has triples of its own would make two entities one: the result
+carries both labels, both comments and both sets of axioms, and nothing in it says which came from
+where. `refactor rename` refuses it at exit 2, before anything is written:
+
+```bash
+rdf-construct refactor rename examples/refactor/typos.ttl \
+    --from ex:Addres --to ex:Structure -o collide.ttl
+```
+
+```text
+Error: Nothing was written:
+  1 rename would merge two entities:
+  <http://example.org/ont#Structure> has 3 triples of its own in examples/refactor/typos.ttl; renaming <http://example.org/ont#Addres> onto it merges them.
+Pass --merge-entities to merge them deliberately. To keep both, deprecate the old term instead:
+  rdf-construct refactor deprecate examples/refactor/typos.ttl --entity 'http://example.org/ont#Addres' --replaced-by 'http://example.org/ont#Structure'
+```
+
+Three things are refused this way, each listed with the file it was found in:
+
+| Refused | Why |
+|---|---|
+| A target that is a **subject** in a source, and is not itself renamed away | Its description and the renamed term's become one. A swap (`A → B`, `B → A`) and a chain (`A → B`, `B → C`) are fine: renames are simultaneous, so a target renamed away leaves nothing behind. |
+| Two renames onto **one target** (`A → C`, `B → C`, from a config, or a namespace rule and an entity rename that land on one IRI) | Two entities become one by construction. |
+| A rename that makes `owl:disjointWith`, `owl:propertyDisjointWith`, `owl:complementOf` or `owl:differentFrom` **reflexive** | The source said the two terms are kept apart. Renamed into one, a class is disjoint with itself (unsatisfiable), or an individual different from itself (an inconsistent ontology). |
+
+The checks cover **every source of the run together**: renaming `ex:Buiding` in one module onto
+an `ex:Building` that another module describes is refused, because the module set would describe
+it twice. Each `--migrate-data` file is checked the same way, against the rename map the data is
+migrated with. A mapping whose old IRI a file never mentions renames nothing there, and is never a
+collision: re-running a typo fix over the already-fixed file is fine.
+
+A term renamed onto an individual (punning) is refused too, although the triple count does not
+change. Every collision is listed: a bulk namespace rename can collide in thousands of places, so
+the first line gives the count.
+
+**A target that is only referenced** — an object or a predicate, never a subject — is not a
+collision. Renaming `ex:Buiding` onto an `ex:Building` that other axioms already mention is what a
+rename is for. The run renames it and says so on stderr, because under the open world the target
+may be described in a file the run never read:
+
+```text
+Note: <http://example.org/Building> was already referenced 2 times in ontology.ttl; those references now reach the renamed entity.
+```
+
+A rename that makes any other triple reflexive is reported the same way, and written. Some say
+nothing (`C rdfs:subClassOf C`), but others are new claims — `P owl:inverseOf P` makes `P`
+symmetric — so read each one:
+
+```text
+Note: <http://example.org/Building> rdfs:subClassOf <http://example.org/Building> is now reflexive (was <http://example.org/Buiding> rdfs:subClassOf <http://example.org/Building>).
+```
+
+**What to do instead.** If both terms should survive, deprecate the old one and point it at the
+other, as the refusal suggests; `refactor deprecate` writes `typos_deprecated.ttl` beside the
+source. If the two terms really are the same entity and both descriptions should be kept,
+asserting `ex:Addres owl:sameAs ex:Structure` says exactly that, without losing which description
+came from where. If one entity is what you want, merge deliberately:
+
+```bash
+rdf-construct refactor rename examples/refactor/typos.ttl \
+    --from ex:Addres --to ex:Structure --merge-entities -o collide.ttl
+```
+
+The merge is written, and each one is named on stderr:
+
+```text
+⚠ Merged (--merge-entities): <http://example.org/ont#Structure> has 3 triples of its own in examples/refactor/typos.ttl; renaming <http://example.org/ont#Addres> onto it merges them.
+```
+
+In a config file, `merge_entities: true` under `rename:` does the same. `--merge-entities` can be
+given with `-c`.
+
+**Known limitations**
+
+| Limitation | Issue |
+|---|---|
+| A contradiction through a list axiom — `owl:AllDisjointClasses`, `owl:AllDifferent`, `owl:AllDisjointProperties` or `owl:disjointUnionOf` naming both terms — is not detected, so the rename writes it. | [#467](https://github.com/aigora-de/rdf-construct/issues/467) |
+| A rename's run time grows with mappings × triples (the scan for literal mentions): a namespace rename of 3,000 terms over 24,000 triples takes about 48 s. A refused run stops before that scan. | [#468](https://github.com/aigora-de/rdf-construct/issues/468) |
+
 ### With Data Migration
 
 When renaming entities, you often need to update instance data as well:
@@ -182,6 +264,9 @@ rename:
     "http://example.org/v2#Buiding": "http://example.org/v2#Building"
     "http://example.org/v2#hasAddres": "http://example.org/v2#hasAddress"
 
+  # Merge two entities deliberately instead of refusing (--merge-entities)
+  # merge_entities: true
+
 # Optional data migration
 migrate_data:
   sources:
@@ -222,6 +307,10 @@ Totals:
 
 Run without --dry-run to apply changes.
 ```
+
+A dry run checks for collisions too. It prints the preview and any notes, then refuses at exit 2
+with the same list as the real run; with `--merge-entities` it names each merge it would make and
+exits 0.
 
 ## Deprecate Subcommand
 
@@ -389,7 +478,7 @@ rdf-construct refactor deprecate ontology.ttl \
 |------|---------|
 | 0 | Success |
 | 1 | `deprecate` only: success, but some entities were not found |
-| 2 | Input refused or run failed (invalid options or config, file not found, parse error) |
+| 2 | Input refused or run failed (invalid options or config, file not found, parse error, a rename that would merge two entities) |
 
 ## See Also
 
