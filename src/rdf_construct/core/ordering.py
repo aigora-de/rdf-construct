@@ -1,10 +1,10 @@
 """Ordering and sorting logic for RDF subjects."""
 
 import heapq
+from collections.abc import Sequence
 from typing import Optional
 
-from rdflib import Graph, URIRef, RDF, RDFS
-from rdflib.namespace import OWL
+from rdflib import Graph, URIRef, RDFS
 
 from .utils import expand_curie, qname_sort_key
 
@@ -15,6 +15,14 @@ from .utils import expand_curie, qname_sort_key
 SORT_MODES: tuple[str, ...] = ("alpha", "qname_alpha", "topological", "topological_then_alpha")
 
 _TOPOLOGICAL_MODES: tuple[str, ...] = ("topological", "topological_then_alpha")
+
+#: The hierarchy predicates a topological section is sorted over, together. RDFS gives
+#: ``rdfs:subClassOf`` a class at each end and ``rdfs:subPropertyOf`` a property at each end,
+#: so each links only like with like, and a term that is both a class and a property (a pun)
+#: keeps both hierarchies. Choosing one predicate per section by sniffing its members' types
+#: ignored characteristic-only, ``other_props`` and annotation-property hierarchies, and one
+#: punned class sent a whole class section alphabetical (#245).
+HIERARCHY_PREDICATES: tuple[URIRef, ...] = (RDFS.subClassOf, RDFS.subPropertyOf)
 
 
 class UnknownSortModeError(ValueError):
@@ -46,8 +54,15 @@ def normalise_sort_mode(mode: object) -> str:
     )
 
 
+def _edges(edge_predicate: URIRef | Sequence[URIRef]) -> tuple[URIRef, ...]:
+    """One predicate or several, as a tuple. A ``URIRef`` is a ``str``: never iterate it."""
+    if isinstance(edge_predicate, str):
+        return (URIRef(edge_predicate),)
+    return tuple(edge_predicate)
+
+
 def build_adjacency(
-    graph: Graph, nodes: set, edge_predicate: URIRef
+    graph: Graph, nodes: set, edge_predicate: URIRef | Sequence[URIRef]
 ) -> tuple[dict[URIRef, set[URIRef]], dict[URIRef, int]]:
     """Build adjacency list and indegree map for topological sorting.
 
@@ -58,7 +73,9 @@ def build_adjacency(
         graph: RDF graph containing the relationships
         nodes: Set of nodes to build adjacency for
         edge_predicate: Predicate defining parent-child relationship
-                       (typically rdfs:subClassOf or rdfs:subPropertyOf)
+                       (typically rdfs:subClassOf or rdfs:subPropertyOf), or several,
+                       such as :data:`HIERARCHY_PREDICATES`. A parent linked by more than
+                       one of them is counted once.
 
     Returns:
         Tuple of (adjacency dict, indegree dict) where:
@@ -69,17 +86,21 @@ def build_adjacency(
     indeg: dict[URIRef, int] = {n: 0 for n in nodes}
 
     for n in nodes:
-        for parent in graph.objects(n, edge_predicate):
-            # RDFS entailment (rdfs10, rdfs6) materialises n ⊑ n for every term;
-            # as an edge it would keep n and its subtree out of the sort (#339).
-            if parent in nodes and parent != n:
-                adj[parent].add(n)  # parent before child
-                indeg[n] += 1
+        for predicate in _edges(edge_predicate):
+            for parent in graph.objects(n, predicate):
+                # RDFS entailment (rdfs10, rdfs6) materialises n ⊑ n for every term;
+                # as an edge it would keep n and its subtree out of the sort (#339).
+                # A pun can reach the same parent by both predicates: one edge (#245).
+                if parent in nodes and parent != n:
+                    children = adj[parent]
+                    if n not in children:
+                        children.add(n)  # parent before child
+                        indeg[n] += 1
 
     return adj, indeg
 
 
-def topo_sort_subset(graph: Graph, nodes: set, edge_predicate: URIRef) -> list:
+def topo_sort_subset(graph: Graph, nodes: set, edge_predicate: URIRef | Sequence[URIRef]) -> list:
     """Topologically sort a subset of nodes using Kahn's algorithm.
 
     Sorts nodes so parents appear before children. Uses alphabetical
@@ -89,7 +110,7 @@ def topo_sort_subset(graph: Graph, nodes: set, edge_predicate: URIRef) -> list:
     Args:
         graph: RDF graph containing the relationships
         nodes: Set of nodes to sort
-        edge_predicate: Predicate defining parent-child relationship
+        edge_predicate: Predicate defining parent-child relationship, or several
 
     Returns:
         List of URIRefs in topological order
@@ -138,7 +159,9 @@ def topo_sort_subset(graph: Graph, nodes: set, edge_predicate: URIRef) -> list:
     return out
 
 
-def descendants_of(graph: Graph, root: URIRef, nodes: set, edge_predicate: URIRef) -> set:
+def descendants_of(
+    graph: Graph, root: URIRef, nodes: set[URIRef], edge_predicate: URIRef | Sequence[URIRef]
+) -> set:
     """Find all descendants of a root node within a set of nodes.
 
     Traverses the graph following child edges (subClassOf/subPropertyOf)
@@ -148,7 +171,7 @@ def descendants_of(graph: Graph, root: URIRef, nodes: set, edge_predicate: URIRe
         graph: RDF graph containing the relationships
         root: Root node to start traversal from
         nodes: Set of nodes to consider (search space)
-        edge_predicate: Predicate defining parent-child relationship
+        edge_predicate: Predicate defining parent-child relationship, or several
 
     Returns:
         Set of URIRefs reachable from root (including root itself if in nodes)
@@ -156,9 +179,10 @@ def descendants_of(graph: Graph, root: URIRef, nodes: set, edge_predicate: URIRe
     # Build parent->children map
     children: dict[URIRef, set[URIRef]] = {n: set() for n in nodes}
     for n in nodes:
-        for parent in graph.objects(n, edge_predicate):
-            if parent in nodes:
-                children[parent].add(n)
+        for predicate in _edges(edge_predicate):
+            for parent in graph.objects(n, predicate):
+                if parent in nodes:
+                    children[parent].add(n)
 
     reachable = set()
     stack = [root] if root in nodes else []
@@ -185,6 +209,9 @@ def sort_with_roots(graph: Graph, subjects: set, mode: str, roots_cfg: Optional[
     topologically. This creates a deterministic ordering that respects
     both hierarchy and explicit sequencing preferences.
 
+    The hierarchy is :data:`HIERARCHY_PREDICATES`, ``rdfs:subClassOf`` and
+    ``rdfs:subPropertyOf`` together, whatever the subjects are.
+
     Args:
         graph: RDF graph containing the relationships
         subjects: Set of subjects to sort
@@ -199,12 +226,7 @@ def sort_with_roots(graph: Graph, subjects: set, mode: str, roots_cfg: Optional[
     """
     mode = normalise_sort_mode(mode)
 
-    # Determine appropriate edge predicate based on subject types
-    looks_like_props = any(
-        (s, RDF.type, OWL.ObjectProperty) in graph or (s, RDF.type, OWL.DatatypeProperty) in graph
-        for s in subjects
-    )
-    edge = RDFS.subPropertyOf if looks_like_props else RDFS.subClassOf
+    edge = HIERARCHY_PREDICATES
 
     # Fall back to simple topological if no roots or mode doesn't support them
     if mode not in _TOPOLOGICAL_MODES or not roots_cfg:

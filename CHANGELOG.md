@@ -227,6 +227,12 @@ change, and what to do about it, is listed command by command in the
   IRI, as an IRI or a CURIE of the source's prefixes.
 
 ### Changed
+- **`sort: topological` follows both hierarchies in every section** (#245).
+  The predicate was chosen per section by sniffing two types, so
+  characteristic-only, `other_props` and annotation-property hierarchies were
+  ignored, and one class punned as an object property sent its whole class
+  section alphabetical. Every topological section now sorts over
+  `rdfs:subClassOf` and `rdfs:subPropertyOf` together (`HIERARCHY_PREDICATES`).
 - **`predicate_order` recognises every class and property type** (#262). A
   term declared only by an OWL characteristic (`owl:TransitiveProperty` and
   the like), or only `owl:FunctionalProperty`, `owl:DeprecatedProperty` or

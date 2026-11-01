@@ -1,6 +1,7 @@
 """Core RDF ordering and serialization functionality."""
 
 from .ordering import (
+    HIERARCHY_PREDICATES,
     SORT_MODES,
     UnknownSortModeError,
     normalise_sort_mode,
@@ -87,6 +88,7 @@ __all__ = [
     "normalise_sort_mode",
     "UnknownSortModeError",
     "SORT_MODES",
+    "HIERARCHY_PREDICATES",
     # Profile
     "OrderingConfig",
     "OrderingProfile",
