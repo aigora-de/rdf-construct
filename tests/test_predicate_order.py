@@ -11,6 +11,8 @@ from rdf_construct.core.predicate_order import (
     expand_curie,
     order_predicates,
 )
+from rdf_construct.core.serialiser import serialise_turtle_str
+from rdf_construct.core.vocab import ALL_PROPERTY_TYPES, CLASS_TYPES
 
 EX = Namespace("http://example.org/")
 IES = Namespace("http://example.org/ies/")
@@ -271,6 +273,86 @@ class TestOrderPredicates:
         middle = ordered[2:-1]
         assert EX.customProp in middle
         assert IES.powertype in middle
+
+
+class TestClassifySubjectFromVocab:
+    """Every class and property type in ``core.vocab`` is recognised (#262).
+
+    The sets are read from ``core.vocab`` rather than written out here, so a type added
+    there is tested without touching this file.
+    """
+
+    @pytest.mark.parametrize("prop_type", sorted(ALL_PROPERTY_TYPES), ids=lambda t: t.n3())
+    def test_every_property_type_is_a_property(self, prop_type: URIRef) -> None:
+        g = Graph()
+        g.add((EX.p, RDF.type, prop_type))
+
+        assert classify_subject(g, EX.p) == "property"
+
+    @pytest.mark.parametrize("class_type", sorted(CLASS_TYPES), ids=lambda t: t.n3())
+    def test_every_class_type_is_a_class(self, class_type: URIRef) -> None:
+        g = Graph()
+        g.add((EX.C, RDF.type, class_type))
+
+        assert classify_subject(g, EX.C) == "class"
+
+    def test_a_pun_is_a_class(self) -> None:
+        """A class that is also an object property (OWL Full) keeps the class spec."""
+        g = Graph()
+        g.add((EX.Part, RDF.type, OWL.Class))
+        g.add((EX.Part, RDF.type, OWL.ObjectProperty))
+
+        assert classify_subject(g, EX.Part) == "class"
+
+    def test_characteristic_only_property_gets_the_properties_spec(self) -> None:
+        """The issue's pair: declared and characteristic-only render alike."""
+        g = Graph()
+        g.parse(
+            data="""
+            @prefix ex: <http://example.org/> .
+            @prefix owl: <http://www.w3.org/2002/07/owl#> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+            ex:declared a owl:ObjectProperty ; rdfs:label "declared" ; rdfs:subPropertyOf ex:base .
+            ex:charonly a owl:TransitiveProperty ; rdfs:label "charonly" ;
+                rdfs:subPropertyOf ex:base .
+            ex:base a owl:ObjectProperty .
+            """,
+            format="turtle",
+        )
+        config = PredicateOrderConfig.from_dict(
+            {
+                "properties": {"first": ["rdfs:subPropertyOf"]},
+                "individuals": {"first": ["rdfs:label"]},
+            }
+        )
+
+        out = serialise_turtle_str(g, [EX.base, EX.charonly, EX.declared], config)
+
+        for name in ("declared", "charonly"):
+            block = out.split(f"ex:{name}\n", 1)[1].split("\n\n", 1)[0]
+            assert block.index("rdfs:subPropertyOf") < block.index("rdfs:label"), out
+
+    def test_deprecated_class_gets_the_classes_spec(self) -> None:
+        g = Graph()
+        g.parse(
+            data="""
+            @prefix ex: <http://example.org/> .
+            @prefix owl: <http://www.w3.org/2002/07/owl#> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+            ex:Old a owl:DeprecatedClass ; rdfs:label "old" ; rdfs:comment "gone" .
+            """,
+            format="turtle",
+        )
+        config = PredicateOrderConfig.from_dict(
+            {
+                "classes": {"first": ["rdfs:comment"]},
+                "individuals": {"first": ["rdfs:label"]},
+            }
+        )
+
+        out = serialise_turtle_str(g, [EX.Old], config)
+
+        assert out.index("rdfs:comment") < out.index("rdfs:label"), out
 
 
 if __name__ == "__main__":

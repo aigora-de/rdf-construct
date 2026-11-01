@@ -227,6 +227,12 @@ change, and what to do about it, is listed command by command in the
   IRI, as an IRI or a CURIE of the source's prefixes.
 
 ### Changed
+- **`predicate_order` recognises every class and property type** (#262). A
+  term declared only by an OWL characteristic (`owl:TransitiveProperty` and
+  the like), or only `owl:FunctionalProperty`, `owl:DeprecatedProperty` or
+  `owl:DeprecatedClass`, was given the `individuals` specification. Subjects
+  are now classified with `core.vocab`'s `CLASS_TYPES` and
+  `ALL_PROPERTY_TYPES`; a class punned as a property is still a class.
 - **`order` honours `prefix_order`** (#238). The serialiser sorted every
   prefix alphabetically, undoing the order `prefix_order` had asked for, so the
   key and `defaults.preserve_prefix_order` both did nothing. The prefixes
