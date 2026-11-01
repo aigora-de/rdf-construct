@@ -6,7 +6,7 @@ the exact subject order provided.
 """
 
 from collections import deque
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -352,6 +352,7 @@ def serialise_turtle(
     subjects_ordered: list,
     output_path: Path | str,
     predicate_order: PredicateOrderConfig | None = None,
+    prefix_order: Sequence[str] | None = None,
 ) -> None:
     """Serialise RDF graph to a Turtle file with preserved subject ordering.
 
@@ -363,10 +364,12 @@ def serialise_turtle(
         subjects_ordered: List of subjects in desired output order
         output_path: Path to write Turtle file to
         predicate_order: Optional predicate ordering configuration
+        prefix_order: Optional prefixes to declare first, in this order
     """
     output_path = Path(output_path)
     output_path.write_text(
-        serialise_turtle_str(graph, subjects_ordered, predicate_order), encoding="utf-8"
+        serialise_turtle_str(graph, subjects_ordered, predicate_order, prefix_order),
+        encoding="utf-8",
     )
 
 
@@ -374,6 +377,7 @@ def serialise_turtle_str(
     graph: Graph,
     subjects_ordered: list[Any],
     predicate_order: PredicateOrderConfig | None = None,
+    prefix_order: Sequence[str] | None = None,
 ) -> str:
     """Serialise RDF graph to a Turtle string with preserved subject ordering.
 
@@ -393,7 +397,8 @@ def serialise_turtle_str(
     as a top-level ``_:label`` instead, breaking the cycle once.
 
     Formatting features:
-    - Prefixes sorted alphabetically at top (used namespaces only)
+    - Prefixes at top (used namespaces only): those in prefix_order first, in
+      that order, then the rest alphabetically
     - Subjects in specified order
     - Single-arc blank nodes rendered inline (not as top-level stubs)
     - rdf:type predicate listed first for each subject and inline block
@@ -407,6 +412,9 @@ def serialise_turtle_str(
             missing from it is not written; ``check_subject_order_complete()``
             in ``core.default_order`` guards a list built for a whole graph.
         predicate_order: Optional predicate ordering configuration
+        prefix_order: Optional prefixes to declare first, in this order (#238). A listed
+            prefix the graph does not use, or does not bind, is skipped; one listed twice
+            takes its first position. ``None`` or empty: every prefix alphabetically.
 
     Returns:
         The Turtle document. ``serialise_turtle()`` writes these exact bytes.
@@ -421,10 +429,18 @@ def serialise_turtle_str(
 
     # Write prefixes — only those actually used in the graph.
     # Turtle requires the @prefix directive with a trailing ' .' (not SPARQL PREFIX).
+    # The empty prefix is declared like any other: `:A` without `@prefix :` is not Turtle.
     used_ns = collect_used_namespaces(graph)
     prefixes = sorted(graph.namespace_manager.namespaces(), key=lambda x: x[0])
+    if prefix_order:
+        # Listed prefixes first, at their first position; the sort is stable, so the rest
+        # stay alphabetical (#238).
+        rank: dict[str, int] = {}
+        for position, listed in enumerate(prefix_order):
+            rank.setdefault(listed, position)
+        prefixes.sort(key=lambda x: rank.get(x[0], len(prefix_order)))
     for prefix, namespace in prefixes:
-        if prefix and str(namespace) in used_ns:
+        if str(namespace) in used_ns:
             lines.append(f"@prefix {prefix}: <{namespace}> .")
     lines.append("")  # Blank line after prefixes
 

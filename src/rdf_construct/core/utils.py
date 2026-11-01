@@ -279,9 +279,10 @@ def nested_rules(rules: Iterable[str]) -> list[tuple[str, str]]:
 
 
 def rebind_prefixes(graph: Graph, ordered_prefixes: list[str], prefix_map: dict[str, str]) -> None:
-    """Rebind prefixes in a graph according to a specified order.
+    """Bind each listed prefix to its namespace in ``prefix_map``, replacing any binding.
 
-    This ensures deterministic prefix ordering in serialized output.
+    This does not decide the order prefixes are written in: ``serialise_turtle()`` sorts
+    them itself, and takes that order as its ``prefix_order`` argument (#238).
 
     Args:
         graph: RDF graph to rebind prefixes in

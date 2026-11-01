@@ -421,20 +421,49 @@ A source with no `owl:Ontology` has no identity to claim, so nothing is stamped 
 
 Only prefixes **actually used** by the emitted triples are declared. `classes-only` drops the
 datatype properties, so `xsd:` disappears from its header — there is no clutter of unused
-declarations (issue #50):
+declarations (issue #50). `prov:` is there because `classes-only` is an extract and is stamped
+(see above):
 
 ```turtle
 @prefix lib: <http://example.org/library#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 ```
 
+The prefixes are the source's own, plus `rdf`, `rdfs`, `owl`, `xsd` and `xml` (issue #239). A
+source's `org:`, `dc:` or `skos:` is written as the source declares it, even where rdflib has a
+well-known prefix of the same name for another vocabulary. Two consequences:
+
+- A namespace the source uses without declaring a prefix for it, outside those five, is written as
+  a full `<IRI>`. Declare the prefix in the source to get CURIEs.
+- A source that binds one of the five to another namespace (`@prefix owl: <…>` for something other
+  than OWL) has its own renamed, to `owl1:`, so that `owl:` still means OWL.
+
+`roots:` and `predicate_order` CURIEs resolve against the same prefixes.
+
 Declarations use Turtle's `@prefix` form, never SPARQL's `PREFIX` (issue #57). Turtle permits both;
 mixing them is what caused that bug, and the rule now is that `order` emits `@prefix` only.
 
-Prefix declarations are emitted in alphabetical order. The `prefix_order` key exists and does not
-currently change this — see [Known limitations](#known-limitations).
+Prefix declarations are emitted in alphabetical order unless the configuration has a top-level
+`prefix_order` list. The prefixes it names come first, in its order, then the rest alphabetically
+(issue #238). `ordering.yml` has no `prefix_order`; with `prefix_order: [lib, rdfs]` added at the
+top, `classes-only` begins:
+
+```turtle
+@prefix lib: <http://example.org/library#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+```
+
+A listed prefix the output does not use, or that the source never declares, is skipped without a
+message, and a prefix listed twice keeps its first place. Anything but a list of names, such as
+`prefix_order: rdf, owl`, is refused at exit 2 before anything is written. The order is
+presentation only: it changes no triple. `defaults.preserve_prefix_order`, which earlier configurations set, has been
+removed; it never had an effect, and a configuration that still sets it is not refused.
 
 ## Hierarchy cycles
 
@@ -492,9 +521,7 @@ it is still growing three releases from now, that is the signal, not the table.
 
 | Issue | Behaviour today |
 |---|---|
-| [#238](https://github.com/aigora-de/rdf-construct/issues/238) | `prefix_order` does not change the order prefixes are emitted in; output is always alphabetical. `defaults.preserve_prefix_order` has no observable effect either. |
-| [#239](https://github.com/aigora-de/rdf-construct/issues/239) | A source prefix that collides with one rdflib binds by default — `org`, `dc`, `foaf`, `skos`, `time`, `geo`, `prov`, `dcat` and others — is **renamed** in the output, so `@prefix org:` comes back as `@prefix org1:`. The graph is unchanged and isomorphic; the CURIEs in the file are not. `lib:` in these examples is unaffected. |
-| [#241](https://github.com/aigora-de/rdf-construct/issues/241) | A `roots:` entry that does not resolve, or that names a term absent from the ontology, is skipped with no message. Combined with #239 this bites: a `roots:` written with your source's own prefix can resolve somewhere else entirely. |
+| [#241](https://github.com/aigora-de/rdf-construct/issues/241) | A `roots:` entry that does not resolve, or that names a term absent from the ontology, is skipped with no message. |
 | [#243](https://github.com/aigora-de/rdf-construct/issues/243) | Eleven keys accepted in profiles and sections are read by nothing: `tie_breaker`, `comment_blocks`, `bnode_strategy`, `anchors`, `after_anchors`, `cluster`, `within_level`, `group_by`, `group_order`, `explicit_group_sequence`, `within_group_tie`. They appear in `examples/order/sample_profile.yml` and `examples/order/ies_profile.yml`, where they make two profiles byte-identical to two others. **`examples/order/ordering.yml`, used throughout this guide, contains only keys that work.** |
 | [#247](https://github.com/aigora-de/rdf-construct/issues/247) | A `selectors:` value beginning `FILTER` is matched by prefix only; the expression is never parsed, and such a selector claims every individual regardless of what it says. |
 | [#245](https://github.com/aigora-de/rdf-construct/issues/245) / [#262](https://github.com/aigora-de/rdf-construct/issues/262) | A section containing **only** properties declared by an OWL characteristic is sorted over `rdfs:subClassOf` rather than `rdfs:subPropertyOf`, so its hierarchy is ignored; and such terms are given the individuals' `predicate_order` specification. A mixed section, like the ones in this guide, is unaffected. |
@@ -526,7 +553,7 @@ from rdf_construct.core import (
 config = OrderingConfig(Path("examples/order/ordering.yml"))
 profile = config.get_profile("hierarchy")
 
-graph = Graph(bind_namespaces="none")
+graph = Graph(bind_namespaces="core")
 graph.parse("examples/order/library.ttl", format="turtle")
 
 ordered: list = []
@@ -560,9 +587,9 @@ print(f"Wrote library-hierarchy.ttl with {len(ordered)} subjects")
 Wrote library-hierarchy.ttl with 17 subjects
 ```
 
-Two things worth copying from it: parse with `bind_namespaces="none"`, or rdflib's well-known
-prefixes will displace your own (#239); and run `bnode_closure` before serialising, or a filtering
-selection can strip the interior of a class expression.
+Two things worth copying from it: parse with `bind_namespaces="core"`, as `order` does, or
+rdflib's well-known prefixes will displace your own (#239); and run `bnode_closure` before
+serialising, or a filtering selection can strip the interior of a class expression.
 
 That the snippet is this long is itself a finding rather than a style choice — there is no public
 "order this graph with this profile" entry point, so a library user has to re-derive the section

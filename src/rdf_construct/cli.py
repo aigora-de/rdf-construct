@@ -26,7 +26,6 @@ from rdf_construct.core import (
     bnode_closure,
     build_section_graph,
     extract_prefix_map,
-    rebind_prefixes,
     BUILTIN_SELECTOR_KEYS,
     UnknownSelectorError,
     UnknownSortModeError,
@@ -835,6 +834,13 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
 
     # Every requested section's select: and sort: too, for the same reason (#242).
     problems = _check_order_sections(ordering_config, profiles_to_gen)
+    # And prefix_order's shape: a string would be read a character at a time (#238).
+    prefix_order: Any = ordering_config.prefix_order  # a YAML value, not yet checked
+    if not isinstance(prefix_order, list) or not all(isinstance(p, str) for p in prefix_order):
+        problems.append(
+            "prefix_order: expected a list of prefix names, such as [rdf, rdfs, owl];"
+            f" got {prefix_order!r}"
+        )
     if problems:
         raise Refusal("Nothing was written:\n  " + "\n  ".join(problems))
 
@@ -845,9 +851,11 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
 
     # Parse source RDF
     click.echo(f"Loading {source}...")
-    graph = Graph()
+    # The source's own prefixes plus rdf, rdfs, owl, xsd and xml, never rdflib's extended
+    # table: under that table a source's `org:` or `dc:` comes back as `org1:` (#239). It is
+    # also what `roots:` and `predicate_order` CURIEs resolve against.
+    graph = Graph(bind_namespaces="core")
     graph.parse(source.as_posix(), format="turtle")
-    prefix_map = extract_prefix_map(graph)
 
     # Generate each profile
     for prof_name in profiles_to_gen:
@@ -957,18 +965,15 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
                 seen.add(WAS_DERIVED_FROM)
             _report_stamps(graph, out_graph, stamps, header_policies[prof_name])
 
-        # Rebind prefixes if configured
-        if ordering_config.defaults.get("preserve_prefix_order", True):
-            if ordering_config.prefix_order:
-                rebind_prefixes(out_graph, ordering_config.prefix_order, prefix_map)
-
         # Get predicate ordering for this profile
         predicate_order = ordering_config.get_predicate_order(prof_name)
 
-        # Serialise with predicate ordering
+        # Serialise with predicate ordering, declaring prefix_order's prefixes first (#238)
         out_file = outdir / f"{source.stem}-{prof_name}.ttl"
         mark_output_dir(outdir, "order")
-        serialise_turtle(out_graph, ordered_subjects, out_file, predicate_order)
+        serialise_turtle(
+            out_graph, ordered_subjects, out_file, predicate_order, ordering_config.prefix_order
+        )
         click.secho(f"  \u2713 {out_file}", fg="green")
 
     click.secho(f"\nConstructed {len(profiles_to_gen)} profile(s) in {outdir}/", fg="cyan")

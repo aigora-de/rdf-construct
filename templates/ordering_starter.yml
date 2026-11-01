@@ -9,8 +9,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 1: Prefix ordering (optional but recommended)
 # ─────────────────────────────────────────────────────────────────────────────
-# Controls the order prefixes appear at the top of the output file.
-# Standard prefixes first, then your domain prefixes.
+# Controls the order prefixes appear at the top of the output file: these
+# first, in this order, then any others alphabetically. A prefix your
+# ontology does not use is skipped.
 
 prefix_order:
   - rdf
@@ -27,7 +28,7 @@ prefix_order:
 # ─────────────────────────────────────────────────────────────────────────────
 
 defaults:
-  preserve_prefix_order: true
+  unclaimed: warn   # subjects no section claims: warn | emit | ignore
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 3: Define entity selectors
