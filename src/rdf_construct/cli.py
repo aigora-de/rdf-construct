@@ -50,6 +50,7 @@ from rdf_construct.core.formats import (
     infer_format as infer_rdf_format,
     normalise_format,
 )
+from rdf_construct.core.literal_forms import preserve_literal_forms
 from rdf_construct.core.outdir import OUTPUT_MARKER, foreign_entries, mark_output_dir, read_marker
 from rdf_construct.core.output_paths import (
     PlannedOutput,
@@ -361,6 +362,12 @@ class CrashHandlingGroup(click.Group):
     A crash stays distinguishable from a refusal at the same code: the traceback always goes to
     stderr, and the ``SystemExit`` is raised ``from`` the original exception, so it is the
     ``__cause__``. Outside standalone mode every exception propagates unchanged.
+
+    It is also where typed literals stop being normalised (#377). Every command runs inside
+    :func:`~rdf_construct.core.literal_forms.preserve_literal_forms`, so it reads and writes each
+    literal in the lexical form it was given. It is set here, not on import, so that a program
+    importing ``rdf_construct`` keeps rdflib's defaults, and it is restored on every way out, so a
+    ``CliRunner`` test leaves it as it found it.
     """
 
     def main(
@@ -387,7 +394,8 @@ class CrashHandlingGroup(click.Group):
             SystemExit: With code 2, chained from the exception no command handled.
         """
         try:
-            return super().main(args, prog_name, complete_var, standalone_mode, **extra)
+            with preserve_literal_forms():
+                return super().main(args, prog_name, complete_var, standalone_mode, **extra)
         except Exception as exc:
             if not standalone_mode:
                 raise

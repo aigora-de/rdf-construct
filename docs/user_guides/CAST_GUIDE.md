@@ -134,6 +134,22 @@ rdflib preserves prefix bindings on the graph object when parsing Turtle and N3 
 
 If prefix fidelity matters when converting from XML or JSON-LD, run `order` on the output to apply a canonical prefix set.
 
+## Literal Forms
+
+`cast` writes every typed literal in the form the source wrote it: `"007"^^xsd:integer` stays
+`"007"`, and `"1"^^xsd:boolean` beside `"true"^^xsd:boolean` stays two triples
+([#377](https://github.com/aigora-de/rdf-construct/issues/377)). Turtle, TriG and N3 output write a
+literal bare (`true`, `7`) only when that bare form reads back as the same literal, and as
+`"lexical"^^datatype` otherwise. Three exceptions, all rdflib's:
+
+- **A bare number in a Turtle or N3 source** (`007`, `+5`) is canonicalised by the parser, so it is
+  written as `7` and `5`.
+- **A JSON-LD source** gives its numbers and booleans as JSON values, which have only one form.
+- **JSON-LD output** writes booleans and numbers from their value, so `"007"^^xsd:integer` becomes
+  `7`, and `"1"^^xsd:boolean` beside `"true"` is written as `true` twice, which reads back as one
+  triple ([#462](https://github.com/aigora-de/rdf-construct/issues/462)). Use N-Triples, RDF/XML,
+  Turtle, TriG or N3 where the form matters.
+
 ## Quad Formats (TriG and N-Quads)
 
 TriG and N-Quads are **multi-graph** formats: a single file can contain multiple named graphs. Turtle, RDF/XML, JSON-LD, and N-Triples are **single-graph** formats.
@@ -215,6 +231,25 @@ if result.success:
 for warning in result.warnings:
     print(f"Warning: {warning}")
 ```
+
+Called from Python, `CastConverter` (like every `rdf_construct` function) uses rdflib's defaults,
+which normalise typed literals as they are read: `"007"^^xsd:integer` becomes `"7"`. To read and
+write them as the CLI does (see [Literal Forms](#literal-forms)), wrap the work in
+`preserve_literal_forms()`:
+
+```python
+from pathlib import Path
+from rdf_construct.cast.converter import CastConverter
+from rdf_construct.core import preserve_literal_forms
+
+with preserve_literal_forms():
+    result = CastConverter().convert(
+        source=Path("ontology.ttl"), formats=["nt"], output_dir=None, pipe_mode=True
+    )
+```
+
+It sets rdflib's settings for the whole process and restores them on exit, so it is not
+thread-safe.
 
 ### `ConversionResult` fields
 

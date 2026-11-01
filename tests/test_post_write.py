@@ -12,6 +12,10 @@ seconds to the suite and catch nothing the smallest does not.
 A contract that fails today is ``xfail(strict=True)`` against the issue that explains it. The fix
 for that issue makes the test pass, and the strict marker then fails the suite until the fix
 removes it.
+
+Every graph is read the way the CLI reads it, without normalising typed literals (#377). Read
+with rdflib's default, both sides would agree on ``"7"`` for ``"007"`` and on one triple for
+``"1"^^xsd:boolean`` beside ``"true"``, and no contract could see either.
 """
 
 import json
@@ -24,6 +28,7 @@ from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import RDF, RDFS, SH
 
 from rdf_construct.cli import cli
+from rdf_construct.core import preserve_literal_forms
 from rdf_construct.core.verify import CONTRACTS, Triple, check_contract, describe
 from rdf_construct.core.vocab import CLASS_TYPES
 from rdf_construct.docs import extract_all
@@ -36,6 +41,7 @@ FIXTURES = REPO / "tests" / "fixtures"
 ANIMAL = EXAMPLES / "animal_ontology.ttl"
 LIBRARY = EXAMPLES / "order" / "library.ttl"
 IES_SMALL = FIXTURES / "ies" / "ies-env-building-classification.ttl"
+LITERALS = FIXTURES / "literals" / "lit.ttl"
 MULTI_BNODE = FIXTURES / "order" / "multi_object_bnode.ttl"
 DOCS_SOURCE = FIXTURES / "docs" / "skos_vocabulary.ttl"
 
@@ -51,7 +57,8 @@ def _run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *argv: object) -> Resu
 
 
 def _parse(path: Path, fmt: str | None = None) -> Graph:
-    return Graph().parse(path, format=fmt)
+    with preserve_literal_forms():
+        return Graph().parse(path, format=fmt)
 
 
 def _assert_holds(
@@ -84,6 +91,31 @@ def test_cast_is_isomorphic(source: Path, fmt: str, tmp_path, monkeypatch):
     _run(tmp_path, monkeypatch, "cast", source, "-f", fmt, "-o", tmp_path / "out")
     [written] = (tmp_path / "out").iterdir()
     _assert_holds("cast", inputs=[_parse(source)], outputs=[_parse(written, fmt)])
+
+
+@pytest.mark.parametrize(
+    "fmt",
+    [
+        "nt",
+        "xml",
+        "n3",
+        pytest.param(
+            "json-ld",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="#462: rdflib's JSON-LD serialiser writes booleans and numbers from "
+                'their value, so "1"^^xsd:boolean and "true" are written as one value',
+            ),
+        ),
+    ],
+)
+def test_cast_keeps_every_lexical_form(fmt: str, tmp_path, monkeypatch):
+    """#377: the fixture states 16 triples, and normalising its literals leaves 14."""
+    _run(tmp_path, monkeypatch, "cast", LITERALS, "-f", fmt, "-o", tmp_path / "out")
+    [written] = (tmp_path / "out").iterdir()
+    source = _parse(LITERALS)
+    assert len(source) == 16
+    _assert_holds("cast", inputs=[source], outputs=[_parse(written, fmt)])
 
 
 # ---------------------------------------------------------------------------

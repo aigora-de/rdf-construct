@@ -155,6 +155,12 @@ expect:
     - building: "http://example.org/Building1"
 ```
 
+A value check compares a literal by its value, so `floors: 3` matches `"3"^^xsd:integer` and
+`"03"^^xsd:integer` alike. A literal constant **inside the query's graph pattern** matches by term:
+`ASK { ?b ex:floors 3 }` does not match `"03"^^xsd:integer`, which the ontology is read with as
+written ([#377](https://github.com/aigora-de/rdf-construct/issues/377)). To compare by value, bind
+a variable and filter it: `ASK { ?b ex:floors ?n FILTER(?n = 3) }`.
+
 ## Schema vs Data Tests
 
 Competency questions fall into two categories:

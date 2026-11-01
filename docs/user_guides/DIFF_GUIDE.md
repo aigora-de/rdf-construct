@@ -248,6 +248,7 @@ The diff detects these as **changes**:
 2. **Literal type changes** — `"42"` (string) vs `42` (integer)
 3. **Language tag changes** — `"Building"@en` vs `"Building"`
 4. **Changes inside blank nodes** — a restriction's cardinality, an axiom annotation's comment, a list's members (see [Blank Nodes](#blank-nodes))
+5. **Lexical form changes** — `"01"^^xsd:integer` vs `"1"^^xsd:integer`: one value written two ways is two literals in RDF 1.1, and neither file is normalised as it is read ([#377](https://github.com/aigora-de/rdf-construct/issues/377)). A bare number in a Turtle file (`007`) is canonicalised by rdflib's parser, so it reads as `7`
 
 ## Blank Nodes
 
