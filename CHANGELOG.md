@@ -227,6 +227,22 @@ change, and what to do about it, is listed command by command in the
   IRI, as an IRI or a CURIE of the source's prefixes.
 
 ### Changed
+- **Typed literals keep the lexical form the source wrote** (#377). rdflib
+  normalised every typed literal as it parsed it, so every command wrote
+  `"007"^^xsd:integer` as `"7"`, and `"1"^^xsd:boolean` beside `"true"` on one
+  subject and predicate became one triple, at exit 0. The CLI now runs every
+  command inside `core.preserve_literal_forms()`, which turns that off and
+  guards rdflib's Turtle, TriG and N3 serialisers: they wrote a literal of a
+  shorthand datatype bare, so `"1"^^xsd:boolean` would have come back as an
+  `xsd:integer`. `diff` now reports a change of lexical form. `merge` keeps both
+  forms, and its conflict detection compares values (`value_key`), so `"1"`
+  and `"01"` never conflict. `refactor deprecate` recognises
+  `owl:deprecated "1"^^xsd:boolean`. A bare number in a Turtle source is still
+  canonicalised by rdflib's parser, and JSON-LD output still writes booleans and
+  numbers from their value (#462). Library callers keep rdflib's defaults
+  unless they use `preserve_literal_forms()`. See
+  [Typed literals](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#typed-literals)
+  in the migration note.
 - **`order` reports a `roots:` entry that anchors nothing** (#241). A root
   whose prefix the source does not declare, that is not in the ontology, that
   its section does not select, or that an earlier section placed, was skipped

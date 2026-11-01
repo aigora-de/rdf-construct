@@ -125,6 +125,14 @@ untagged literal is its own bucket. Subtags are not matched: `@en` and `@en-gb` 
 `"Building"` and `"Building"^^xsd:string` are one value, as RDF 1.1 says, so they never conflict;
 both spellings are still written to the output.
 
+One value written two ways is not a disagreement either: `"1"^^xsd:integer` and
+`"01"^^xsd:integer`, or an `xsd:dateTime` written with `Z` and again with `+00:00`, never conflict,
+even for a functional property. Both forms are written to the output as the sources wrote them,
+because RDF 1.1 counts them as two literals
+([#377](https://github.com/aigora-de/rdf-construct/issues/377)). So two restrictions that differ
+only in such a form, `owl:cardinality "1"` in one source and `"01"` in another, are two blank-node
+structures, and both are written.
+
 The conflict types say why a second value matters:
 
 | Type | Tier | Meaning |

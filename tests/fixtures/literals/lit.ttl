@@ -1,0 +1,23 @@
+# Typed literals whose lexical form is not rdflib's canonical one (#377).
+#
+# The first block is #377's reproducer, verbatim: 12 triples. The second adds four that make other
+# wrong answers visible. The file states 16 triples. Parsed with rdflib's default normalisation it
+# gives 14: "1"^^xsd:boolean merges into "true", and the "Z" dateTime into the "+00:00" one.
+#
+# What a wrong answer looks like:
+# - a count of 14 is normalisation merging terms;
+# - "7", "1", "5", "20.0" or "false" is a normalised lexical form;
+# - "1"^^xsd:integer or "0"^^xsd:integer is a boolean written bare by rdflib's Turtle serialiser;
+# - "1.0"^^xsd:decimal is a whole decimal written bare by it.
+
+@prefix ex: <http://example.org/lit#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ex:A a owl:Class ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty ex:p ; owl:cardinality "01"^^xsd:nonNegativeInteger ] .
+ex:p a owl:ObjectProperty .
+ex:x ex:v "007"^^xsd:integer , "1.50"^^xsd:decimal , "true"^^xsd:boolean , "1"^^xsd:boolean , "2024-01-01T00:00:00+00:00"^^xsd:dateTime , "+5"^^xsd:int .
+
+ex:x ex:v "2024-01-01T00:00:00Z"^^xsd:dateTime , "1"^^xsd:decimal , "20"^^xsd:double , "0"^^xsd:boolean .

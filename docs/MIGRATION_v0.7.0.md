@@ -128,6 +128,45 @@ section.
 that `lint` finds without `-c`. A key that has never had an effect now does: remove it, or pass
 the flag, if it says something you do not mean.
 
+### Typed literals
+
+Typed literals are written as the source wrote them, not in rdflib's canonical form, and `diff`
+reports a change of lexical form ([#377](https://github.com/aigora-de/rdf-construct/issues/377)).
+rdflib rewrote every typed literal as it parsed it, so every command wrote `"007"^^xsd:integer` as
+`"7"`, `"01"^^xsd:nonNegativeInteger` as `"1"`, `"+5"^^xsd:int` as `"5"` and `"20"^^xsd:float` as
+`"20.0"`. Where two forms of one value sat on the same subject and predicate, such as
+`"1"^^xsd:boolean` beside `"true"^^xsd:boolean`, or one `xsd:dateTime` written with `Z` and again
+with `+00:00`, it kept **one triple** and dropped the other, at exit 0.
+
+**What moved:**
+
+- **Every command's output:**
+  - a typed literal keeps the form the source gave it;
+  - a file that states two forms of one value keeps both triples;
+  - Turtle, TriG and N3 output writes a literal bare (`true`, `7`) only when that bare form reads back as the same literal, and as `"lexical"^^datatype` otherwise. So a whole `xsd:decimal` is no longer written as `1.0`, and an `xsd:double` is no longer written as `2e+01`.
+- **`diff`** reports `"01"^^xsd:integer` against `"1"^^xsd:integer` as a change; it used to read them as the same.
+- **`merge`:**
+  - when one source writes `"1"` and another `"01"`, both are kept, so two restrictions that differ only in a lexical form are two restrictions;
+  - a conflict compares values, so `"1"` and `"01"` never conflict, even on a predicate a config makes load-bearing.
+- **`cq-test`:** a literal constant in a graph pattern matches by term. `ASK { ?s ex:v 7 }` no longer matches `"007"^^xsd:integer`, though `FILTER(?v = 7)` still does.
+- **`localise`:** `owl:deprecated "TRUE"^^xsd:boolean` no longer counts as deprecated. `"TRUE"` is not a boolean's lexical form, and the parse used to rewrite it as `"true"` (#463 is about the three readers of `owl:deprecated`).
+- **`refactor deprecate`:** an entity with `owl:deprecated "1"^^xsd:boolean` still counts as already deprecated.
+
+**What did not move:**
+
+- A bare number in a Turtle source (`007`, `+5`) is still canonicalised, by rdflib's parser, so "as the source wrote them" applies to quoted typed literals.
+- JSON-LD input arrives as JSON values, which are canonical anyway.
+- **JSON-LD output** still writes booleans and numbers from their value, so a `"1"^^xsd:boolean` beside `"true"` is still one triple there ([#462](https://github.com/aigora-de/rdf-construct/issues/462)).
+- `shacl-gen` reads a cardinality by value, so its shapes do not change.
+
+**Python API:** a program that imports `rdf_construct` keeps rdflib's defaults. Wrap its work in
+`rdf_construct.core.preserve_literal_forms()` to read and write literals as the CLI does.
+
+**What to do:**
+
+- Expect `diff` to report literal changes between an output written before this release and one written after it. In the IES fixtures, 14 `xsd:float` literals go back from `"20.0"` to `"20"`.
+- Look for literals that a pipeline compares as text, or `cq-test` patterns with literal constants. Use `FILTER` for a comparison by value.
+
 ## `cast`
 
 Nothing has landed yet.

@@ -84,6 +84,7 @@ from .formats import (
     is_quad_format,
     default_cast_formats,
 )
+from .literal_forms import preserve_literal_forms
 
 __all__ = [
     # Ordering
@@ -164,4 +165,6 @@ __all__ = [
     "infer_format",
     "is_quad_format",
     "default_cast_formats",
+    # Literal forms
+    "preserve_literal_forms",
 ]

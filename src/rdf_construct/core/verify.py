@@ -20,7 +20,11 @@ labels never matter and two parses of the same file are the same graph. That cut
 - **Prefixes, comments and layout are invisible.** Only triples count.
 - **Literals are compared as terms, not values.** ``"01"^^xsd:integer`` and ``"1"^^xsd:integer``
   are different literals. RDF isomorphism is defined on terms, so a serialiser that normalises a
-  lexical form has changed the graph, and is reported.
+  lexical form has changed the graph, and is reported, **but only if both sides were read without
+  normalisation**, as the CLI reads them
+  (:func:`~rdf_construct.core.literal_forms.preserve_literal_forms`). A graph parsed with rdflib's
+  default has already rewritten ``"01"`` to ``"1"`` and merged equal-valued forms, so a contract
+  checked over such graphs cannot see either (#377).
 - **Named graphs are invisible.** Every contract compares :class:`~rdflib.Graph` objects, so a
   triple moved from one named graph to another, or a graph name that is lost, cannot be seen. No
   command carries named graphs end to end today: ``cast`` refuses a quad source unless
