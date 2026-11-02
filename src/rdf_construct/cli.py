@@ -3758,8 +3758,15 @@ def localise_report(
         get_formatter as get_localise_formatter,
     )
 
-    # Parse languages
-    lang_list = [lang.strip() for lang in languages.split(",")]
+    # Parse languages: drop empties from ",," and keep first of each code (#163).
+    lang_list: list[str] = []
+    seen_langs: set[str] = set()
+    for lang in languages.split(","):
+        code = lang.strip()
+        if not code or code in seen_langs:
+            continue
+        seen_langs.add(code)
+        lang_list.append(code)
 
     # Parse properties
     prop_list = None
@@ -3786,7 +3793,8 @@ def localise_report(
     # Output
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(report_text)
+        # Always UTF-8: reports contain ✓/⚠/✗ (and emoji in markdown) (#163).
+        output.write_text(report_text, encoding="utf-8")
         click.secho(f"\u2713 Wrote {output}", fg="green")
     else:
         click.echo()
