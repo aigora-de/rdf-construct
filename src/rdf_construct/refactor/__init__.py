@@ -30,8 +30,11 @@ from rdf_construct.refactor.collisions import (
     RenameCollision,
     TargetReference,
     ReflexiveTriple,
+    InertRename,
     find_collisions,
     find_references,
+    inert_renames,
+    live_mappings,
 )
 from rdf_construct.refactor.renamer import (
     OntologyRenamer,
@@ -73,6 +76,10 @@ __all__ = [
     "ReflexiveTriple",
     "find_collisions",
     "find_references",
+    # Renames that change nothing (#183)
+    "InertRename",
+    "inert_renames",
+    "live_mappings",
     # Deprecator
     "OntologyDeprecator",
     "DeprecationResult",

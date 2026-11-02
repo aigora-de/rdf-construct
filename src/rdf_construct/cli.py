@@ -151,6 +151,8 @@ from rdf_construct.refactor import (
     RenameCollision,
     find_collisions,
     find_references,
+    InertRename,
+    inert_renames,
 )
 from rdf_construct.refactor.config import AmbiguousCurieError, RenameMapping
 from rdf_construct.merge import DataMigrator
@@ -3724,8 +3726,8 @@ def _load_refactor_sources(paths: list[Path]) -> list[tuple[Path, Graph]]:
 
 
 @dataclass
-class _RenameOutputs:
-    """Where ``refactor rename`` will write, worked out before anything is written (#411).
+class _RefactorOutputs:
+    """Where ``refactor rename`` or ``deprecate`` will write, worked out before writing (#411, #186).
 
     Attributes:
         ontology: Each source's output path, for the sources that have one.
@@ -3743,13 +3745,97 @@ class _RenameOutputs:
         ]
 
 
+def _apply_refactor_cli(
+    config: RefactorConfig, sources: tuple[Path, ...], output: Path | None
+) -> None:
+    """Lay the command line's sources and ``-o`` over the configuration (#411, #186).
+
+    The sources replace the config's ``source_files:`` first, so ``-o`` is read against the
+    sources the run will actually process: a file for one, a directory for several. Either
+    way ``-o`` replaces the config's ``output:`` and ``output_dir:``, so a config's single
+    file cannot outrank it.
+
+    Args:
+        config: The configuration, loaded from a file or built from the command line.
+        sources: The source arguments, if any.
+        output: ``-o``, if given.
+    """
+    if sources:
+        config.source_files = list(sources)
+    if output:
+        if len(config.source_files) > 1:
+            config.output, config.output_dir = None, output
+        else:
+            config.output, config.output_dir = output, None
+
+
+def _output_label(config: RefactorConfig, output: Path | None) -> str | None:
+    """What named the ontology output: ``-o``, the config's ``output:`` or ``output_dir:``."""
+    if output:
+        return "-o"
+    if config.output is not None:
+        return "the config's output:"
+    if config.output_dir is not None:
+        return "the config's output_dir:"
+    return None
+
+
+def _refuse_one_output_for_many(config: RefactorConfig) -> None:
+    """Refuse a config ``output:`` that names one file for several sources (#411, #186).
+
+    Raises:
+        Refusal: When each result would replace the last.
+    """
+    if config.output and len(config.source_files) > 1:
+        raise Refusal(
+            f"The config's output: names one file, {config.output}, but there are "
+            f"{len(config.source_files)} sources, and each result would replace the last. "
+            "Use output_dir: in the config, or -o with a directory."
+        )
+
+
+def _refuse_config_with_operation(section: str, flags: dict[str, str]) -> None:
+    """Refuse ``-c`` together with an operation given on the command line (#352).
+
+    A flag and the config each specify the operation, so neither can quietly win. Each flag is
+    detected with ``flag_given``, so ``--message ""`` counts. Called before the config is read
+    or any source parsed.
+
+    Args:
+        section: The config key the operation belongs in (``rename:``, ``deprecations:``).
+        flags: Each operation option's parameter name, with its spelling on the command line.
+
+    Raises:
+        Refusal: When any of the flags was given.
+    """
+    given = [spelling for name, spelling in flags.items() if flag_given(name)]
+    if given:
+        raise Refusal(
+            "Nothing was written:\n  -c/--config cannot be combined with "
+            f"{', '.join(given)}. Put the operation in the config's {section} section, or run "
+            "it as a separate command without -c."
+        )
+
+
+def _report_inert_renames(inert: list[InertRename]) -> None:
+    """Name each rename that changed nothing, on stderr (#183)."""
+    if not inert:
+        return
+    count = (
+        "1 rename matched nothing" if len(inert) == 1 else f"{len(inert)} renames matched nothing"
+    )
+    click.secho(f"\u26a0 {count}:", fg="yellow", err=True)
+    for rename in inert:
+        click.secho(f"  {rename.describe()}", fg="yellow", err=True)
+
+
 def _plan_rename_outputs(
     config: RefactorConfig,
     graphs: list[tuple[Path, Graph]],
     data_graphs: list[tuple[Path, Graph]],
     uri_map: dict[URIRef, URIRef],
     data_output: Path | None,
-) -> _RenameOutputs:
+) -> _RefactorOutputs:
     """Work out every path ``refactor rename`` would write.
 
     The paths are the ones each write used to work out for itself: ``-o`` or the config's
@@ -3768,7 +3854,7 @@ def _plan_rename_outputs(
     Returns:
         The planned outputs.
     """
-    outputs = _RenameOutputs()
+    outputs = _RefactorOutputs()
     for source_path, _ in graphs:
         out_path = config.output or (
             config.output_dir / source_path.name if config.output_dir else None
@@ -3786,19 +3872,48 @@ def _plan_rename_outputs(
     return outputs
 
 
-def _check_rename_outputs(
-    outputs: _RenameOutputs,
+def _plan_deprecate_outputs(
+    config: RefactorConfig, graphs: list[tuple[Path, Graph]]
+) -> _RefactorOutputs:
+    """Work out every path ``refactor deprecate`` would write (#186).
+
+    ``-o`` or the config's ``output:`` for one source, ``output_dir`` joined with the
+    basename for several, and ``<stem>_deprecated`` beside each source without either.
+
+    Args:
+        config: The resolved refactor configuration.
+        graphs: Each source with its graph.
+
+    Returns:
+        The planned outputs.
+    """
+    outputs = _RefactorOutputs()
+    for source_path, _ in graphs:
+        if config.output:
+            out_path = config.output
+        elif config.output_dir:
+            out_path = config.output_dir / source_path.name
+        else:
+            out_path = source_path.with_stem(f"{source_path.stem}_deprecated")
+        outputs.ontology[source_path] = out_path
+    return outputs
+
+
+def _check_refactor_outputs(
+    outputs: _RefactorOutputs,
     config: RefactorConfig,
     data_paths: tuple[Path, ...],
     data_output: Path | None,
     config_file: Path | None,
     in_place: bool,
+    label: str | None = "-o",
 ) -> dict[Path, Path]:
-    """Refuse a plan that would write one file twice, or write over an input (#411).
+    """Refuse a plan that would write one file twice, or write over an input (#411, #186).
 
     An output may replace an input only when it is that input's own result and
-    ``--in-place`` is given: a source rewritten with its rename, a data file with its
-    migration. Every other overlap is refused, flag or not.
+    ``--in-place`` is given: a source rewritten with its rename or its deprecations, a data
+    file with its migration. Every other overlap is refused, flag or not. Each refusal says
+    what to do instead.
 
     Args:
         outputs: The planned outputs.
@@ -3807,6 +3922,8 @@ def _check_rename_outputs(
         data_output: ``--data-output``, if given.
         config_file: The config file, which is an input too.
         in_place: Whether ``--in-place`` was given.
+        label: What named the ontology outputs (``-o``, the config's ``output:`` or
+            ``output_dir:``), or ``None`` when each is a default derived from its source.
 
     Returns:
         Each output that ``--in-place`` lets replace its own input, with that input.
@@ -3816,20 +3933,38 @@ def _check_rename_outputs(
     """
     directories = []
     if config.output is None and config.output_dir is not None and outputs.ontology:
-        directories.append((config.output_dir, "-o"))
+        directories.append((config.output_dir, label or "-o"))
     if data_output is not None and len(outputs.data) > 1:
         directories.append((data_output, "--data-output"))
     for directory, flag in directories:
         if directory.exists() and not directory.is_dir():
             raise Refusal(
-                f"{directory} is a file, but with several inputs {flag} names a directory."
+                f"{directory} is a file, but with several inputs {flag} names a directory. "
+                "Name a directory, or a path that does not exist yet."
+            )
+
+    # One input, and a file path that is an existing directory: the write would fail (#186)
+    files = []
+    if config.output is not None and len(outputs.ontology) == 1:
+        files.append((config.output, label or "-o", next(iter(outputs.ontology))))
+    if data_output is not None and len(outputs.data) == 1:
+        files.append((data_output, "--data-output", next(iter(outputs.data))))
+    for path, flag, source in files:
+        if path.is_dir():
+            raise Refusal(
+                f"{path} is a directory, but with one input {flag} names the output file. "
+                f"Name a file, such as {path / source.name}."
             )
 
     planned = outputs.planned()
     problems: list[str] = []
     for group in colliding_outputs(planned):
         made_from = ", ".join(str(output.made_from) for output in group)
-        problems.append(f"{group[0].path} would be written {len(group)} times, from {made_from}.")
+        problems.append(
+            f"{group[0].path} would be written {len(group)} times, from {made_from}. Give each "
+            "its own path: inputs that share a file name need separate output directories, "
+            "or separate runs."
+        )
 
     inputs = [*config.source_files, *data_paths, *([config_file] if config_file else [])]
     replaced: dict[Path, Path] = {}
@@ -3845,9 +3980,13 @@ def _check_rename_outputs(
             )
         else:
             which = "an input" if output.path == existing else f"the input {existing}"
+            derived = label is None and output.path in outputs.ontology.values()
+            advice = (
+                "Pass -o to write the results elsewhere." if derived else "Choose another path."
+            )
             problems.append(
                 f"{output.path} would replace {which}, but it is the result of "
-                f"{output.made_from}. Choose another path."
+                f"{output.made_from}. {advice}"
             )
 
     if problems:
@@ -4106,11 +4245,17 @@ def refactor_rename(
     owl:propertyDisjointWith or owl:differentFrom axiom reflexive. A target that is
     only referenced is renamed onto, and the run says so.
 
+    A run that would write nothing (no -o, no output: or output_dir: in the config,
+    and no data to migrate) is refused; --dry-run writes nothing by design. -c cannot
+    be combined with --from, --to, --from-namespace or --to-namespace: put the
+    operation in the config.
+
     \b
     Exit codes:
       0 - Success
+      1 - Finished, but a rename matched nothing in any file of the run
       2 - Input refused or run failed (invalid options or config, parse error,
-          a rename that would merge two entities, etc.)
+          a rename that would merge two entities, nothing to write, etc.)
 
     \b
     Examples:
@@ -4130,7 +4275,8 @@ def refactor_rename(
       rdf-construct refactor rename ontology.ttl \\
           --from "ex:OldClass" --to "ex:NewClass" \\
           --migrate-data instances.ttl \\
-          --data-output updated-instances.ttl
+          --data-output updated-instances.ttl \\
+          -o fixed.ttl
 
       # From configuration file
       rdf-construct refactor rename --config renames.yml
@@ -4167,6 +4313,18 @@ def refactor_rename(
             "Provide source files or use --config with a configuration file."
         )
 
+    # An operation on the command line and one in the config cannot both run (#352)
+    if config_file:
+        _refuse_config_with_operation(
+            "rename:",
+            {
+                "from_uri": "--from",
+                "to_uri": "--to",
+                "from_namespace": "--from-namespace",
+                "to_namespace": "--to-namespace",
+            },
+        )
+
     # Validate rename options
     if from_uri and not to_uri:
         raise Refusal("--from requires --to.")
@@ -4182,19 +4340,6 @@ def refactor_rename(
         try:
             config = load_refactor_config(config_file)
             click.echo(f"Using config: {config_file}")
-
-            # Override output if provided on CLI. -o replaces the config's output: and
-            # output_dir: alike, so a config's single file cannot outrank it (#411).
-            if output:
-                if len(sources) > 1 or (config.source_files and len(config.source_files) > 1):
-                    config.output = None
-                    config.output_dir = output
-                else:
-                    config.output = output
-
-            # Override sources if provided on CLI
-            if sources:
-                config.source_files = list(sources)
         except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
             raise Refusal(f"Could not load config {config_file}: {e}") from e
     else:
@@ -4207,13 +4352,9 @@ def refactor_rename(
         if from_uri and to_uri:
             rename_config.entities[from_uri] = to_uri
 
-        config = RefactorConfig(
-            rename=rename_config,
-            source_files=list(sources),
-            output=output if len(sources) == 1 else None,
-            output_dir=output if len(sources) > 1 else None,
-            dry_run=dry_run,
-        )
+        config = RefactorConfig(rename=rename_config, dry_run=dry_run)
+    # The sources first, then -o read against them: a file for one, a directory for several
+    _apply_refactor_cli(config, sources, output)
 
     # Validate we have something to rename
     if config.rename is None or (not config.rename.namespaces and not config.rename.entities):
@@ -4225,12 +4366,7 @@ def refactor_rename(
 
     # One output file cannot hold the results of several sources: each would replace the
     # last (#411).
-    if config.output and len(config.source_files) > 1:
-        raise Refusal(
-            f"The config's output: names one file, {config.output}, but there are "
-            f"{len(config.source_files)} sources, and each result would replace the last. "
-            "Use output_dir: in the config, or -o with a directory."
-        )
+    _refuse_one_output_for_many(config)
 
     # Load every source before writing anything, so that a CURIE is resolved once, against
     # the prefixes the files declare, and refused before any output exists (#182).
@@ -4265,8 +4401,31 @@ def refactor_rename(
             uri_map[mapping.from_uri] = mapping.to_uri
 
     planned = _plan_rename_outputs(config, graphs, data_graphs, uri_map, data_output)
-    replaced = _check_rename_outputs(
-        planned, config, migrate_data, data_output, config_file, in_place
+
+    # A rename that would write nothing is refused; a dry run writes nothing by design (#183)
+    if not planned.ontology and not planned.data and not dry_run:
+        if migrate_data:
+            reason = (
+                "no output was named for the renamed ontology, and the rename matches nothing "
+                "in the sources, and the data is migrated only with renames found there."
+            )
+        else:
+            reason = "no output was named, so the renamed ontology would be thrown away."
+        advice = (
+            "Pass -o FILE (-o DIR/ for several sources), or set output: or output_dir: in "
+            "the config."
+        )
+        if in_place:
+            advice += " --in-place lets -o replace a source; it does not name one."
+        raise Refusal(f"Nothing was written:\n  {reason}\n{advice}")
+    replaced = _check_refactor_outputs(
+        planned,
+        config,
+        migrate_data,
+        data_output,
+        config_file,
+        in_place,
+        _output_label(config, output),
     )
 
     # Every mapping in every file is checked before anything is written; a dry run shows
@@ -4275,6 +4434,19 @@ def refactor_rename(
     collisions = _find_rename_collisions(graphs, data_graphs, config.rename, uri_map)
     if not dry_run and not config.rename.merge_entities:
         _refuse_rename_collisions(collisions)
+
+    # A rename that matches nothing is judged over every file of the run, never file by file:
+    # a module set uses each term in only one or two of its files (#183)
+    union = graphs[0][1] if len(graphs) == 1 else Graph()
+    if len(graphs) > 1:
+        for _, graph in graphs:
+            union += graph
+    inert = inert_renames(config.rename, union, [graph for _, graph in data_graphs])
+    if planned.data and not planned.ontology and not dry_run:
+        click.echo(
+            "Note: no -o, so the renamed ontology is not written; only the migrated data is.",
+            err=True,
+        )
 
     # Execute rename
     formatter = RefactorTextFormatter(use_colour=not no_colour)
@@ -4294,7 +4466,8 @@ def refactor_rename(
         _report_rename_collisions(collisions, merging=config.rename.merge_entities, dry_run=True)
         if not config.rename.merge_entities:
             _refuse_rename_collisions(collisions)
-        raise SystemExit(0)
+        _report_inert_renames(inert)
+        raise SystemExit(1 if inert else 0)
 
     # Rename every source before writing any of them, so a failure leaves nothing behind.
     results = []
@@ -4341,7 +4514,20 @@ def refactor_rename(
                         )
 
     _report_rename_collisions(collisions, merging=config.rename.merge_entities, dry_run=False)
-    raise SystemExit(0)
+    _report_inert_renames(inert)
+    raise SystemExit(1 if inert else 0)
+
+
+def _report_missing_entities(missing: list[str]) -> None:
+    """Name each entity that no source describes, so none deprecated it (#186)."""
+    if not missing:
+        return
+    count = "1 entity is" if len(missing) == 1 else f"{len(missing)} entities are"
+    click.secho(
+        f"\n\u26a0 {count} a subject in no source, so not deprecated:", fg="yellow", err=True
+    )
+    for iri in missing:
+        click.secho(f"  <{iri}>", fg="yellow", err=True)
 
 
 @refactor.command("deprecate")
@@ -4350,7 +4536,7 @@ def refactor_rename(
     "-o",
     "--output",
     type=click.Path(path_type=Path),
-    help="Output file.",
+    help="Output file (for single source) or directory (for multiple sources).",
 )
 @click.option(
     "--entity",
@@ -4377,6 +4563,11 @@ def refactor_rename(
     help="YAML configuration file with deprecation specs.",
 )
 @click.option(
+    "--in-place",
+    is_flag=True,
+    help="Allow -o to name a source, and rewrite it with its own deprecations.",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Preview changes without writing files.",
@@ -4401,6 +4592,7 @@ def refactor_deprecate(
     message: str | None,
     version: str | None,
     config_file: Path | None,
+    in_place: bool,
     dry_run: bool,
     no_colour: bool,
     init_config: bool,
@@ -4418,11 +4610,18 @@ def refactor_deprecate(
     \b
     SOURCES: One or more RDF files to process (.ttl, .rdf, .owl)
 
+    Without -o, each result is written beside its source as <stem>_deprecated.ttl.
+    With several sources, -o names a directory and each result keeps its source's
+    file name. An output that would replace a source is refused unless --in-place is
+    given and it is that source's own result. -c cannot be combined with --entity,
+    --replaced-by, --message or --version: put the deprecation in the config.
+
     \b
     Exit codes:
       0 - Success
-      1 - Success with warnings (some entities not found)
-      2 - Input refused or run failed (invalid options or config, parse error, etc.)
+      1 - Finished, but an entity is a subject in no source, so it was not deprecated
+      2 - Input refused or run failed (invalid options or config, parse error,
+          an output that would replace an input, etc.)
 
     \b
     Examples:
@@ -4471,19 +4670,23 @@ def refactor_deprecate(
             "Provide source files or use --config with a configuration file."
         )
 
+    # A deprecation on the command line and the config's cannot both run (#352)
+    if config_file:
+        _refuse_config_with_operation(
+            "deprecations:",
+            {
+                "entity": "--entity",
+                "replaced_by": "--replaced-by",
+                "message": "--message",
+                "version": "--version",
+            },
+        )
+
     # Build configuration
     if config_file:
         try:
             config = load_refactor_config(config_file)
             click.echo(f"Using config: {config_file}")
-
-            # Override output if provided on CLI
-            if output:
-                config.output = output
-
-            # Override sources if provided on CLI
-            if sources:
-                config.source_files = list(sources)
         except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
             raise Refusal(f"Could not load config {config_file}: {e}") from e
     else:
@@ -4498,16 +4701,17 @@ def refactor_deprecate(
             version=version,
         )
 
-        config = RefactorConfig(
-            deprecations=[spec],
-            source_files=list(sources),
-            output=output,
-            dry_run=dry_run,
-        )
+        config = RefactorConfig(deprecations=[spec], dry_run=dry_run)
+    # The sources first, then -o read against them: a file for one, a directory for several
+    # (#186), as rename does
+    _apply_refactor_cli(config, sources, output)
 
     # Validate we have something to deprecate
     if not config.deprecations:
         raise Refusal("No deprecations specified. Use --entity or provide a config file.")
+
+    # One output file cannot hold the results of several sources (#186)
+    _refuse_one_output_for_many(config)
 
     # Load every source before writing anything, so that a CURIE is resolved once, against
     # the prefixes the files declare, and refused before any output exists (#182).
@@ -4518,14 +4722,34 @@ def refactor_deprecate(
     except (CurieError, AmbiguousCurieError) as e:
         raise Refusal(str(e)) from e
 
+    # Work out every output, and refuse a plan that writes one file twice or over an input,
+    # before anything is written (#186). A dry run is checked the same way.
+    planned = _plan_deprecate_outputs(config, graphs)
+    replaced = _check_refactor_outputs(
+        planned, config, (), None, config_file, in_place, _output_label(config, output)
+    )
+    if in_place and not config.output and not config.output_dir and not dry_run:
+        click.echo(
+            "Note: --in-place lets -o replace its own source; without -o each result is "
+            "written beside its source as <stem>_deprecated.",
+            err=True,
+        )
+
+    # An entity is found if any source describes it: a module set declares each term in one
+    # file and only refers to it from the others (#186)
+    missing = [
+        spec.entity
+        for spec in config.deprecations
+        if not any((URIRef(spec.entity), None, None) in graph for _, graph in graphs)
+    ]
+
     # Execute deprecation
     formatter = RefactorTextFormatter(use_colour=not no_colour)
     deprecator = OntologyDeprecator()
 
-    for source_path, graph in graphs:
-        click.echo(f"\nProcessing: {source_path}")
-
-        if dry_run:
+    if dry_run:
+        for source_path, graph in graphs:
+            click.echo(f"\nProcessing: {source_path}")
             # Perform dry run to get entity info
             temp_graph = Graph(bind_namespaces="core")
             for triple in graph:
@@ -4543,33 +4767,31 @@ def refactor_deprecate(
                     source_triples=len(graph),
                 )
             )
-        else:
-            # Perform deprecation
-            result = deprecator.deprecate_bulk(graph, config.deprecations)
+        _report_missing_entities(missing)
+        raise SystemExit(1 if missing else 0)
 
-            if not result.success:
-                click.secho(f"\u2717 Deprecation failed: {result.error}", fg="red", err=True)
-                raise SystemExit(2)
+    # Deprecate every source before writing any of them, so a failure leaves nothing behind.
+    results = []
+    for source_path, graph in graphs:
+        result = deprecator.deprecate_bulk(graph, config.deprecations)
+        if not result.success:
+            raise Refusal(f"Deprecation failed for {source_path}: {result.error}")
+        results.append(result)
 
-            # Show result
-            click.echo(formatter.format_deprecation_result(result))
+    for (source_path, _), result in zip(graphs, results, strict=True):
+        click.echo(f"\nProcessing: {source_path}")
+        click.echo(formatter.format_deprecation_result(result))
 
-            # Write output
-            if result.deprecated_graph:
-                out_path = config.output or source_path.with_stem(f"{source_path.stem}_deprecated")
-                out_path.parent.mkdir(parents=True, exist_ok=True)
-                result.deprecated_graph.serialize(destination=out_path.as_posix(), format="turtle")
-                click.secho(f"\u2713 Wrote {out_path}", fg="green")
+        out_path = planned.ontology[source_path]
+        if result.deprecated_graph:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            result.deprecated_graph.serialize(destination=out_path.as_posix(), format="turtle")
+            click.secho(f"\u2713 Wrote {out_path}", fg="green")
+            if out_path in replaced:
+                click.secho(f"\u26a0 Replaced {replaced[out_path]}", fg="yellow", err=True)
 
-            # Warn about entities not found
-            if result.stats.entities_not_found > 0:
-                click.secho(
-                    f"\n\u26a0 {result.stats.entities_not_found} entity/entities not found in graph",
-                    fg="yellow",
-                )
-                raise SystemExit(1)
-
-    raise SystemExit(0)
+    _report_missing_entities(missing)
+    raise SystemExit(1 if missing else 0)
 
 
 @cli.group()

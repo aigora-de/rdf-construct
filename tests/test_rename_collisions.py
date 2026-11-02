@@ -377,24 +377,28 @@ def test_a_chain_does_not_chain(tmp_path, monkeypatch):
 
 
 def test_a_rename_onto_itself_is_not_refused(tmp_path, monkeypatch):
+    """It merges nothing, so it is written; it renames nothing, so it exits 1 (#183)."""
     src = _ttl(tmp_path, "a.ttl", TWO_CLASSES)
     out = tmp_path / "out.ttl"
-    _ran(tmp_path, monkeypatch, src, "--from", "ex:A", "--to", "ex:A", "-o", out)
+    result = _invoke(tmp_path, monkeypatch, (src, "--from", "ex:A", "--to", "ex:A", "-o", out))
+    assert result.exit_code == 1, result.output
+    assert f"<{EX.A}> renames onto itself." in result.stderr
     assert len(_parse(out)) == 4
 
 
 def test_a_mapping_whose_source_is_absent_is_not_refused(tmp_path, monkeypatch):
-    """`renames.yml` over `legacy.ttl`: it defines `hasAddress` and `Address`, not the typos."""
+    """`renames.yml` over `legacy.ttl`: it defines `hasAddress` and `Address`, not the typos.
+
+    Not a collision, so it is written; every mapping renames nothing, so it exits 1 (#183).
+    """
     out = tmp_path / "out.ttl"
-    _ran(
+    result = _invoke(
         tmp_path,
         monkeypatch,
-        REFACTOR / "legacy.ttl",
-        "-c",
-        REFACTOR / "renames.yml",
-        "-o",
-        out,
+        (REFACTOR / "legacy.ttl", "-c", REFACTOR / "renames.yml", "-o", out),
     )
+    assert result.exit_code == 1, result.output
+    assert "4 renames matched nothing:" in result.stderr
     assert len(_parse(out)) == len(_parse(REFACTOR / "legacy.ttl"))
 
 
