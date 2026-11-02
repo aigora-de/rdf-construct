@@ -802,3 +802,56 @@ class TestMultipleLanguages:
         languages_found = {l.language for l in building_labels if hasattr(l, "language")}
         assert "de" in languages_found
         assert "fr" in languages_found
+
+
+class TestLocaliseReportCli:
+    """CLI regressions for `localise report` (#163)."""
+
+    def test_report_cli_writes_utf8(self, simple_ontology_file: Path, temp_dir: Path):
+        from click.testing import CliRunner
+        from rdf_construct.cli import cli
+
+        out = temp_dir / "coverage.txt"
+        result = CliRunner().invoke(
+            cli,
+            [
+                "localise",
+                "report",
+                str(simple_ontology_file),
+                "-l",
+                "en,de",
+                "--no-colour",
+                "-o",
+                str(out),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        content = out.read_text(encoding="utf-8")
+        assert any(mark in content for mark in ("✓", "⚠", "✗", "✅", "⚠️", "❌"))
+
+    def test_report_cli_skips_empty_and_duplicate_languages(
+        self, simple_ontology_file: Path, temp_dir: Path
+    ):
+        from click.testing import CliRunner
+        from rdf_construct.cli import cli
+
+        out = temp_dir / "coverage.txt"
+        result = CliRunner().invoke(
+            cli,
+            [
+                "localise",
+                "report",
+                str(simple_ontology_file),
+                "-l",
+                "en,,de,en",
+                "--no-colour",
+                "-o",
+                str(out),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        content = out.read_text(encoding="utf-8")
+        assert content.count("en (base)") == 1
+        assert "\nde" in content or content.startswith("de")
+        # Empty language codes used to render as a blank Language column.
+        assert "(base)" not in content.replace("en (base)", "", 1)
