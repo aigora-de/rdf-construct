@@ -3824,7 +3824,7 @@ def _report_inert_renames(inert: list[InertRename]) -> None:
     count = (
         "1 rename matched nothing" if len(inert) == 1 else f"{len(inert)} renames matched nothing"
     )
-    click.secho(f"\u26a0 {count} in any file of the run:", fg="yellow", err=True)
+    click.secho(f"\u26a0 {count}:", fg="yellow", err=True)
     for rename in inert:
         click.secho(f"  {rename.describe()}", fg="yellow", err=True)
 
@@ -4407,7 +4407,7 @@ def refactor_rename(
         if migrate_data:
             reason = (
                 "no output was named for the renamed ontology, and the rename matches nothing "
-                "in the sources, so there is no data to migrate."
+                "in the sources, and the data is migrated only with renames found there."
             )
         else:
             reason = "no output was named, so the renamed ontology would be thrown away."

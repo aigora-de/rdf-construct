@@ -238,10 +238,12 @@ given with `-c`.
 ### A Rename That Matches Nothing
 
 A mapping that renames nothing in **any** file of the run is listed on stderr after the run, which
-exits 1. The files are judged together: in a module set most terms appear in only one or two
+exits 1, each with the reason. The files are judged together: in a module set most terms appear in only one or two
 files, so a mapping absent from one file is normal. An entity mapping counts as matched if its old
 IRI occurs in a source or in a `--migrate-data` file. A namespace rule counts if it moves at least
-one IRI of the sources itself, not through a longer rule or an entity mapping. A mapping onto
+one IRI of the sources itself, not through a longer rule or an entity mapping. Namespace rules are
+expanded from the sources only, so an IRI that only the data uses is not migrated, and a rule that
+matches only the data is listed ([#471](https://github.com/aigora-de/rdf-construct/issues/471)). A mapping onto
 itself renames nothing too.
 
 ```bash
@@ -250,7 +252,7 @@ rdf-construct refactor rename examples/refactor/typos.ttl \
 ```
 
 ```text
-⚠ 1 rename matched nothing in any file of the run:
+⚠ 1 rename matched nothing:
   <http://example.org/ont#DoesNotExist> → <http://example.org/ont#Nope>: <http://example.org/ont#DoesNotExist> occurs in no file of the run.
 ```
 
@@ -426,7 +428,8 @@ that no source describes is reported, once, after every file is written:
   <http://example.org/ont#Nope>
 ```
 
-That run exits 1, and so does its `--dry-run`. The per-file summary still says "not found" for each
+That run exits 1, and so does its `--dry-run`. Every source is written, including those the run
+did not change. The per-file summary still says "not found" for each
 file that does not describe the entity.
 
 ### Deprecation Annotations Added
@@ -566,7 +569,7 @@ rdf-construct refactor deprecate ontology.ttl \
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | Finished, with something to report: a rename that matched nothing in any file of the run, or an entity that no source describes. The outputs are written |
+| 1 | Finished, with something to report: a rename that matched nothing in any file of the run, or an entity that no source describes. The outputs are written (with `--dry-run`, nothing is) |
 | 2 | Input refused or run failed (invalid options or config, file not found, parse error, a rename that would merge two entities, nothing to write, an output over an input, `-c` with an operation flag) |
 
 ## See Also

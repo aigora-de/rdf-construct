@@ -154,7 +154,7 @@ class TestRenameWritesNothing:
             "--migrate-data",
             "data.ttl",
         )
-        assert "the rename matches nothing in the sources, so there is no data to migrate" in stderr
+        assert "the data is migrated only with renames found there" in stderr
 
 
 # --- #183: a rename that matches nothing ----------------------------------------------------
@@ -176,7 +176,7 @@ class TestRenameMatchesNothing:
             "out.ttl",
         )
         assert result.exit_code == 1, result.output
-        assert "1 rename matched nothing in any file of the run:" in result.stderr
+        assert "1 rename matched nothing:" in result.stderr
         assert f"<{A_NS}Nope> occurs in no file of the run." in result.stderr
         assert (tmp_path / "out.ttl").exists()
 
@@ -566,3 +566,66 @@ b:Y a a:C .
             namespaces={"http://e.org/a/b/": "http://n/b/"},
             entities={"http://e.org/a/b/Y": "http://k/Y"},
         ) == [("http://e.org/a/b/", "absent")]
+
+
+class TestRefusalLabels:
+    def test_a_config_output_dir_that_is_a_file(self, tmp_path, monkeypatch):
+        _files(
+            tmp_path,
+            **{
+                "a.ttl": A_TTL,
+                "b.ttl": B_TTL,
+                "afile": "# mine\n",
+                "d.yml": f"source_files: [a.ttl, b.ttl]\noutput_dir: afile\ndeprecations:\n"
+                f"  - entity: '{A_NS}Old'\n",
+            },
+        )
+        stderr = _refused(tmp_path, monkeypatch, "deprecate", "-c", "d.yml")
+        assert "afile is a file, but with several inputs the config's output_dir: names" in stderr
+
+    def test_data_output_that_is_a_directory(self, tmp_path, monkeypatch):
+        _files(tmp_path, **{"a.ttl": A_TTL, "d.ttl": DATA_TTL})
+        (tmp_path / "dd").mkdir()
+        stderr = _refused(
+            tmp_path,
+            monkeypatch,
+            "rename",
+            "a.ttl",
+            *RENAME_OLD,
+            "-o",
+            "o.ttl",
+            "--migrate-data",
+            "d.ttl",
+            "--data-output",
+            "dd",
+        )
+        assert (
+            "dd is a directory, but with one input --data-output names the output file." in stderr
+        )
+        assert "Name a file, such as dd/d.ttl." in stderr
+
+    def test_an_inert_namespace_rule_says_why(self, tmp_path, monkeypatch):
+        _files(tmp_path, **{"a.ttl": A_TTL})
+        result, _, _ = _cli(
+            tmp_path,
+            monkeypatch,
+            "rename",
+            "a.ttl",
+            "--from-namespace",
+            "http://nowhere.example/",
+            "--to-namespace",
+            "http://new.example/",
+            "-o",
+            "o.ttl",
+        )
+        assert result.exit_code == 1, result.output
+        assert (
+            "namespace <http://nowhere.example/> → <http://new.example/> moves no IRI in the "
+            "sources (none is in it, or each one moves by a longer rule or an entity mapping)."
+        ) in result.stderr
+
+
+def test_the_library_exports():
+    from rdf_construct.refactor import InertRename, inert_renames, live_mappings
+
+    assert callable(inert_renames) and callable(live_mappings) and InertRename

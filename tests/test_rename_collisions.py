@@ -398,7 +398,7 @@ def test_a_mapping_whose_source_is_absent_is_not_refused(tmp_path, monkeypatch):
         (REFACTOR / "legacy.ttl", "-c", REFACTOR / "renames.yml", "-o", out),
     )
     assert result.exit_code == 1, result.output
-    assert "4 renames matched nothing in any file of the run:" in result.stderr
+    assert "4 renames matched nothing:" in result.stderr
     assert len(_parse(out)) == len(_parse(REFACTOR / "legacy.ttl"))
 
 
