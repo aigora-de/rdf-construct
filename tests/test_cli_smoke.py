@@ -562,6 +562,79 @@ THREE_STATES = [
     ),
     _row(
         Row(
+            "refactor rename",
+            "refused",
+            (
+                "refactor",
+                "rename",
+                str(EXAMPLES / "refactor" / "typos.ttl"),
+                "--from",
+                "http://example.org/ont#Buiding",
+                "--to",
+                "http://example.org/ont#Building",
+            ),
+        ),
+        label="no-output",
+    ),
+    _row(
+        Row(
+            "refactor rename",
+            "refused",
+            (
+                "refactor",
+                "rename",
+                "-c",
+                str(EXAMPLES / "refactor" / "renames.yml"),
+                "--from",
+                "http://example.org/ont#Organistion",
+                "--to",
+                "http://example.org/ont#Organisation",
+                "-o",
+                "@tmp/r.ttl",
+            ),
+        ),
+        label="config-with-operation",
+    ),
+    _row(
+        Row(
+            "refactor deprecate",
+            "refused",
+            (
+                "refactor",
+                "deprecate",
+                "@tmp/legacy.ttl",
+                "@tmp/typos.ttl",
+                "--entity",
+                "http://example.org/ont#LegacyPerson",
+                "-o",
+                "@tmp/legacy.ttl",
+            ),
+            copied=(
+                str(EXAMPLES / "refactor" / "legacy.ttl"),
+                str(EXAMPLES / "refactor" / "typos.ttl"),
+            ),
+        ),
+        label="output-over-source",
+    ),
+    _row(
+        Row(
+            "refactor deprecate",
+            "refused",
+            (
+                "refactor",
+                "deprecate",
+                "-c",
+                str(EXAMPLES / "refactor" / "deprecations.yml"),
+                "--message",
+                "",
+                "-o",
+                "@tmp/d.ttl",
+            ),
+        ),
+        label="config-with-operation",
+    ),
+    _row(
+        Row(
             "localise extract",
             "clean",
             ("localise", "extract", ANIMAL, "-l", "de", "-o", "@tmp/de.yml"),

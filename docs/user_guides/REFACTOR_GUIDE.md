@@ -65,8 +65,28 @@ rdf-construct refactor rename ontology.ttl \
 its source's file name. `--data-output` works the same way for the data files given to
 `--migrate-data`; without it, each migrated file is written beside its data file as
 `migrated_<name>`. A config file's `output:` names one file and `output_dir:` a directory; `-o`
-overrides both. Without `-o` or a config `output:`, a single source is renamed and nothing is
-written.
+overrides both. `-o` is read against the sources the run processes: source arguments replace the
+config's `source_files:` first, so one source given with a config that lists two takes `-o` as a
+file.
+
+A rename that would write nothing is refused at exit 2:
+
+```bash
+rdf-construct refactor rename examples/refactor/typos.ttl --from ex:Buiding --to ex:Building
+```
+
+```text
+Error: Nothing was written:
+  no output was named, so the renamed ontology would be thrown away.
+Pass -o FILE (-o DIR/ for several sources), or set output: or output_dir: in the config.
+```
+
+`--dry-run` writes nothing by design, so it needs no `-o`. A run with `--migrate-data` but no `-o`
+writes only the migrated data, and says so on stderr:
+
+```text
+Note: no -o, so the renamed ontology is not written; only the migrated data is.
+```
 
 Every output path is worked out, and every source and data file read, before anything is written.
 The run is refused at exit 2, with nothing written, when:
@@ -77,6 +97,8 @@ The run is refused at exit 2, with nothing written, when:
 - an output would replace an input, unless `--in-place` is given and the input is the file the
   output is made from;
 - a config's `output:` names one file for several sources;
+- `-o` (or `--data-output`) names an existing directory for one input, or an existing file for
+  several;
 - a data file cannot be parsed.
 
 Paths are compared as files, so a symbolic link or a `..` reaches the same file it points at:
@@ -169,7 +191,8 @@ The checks cover **every source of the run together**: renaming `ex:Buiding` in 
 an `ex:Building` that another module describes is refused, because the module set would describe
 it twice. Each `--migrate-data` file is checked the same way, against the rename map the data is
 migrated with. A mapping whose old IRI a file never mentions renames nothing there, and is never a
-collision: re-running a typo fix over the already-fixed file is fine.
+collision: re-running a typo fix over the already-fixed file is not refused. It exits 1, because
+the fix [matched nothing](#a-rename-that-matches-nothing).
 
 A term renamed onto an individual (punning) is refused too, although the triple count does not
 change. Every collision is listed: a bulk namespace rename can collide in thousands of places, so
@@ -212,12 +235,34 @@ The merge is written, and each one is named on stderr:
 In a config file, `merge_entities: true` under `rename:` does the same. `--merge-entities` can be
 given with `-c`.
 
+### A Rename That Matches Nothing
+
+A mapping that renames nothing in **any** file of the run is listed on stderr after the run, which
+exits 1. The files are judged together: in a module set most terms appear in only one or two
+files, so a mapping absent from one file is normal. An entity mapping counts as matched if its old
+IRI occurs in a source or in a `--migrate-data` file. A namespace rule counts if it moves at least
+one IRI of the sources itself, not through a longer rule or an entity mapping. A mapping onto
+itself renames nothing too.
+
+```bash
+rdf-construct refactor rename examples/refactor/typos.ttl \
+    --from "http://example.org/ont#DoesNotExist" --to "http://example.org/ont#Nope" -o out.ttl
+```
+
+```text
+⚠ 1 rename matched nothing in any file of the run:
+  <http://example.org/ont#DoesNotExist> → <http://example.org/ont#Nope>: <http://example.org/ont#DoesNotExist> occurs in no file of the run.
+```
+
+The output is still written: exit 1 means the run finished with something to report. `--dry-run`
+lists the same and exits the same way.
+
 **Known limitations**
 
 | Limitation | Issue |
 |---|---|
 | A contradiction through a list axiom — `owl:AllDisjointClasses`, `owl:AllDifferent`, `owl:AllDisjointProperties` or `owl:disjointUnionOf` naming both terms — is not detected, so the rename writes it. | [#467](https://github.com/aigora-de/rdf-construct/issues/467) |
-| A rename's run time grows with mappings × triples (the scan for literal mentions): a namespace rename of 3,000 terms over 24,000 triples takes about 48 s. A refused run stops before that scan. | [#468](https://github.com/aigora-de/rdf-construct/issues/468) |
+| A rename's run time grows with mappings × triples (the scan for literal mentions): a namespace rename of 3,000 terms over 24,000 triples takes about 48 s. A refused run stops before that scan. | [#194](https://github.com/aigora-de/rdf-construct/issues/194) |
 
 ### With Data Migration
 
@@ -310,7 +355,15 @@ Run without --dry-run to apply changes.
 
 A dry run checks for collisions too. It prints the preview and any notes, then refuses at exit 2
 with the same list as the real run; with `--merge-entities` it names each merge it would make and
-exits 0.
+exits 0. It checks the planned outputs the same way, and exits 1 for a rename that matches nothing.
+
+### Configuration and the Command Line
+
+`-c` cannot be combined with an operation flag (`--from`, `--to`, `--from-namespace`,
+`--to-namespace`). The run is refused at exit 2 before the config is read, naming each flag given.
+Put the rename in the config's `rename:` section, or run it as a separate command. Settings combine
+with `-c`: the sources, `-o`, `--dry-run`, `--no-colour`, `--migrate-data`, `--data-output`,
+`--in-place` and `--merge-entities`.
 
 ## Deprecate Subcommand
 
@@ -342,9 +395,39 @@ rdf-construct refactor deprecate ontology.ttl \
 | `-m, --message TEXT` | Deprecation message |
 | `--version VERSION` | Version when deprecated |
 | `-c, --config FILE` | YAML configuration file |
-| `-o, --output PATH` | Output file |
+| `-o, --output PATH` | Output file for one source, or directory for several |
+| `--in-place` | Allow `-o` to name a source, and rewrite it with its own deprecations |
 | `--dry-run` | Preview changes without writing |
 | `--init` | Generate template configuration |
+
+### Where Deprecated Output Goes
+
+Without `-o`, each result is written beside its source as `<stem>_deprecated.ttl`. With one source,
+`-o` names the output file; with several, a directory, where each result keeps its source's file
+name. A config's `output:` and `output_dir:` work the same way, and `-o` overrides both. Every output
+is worked out before anything is written, and the run is refused at exit 2 with nothing written
+when:
+
+- two outputs would be the same file;
+- an output would replace a source, unless `--in-place` is given and it is that source's own result
+  (`-o ontology.ttl --in-place`);
+- `-o` names an existing directory for one source, or an existing file for several;
+- a config's `output:` names one file for several sources.
+
+`-c` cannot be combined with `--entity`, `--replaced-by`, `--message` or `--version`: put the
+deprecation in the config's `deprecations:` section. `--message ""` counts as given.
+
+**An entity is found if any source describes it** (has it as a subject). A module set declares a
+term in one file and refers to it from others, so every source is processed and only an entity
+that no source describes is reported, once, after every file is written:
+
+```text
+⚠ 1 entity is a subject in no source, so not deprecated:
+  <http://example.org/ont#Nope>
+```
+
+That run exits 1, and so does its `--dry-run`. The per-file summary still says "not found" for each
+file that does not describe the entity.
 
 ### Deprecation Annotations Added
 
@@ -425,16 +508,22 @@ rdf-construct refactor rename ontology.ttl \
     --from "ex:Buiding" --to "ex:Building" \
     --dry-run
 
-# 2. Apply the change
+# 2. Apply the change, and migrate the instance data with it
 rdf-construct refactor rename ontology.ttl \
     --from "ex:Buiding" --to "ex:Building" \
-    -o fixed.ttl
-
-# 3. Migrate instance data
-rdf-construct refactor rename fixed.ttl \
-    --from "ex:Buiding" --to "ex:Building" \
+    -o fixed.ttl \
     --migrate-data instances.ttl \
     --data-output updated_instances.ttl
+```
+
+Data found later can be migrated against the already-fixed ontology. Without `-o`, only the data is
+written:
+
+```bash
+rdf-construct refactor rename fixed.ttl \
+    --from "ex:Buiding" --to "ex:Building" \
+    --migrate-data more_instances.ttl \
+    --data-output updated_more_instances.ttl
 ```
 
 ### Project Namespace Migration
@@ -459,16 +548,16 @@ rdf-construct refactor rename modules/*.ttl \
 # 1. Create deprecation config
 rdf-construct refactor deprecate --init
 
-# 2. Edit deprecations.yml with your deprecations
+# 2. Edit refactor_deprecate.yml with your deprecations
 
 # 3. Preview
 rdf-construct refactor deprecate ontology.ttl \
-    --config deprecations.yml \
+    --config refactor_deprecate.yml \
     --dry-run
 
 # 4. Apply deprecations
 rdf-construct refactor deprecate ontology.ttl \
-    --config deprecations.yml \
+    --config refactor_deprecate.yml \
     -o v2.0-with-deprecations.ttl
 ```
 
@@ -477,8 +566,8 @@ rdf-construct refactor deprecate ontology.ttl \
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | `deprecate` only: success, but some entities were not found |
-| 2 | Input refused or run failed (invalid options or config, file not found, parse error, a rename that would merge two entities) |
+| 1 | Finished, with something to report: a rename that matched nothing in any file of the run, or an entity that no source describes. The outputs are written |
+| 2 | Input refused or run failed (invalid options or config, file not found, parse error, a rename that would merge two entities, nothing to write, an output over an input, `-c` with an operation flag) |
 
 ## See Also
 

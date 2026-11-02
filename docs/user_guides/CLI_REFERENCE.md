@@ -900,6 +900,11 @@ A namespace that ends in `#`, `/` or `:` matches as given. Without one, the matc
 `…/ont` itself, but not `…/ontology#Two`; `urn:old:` takes `urn:old:A` but not `urn:older:C`.
 Give `http://example.org/ont#` to move that one namespace only.
 
+A run that would write nothing (no `-o`, no `output:` or `output_dir:` in the config, and no data to
+migrate) is refused at exit 2; `--dry-run` needs no `-o`. A rename that matches nothing in any file
+of the run is listed on stderr, and the run exits 1. `-c` cannot be combined with `--from`, `--to`,
+`--from-namespace` or `--to-namespace`.
+
 **Examples**:
 
 ```bash
@@ -919,7 +924,8 @@ rdf-construct refactor rename ontology.ttl \
 rdf-construct refactor rename ontology.ttl \
     --from "ex:OldClass" --to "ex:NewClass" \
     --migrate-data instances.ttl \
-    --data-output updated-instances.ttl
+    --data-output updated-instances.ttl \
+    -o fixed.ttl
 
 # From configuration file
 rdf-construct refactor rename --config renames.yml
@@ -981,10 +987,16 @@ rdf-construct refactor deprecate SOURCES [OPTIONS]
 - `-m, --message TEXT`: Deprecation message (added to rdfs:comment)
 - `--version VERSION`: Version when deprecated (included in message)
 - `-c, --config PATH`: YAML configuration file with deprecation specs
-- `-o, --output PATH`: Output file
+- `-o, --output PATH`: Output file (single source) or directory (multiple sources)
+- `--in-place`: Allow `-o` to name a source, and rewrite it with its own deprecations
 - `--dry-run`: Preview changes without writing files
 - `--no-colour`: Disable coloured output
 - `--init`: Generate a template deprecation configuration file
+
+Without `-o`, each result is written beside its source as `<stem>_deprecated.ttl`. An output that
+would replace a source is refused at exit 2 unless `--in-place` is given. An entity is reported, and
+the run exits 1, only when no source describes it. `-c` cannot be combined with `--entity`,
+`--replaced-by`, `--message` or `--version`.
 
 **Examples**:
 

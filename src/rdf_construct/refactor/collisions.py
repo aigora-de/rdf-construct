@@ -29,7 +29,8 @@ from rdflib import Graph, URIRef
 from rdflib.namespace import OWL, RDF, RDFS
 from rdflib.term import Node
 
-from rdf_construct.refactor.config import RenameMapping
+from rdf_construct.core.utils import claiming_namespace
+from rdf_construct.refactor.config import RenameConfig, RenameMapping
 
 #: Predicates that keep their subject and object apart. Made reflexive by a rename, each
 #: one contradicts itself: a class disjoint with itself or its own complement, a property
@@ -277,3 +278,76 @@ def find_references(
             reflexive.append(ReflexiveTriple((new_s, new_p, new_s), (s, p, o)))
     reflexive.sort(key=lambda t: [str(x) for x in (*t.triple, *t.original)])
     return references, reflexive
+
+
+@dataclass(frozen=True)
+class InertRename:
+    """A rename that changes nothing in any file of the run (#183).
+
+    Attributes:
+        old: The IRI, or for a namespace rule the namespace, that would be renamed.
+        new: What it would be renamed to.
+        kind: ``entity`` for an entity mapping, ``namespace`` for a namespace rule.
+        reason: ``absent`` when nothing in the run matches it, ``self`` when it renames
+            something onto itself.
+    """
+
+    old: str
+    new: str
+    kind: Literal["entity", "namespace"]
+    reason: Literal["absent", "self"]
+
+    def describe(self) -> str:
+        """One line naming the rename and why it changes nothing."""
+        if self.reason == "self":
+            return f"<{self.old}> renames onto itself."
+        if self.kind == "namespace":
+            return (
+                f"namespace <{self.old}> \u2192 <{self.new}> moves no IRI in the sources "
+                "(none is in it, or each one moves by a longer rule or an entity mapping)."
+            )
+        return f"<{self.old}> \u2192 <{self.new}>: <{self.old}> occurs in no file of the run."
+
+
+def inert_renames(
+    rename: RenameConfig, sources: Graph, data: Iterable[Graph] = ()
+) -> list[InertRename]:
+    """Every entity mapping and namespace rule that would rename nothing in the run (#183).
+
+    A run over a module set renames each term in the one or two files that use it, so a
+    mapping is judged over the union of the run's files, never file by file. An entity
+    mapping is live if its old IRI occurs in a source or in a data file, because data is
+    migrated with every entity mapping. A namespace rule is expanded from the sources alone,
+    so it is live only if it is the longest rule claiming some IRI there that it actually
+    moves; a rule whose IRIs all move by a longer rule, or by an entity mapping, is inert.
+
+    Args:
+        rename: The resolved rename configuration.
+        sources: Every source of the run, as one graph.
+        data: Each data file the run migrates.
+
+    Returns:
+        The inert renames: entity mappings in the order given, then namespace rules.
+    """
+    data_graphs = list(data)
+    inert: list[InertRename] = []
+    for old, new in rename.entities.items():
+        if old == new:
+            inert.append(InertRename(old, new, "entity", "self"))
+        elif not any(_occurs(g, URIRef(old)) for g in [sources, *data_graphs]):
+            inert.append(InertRename(old, new, "entity", "absent"))
+
+    # Every namespace-derived mapping is of an IRI the sources use, and an entity mapping of
+    # the same IRI replaces it, so the rules left claiming one are the rules that move something
+    moved_by: set[str] = set()
+    for mapping in rename.build_mappings(sources):
+        if mapping.source == "namespace":
+            rule = claiming_namespace(str(mapping.from_uri), rename.namespaces)
+            if rule is not None:
+                moved_by.add(rule)
+    for old, new in rename.namespaces.items():
+        if old == new:
+            inert.append(InertRename(old, new, "namespace", "self"))
+        elif old not in moved_by:
+            inert.append(InertRename(old, new, "namespace", "absent"))
+    return inert

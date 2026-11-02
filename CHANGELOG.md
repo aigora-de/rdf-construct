@@ -157,6 +157,13 @@ deliberately. See
 [`refactor`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#refactor)
 in the migration note.
 
+**`refactor rename` without `-o` is refused, and `refactor deprecate -o <source>`
+needs `--in-place`.** A rename that would write nothing exits 2, a rename that
+matches nothing exits 1, and `deprecate` with several sources takes `-o` as a
+directory. `-c` with an operation flag is refused for both. See
+[`refactor`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#refactor)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
@@ -346,6 +353,22 @@ change, and what to do about it, is listed command by command in the
   deliberately and names each merge. In the library, `OntologyRenamer.rename`
   returns `success=False` with `collisions` listed and no graph, and
   `rename_file` writes nothing, unless `RenameConfig(merge_entities=True)`.
+- **`refactor rename` refuses a run that would write nothing, and reports a
+  rename that matches nothing** (#183). Without `-o`, a config `output:` or
+  `output_dir:`, or data to migrate, the run is refused at exit 2; it renamed in
+  memory and exited 0. A mapping that renames nothing in any file of the run,
+  sources and data files together, is listed on stderr and the run exits 1.
+  `inert_renames` and `live_mappings` are exported from `rdf_construct.refactor`.
+- **`refactor deprecate` plans its outputs before writing** (#186). Several
+  sources take `-o` as a directory, each result keeping its source's name; an
+  output over a source needs the new `--in-place`; the config's `output_dir:` is
+  honoured. An entity is reported, exit 1, only when no source describes it, and
+  every source is processed first. The last write used to win, an `-o` naming
+  the first source replaced it with the second's triples, and a missing entity
+  stopped the run at the first file that lacked it.
+- **`refactor` refuses `-c` with an operation flag** (#352): `--from`, `--to`,
+  `--from-namespace`, `--to-namespace`, `--entity`, `--replaced-by`, `--message`
+  or `--version`, at exit 2, before anything is read. They were ignored at exit 0.
 - **`split`'s unmatched module is called `unmatched` by default** (#382), not
   `common`, and a run whose unmatched module would take another module's name
   is refused at exit 2 instead of overwriting it. `--common-name common` keeps
