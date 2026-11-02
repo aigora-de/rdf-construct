@@ -475,9 +475,16 @@ change, and what to do about it, is listed command by command in the
 - **`localise` has one rule for "deprecated"** (#407). `report` leaves out what
   `extract` skips, and gains `--include-deprecated`; a plain-string
   `owl:deprecated "true"` counts.
-- **`localise merge --existing preserve` keeps every translation of a repeatable
-  property** such as `skos:altLabel` (#405, in part). It skips one only when the
-  same text already exists in that language.
+- **`localise merge` keeps every translation of a repeatable property** such as
+  `skos:altLabel` (#405). Under `--existing preserve` it skips one only when the
+  same text already exists in that language. Under `--existing overwrite` the
+  file's translations replace the language's values as one set, counted once
+  each. When values exist, the set is replaced only if every entry for it is
+  finished and its sources are the ontology's current ones; otherwise it is left
+  unchanged, counted as `Skipped (group)`, and the run exits 1.
+  `extract --missing-only` offers every source value of such a property that has
+  two or more, with the existing translations in `notes`, so fewer entities are
+  counted as `Skipped:`. `MergeStats` gains `skipped_group`.
 - **`localise extract` and `init` never replace translation work in silence**
   (#404). A destination holding an entry that is not `pending`, or whose
   translation is not blank, is refused at exit 2 before the ontology is read; so

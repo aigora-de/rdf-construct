@@ -1,0 +1,21 @@
+metadata:
+  source_file: per_language.ttl
+  source_language: en
+  target_language: de
+  properties:
+  - rdfs:label
+  - skos:prefLabel
+entities:
+- uri: http://example.org/ont#Building
+  type: owl:Class
+  labels:
+  - {property: rdfs:label, source: Building, translation: Gebaeude, status: translated}
+  - {property: rdfs:label, source: Edifice, translation: Bauwerk, status: translated}
+  - {property: skos:prefLabel, source: Building, translation: Gebaeude, status: translated}
+  - {property: skos:prefLabel, source: Edifice, translation: Bauwerk, status: translated}
+- uri: http://example.org/ont#House
+  type: owl:Class
+  labels:
+  - {property: rdfs:label, source: House, translation: Wohnhaus, status: translated}
+  - {property: skos:prefLabel, source: House, translation: Wohnhaus, status: translated}
+  - {property: skos:prefLabel, source: Home, translation: Heim, status: pending}

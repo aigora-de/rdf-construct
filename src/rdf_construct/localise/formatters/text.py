@@ -72,6 +72,8 @@ class TextFormatter:
                 lines.append(f"  Skipped (status): {stats.skipped_status}")
             if stats.skipped_existing > 0:
                 lines.append(f"  Skipped (exists): {stats.skipped_existing}")
+            if stats.skipped_group > 0:
+                lines.append(self._warning(f"  Skipped (group): {stats.skipped_group}"))
             if stats.errors > 0:
                 lines.append(self._warning(f"  Errors:          {stats.errors}"))
 

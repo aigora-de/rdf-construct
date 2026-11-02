@@ -35,7 +35,9 @@ Error: translations/de.yml already holds 8 finished translations (translated 8);
 An entry is finished when its status is not `pending`, or when its translation is not blank:
 text typed with the status left at `pending` counts. A file with no finished entry, such as one
 just extracted, is replaced without a word. To update a translation file for new terms, extract
-to a new file (`--missing-only -o de_update.yml`); merging the two is not supported.
+to a new file (`--missing-only -o de_update.yml`); merging the two is not supported. A property
+such as `skos:altLabel` with several source values comes back whole: see
+[Properties With Several Values](#properties-with-several-values).
 
 ## Language Tags and Which Terms Are Translated
 
@@ -73,6 +75,48 @@ literal**, whatever its type: classes and properties of every kind, individuals,
 ontology header, and untyped subjects. A deprecated entity (`owl:deprecated true`, as a boolean
 or as the string `"true"`, or a type of `owl:DeprecatedClass` or `owl:DeprecatedProperty`) is
 skipped by `extract` and left out of `report` unless `--include-deprecated` is given.
+
+## Properties With Several Values
+
+`rdfs:label` and `skos:prefLabel` take one value per language. Every other property
+(`skos:altLabel`, `rdfs:comment`, `skos:definition`, and any property not named here) may take
+several, so an English concept can have two alternative labels and its German counterpart three.
+Nothing in RDF says which German value translates which English one: only the translation file
+pairs them. So `localise` treats such a property's values in one language as a set.
+
+- **`merge --existing preserve`** (the default) adds each finished translation unless the same
+  text is already there in that language. A reworded translation is added beside the old one, not
+  in its place: remove the old one by hand, or merge with `overwrite`.
+- **`merge --existing overwrite`** replaces the set. When the language has no value yet, every
+  finished translation is added. When it has values, they are all replaced, but only if every
+  entry for that entity and property is finished and their `source` texts are exactly the
+  ontology's current source values. Otherwise the set is left as it is, its entries are counted
+  under `Skipped (group)`, the reason is listed, and the run exits 1:
+
+  ```text
+    - Left unchanged: http://example.org/ont#Bridge skos:altLabel @de: 2 of 3 entries not translated; finish every entry, copying in any existing translation that still stands
+  ```
+
+  A `source` the ontology no longer has, because it was edited after the file was extracted, is
+  reported as `the file's sources differ from the ontology's (…); re-extract`. When two files for
+  the same language both hold a set, the last file wins, as it does for a label. A set split
+  across two files is incomplete in each, so neither replaces it.
+- **`extract --missing-only`** treats a property with one source value as done once the target
+  has any value, as it does a label. With two or more source values it cannot tell which are
+  translated, so it offers them all, and each entry's `notes` lists what the target already has:
+
+  ```yaml
+    - property: skos:altLabel
+      source: Span
+      translation: ''
+      status: pending
+      notes: 'Already in de: "Bruecke", "Steg"'
+  ```
+
+  Copy an existing value into `translation` where it still stands: under `overwrite` the set
+  merged is exactly what the file holds, and under `preserve` the same text is not added twice.
+- **`report`** counts a property as translated in a language when it has any value there, so a
+  set with an untranslated value can read as complete while `--missing-only` offers it again.
 
 ## Naming Properties
 
@@ -147,7 +191,7 @@ rdf-construct localise extract ontology.ttl -l de --include-deprecated -o de.yml
 | `--source-language` | Source language tag (default: `en`) |
 | `--properties, -p` | Comma-separated properties to extract, on the ontology's own prefixes (see [Naming Properties](#naming-properties)) |
 | `--include-deprecated` | Include deprecated entities |
-| `--missing-only` | Only extract strings without target translations |
+| `--missing-only` | Only extract strings without target translations. A property with several source values that may take several per language is offered whole (see [Properties With Several Values](#properties-with-several-values)) |
 | `--config, -c` | YAML configuration file |
 | `--overwrite` | Replace an existing translation file, even one holding finished translations |
 
@@ -197,7 +241,7 @@ rdf-construct localise merge ontology.ttl de.yml -o test.ttl --dry-run
 |--------|-------------|
 | `--output, -o` | Output file (required). Refused (exit 2) if it names a translation file |
 | `--status` | Minimum status to include: `pending`, `needs_review`, `translated`, `approved` |
-| `--existing` | How to handle existing translations: `preserve` or `overwrite` |
+| `--existing` | How to handle existing translations: `preserve` or `overwrite`. Under `overwrite`, a property that may take several values per language is replaced as a set, only when nothing is lost by it (see [Properties With Several Values](#properties-with-several-values)) |
 | `--dry-run` | Show what would happen without writing |
 | `--no-colour` | Disable coloured output |
 
@@ -258,6 +302,9 @@ entities have an English label".
 - A second literal in one language adds nothing to the figure. For a property that takes one
   value per language (`rdfs:label`, `skos:prefLabel`) it is listed as a warning. Several
   `skos:altLabel` or `rdfs:comment` values in one language are normal and are not.
+- A property counts as translated when it has any value in the language. For one that may take
+  several, that is all a report can measure: `extract --missing-only` may still offer some of its
+  values (see [Properties With Several Values](#properties-with-several-values)).
 
 #### Example Output
 
@@ -516,6 +563,12 @@ rdf-construct localise extract ontology.ttl -l de --missing-only -o translations
 rdf-construct localise merge ontology.ttl translations/de_new.yml -o ontology.ttl
 ```
 
+A property that may take several values per language (`skos:altLabel`, or `rdfs:comment` with
+two English comments) and has two or more source values is extracted whole, each entry noting
+what German already has. Re-type an existing value that still stands and the merge skips it as
+already there; a new wording is added beside the old one. See
+[Properties With Several Values](#properties-with-several-values).
+
 ### Quality-Controlled Workflow
 
 Use the status field for a review workflow:
@@ -571,7 +624,7 @@ The extractor treats literals without language tags as the source language. If y
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | Completed with findings: `merge` found translated entities that are not in the ontology; `extract`, `init` or `report` was given a language that matched no literal while a related tag did |
+| 1 | Completed with findings: `merge` found translated entities that are not in the ontology, or left a set of values unchanged under `--existing overwrite` (`Skipped (group)`); `extract`, `init` or `report` was given a language that matched no literal while a related tag did |
 | 2 | Input refused or run failed (invalid options or config, a malformed, missing or blank language tag, a target language that is the source language, file not found, parse error); `extract` or `init` asked to replace a file holding finished translations without `--overwrite`, or a file that is not a translation file at all; a translation file or config value of the wrong type; a property whose prefix is not bound |
 
 ## Related Commands
