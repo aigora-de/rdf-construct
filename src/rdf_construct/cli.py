@@ -92,6 +92,7 @@ from rdf_construct.diff import compare_files, format_diff, filter_diff, parse_fi
 
 from rdf_construct.puml2rdf import (
     ConversionConfig,
+    NamespaceMapping,
     PlantUMLParser,
     PumlToRdfConverter,
     OntologyMerger as PumlOntologyMerger,
@@ -2313,8 +2314,10 @@ def puml2rdf(
             replaced or refused a value the ontology held (written,
             unless --strict)
         2 - Refused or failed: not a whole diagram (no @startuml or
-            @enduml), a parse or model error, an ontology to merge with
-            that cannot be parsed, or RDF that cannot be written
+            @enduml), a parse or model error, a -C config with an
+            unknown, removed or mistyped key or a mapping the diagram
+            contradicts, an ontology to merge with that cannot be
+            parsed, or RDF that cannot be written
     """
     # Normalise output format
     format_map = {
@@ -2337,13 +2340,20 @@ def puml2rdf(
         check_outputs([("-o", output)], [source, *([config] if config else [])])
 
     # Load configuration if provided
+    namespace_mappings: list[NamespaceMapping] = []
     if config:
         try:
             import_config = load_import_config(config)
             conversion_config = import_config.to_conversion_config()
         except Exception as e:
-            click.secho(f"Error loading config: {e}", fg="red", err=True)
+            click.secho(f"Error loading config {config.name}: {e}", fg="red", err=True)
             sys.exit(2)
+        namespace_mappings = import_config.namespace_mappings
+        # What the config chose that is worth saying; never fatal
+        if import_config.notes:
+            click.secho("Config notes:", err=True)
+            for config_note in import_config.notes:
+                click.echo(f"  {config_note}", err=True)
     else:
         conversion_config = ConversionConfig()
 
@@ -2357,7 +2367,8 @@ def puml2rdf(
 
     # Parse PlantUML file
     click.echo(f"Parsing {source.name}...")
-    parser = PlantUMLParser()
+    # The parser applies the config's namespace mappings, under the diagram's prefix checks
+    parser = PlantUMLParser(namespace_mappings, conversion_config.default_namespace)
 
     try:
         parse_result = parser.parse_file(source)
@@ -2435,7 +2446,8 @@ def puml2rdf(
     )
 
     # Validate model
-    model_validation = validate_puml(model)
+    # The validator reads the converter's one datatype map, so they agree on every type (#155)
+    model_validation = validate_puml(model, conversion_config.datatypes)
 
     if model_validation.has_errors:
         click.secho("Model validation errors:", fg="red", err=True)

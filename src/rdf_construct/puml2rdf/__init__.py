@@ -20,6 +20,7 @@ Example:
 """
 
 from rdf_construct.puml2rdf.model import (
+    NamespaceMapping,
     PropertyKind,
     PumlAttribute,
     PumlClass,
@@ -43,7 +44,6 @@ from rdf_construct.puml2rdf.converter import (
 )
 from rdf_construct.puml2rdf.config import (
     DatatypeMapping,
-    NamespaceMapping,
     PumlImportConfig,
     create_default_config,
     load_import_config,

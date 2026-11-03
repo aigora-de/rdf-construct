@@ -425,7 +425,7 @@ rdf-construct puml2rdf design.puml --validate --strict
 **Exit Codes**:
 - `0`: Success, including a run with warnings when `--strict` is not given
 - `1`: Warnings, with `--strict`; nothing is written
-- `2`: Refused or failed: no `@startuml` or `@enduml`, a parse error, a model error, or RDF that cannot be written
+- `2`: Refused or failed: no `@startuml` or `@enduml`, a parse error, a model error, a `-C` config with an unknown, removed or mistyped key or a mapping the diagram contradicts, or RDF that cannot be written
 
 ---
 

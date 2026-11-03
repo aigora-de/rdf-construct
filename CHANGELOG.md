@@ -759,6 +759,24 @@ change, and what to do about it, is listed command by command in the
   prefix check or report reads the diagram. Commented-out lines no longer cause
   refusals. A block comment that never closes is refused at exit 2, because
   PlantUML draws nothing for it.
+- **`puml2rdf -C` takes effect** (#152). `namespace_mappings` and
+  `datatype_mappings` in a `puml2rdf` config now take effect; the shipped
+  example config produced output byte-identical to a run without `-C`. A
+  mapping is held to the diagram's prefix rules (#150): where the diagram gives
+  a package another IRI, the run is refused at exit 2, naming the mapping and
+  the line, and a mapping that matches no package is a note. Every key is now
+  checked: an unknown key is refused at exit 2 with the nearest valid one, and
+  `generate_labels: "false"` no longer means true. `prefix_order`,
+  `ontology_imports`, `annotation_properties` and `generate_inverse_properties`,
+  which nothing ever read, are removed and refused. See the
+  [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#puml2rdf).
+- **`puml2rdf` has one datatype map** (#155, #480). `gYearMonth` and
+  `hexBinary` were unreachable and written as `xsd:string`; the validator held
+  a second copy of the map, so every unknown type was warned twice. Both now
+  read one map, case-folded, and an unknown type is warned once. An attribute
+  typed `xsd:gYearMonth` was read as the type `xsd`; a CURIE type is now read
+  whole, and one in `xsd:`, `rdf:`, `rdfs:` or `owl:` that names no datatype
+  is refused at exit 2.
 - **`sort: topological` no longer turns alphabetical on inferred graphs** (#339).
   RDFS entailment materialises `C rdfs:subClassOf C` for every class (`rdfs10`)
   and `P rdfs:subPropertyOf P` for every property (`rdfs6`). Each self-loop was
