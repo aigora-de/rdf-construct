@@ -746,6 +746,19 @@ change, and what to do about it, is listed command by command in the
   the diagram, validates the RDF and serialises it in memory in the requested
   format, writing nothing and running no `--merge`, so RDF that cannot be
   written fails validation at exit 2 rather than at the real run.
+- **`puml2rdf` files a class in a nested package under the innermost package**
+  (#391). It was minted in the outermost package's namespace. A nested package
+  without an IRI is named by its path, as PlantUML names it: `inner` in `outer`
+  is `outer.inner:`, the namespace `class outer.inner.X` already had. The IRIs
+  of those classes change; see the
+  [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#puml2rdf).
+- **`puml2rdf` no longer reads comments** (#394, #475). A class or arrow inside
+  a `/' … '/` block was converted, and a `package … {` or `title …` inside a
+  `'` line comment moved classes into a package and labelled the ontology, at
+  exit 0. Comments are now blanked, by PlantUML's own rule, before any pass,
+  prefix check or report reads the diagram. Commented-out lines no longer cause
+  refusals. A block comment that never closes is refused at exit 2, because
+  PlantUML draws nothing for it.
 - **`sort: topological` no longer turns alphabetical on inferred graphs** (#339).
   RDFS entailment materialises `C rdfs:subClassOf C` for every class (`rdfs10`)
   and `P rdfs:subPropertyOf P` for every property (`rdfs6`). Each self-loop was
