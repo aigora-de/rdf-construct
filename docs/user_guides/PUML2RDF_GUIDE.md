@@ -77,6 +77,48 @@ namespace IRI and the alias after `as` is the prefix, so `bld:Building` is
 has `#` appended, so `urn:example:building:` is used as it stands. A quoted name that is not an IRI is display text: `package "Building Things" as bld`
 is `package bld`.
 
+**A package nested in another** holds the classes declared inside it; a class after the inner
+block belongs to the outer one again. A nested package without an IRI is named by its path, as
+PlantUML names it: `parts` inside `building` is `building.parts`, the same package
+`class building.parts.Floor` names, so the two spellings mint the same IRI. A nested package with
+an IRI of its own uses that IRI and its own prefix. Given `nested.puml`:
+
+```plantuml
+@startuml
+package building {
+  class Building
+  package parts {
+    class Floor
+  }
+  class Site
+}
+@enduml
+```
+
+```bash
+rdf-construct puml2rdf nested.puml -o nested.ttl
+```
+
+`nested.ttl` holds:
+
+```turtle
+@prefix building: <http://example.org/ontology/building#> .
+@prefix building.parts: <http://example.org/ontology/building.parts#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://example.org/ontology> a owl:Ontology .
+
+building:Building a owl:Class ;
+    rdfs:label "building"@en .
+
+building:Site a owl:Class ;
+    rdfs:label "site"@en .
+
+building.parts:Floor a owl:Class ;
+    rdfs:label "floor"@en .
+```
+
 **A package with an IRI and no alias** gets a prefix derived from the IRI's last segment, and the
 run says which one. Given `things.puml`:
 
@@ -425,8 +467,15 @@ rdf-construct from-uml design.puml --validate
   is refused: exit 2, nothing written. A fragment must be wrapped in `@startuml` … `@enduml`.
   Only the first diagram is read: text before `@startuml`, or after the `@enduml` that closes it,
   is reported and not converted. A leading byte-order mark is ignored.
-- Every line the parser does not read is reported by its line number, unless it is a comment,
-  layout or presentation: `'` and `/' … '/` comments, closing braces, `hide`/`show`,
+- Comments are read by no check and no pass, so nothing in one is converted, refused or
+  reported. The rule is PlantUML's own. A line whose first non-blank character is `'` is a
+  comment, inside a class or note body too. `/'` at the start of a line opens a block comment.
+  The block ends at a `'/` on the same line, and the rest of that line is read. Otherwise it ends
+  on the first line that **ends** with `'/`, so `'/ class Foo` does not close it. A `/' … '/` at
+  the end of a line is a comment too. A block comment that never closes is refused: exit 2,
+  nothing written, naming its opening line. PlantUML draws nothing for such a diagram.
+- Every line the parser does not read is reported by its line number, unless it is layout or
+  presentation: closing braces, `hide`/`show`,
   `left to right direction`, `top to bottom direction`, `!include`, `!theme`, `skinparam`,
   `legend`, `header`, `footer`, `caption`, `title` and `together`. A block of these that is never
   closed is reported on its opening line.

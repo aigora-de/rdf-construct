@@ -55,10 +55,21 @@ CORE_PREFIXES: dict[str, str] = {
 STARTUML_PATTERN = re.compile(r"^[ \t]*@startuml\b", re.MULTILINE)
 ENDUML_PATTERN = re.compile(r"^[ \t]*@enduml\b", re.MULTILINE)
 
-# Lines no pass reads that are known to carry nothing for the ontology: comments, layout and
-# presentation (#151). A line no pass reads and nothing here matches is reported.
+# Comments, by PlantUML's own rule (measured with PlantUML 1.2026.9; #394, #475). A line whose
+# first non-blank character is `'` is a comment, in a class or note body too. `/'` opens a block
+# only at a line start; the block ends at a `'/` on that same line, the rest of which is read, or
+# else on the first later line that ends with `'/`. A `/' … '/` that ends a line is a trailing
+# comment. Every pass, check and the unread-line report read the text with these blanked.
+LINE_COMMENT_PATTERN = re.compile(r"^\s*'")
+BLOCK_COMMENT_OPEN_PATTERN = re.compile(r"^\s*/'")
+BLOCK_COMMENT_CLOSE_PATTERN = re.compile(r"'/\s*$")
+# From the last `/'` on the line, so a quoted name holding `/'` before the comment is kept
+TRAILING_COMMENT_PATTERN = re.compile(r"/'(?:(?!/').)*'/\s*$")
+
+# Lines no pass reads that are known to carry nothing for the ontology: layout and presentation
+# (#151). Comments are blanked before any pass reads the text, so they are not listed here. A
+# line no pass reads and nothing here matches is reported.
 IGNORABLE_LINE_PATTERNS = [
-    re.compile(r"^\s*'"),  # ' comment
     re.compile(r"^\s*\}\s*$"),  # a package's or group's closing brace
     re.compile(r"^\s*(?:hide|show)\b"),
     re.compile(r"^\s*(?:left\s+to\s+right|top\s+to\s+bottom)\s+direction\s*$"),
@@ -71,7 +82,6 @@ IGNORABLE_LINE_PATTERNS = [
 # Ignorable blocks: (opening line, closing line). Every line from one to the other is skipped,
 # so a block-form `skinparam` is not read as `skinparam class {`, nor a legend's text as a line.
 IGNORABLE_BLOCK_PATTERNS = [
-    (re.compile(r"^\s*/'"), re.compile(r"'/")),
     (re.compile(r"^\s*skinparam\s+\w+\s*\{\s*$"), re.compile(r"^\s*\}\s*$")),
     (
         re.compile(r"^\s*legend(?:\s+(?:top|bottom|left|right|center))*\s*$"),
@@ -243,6 +253,27 @@ class ParseResult:
         return len(self.errors) == 0
 
 
+@dataclass(frozen=True)
+class _PackageSpan:
+    """A package declaration and the text its braces enclose (#391).
+
+    Attributes:
+        match: The declaration's match of :attr:`PlantUMLParser.PACKAGE_PATTERN`.
+        start: Offset of the first character after the opening brace.
+        end: Offset of the closing brace, or the end of the text if it never closes.
+        key: The name its classes are filed under, and the prefix it is bound to. A package
+            nested in another, without a namespace URI of its own, is qualified by its
+            parent's key, as PlantUML qualifies it: ``outer.inner``.
+        namespace_uri: The namespace URI the package declares, if any.
+    """
+
+    match: re.Match[str]
+    start: int
+    end: int
+    key: str
+    namespace_uri: str | None
+
+
 class PlantUMLParser:
     """Parser for PlantUML class diagram syntax.
 
@@ -386,6 +417,12 @@ class PlantUMLParser:
         # by _report_unread_lines (#400)
         content = self._blank_outside(content, span)
 
+        # Comments are blanked before any check or pass reads the text (#394, #475); a block
+        # comment that never closes is refused whole, as PlantUML draws nothing for it
+        content = self._blank_comments(content)
+        if self._errors:
+            return ParseResult(model=model, errors=self._errors, warnings=[])
+
         # Prefixes are checked before the markers are blanked, so a refusal names the file's line
         self._check_prefixes(content)
 
@@ -488,6 +525,56 @@ class PlantUMLParser:
         start, end = span
         return blank(content[:start]) + content[start:end] + blank(content[end:])
 
+    def _blank_comments(self, content: str) -> str:
+        """Blank every comment, keeping every newline, so offsets do not move (#394, #475).
+
+        The rule is PlantUML's own, as the patterns at the top of this module describe. A
+        block comment still open at the end of the text is recorded as a :class:`ParseError`
+        on its opening line, and the rest of the text is blanked.
+
+        Args:
+            content: The text to blank, with the text outside the diagram already blanked.
+
+        Returns:
+            The text with every comment character replaced by a space.
+        """
+        lines = content.split("\n")
+        opened_on: int | None = None
+        for index, line in enumerate(lines):
+            if opened_on is not None:
+                if BLOCK_COMMENT_CLOSE_PATTERN.search(line):
+                    opened_on = None
+                lines[index] = " " * len(line)
+                continue
+            opener = BLOCK_COMMENT_OPEN_PATTERN.match(line)
+            if opener is not None:
+                close = line.find("'/", opener.end())
+                if close == -1:
+                    opened_on = index + 1
+                    lines[index] = " " * len(line)
+                    continue
+                # A block that closes on its opening line leaves the rest of the line to read
+                line = " " * (close + 2) + line[close + 2 :]
+            elif LINE_COMMENT_PATTERN.match(line):
+                lines[index] = " " * len(line)
+                continue
+            trailing = TRAILING_COMMENT_PATTERN.search(line)
+            if trailing is not None:
+                line = line[: trailing.start()] + " " * (len(line) - trailing.start())
+            lines[index] = line
+
+        if opened_on is not None:
+            opener_text = content.split("\n")[opened_on - 1].strip()
+            self._errors.append(
+                ParseError(
+                    line_number=opened_on,
+                    message="this block comment is never closed, so PlantUML draws nothing: "
+                    f"{opener_text}. A block comment closes on a line that ends with '/",
+                    line_content=opener_text,
+                )
+            )
+        return "\n".join(lines)
+
     def _strip_diagram_markers(self, content: str) -> str:
         """Blank out @startuml and @enduml markers, keeping every newline.
 
@@ -513,15 +600,19 @@ class PlantUMLParser:
 
         A line counts as read when a match a pass kept touches it; that is generous to a
         line a pass read only part of. Declarations of kinds the converter does not model
-        are named; any other line is reported as not understood.
+        are named; any other line is reported as not understood. Lines inside the diagram
+        are judged by the text the passes read, so a comment is skipped by the same rule
+        that kept the passes from reading it (#394, #475).
 
         Args:
-            source: The diagram text as given, for the markers and the reported lines.
-            content: The text the passes read, with the markers blanked; same offsets.
+            source: The diagram text as given, for the text outside the diagram.
+            content: The text the passes read, with the comments and markers blanked; same
+                offsets.
             span: The diagram's span in both; a line outside it is reported as such (#400).
         """
         # Lines are numbered by "\n" only, as offsets are mapped below (#401)
         lines = source.split("\n")
+        read_lines = content.split("\n")
         line_starts = [0]
         line_starts.extend(i + 1 for i, char in enumerate(content) if char == "\n")
         first_line = bisect_right(line_starts, span[0])
@@ -552,7 +643,7 @@ class PlantUMLParser:
         body_depth = 0
         opened_on = 0
         for number in range(first_line, last_line + 1):
-            text = lines[number - 1]
+            text = read_lines[number - 1]
             if block_end is not None:
                 if block_end.search(text):
                     block_end = None
@@ -560,7 +651,8 @@ class PlantUMLParser:
             if body_depth:
                 body_depth += text.count("{") - text.count("}")
                 continue
-            if not text.strip() or STARTUML_PATTERN.match(text) or ENDUML_PATTERN.match(text):
+            marker = lines[number - 1]
+            if not text.strip() or STARTUML_PATTERN.match(marker) or ENDUML_PATTERN.match(marker):
                 continue
             opened = next(
                 (
@@ -660,17 +752,14 @@ class PlantUMLParser:
         """Extract package definitions from content."""
         packages = []
 
-        for match in self.PACKAGE_PATTERN.finditer(content):
-            self._consume(match)
-            name = match.group(1) or match.group(2)  # Quoted or unquoted
-            stereotype = match.group(4)
-
-            package_name, namespace_uri = self._package_identity(name, match.group(3))
+        for span in self._package_spans(content):
+            self._consume(span.match)
+            stereotype = span.match.group(4)
 
             packages.append(
                 PumlPackage(
-                    name=package_name,
-                    namespace_uri=namespace_uri,
+                    name=span.key,
+                    namespace_uri=span.namespace_uri,
                     stereotype=stereotype,
                 )
             )
@@ -814,7 +903,8 @@ class PlantUMLParser:
             if prefix not in bound or bound[prefix][0] is None:
                 bound[prefix] = (iri, line)
 
-        for match in self.PACKAGE_PATTERN.finditer(source):
+        for span in self._package_spans(source):
+            match = span.match
             line = line_of(match.start())
             name = match.group(1) or match.group(2)
             alias = match.group(3)
@@ -829,7 +919,8 @@ class PlantUMLParser:
             if alias is None and uri is not None:
                 derived.append((prefix, uri, line))
                 continue
-            claim(prefix, self._namespace_iri(uri) if uri else None, line)
+            # A nested package is bound by its qualified name, as its classes are filed (#391)
+            claim(span.key, self._namespace_iri(uri) if uri else None, line)
 
         for prefix, uri, line in derived:
             iri = self._namespace_iri(uri)
@@ -1204,20 +1295,23 @@ class PlantUMLParser:
             params[key] = value
         return params
 
-    def _build_package_map(self, content: str) -> list[tuple[int, int, str]]:
-        """Build a map of character positions to package names.
+    def _package_spans(self, content: str) -> list[_PackageSpan]:
+        """Find every package declaration, the text it encloses and its key (#391).
 
-        The package name is the same one :meth:`_parse_packages` records, so a
-        class inside ``package "URI" as pfx`` is filed under ``pfx`` and not
-        under the URI (#150).
+        The one reading of packages that the prefix check, the package pass and the class
+        pass share, so all three agree on which package a class is in and what it is called.
 
-        Returns a list of (start, end, package_name) tuples.
+        Args:
+            content: The text to read; offsets in the result are offsets into it.
+
+        Returns:
+            One span per declaration, in declaration order.
         """
-        package_map = []
+        spans: list[_PackageSpan] = []
 
         for match in self.PACKAGE_PATTERN.finditer(content):
             name = match.group(1) or match.group(2)
-            package_name, _namespace_uri = self._package_identity(name, match.group(3))
+            package_name, namespace_uri = self._package_identity(name, match.group(3))
             start = match.end()
 
             # Find matching closing brace
@@ -1230,15 +1324,34 @@ class PlantUMLParser:
                     brace_count -= 1
                 pos += 1
 
-            package_map.append((start, pos - 1, package_name))
+            # Spans nest, so the latest declared one that encloses this one is its parent
+            parent = next(
+                (span for span in reversed(spans) if span.start <= match.start() <= span.end),
+                None,
+            )
+            key = package_name
+            if namespace_uri is None and parent is not None:
+                key = f"{parent.key}.{package_name}"
 
-        return package_map
+            spans.append(_PackageSpan(match, start, pos - 1, key, namespace_uri))
+
+        return spans
+
+    def _build_package_map(self, content: str) -> list[tuple[int, int, str]]:
+        """Build a map of character positions to package names.
+
+        The package name is the same one :meth:`_parse_packages` records, so a
+        class inside ``package "URI" as pfx`` is filed under ``pfx`` and not
+        under the URI (#150), and one inside a nested package is filed under its
+        qualified name (#391).
+
+        Returns a list of (start, end, package_name) tuples.
+        """
+        return [(span.start, span.end, span.key) for span in self._package_spans(content)]
 
     def _find_package_at_position(
         self, pos: int, package_map: list[tuple[int, int, str]]
     ) -> Optional[str]:
-        """Find which package contains a given character position."""
-        for start, end, name in package_map:
-            if start <= pos <= end:
-                return name
-        return None
+        """Find the innermost package that contains a given character position (#391)."""
+        enclosing = [(start, name) for start, end, name in package_map if start <= pos <= end]
+        return max(enclosing)[1] if enclosing else None
