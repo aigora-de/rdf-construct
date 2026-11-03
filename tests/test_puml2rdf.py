@@ -1328,8 +1328,9 @@ class TestValidateConvertsAndChecks:
 
         assert result.exit_code == 0, result.output
         assert "Converting to RDF..." in result.output
-        assert "Conversion warnings:" in result.output
-        assert "Validation complete: 3 warnings" in result.output
+        assert "Generated: " in result.output
+        # One warning for the unknown type, not one each from the validator and converter (#155)
+        assert "Validation complete: 2 warnings" in result.output
         assert _wrote_nothing(tmp_path)
 
     def test_validate_clean_diagram(self, tmp_path: Path) -> None:

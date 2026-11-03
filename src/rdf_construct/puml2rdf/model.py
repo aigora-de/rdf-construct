@@ -106,11 +106,31 @@ class PumlPackage:
             a URI package with no alias, otherwise the quoted or unquoted name
         namespace_uri: The URI to use as the namespace (the quoted URI)
         stereotype: Package stereotype (if any)
+        prefix: The prefix it is bound to, when a ``namespace_mappings`` entry renames it;
+            None means its name (#152)
     """
 
     name: str
     namespace_uri: Optional[str] = None
     stereotype: Optional[str] = None
+    prefix: str | None = None
+
+
+@dataclass
+class NamespaceMapping:
+    """Maps a PlantUML package to an RDF namespace.
+
+    Attributes:
+        package: The package's key as the diagram files classes under it: its name or
+            alias, ``outer.inner`` for a nested package with no IRI of its own, or the
+            part before the dot in ``class pkg.Name``
+        namespace_uri: Target namespace URI
+        prefix: Prefix to bind it to, if not the package's own name
+    """
+
+    package: str
+    namespace_uri: str
+    prefix: str | None = None
 
 
 @dataclass

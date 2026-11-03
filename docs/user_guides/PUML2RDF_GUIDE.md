@@ -216,15 +216,44 @@ Attributes become `owl:DatatypeProperty` with domain set to the containing class
 
 ### Supported Datatypes
 
+A type name matches without regard to case: `String`, `string` and `STRING` are all
+`xsd:string`.
+
 | PlantUML Type | XSD Type |
 |---------------|----------|
 | `string`, `str`, `text` | `xsd:string` |
 | `integer`, `int` | `xsd:integer` |
-| `decimal`, `float`, `double` | `xsd:decimal`, `xsd:float`, `xsd:double` |
+| `decimal`, `number` | `xsd:decimal` |
+| `float` | `xsd:float` |
+| `double` | `xsd:double` |
 | `boolean`, `bool` | `xsd:boolean` |
-| `date`, `datetime`, `time` | `xsd:date`, `xsd:dateTime`, `xsd:time` |
-| `gYear`, `gYearMonth` | `xsd:gYear`, `xsd:gYearMonth` |
+| `date` | `xsd:date` |
+| `datetime` | `xsd:dateTime` |
+| `time` | `xsd:time` |
+| `gYear` | `xsd:gYear` |
+| `gYearMonth` | `xsd:gYearMonth` |
+| `duration` | `xsd:duration` |
 | `uri`, `anyURI`, `url` | `xsd:anyURI` |
+| `base64` | `xsd:base64Binary` |
+| `hexBinary` | `xsd:hexBinary` |
+| `language` | `xsd:language` |
+| `token` | `xsd:token` |
+
+`xsd:date`, `xsd:time`, `xsd:gYear`, `xsd:gYearMonth` and `xsd:duration` are XSD datatypes but
+are not in the OWL 2 datatype map, so an OWL 2 DL reasoner may not accept them as ranges.
+
+Any other datatype can be written as a CURIE: `q : xsd:gYearMonth`, `l : rdf:langString`. A
+CURIE in `xsd:`, `rdf:`, `rdfs:` or `owl:` must name one of their datatypes, with its own
+case: `xsd:Foo` and `xsd:gyearmonth` are refused at exit 2 (`NOT_A_DATATYPE`).
+
+A type the map does not know, such as `Money`, is written as `xsd:string` and warned once:
+
+```text
+Unknown datatype 'Money' for attribute 'Building.value'; written as xsd:string. Map it under datatype_mappings in a -C config
+```
+
+Map it under `datatype_mappings` in a [configuration file](#configuration-file) to give it a
+datatype of its own.
 
 ### Relationships
 
@@ -265,7 +294,7 @@ rdf-construct from-uml [OPTIONS] SOURCE
 |------|---------|
 | 0 | Success, including a run with warnings when `--strict` is not given |
 | 1 | Warnings, with `--strict`; nothing is written. Or `--merge` replaced or kept back a value the ontology held: written, unless `--strict` is given |
-| 2 | Refused or failed: no `@startuml` or `@enduml`, a parse error, a model error, a `--merge` ontology that cannot be parsed, or RDF that cannot be written |
+| 2 | Refused or failed: no `@startuml` or `@enduml`, a parse error, a model error, a `-C` config with an unknown, removed or mistyped key or a mapping the diagram contradicts, a `--merge` ontology that cannot be parsed, or RDF that cannot be written |
 
 ## Configuration File
 
@@ -275,7 +304,7 @@ Create a YAML configuration file for advanced control:
 # puml-import.yml
 
 # Default namespace for entities without explicit package
-default_namespace: "http://example.org/building#"
+default_namespace: "http://example.org/ontology#"
 
 # Language tag for labels and comments
 language: "en"
@@ -294,23 +323,11 @@ namespace_mappings:
     prefix: "bld"
   - package: "core"
     namespace_uri: "http://example.org/core#"
-    prefix: "core"
 
 # Custom datatype mappings
 datatype_mappings:
   Money: "xsd:decimal"
   Percentage: "xsd:decimal"
-
-# Preferred prefix ordering in output
-prefix_order:
-  - ""
-  - "owl"
-  - "rdfs"
-  - "xsd"
-
-# URIs to include as owl:imports
-ontology_imports:
-  - "http://example.org/core"
 ```
 
 Use with:
@@ -318,6 +335,67 @@ Use with:
 ```bash
 rdf-construct from-uml design.puml -C puml-import.yml
 ```
+
+[`examples/puml2rdf/puml2rdf_config.yml`](../../examples/puml2rdf/puml2rdf_config.yml) is a
+fuller example, and [`building.puml`](../../examples/puml2rdf/building.puml) beside it uses
+every mapping it carries.
+
+### Keys
+
+| Key | Value | Default |
+|-----|-------|---------|
+| `default_namespace` | Namespace IRI for classes outside any package | `http://example.org/ontology#` |
+| `language` | Language tag for labels and comments | `en` |
+| `generate_labels` | `true` or `false`, unquoted | `true` |
+| `camel_to_label` | `true` or `false`, unquoted | `true` |
+| `namespace_mappings` | A list of `package`, `namespace_uri` and an optional `prefix` | none |
+| `datatype_mappings` | Type name to datatype | none |
+
+Every key is checked. A key `puml2rdf` does not accept stops the run at exit 2, naming the
+nearest key it does accept; so does a value of the wrong type, such as `generate_labels:
+"false"` in quotes. Options on the command line win over the config: `-n` over
+`default_namespace`, `-l` over `language` and `--no-labels` over `generate_labels`.
+
+`prefix_order`, `ontology_imports`, `annotation_properties` and `generate_inverse_properties`
+were accepted before 0.7.0 and never read. They are now refused, each with a message saying
+why. `prefix_order` is the one to note: the [`order`](ORDER_GUIDE.md) command honours a key of
+that name, but `puml2rdf` does not order its prefixes yet. The key can return when `puml2rdf`'s
+Turtle goes through the same semantic serialiser
+([#162](https://github.com/aigora-de/rdf-construct/issues/162)).
+
+### Namespace mappings
+
+A mapping names a package as the diagram files classes under it: its name, or its alias
+(`package "Building Things" as bld` is `bld`); `outer.inner` for a package nested in another
+with no IRI of its own; or the part before the dot in `class building.Building`. The mapping
+gives that package its namespace IRI (with `#` added unless it ends in `#`, `/` or `:`), and
+`prefix` binds it to another prefix than its name.
+
+The diagram is the first route to a namespace (`package "http://…#" as pfx`, under
+[Packages and Namespaces](#packages-and-namespaces)); a mapping is the second, and lets one
+config serve several diagrams. Where both speak, they must agree:
+
+- A package the diagram gives an IRI must be given the same IRI, and a prefix the diagram names
+  with that IRI cannot be renamed. A package whose prefix was derived from its IRI may be named
+  one by its mapping.
+- A mapped prefix and IRI are held to the same rules as the diagram's: a legal Turtle prefix,
+  no core prefix (`owl`, `rdf`, `rdfs`, `xsd`, `xml`) on another namespace, one prefix per
+  namespace and one namespace per prefix.
+- A mapped IRI cannot be the default namespace, or the namespace generated for a package the
+  config does not map; a mapped prefix cannot be another package's name.
+
+Each refusal is a parse error at exit 2, on the package's line, naming the mapping. A mapping
+that matches no package in the diagram is reported as a note and not used; it does not fail
+`--strict`.
+
+### Datatype mappings
+
+`datatype_mappings` adds type names to the [datatype map](#supported-datatypes), or replaces
+a built-in one, which is reported as a note. Names match without regard to case, so two names
+that differ only in case are refused. A value is an `xsd:` CURIE naming an XSD datatype; one of
+`rdf:langString`, `rdf:PlainLiteral`, `rdf:XMLLiteral`, `rdf:HTML`, `rdfs:Literal`, `owl:real`
+or `owl:rational`; or a full IRI, such as `<http://example.org/datatypes#money>`. Anything
+else, `xsd:Foo` included, stops the run at exit 2.
 
 ## Merging with Existing Ontologies
 
@@ -525,7 +603,7 @@ Without `--strict`, the same diagram converts at exit 0 and the three lines are 
 - Duplicate class names
 - Relationships reference existing classes
 - Inheritance cycles
-- Unknown datatypes
+- Unknown datatypes, warned once; a CURIE such as `xsd:Foo` that names no datatype is an error
 
 **RDF Validation:**
 - Classes properly typed
@@ -536,7 +614,8 @@ Without `--strict`, the same diagram converts at exit 0 and the three lines are 
 ### Strict Mode
 
 Treat warnings as errors for CI pipelines. Under `--strict` any parse, model, conversion or RDF
-warning stops the run at exit 1 with nothing written; a derived prefix is a note and does not:
+warning stops the run at exit 1 with nothing written; a derived prefix, or a namespace mapping
+that matches no package, is a note and does not:
 
 ```bash
 rdf-construct from-uml design.puml --validate --strict

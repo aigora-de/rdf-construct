@@ -13,6 +13,7 @@ The parser uses a multi-pass approach:
 
 import re
 from bisect import bisect_right
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -27,6 +28,7 @@ from rdf_construct.core.vocab import (
     OBJECT_PROPERTY_TYPES,
 )
 from rdf_construct.puml2rdf.model import (
+    NamespaceMapping,
     PumlAttribute,
     PumlClass,
     PumlModel,
@@ -330,7 +332,7 @@ class PlantUMLParser:
         r"([+\-#~])?\s*"  # Optional visibility
         r"(\{static\})?\s*"  # Optional static marker
         r"(\w+)"  # Attribute name
-        r"(?:\s*:\s*(\w+))?"  # Optional : type
+        r"(?:\s*:\s*(\w+(?::\w+)?))?"  # Optional : type, which may be a CURIE (#480)
         r"\s*$",
         re.MULTILINE,
     )
@@ -376,8 +378,23 @@ class PlantUMLParser:
     # Skinparam settings
     SKINPARAM_PATTERN = re.compile(r"skinparam\s+(\w+)\s+(\S+)", re.MULTILINE)
 
-    def __init__(self) -> None:
-        """Initialise the parser."""
+    def __init__(
+        self,
+        namespace_mappings: Sequence[NamespaceMapping] = (),
+        default_namespace: str | None = None,
+    ) -> None:
+        """Initialise the parser.
+
+        Args:
+            namespace_mappings: A ``-C`` config's mappings from package to namespace, held
+                to the same prefix checks as the diagram's own packages (#152).
+            default_namespace: The namespace unpackaged classes go in, so a mapping onto it,
+                or onto a namespace generated from it, can be refused. None skips both checks.
+        """
+        self._namespace_mappings = list(namespace_mappings)
+        self._default_namespace = default_namespace
+        # package key -> (prefix, namespace IRI) for every mapping applied
+        self._mapped: dict[str, tuple[str, str]] = {}
         self._errors: list[ParseError] = []
         self._warnings: list[ParseWarning] = []
         self._notes: list[ParseWarning] = []
@@ -400,6 +417,7 @@ class PlantUMLParser:
         self._notes = []
         self._consumed = []
         self._dropped = {}
+        self._mapped = {}
 
         model = PumlModel()
 
@@ -434,6 +452,9 @@ class PlantUMLParser:
 
         # Pass 2: Extract classes with attributes
         model.classes = self._parse_classes(content)
+
+        # The namespaces a -C config maps packages to, checked by _check_prefixes (#152)
+        self._apply_mappings(model)
 
         # Pass 3: Extract relationships
         model.relationships = self._parse_relationships(content)
@@ -767,6 +788,37 @@ class PlantUMLParser:
         return packages
 
     @staticmethod
+    def _mapping_line(mapped_lines: dict[str, tuple[str, int]], key: str) -> int:
+        """Return the line a mapping for package *key* was applied on."""
+        return next(line for owner, line in mapped_lines.values() if owner == key)
+
+    def _apply_mappings(self, model: PumlModel) -> None:
+        """Give each mapped package the namespace and prefix its mapping names (#152).
+
+        A ``class pkg.Name`` whose package is mapped but never declared gets a package of
+        its own, so the converter binds the mapped namespace for it.
+        """
+        if not self._mapped:
+            return
+        for package in model.packages:
+            if package.name in self._mapped:
+                prefix, iri = self._mapped[package.name]
+                package.namespace_uri = iri
+                package.prefix = None if prefix == package.name else prefix
+        declared = {package.name for package in model.packages}
+        for cls in model.classes:
+            if cls.package in self._mapped and cls.package not in declared:
+                prefix, iri = self._mapped[cls.package]
+                model.packages.append(
+                    PumlPackage(
+                        name=cls.package,
+                        namespace_uri=iri,
+                        prefix=None if prefix == cls.package else prefix,
+                    )
+                )
+                declared.add(cls.package)
+
+    @staticmethod
     def _looks_like_uri(value: str) -> bool:
         """Return True when *value* starts with a URI scheme, such as ``http:`` or ``urn:``."""
         return URI_SCHEME_PATTERN.match(value) is not None
@@ -846,6 +898,13 @@ class PlantUMLParser:
         Each refusal is a :class:`ParseError` on the declaration's line, so
         nothing is converted or written.
 
+        A ``namespace_mappings`` entry from a ``-C`` config (#152) gives an IRI-less
+        package its namespace and may name its prefix; the mapped prefix and IRI are then
+        claimed as the diagram's own are, and a refusal names the entry. A package whose
+        diagram gives another IRI, or the same IRI under another prefix it names, is
+        refused. So is a mapped IRI that is the default namespace, or the namespace
+        generated for an unmapped package. A mapping that matches no package is a note.
+
         Args:
             source: The diagram text before its markers are stripped, so that
                 line numbers are the file's own.
@@ -864,12 +923,12 @@ class PlantUMLParser:
             content = lines[line - 1].strip() if line <= len(lines) else ""
             self._errors.append(ParseError(line_number=line, message=message, line_content=content))
 
-        def claim(prefix: str, iri: str | None, line: int) -> None:
+        def claim(prefix: str, iri: str | None, line: int, origin: str = "") -> None:
             if not PN_PREFIX_PATTERN.fullmatch(prefix):
                 refuse(
                     line,
                     f'"{prefix}" is not a legal Turtle prefix: it must start with a letter, '
-                    'hold only letters, digits, "_", "-" and ".", and not end with "."',
+                    'hold only letters, digits, "_", "-" and ".", and not end with "."' + origin,
                 )
                 return
             core = CORE_PREFIXES.get(prefix)
@@ -878,7 +937,7 @@ class PlantUMLParser:
                     line,
                     f'"{prefix}" is a core prefix, bound to <{core}>; it cannot name '
                     f"{f'<{iri}>' if iri else 'a namespace of this diagram'}. "
-                    "Choose another prefix",
+                    "Choose another prefix" + origin,
                 )
                 return
             if prefix in bound:
@@ -887,7 +946,7 @@ class PlantUMLParser:
                     refuse(
                         line,
                         f'"{prefix}" is already the prefix for <{earlier}> (line {earlier_line}); '
-                        f"one prefix cannot name <{iri}> as well",
+                        f"one prefix cannot name <{iri}> as well" + origin,
                     )
                     return
             if iri is not None:
@@ -896,12 +955,57 @@ class PlantUMLParser:
                     refuse(
                         line,
                         f'<{iri}> already has the prefix "{other}" (line {other_line}); '
-                        f'one namespace cannot have "{prefix}" as well',
+                        f'one namespace cannot have "{prefix}" as well' + origin,
                     )
                     return
                 named.setdefault(iri, (prefix, line))
             if prefix not in bound or bound[prefix][0] is None:
                 bound[prefix] = (iri, line)
+
+        mappings = {mapping.package: mapping for mapping in self._namespace_mappings}
+        # The keys a mapping matched, mapped IRIs by line, and the packages given a generated IRI
+        matched: set[str] = set()
+        mapped_lines: dict[str, tuple[str, int]] = {}
+        generated: dict[str, int] = {}
+        declared_iri: set[str] = set()
+        default_iri = (
+            self._namespace_iri(self._default_namespace) if self._default_namespace else None
+        )
+
+        def apply(
+            mapping: NamespaceMapping, key: str, uri: str | None, alias: bool, line: int
+        ) -> None:
+            """Check one mapping against the package it matched, and claim what it names."""
+            matched.add(key)
+            entry = f"namespace_mappings entry for package '{key}'"
+            iri = self._namespace_iri(mapping.namespace_uri)
+            prefix = mapping.prefix or key
+            if uri is not None and self._namespace_iri(uri) != iri:
+                refuse(
+                    line,
+                    f"{entry} gives <{iri}>, but this package declares "
+                    f"<{self._namespace_iri(uri)}>; remove one",
+                )
+                return
+            if uri is not None and alias and prefix != key:
+                refuse(
+                    line,
+                    f'{entry} gives the prefix "{prefix}", but this package names "{key}"; '
+                    "remove one",
+                )
+                return
+            if default_iri is not None and iri == default_iri:
+                refuse(
+                    line,
+                    f'{entry} gives <{iri}>, the default namespace, which has the prefix ""; '
+                    f'one namespace cannot have "{prefix}" as well',
+                )
+                return
+            errors = len(self._errors)
+            claim(prefix, iri, line, origin=f" (from the {entry})")
+            if len(self._errors) == errors:
+                self._mapped[key] = (prefix, iri)
+                mapped_lines.setdefault(iri, (key, line))
 
         for span in self._package_spans(source):
             match = span.match
@@ -916,6 +1020,14 @@ class PlantUMLParser:
                 )
                 continue
             prefix, uri = self._package_identity(name, alias)
+            if span.key in mappings:
+                # A derived prefix is not one the diagram names, so the mapping may name it
+                apply(mappings[span.key], span.key, uri, alias is not None, line)
+                continue
+            if uri is None:
+                generated.setdefault(span.key, line)
+            else:
+                declared_iri.add(span.key)
             if alias is None and uri is not None:
                 derived.append((prefix, uri, line))
                 continue
@@ -967,7 +1079,50 @@ class PlantUMLParser:
             if package is None:
                 continue
             line = line_of(match.start() + match.group(0).index("class"))
-            claim(package, bound[package][0] if package in bound else None, line)
+            if package in self._mapped:
+                claim(*self._mapped[package], line)
+            elif package in mappings and package not in matched:
+                # `class pkg.Name` with no package declared: the mapping is all it has
+                apply(mappings[package], package, None, False, line)
+            elif package not in mappings:
+                if package not in declared_iri:
+                    generated.setdefault(package, line)
+                claim(package, bound[package][0] if package in bound else None, line)
+
+        # A package the config does not map is generated a namespace, and bound by its own
+        # name: neither may be what a mapping gives another package
+        base = default_iri.rstrip("#/") if default_iri is not None else None
+        mapped_prefixes = {prefix: key for key, (prefix, _) in self._mapped.items()}
+        for key, key_line in generated.items():
+            owner = mapped_prefixes.get(key)
+            if owner is not None and owner != key:
+                refuse(
+                    self._mapping_line(mapped_lines, owner),
+                    f"namespace_mappings entry for package '{owner}' gives the prefix "
+                    f"\"{key}\", which names package '{key}' (line {key_line}) too; "
+                    "map that package too, or choose another prefix",
+                )
+                continue
+            auto = f"{base}/{key}#" if base is not None else None
+            if auto is not None and auto in mapped_lines:
+                owner, line = mapped_lines[auto]
+                refuse(
+                    line,
+                    f"namespace_mappings entry for package '{owner}' gives <{auto}>, the "
+                    f"namespace generated for package '{key}' (line {key_line}); "
+                    "map that package too, or choose another IRI",
+                )
+
+        for mapping in self._namespace_mappings:
+            if mapping.package not in matched:
+                self._notes.append(
+                    ParseWarning(
+                        None,
+                        f"namespace_mappings entry for package '{mapping.package}' matches no "
+                        "package in this diagram, so it was not used",
+                        code="unmatched-mapping",
+                    )
+                )
 
     def _parse_classes(self, content: str) -> list[PumlClass]:
         """Extract class definitions from content."""
@@ -1067,7 +1222,7 @@ class PlantUMLParser:
                 )
             else:
                 # Try simpler pattern: just "name" or "name : type"
-                simple_match = re.match(r"(\w+)(?:\s*:\s*(\w+))?", line)
+                simple_match = re.match(r"(\w+)(?:\s*:\s*(\w+(?::\w+)?))?", line)
                 if simple_match:
                     attributes.append(
                         PumlAttribute(

@@ -11,6 +11,7 @@ from typing import Optional
 from rdflib import Graph, URIRef, RDF, RDFS
 from rdflib.namespace import OWL
 
+from rdf_construct.puml2rdf.datatypes import DatatypeMap, NotADatatype
 from rdf_construct.puml2rdf.model import PumlModel, PumlRelationship, RelationshipType
 
 
@@ -94,6 +95,15 @@ class PumlModelValidator:
     - Attributes have valid types
     - Inheritance doesn't create cycles
     """
+
+    def __init__(self, datatypes: DatatypeMap | None = None) -> None:
+        """Initialise the validator.
+
+        Args:
+            datatypes: The datatype map the converter resolves attribute types through;
+                None means the built-in type names alone
+        """
+        self._datatypes = datatypes or DatatypeMap()
 
     def validate(self, model: PumlModel) -> ValidationResult:
         """Validate a parsed PlantUML model.
@@ -225,51 +235,41 @@ class PumlModelValidator:
         return issues
 
     def _check_attribute_types(self, model: PumlModel) -> list[ValidationIssue]:
-        """Check that attribute types are recognized."""
+        """Check each attribute's type against the one datatype map the converter reads (#155)."""
         issues = []
-
-        known_types = {
-            "string",
-            "str",
-            "text",
-            "integer",
-            "int",
-            "decimal",
-            "float",
-            "double",
-            "number",
-            "boolean",
-            "bool",
-            "date",
-            "datetime",
-            "time",
-            "gYear",
-            "gyear",
-            "gYearMonth",
-            "duration",
-            "uri",
-            "anyURI",
-            "anyuri",
-            "url",
-            "base64",
-            "hexBinary",
-            "language",
-            "token",
-        }
 
         for cls in model.classes:
             for attr in cls.attributes:
-                if attr.datatype and attr.datatype.lower() not in known_types:
-                    if not attr.datatype.startswith("xsd:"):
-                        issues.append(
-                            ValidationIssue(
-                                severity=Severity.WARNING,
-                                code="UNKNOWN_DATATYPE",
-                                message=f"Unknown datatype '{attr.datatype}' for attribute '{attr.name}'",
-                                entity=f"{cls.name}.{attr.name}",
-                                suggestion="Use standard XSD type or add custom mapping in config",
-                            )
+                if not attr.datatype:
+                    continue
+                entity = f"{cls.name}.{attr.name}"
+                try:
+                    known = self._datatypes.resolve(attr.datatype)
+                except NotADatatype as error:
+                    issues.append(
+                        ValidationIssue(
+                            severity=Severity.ERROR,
+                            code="NOT_A_DATATYPE",
+                            message=f"{error}, for attribute '{entity}'",
+                            entity=entity,
+                            suggestion="Name an XSD datatype, such as xsd:gYearMonth",
                         )
+                    )
+                    continue
+                if known is None:
+                    issues.append(
+                        ValidationIssue(
+                            severity=Severity.WARNING,
+                            code="UNKNOWN_DATATYPE",
+                            message=(
+                                f"Unknown datatype '{attr.datatype}' for attribute '{entity}'; "
+                                "written as xsd:string. Map it under datatype_mappings in a -C "
+                                "config"
+                            ),
+                            entity=entity,
+                            suggestion="Map it under datatype_mappings in a -C config",
+                        )
+                    )
 
         return issues
 
@@ -438,16 +438,18 @@ class RdfValidator:
         return issues
 
 
-def validate_puml(model: PumlModel) -> ValidationResult:
+def validate_puml(model: PumlModel, datatypes: DatatypeMap | None = None) -> ValidationResult:
     """Convenience function to validate a PlantUML model.
 
     Args:
         model: The parsed model to validate
+        datatypes: The datatype map the converter reads; None means the built-in type
+            names alone
 
     Returns:
         ValidationResult with any issues found
     """
-    validator = PumlModelValidator()
+    validator = PumlModelValidator(datatypes)
     return validator.validate(model)
 
 
