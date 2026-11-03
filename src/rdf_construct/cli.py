@@ -1397,7 +1397,7 @@ def contexts(config: Path):
     type=click.Choice(LINT_FAIL_ON),
     default="error",
     show_default=True,
-    help="Lowest severity that makes the run exit 1 ('never' always exits 0)",
+    help="Lowest severity that makes the run exit 1 ('never' ignores findings; failures still exit 2)",
 )
 def lint(
     sources: tuple[Path, ...],
@@ -1579,15 +1579,20 @@ def lint(
 def _lint_exit_code(summary: LintSummary, fail_on: str) -> int:
     """Map a lint summary to an exit code (#286).
 
-    The engine reports severities; this decides what they mean for the process.
+    Parse failures mean the run did not complete, regardless of the findings policy.
+    Otherwise, the engine reports severities; this decides what they mean for the process.
 
     Args:
         summary: The completed lint run.
         fail_on: Lowest severity that counts as a finding: error, warning, info or never.
 
     Returns:
-        1 if any finding is at or above ``fail_on``, otherwise 0.
+        2 if any source could not be parsed, 1 if any finding is at or above
+        ``fail_on``, otherwise 0.
     """
+    if any(result.parse_failed for result in summary.results):
+        return 2
+
     counts = {
         "error": summary.total_errors,
         "warning": summary.total_errors + summary.total_warnings,

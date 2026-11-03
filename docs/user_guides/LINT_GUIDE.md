@@ -28,6 +28,9 @@ rdf-construct lint ontology.ttl --format json
 
 `--fail-on` sets the lowest severity that counts: `error` (the default), `warning`, `info` or
 `never`. With the default, a run with only warnings exits 0.
+`never` ignores findings, not failed inputs: if any source cannot be parsed, the run exits 2
+whatever `--fail-on` says. Its `parse-error` is still reported alongside the other files' results,
+so a mixed run does not hide either the failed source or the findings in readable sources.
 
 Use exit codes in CI pipelines:
 
@@ -74,6 +77,17 @@ rdf-construct lint ontology.ttl --level relaxed
 ```
 
 ## Rules Reference
+
+The common class and property checks use `core.vocab`'s shared type sets. Properties declared only
+by an OWL characteristic (such as `owl:TransitiveProperty` or `owl:FunctionalProperty`),
+`owl:DeprecatedProperty` and `owl:DeprecatedClass` now receive the applicable naming,
+documentation and structural checks. Deprecation does not exempt a term from these checks.
+`property-no-type` recognises all the property declarations as types too.
+
+`property-no-domain` and `property-no-range` still check explicit `owl:ObjectProperty`
+declarations; broadening those two rules is tracked separately in
+[#205](https://github.com/aigora-de/rdf-construct/issues/205). A functional or deprecated property
+alone does not imply that it is an object property.
 
 ### Structural Rules (Default: Error)
 

@@ -13,6 +13,8 @@ from typing import Callable
 from rdflib import Graph, Namespace, RDF, RDFS, URIRef
 from rdflib.namespace import OWL
 
+from rdf_construct.core.vocab import ALL_PROPERTY_TYPES, CLASS_TYPES
+
 
 class Severity(Enum):
     """Severity levels for lint issues."""
@@ -126,26 +128,19 @@ def list_rules() -> list[str]:
 
 
 def get_classes(graph: Graph) -> set[URIRef]:
-    """Get all classes (owl:Class and rdfs:Class)."""
+    """Get named classes declared by any of the shared class types."""
     classes: set[URIRef] = set()
-    for cls in graph.subjects(RDF.type, OWL.Class):
-        if isinstance(cls, URIRef):
-            classes.add(cls)
-    for cls in graph.subjects(RDF.type, RDFS.Class):
-        if isinstance(cls, URIRef):
-            classes.add(cls)
+    for cls_type in CLASS_TYPES:
+        for cls in graph.subjects(RDF.type, cls_type):
+            if isinstance(cls, URIRef):
+                classes.add(cls)
     return classes
 
 
 def get_properties(graph: Graph) -> set[URIRef]:
     """Get all properties (all property types)."""
     props: set[URIRef] = set()
-    for prop_type in (
-        RDF.Property,
-        OWL.ObjectProperty,
-        OWL.DatatypeProperty,
-        OWL.AnnotationProperty,
-    ):
+    for prop_type in ALL_PROPERTY_TYPES:
         for prop in graph.subjects(RDF.type, prop_type):
             if isinstance(prop, URIRef):
                 props.add(prop)
@@ -367,17 +362,10 @@ def check_property_no_type(graph: Graph) -> list[LintIssue]:
     issues = []
 
     # Find all subjects that have domain or range but no property type
-    property_types = {
-        RDF.Property,
-        OWL.ObjectProperty,
-        OWL.DatatypeProperty,
-        OWL.AnnotationProperty,
-    }
-
     for subj in graph.subjects(RDFS.domain, None):
         if isinstance(subj, URIRef) and not is_builtin(subj):
             types = set(graph.objects(subj, RDF.type))
-            if not types.intersection(property_types):
+            if not types.intersection(ALL_PROPERTY_TYPES):
                 issues.append(
                     LintIssue(
                         rule_id="property-no-type",
@@ -390,7 +378,7 @@ def check_property_no_type(graph: Graph) -> list[LintIssue]:
     for subj in graph.subjects(RDFS.range, None):
         if isinstance(subj, URIRef) and not is_builtin(subj):
             types = set(graph.objects(subj, RDF.type))
-            if not types.intersection(property_types):
+            if not types.intersection(ALL_PROPERTY_TYPES):
                 # Avoid duplicates if already reported
                 existing = [i for i in issues if i.entity == subj]
                 if not existing:
@@ -552,7 +540,7 @@ def check_redundant_subclass(graph: Graph) -> list[LintIssue]:
         superclasses = get_superclasses(graph, cls)
 
         # For each pair of direct superclasses, check if one is an ancestor of the other
-        superclass_list = list(superclasses)
+        superclass_list = sorted(superclasses)
         for i, sup1 in enumerate(superclass_list):
             for sup2 in superclass_list[i + 1 :]:
                 # Check if sup1 is an ancestor of sup2 (or vice versa)

@@ -514,6 +514,16 @@ change, and what to do about it, is listed command by command in the
   counts entity and property pairs. The CLI output is unchanged.
 
 ### Fixed
+
+- **`lint`: common entity/type checks see characteristic-only and deprecated terms; parse failures exit 2** ([#204](https://github.com/aigora-de/rdf-construct/issues/204), [#322](https://github.com/aigora-de/rdf-construct/issues/322)).
+  Class/property enumeration and `property-no-type` use `core.vocab`'s type sets, including OWL
+  characteristics, `owl:DeprecatedClass` and `owl:DeprecatedProperty`. Domain/range rule widening
+  remains separate (#205), and no deprecation exemption is introduced. Any unparseable source now
+  exits 2, even with `--fail-on never` or readable files alongside it; the report retains every
+  file's findings. `LintResult.parse_failed` distinguishes failed parsing from ordinary findings.
+  Redundant-subclass messages compare superclass pairs in stable order, fixing the pre-existing
+  six-hash-seed gate failure without changing which pairs are reported.
+  See the [`lint` migration rows](docs/MIGRATION_v0.7.0.md#lint).
 - **An inline blank node with several objects for one predicate is valid
   Turtle again** (#343). `order` wrote the predicate again before every object
   after the comma, and the grammar expects another object there, so rdflib
