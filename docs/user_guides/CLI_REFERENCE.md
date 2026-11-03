@@ -1102,7 +1102,7 @@ rdf-construct localise extract SOURCE [OPTIONS]
 - `--source-language CODE`: Source language code (default: en)
 - `-p, --properties PROPS`: Comma-separated properties to extract (e.g., rdfs:label,rdfs:comment). A CURIE uses the ontology's own prefixes plus rdf, rdfs, owl, xsd and xml; an unbound prefix is refused (exit 2)
 - `--include-deprecated`: Include deprecated entities
-- `--missing-only`: Only extract strings missing in target language
+- `--missing-only`: Only extract strings missing in target language. A property that may take several values per language (`skos:altLabel`, `rdfs:comment`) and has two or more source values is extracted whole, with the target's existing values in each entry's `notes`
 - `-c, --config PATH`: YAML configuration file
 
 **Examples**:
@@ -1138,7 +1138,7 @@ rdf-construct localise merge SOURCE TRANSLATIONS... [OPTIONS]
 **Options**:
 - `-o, --output PATH`: Output file for merged ontology (required); refused (exit 2) if it names a translation file
 - `--status STATUS`: Minimum status to include (pending|needs_review|translated|approved, default: translated)
-- `--existing STRATEGY`: How to handle existing translations (preserve|overwrite, default: preserve)
+- `--existing STRATEGY`: How to handle existing translations (preserve|overwrite, default: preserve). Under `overwrite`, a property that may take several values per language is replaced as a set; one that already has values is left unchanged, counted as `Skipped (group)` and reported at exit 1, unless the file's entries for it are all finished and their sources are the ontology's current ones
 - `--dry-run`: Preview changes without writing files
 - `--no-colour`: Disable coloured output
 
@@ -1154,7 +1154,7 @@ rdf-construct localise merge ontology.ttl translations/*.yml -o multilingual.ttl
 # Merge only approved translations
 rdf-construct localise merge ontology.ttl de.yml --status approved -o localised.ttl
 
-# Overwrite existing translations
+# Overwrite existing translations (a skos:altLabel set is replaced whole)
 rdf-construct localise merge ontology.ttl de.yml --existing overwrite -o updated.ttl
 
 # Preview changes

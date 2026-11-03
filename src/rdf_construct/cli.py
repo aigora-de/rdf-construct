@@ -4995,7 +4995,11 @@ def _echo_localise_warnings(warnings: list[str]) -> None:
 @click.option(
     "--missing-only",
     is_flag=True,
-    help="Only extract strings missing in target language",
+    help=(
+        "Only extract strings missing in target language. A property that takes several values "
+        "(skos:altLabel, rdfs:comment) with two or more source values is offered whole, with the "
+        "target's existing values in each entry's notes"
+    ),
 )
 @click.option(
     "--config",
@@ -5135,7 +5139,12 @@ def localise_extract(
     "--existing",
     type=click.Choice(["preserve", "overwrite"], case_sensitive=False),
     default="preserve",
-    help="How to handle existing translations (default: preserve)",
+    help=(
+        "How to handle existing translations (default: preserve). Under overwrite, a property "
+        "that takes several values is replaced as a set; one that already has values is left "
+        "unchanged, at exit 1, unless the file's entries for it are all finished and match the "
+        "ontology's source values"
+    ),
 )
 @click.option(
     "--dry-run",
@@ -5229,8 +5238,8 @@ def localise_merge(
         click.echo()
         click.secho(f"\u2713 Wrote {output}", fg="green")
 
-    # Exit code based on warnings
-    if result.stats.errors > 0:
+    # Exit code based on warnings: a group left unchanged is a finding too (#405)
+    if result.stats.errors > 0 or result.stats.skipped_group > 0:
         raise SystemExit(1)
     else:
         raise SystemExit(0)

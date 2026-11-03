@@ -9,7 +9,9 @@
   malformed, missing and blank tags refused at exit 2 with nothing written; canonical case on merge.
 - #158: coverage counted in entities over the entities carrying the property in any language,
   printed as counts beside the percentage.
-- #405 (the half that lands here): ``preserve`` keeps every translation of a repeatable property.
+- #405: ``preserve`` keeps every translation of a repeatable property (P23); ``overwrite`` replaces
+  its set only when nothing is lost by it, and ``--missing-only`` offers a group with several
+  source values whole (P81).
 """
 
 import re
@@ -516,3 +518,245 @@ def test_preserve_keeps_every_translation_of_a_repeatable_property(tmp_path: Pat
     assert "Added:           1" in result.output and "Skipped (exists): 1" in result.output
     values = set(Graph().parse(out).objects(URIRef(EX + "Building"), None))
     assert {Literal("Bauwerk", lang="de"), Literal("Struktur", lang="de")} <= values
+
+
+# --- #405, the open half (P81): overwrite and --missing-only on a repeatable property --------
+
+REPEATABLE = REPO / "tests" / "fixtures" / "localise" / "repeatable"
+BRIDGE = URIRef(EX + "Bridge")
+BUILDING = URIRef(EX + "Building")
+ALT = URIRef("http://www.w3.org/2004/02/skos/core#altLabel")
+COMMENT = URIRef("http://www.w3.org/2000/01/rdf-schema#comment")
+
+
+def fill(
+    path: Path, out: Path, translate: dict[str, str] | None = None, suffix: str = "-de"
+) -> Path:
+    """Finish an extracted file: each source `s` becomes `translate[s]`, or `s + suffix`.
+
+    A source mapped to "" is left pending.
+    """
+    import yaml
+
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    for entity in data["entities"]:
+        for label in entity["labels"]:
+            text = (translate or {}).get(label["source"], label["source"] + suffix)
+            label["translation"] = text
+            label["status"] = "translated" if text else "pending"
+    out.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    return out
+
+
+def german(path: Path, subject: URIRef, prop: URIRef) -> set[str]:
+    return {
+        str(o)
+        for o in Graph().parse(path).objects(subject, prop)
+        if isinstance(o, Literal) and o.language == "de"
+    }
+
+
+class TestRepeatable:
+    """Overwrite replaces a repeatable property's set, only when nothing is lost by it."""
+
+    PROPS = "rdfs:label,rdfs:comment,skos:altLabel"
+
+    def extract(self, tmp_path: Path, src: Path, *args: str) -> Path:
+        out = tmp_path / "de.yml"
+        result = run("localise", "extract", src, "-l", "de", *args, "-o", out)
+        assert result.exit_code == 0, result.output
+        return out
+
+    def preserved(self, tmp_path: Path) -> Path:
+        """The fixture with every value translated once, by a preserve merge."""
+        src = REPEATABLE / "ontology.ttl"
+        done = fill(self.extract(tmp_path, src, "-p", self.PROPS), tmp_path / "first.yml")
+        out = tmp_path / "preserved.ttl"
+        result = run("localise", "merge", src, done, "-o", out)
+        assert result.exit_code == 0 and "Added:           10" in result.output, result.output
+        return out
+
+    def test_overwrite_onto_no_translation_adds_every_value(self, tmp_path: Path) -> None:
+        src = REPEATABLE / "ontology.ttl"
+        done = fill(self.extract(tmp_path, src, "-p", self.PROPS), tmp_path / "done.yml")
+        out = tmp_path / "out.ttl"
+        result = run("localise", "merge", src, done, "--existing", "overwrite", "-o", out)
+        assert result.exit_code == 0, result.output
+        assert "Added:           10" in result.output and "Updated:         0" in result.output
+        assert german(out, BRIDGE, ALT) == {"Span-de", "Crossing-de", "Viaduct-de"}
+        assert german(out, BUILDING, ALT) == {"Structure-de", "Edifice-de"}
+
+    def test_overwrite_onto_translations_replaces_the_set(self, tmp_path: Path) -> None:
+        src = self.preserved(tmp_path)
+        done = fill(
+            self.extract(tmp_path, REPEATABLE / "ontology.ttl", "-p", self.PROPS),
+            tmp_path / "second.yml",
+            suffix="-neu",
+        )
+        out = tmp_path / "out.ttl"
+        result = run("localise", "merge", src, done, "--existing", "overwrite", "-o", out)
+        assert result.exit_code == 0, result.output
+        assert "Added:           0" in result.output and "Updated:         10" in result.output
+        assert german(out, BRIDGE, ALT) == {"Span-neu", "Crossing-neu", "Viaduct-neu"}
+        assert german(out, BRIDGE, COMMENT) == {"One.-neu", "Two.-neu"}
+        assert german(out, BUILDING, ALT) == {"Structure-neu", "Edifice-neu"}
+
+    def test_a_pending_sibling_leaves_the_group_unchanged_at_exit_1(self, tmp_path: Path) -> None:
+        src = self.preserved(tmp_path)
+        extract = self.extract(tmp_path, REPEATABLE / "ontology.ttl", "-p", "skos:altLabel")
+        done = fill(extract, tmp_path / "one.yml", {"Crossing": "", "Viaduct": ""}, "-neu")
+        out = tmp_path / "out.ttl"
+        result = run("localise", "merge", src, done, "--existing", "overwrite", "-o", out)
+        assert result.exit_code == 1, result.output
+        assert "Skipped (group): 3" in result.output
+        assert f"Left unchanged: {BRIDGE} skos:altLabel @de: 2 of 3 entries" in result.output
+        # The guide's example is this run's warning
+        warning = next(line for line in result.output.splitlines() if "Left unchanged" in line)
+        assert warning.strip() in GUIDE.read_text(encoding="utf-8")
+        assert german(out, BRIDGE, ALT) == {"Span-de", "Crossing-de", "Viaduct-de"}
+        # Building's group was whole and current, so it was replaced
+        assert german(out, BUILDING, ALT) == {"Structure-neu", "Edifice-neu"}
+
+    def test_a_stale_source_leaves_the_group_unchanged_at_exit_1(self, tmp_path: Path) -> None:
+        src = self.preserved(tmp_path)
+        extract = self.extract(tmp_path, REPEATABLE / "ontology.ttl", "-p", "skos:altLabel")
+        extract.write_text(extract.read_text().replace("source: Span", "source: Old span"))
+        done = fill(extract, tmp_path / "stale.yml", suffix="-neu")
+        out = tmp_path / "out.ttl"
+        result = run("localise", "merge", src, done, "--existing", "overwrite", "-o", out)
+        assert result.exit_code == 1, result.output
+        assert 'not in the ontology: "Old span"; not in the file: "Span"' in result.output
+        assert "Skipped (group): 3" in result.output
+        assert german(out, BRIDGE, ALT) == {"Span-de", "Crossing-de", "Viaduct-de"}
+
+    def test_the_guard_applies_only_when_values_would_be_removed(self, tmp_path: Path) -> None:
+        src = REPEATABLE / "ontology.ttl"
+        extract = self.extract(tmp_path, src, "-p", "skos:altLabel")
+        extract.write_text(extract.read_text().replace("source: Span", "source: Old span"))
+        done = fill(extract, tmp_path / "stale.yml", {"Crossing": ""})
+        out = tmp_path / "out.ttl"
+        result = run("localise", "merge", src, done, "--existing", "overwrite", "-o", out)
+        assert result.exit_code == 0, result.output
+        assert "Added:           4" in result.output and "Skipped (status): 1" in result.output
+        assert german(out, BRIDGE, ALT) == {"Old span-de", "Viaduct-de"}
+
+    def test_a_group_split_across_blocks_and_spellings_is_one_group(self, tmp_path: Path) -> None:
+        src = self.preserved(tmp_path)
+        trans = merge_file(
+            tmp_path,
+            "de",
+            """\
+            entities:
+            - uri: http://example.org/ont#Bridge
+              labels:
+              - {property: skos:altLabel, source: Span, translation: S, status: translated}
+            - uri: http://example.org/ont#Bridge
+              labels:
+              - property: http://www.w3.org/2004/02/skos/core#altLabel
+                source: Crossing
+                translation: C
+                status: translated
+              - {property: skos:altLabel, source: Viaduct, translation: V, status: translated}
+            """,
+        )
+        out = tmp_path / "out.ttl"
+        result = run("localise", "merge", src, trans, "--existing", "overwrite", "-o", out)
+        assert result.exit_code == 0, result.output
+        assert "Updated:         3" in result.output
+        assert german(out, BRIDGE, ALT) == {"S", "C", "V"}
+
+    def test_default_properties_keep_both_comments(self, tmp_path: Path) -> None:
+        src = REPEATABLE / "ontology.ttl"
+        done = fill(self.extract(tmp_path, src), tmp_path / "done.yml")
+        out = tmp_path / "out.ttl"
+        result = run("localise", "merge", src, done, "--existing", "overwrite", "-o", out)
+        assert result.exit_code == 0, result.output
+        assert german(out, BRIDGE, COMMENT) == {"One.-de", "Two.-de"}
+
+    def test_missing_only_offers_a_group_with_several_sources(self, tmp_path: Path) -> None:
+        import yaml
+
+        src = ttl(
+            tmp_path,
+            """
+            ex:Bridge a owl:Class ;
+                rdfs:comment "A crossing."@en, "Eine Querung."@de ;
+                skos:altLabel "Span"@en, "Crossing"@en, "Viaduct"@en, "Bruecke"@de, "Steg"@de .
+            """,
+        )
+        out = self.extract(tmp_path, src, "-p", "rdfs:comment,skos:altLabel", "--missing-only")
+        data = yaml.safe_load(out.read_text(encoding="utf-8"))
+        labels = data["entities"][0]["labels"]
+        # The comment has one source value and a German one, so it is done, as before
+        assert {label["source"] for label in labels} == {"Span", "Crossing", "Viaduct"}
+        assert {label["property"] for label in labels} == {"skos:altLabel"}
+        assert {label["notes"] for label in labels} == {'Already in de: "Bruecke", "Steg"'}
+        # The guide's example is this file's entry
+        assert 'notes: \'Already in de: "Bruecke", "Steg"\'' in out.read_text(encoding="utf-8")
+        assert 'notes: \'Already in de: "Bruecke", "Steg"\'' in GUIDE.read_text(encoding="utf-8")
+
+    def test_missing_only_still_skips_a_per_language_property(self, tmp_path: Path) -> None:
+        src = ttl(tmp_path, 'ex:A a owl:Class ; rdfs:label "A"@en, "B"@en, "Ah"@de .')
+        out = tmp_path / "de.yml"
+        result = run(
+            "localise", "extract", src, "-l", "de", "-p", "rdfs:label", "--missing-only",
+            "-o", out,
+        )  # fmt: skip
+        assert result.exit_code == 0, result.output
+        assert "Strings:         0" in result.output
+
+    def test_preserve_puts_a_reworded_translation_beside_the_old_one(self, tmp_path: Path) -> None:
+        # Not P81's to change: P23's identical-text rule, so a reworded re-translation is added
+        src = ttl(tmp_path, 'ex:A a owl:Class ; skos:altLabel "One"@en, "Two"@en, "Eins"@de .')
+        extract = self.extract(tmp_path, src, "-p", "skos:altLabel")
+        done = fill(extract, tmp_path / "done.yml", {"One": "Ein", "Two": "Zwei"})
+        out = tmp_path / "out.ttl"
+        result = run("localise", "merge", src, done, "-o", out)
+        assert result.exit_code == 0 and "Added:           2" in result.output, result.output
+        assert german(out, URIRef(EX + "A"), ALT) == {"Ein", "Eins", "Zwei"}
+
+    @pytest.mark.parametrize("existing", ["preserve", "overwrite"])
+    def test_a_per_language_property_merges_byte_for_byte_as_before(
+        self, tmp_path: Path, existing: str
+    ) -> None:
+        out = tmp_path / "out.ttl"
+        result = run(
+            "localise", "merge", REPEATABLE / "per_language.ttl",
+            REPEATABLE / "per_language_de.yml", "--existing", existing, "-o", out,
+        )  # fmt: skip
+        assert result.exit_code == 0, result.output
+        expected = REPEATABLE / f"per_language.{existing}.expected.ttl"
+        assert out.read_bytes() == expected.read_bytes()
+
+    def test_the_api_counts_and_notes(self, tmp_path: Path) -> None:
+        from rdf_construct.localise import (
+            ExistingStrategy,
+            ExtractConfig,
+            MergeConfig,
+            StringExtractor,
+            TranslationFile,
+            TranslationMerger,
+        )
+        from rdf_construct.localise.formatters.markdown import MarkdownFormatter
+
+        src = self.preserved(tmp_path)
+        graph = Graph().parse(src)
+        extract = self.extract(tmp_path, REPEATABLE / "ontology.ttl", "-p", "skos:altLabel")
+        done = fill(extract, tmp_path / "one.yml", {"Span": ""}, "-neu")
+        merger = TranslationMerger(MergeConfig(existing=ExistingStrategy.OVERWRITE))
+        result = merger.merge(graph, TranslationFile.from_yaml(done))
+        assert result.success
+        assert (result.stats.updated, result.stats.skipped_group) == (2, 3)
+        assert result.stats.total_processed == 5
+        assert "| Skipped (group) | 3 |" in MarkdownFormatter().format_merge_result(result)
+
+        config = ExtractConfig(
+            target_language="de", properties=["skos:altLabel"], missing_only=True
+        )
+        file = StringExtractor(config).extract(graph, "x.ttl").translation_file
+        assert file is not None
+        notes = {label.notes for entity in file.entities for label in entity.labels}
+        assert notes == {
+            'Already in de: "Crossing-de", "Span-de", "Viaduct-de"',
+            'Already in de: "Edifice-de", "Structure-de"',
+        }

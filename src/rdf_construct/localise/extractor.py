@@ -10,6 +10,11 @@ from pathlib import Path
 
 from rdflib import Graph, URIRef
 
+from rdf_construct.core.predicate_tiers import (
+    DEFAULT_PREDICATE_TIERS,
+    PredicateTier,
+    tier_of,
+)
 from rdf_construct.localise.config import (
     EntityTranslations,
     ExtractConfig,
@@ -234,11 +239,22 @@ class StringExtractor:
             if not source_literals:
                 continue
 
-            # Check for existing translation if missing_only mode
+            # Check for existing translation if missing_only mode. One value per language, or
+            # one source value, is done once the target has any; nothing in RDF says which of
+            # several source values a repeatable property's translation is of, so they are all
+            # offered again, beside what the target already has (#405)
+            notes = None
             if self.config.missing_only:
                 existing = self._get_language_literals(graph, entity, prop_uri, target_lang)
                 if existing:
-                    continue
+                    if (
+                        tier_of(prop_uri, DEFAULT_PREDICATE_TIERS) is PredicateTier.PER_LANGUAGE
+                        or len(source_literals) < 2
+                    ):
+                        continue
+                    notes = f"Already in {target_lang}: " + ", ".join(
+                        f'"{value}"' for value in sorted(existing)
+                    )
 
             for source_text in source_literals:
                 labels.append(
@@ -247,6 +263,7 @@ class StringExtractor:
                         source_text=source_text,
                         translation="",
                         status=TranslationStatus.PENDING,
+                        notes=notes,
                     )
                 )
 

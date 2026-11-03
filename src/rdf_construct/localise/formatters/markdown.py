@@ -77,6 +77,7 @@ class MarkdownFormatter:
             lines.append(f"| Updated | {stats.updated} |")
             lines.append(f"| Skipped (status) | {stats.skipped_status} |")
             lines.append(f"| Skipped (existing) | {stats.skipped_existing} |")
+            lines.append(f"| Skipped (group) | {stats.skipped_group} |")
             lines.append(f"| Errors | {stats.errors} |")
 
             if result.warnings:
