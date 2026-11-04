@@ -18,8 +18,6 @@ from rdflib import RDF, Graph, URIRef
 from rdf_construct.core.utils import CurieError, extract_prefix_map, resolve_curie
 from rdf_construct.core.vocab import CLASS_TYPES
 
-from .config import StrictnessLevel
-
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
@@ -219,15 +217,7 @@ class _ClassResolver:
         shown = display(iri, self.prefixes)
         named = repr(text) if text.strip() == shown else f"{text!r} ({shown})"
         if iri in self.declared:
-            types = sorted(
-                display(t, self.prefixes)
-                for t in self.graph.objects(iri, RDF.type)
-                if isinstance(t, URIRef) and t in CLASS_TYPES
-            )
-            return None, (
-                f"{key}: {named} is declared only as {', '.join(types)}, "
-                "which shacl-gen does not shape yet (#228)"
-            )
+            return None, f"{key}: {named} is declared, but not among the classes being shaped"
         if any(pattern in self.graph for pattern in _patterns(iri)):
             return (
                 None,
@@ -315,11 +305,8 @@ def resolve_selection(graph: Graph, config: ShaclConfig, shaped: Iterable[URIRef
             ["the selection is empty: no class is left once exclude_classes is applied"]
         )
 
-    if config.ignored_properties and not (config.closed and config.level is StrictnessLevel.STRICT):
-        notes.append(
-            "ignored_properties has no effect: shapes are closed only with --closed "
-            "at --level strict"
-        )
+    if config.ignored_properties and not config.closed:
+        notes.append("ignored_properties has no effect: shapes are closed only with --closed")
 
     return Selection(
         classes=tuple(classes),

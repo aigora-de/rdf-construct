@@ -1,0 +1,16 @@
+# Two classes with one local name, each with its own property (#485). `a:` holds the most
+# classes, so it is the home namespace and a:Cat keeps the plain name.
+@prefix a: <http://example.org/a#> .
+@prefix b: <http://example.org/b#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/zoo> a owl:Ontology .
+
+a:Cat a owl:Class .
+a:Dog a owl:Class .
+b:Cat a owl:Class .
+
+a:purrs a owl:DatatypeProperty ; rdfs:domain a:Cat ; rdfs:range xsd:boolean .
+b:meows a owl:DatatypeProperty ; rdfs:domain b:Cat ; rdfs:range xsd:boolean .

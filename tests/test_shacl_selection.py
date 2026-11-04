@@ -159,7 +159,6 @@ def test_exclusions_that_exclude_nothing_are_notes(tmp_path):
         (FIXTURES / "two_cats.ttl", "Cat", "matches 2 classes (a:Cat, b:Cat)"),
         (ANIMAL, "zz:Dog", "prefix 'zz' is not bound"),
         (ANIMAL, "Dog,", "an empty entry (a stray comma?)"),
-        (FIXTURES / "kinds.ttl", "a:Old", "declared only as owl:DeprecatedClass"),
         (FIXTURES / "kinds.ttl", "x:Animal", "only referenced, not declared as a class"),
     ],
     ids=[
@@ -168,7 +167,6 @@ def test_exclusions_that_exclude_nothing_are_notes(tmp_path):
         "ambiguous",
         "unbound",
         "empty-entry",
-        "deprecated",
         "referenced",
     ],
 )
@@ -178,10 +176,12 @@ def test_target_refusals(tmp_path, source, classes, message):
     assert message in result.stderr
 
 
-def test_deprecated_refusal_names_228(tmp_path):
-    result, out = _run(tmp_path, FIXTURES / "kinds.ttl", "--classes", "Old")
-    _refused(result, out)
-    assert "#228" in result.stderr
+@pytest.mark.parametrize("spelling", ["Old", "a:Old"], ids=["bare", "curie"])
+def test_deprecated_class_is_selectable(tmp_path, spelling):
+    """A class declared only ``owl:DeprecatedClass`` is shaped, so it may be selected (#228)."""
+    result, out = _run(tmp_path, FIXTURES / "kinds.ttl", "--classes", spelling)
+    assert result.exit_code == 0, result.output
+    assert _targets(out) == {A.Old}
 
 
 def test_every_problem_is_listed_at_once(tmp_path):
@@ -191,7 +191,7 @@ def test_every_problem_is_listed_at_once(tmp_path):
 
 
 def test_class_typed_both_ways_is_selectable(tmp_path):
-    """``owl:Class`` plus ``owl:DeprecatedClass`` is shaped today, so it may be selected."""
+    """``owl:Class`` plus ``owl:DeprecatedClass`` is shaped, so it may be selected."""
     result, out = _run(tmp_path, FIXTURES / "kinds.ttl", "--classes", "a:Both")
     assert result.exit_code == 0, result.output
     assert _targets(out) == {A.Both}
@@ -269,9 +269,13 @@ def test_ignored_properties_without_closed_shapes_is_a_note(tmp_path):
     assert _ignored_lists(out) == []
 
 
-def test_closed_strict_gives_no_note(tmp_path):
-    result, _ = _run(tmp_path, ANIMAL, "-C", SHIPPED_CONFIG, "--level", "strict", "--closed")
+@pytest.mark.parametrize("level", ["minimal", "standard", "strict"])
+def test_closed_gives_no_note_at_any_level(tmp_path, level):
+    """``--closed`` alone closes shapes, so the list takes effect at every level (#224)."""
+    result, out = _run(tmp_path, ANIMAL, "-C", SHIPPED_CONFIG, "--level", level, "--closed")
+    assert result.exit_code == 0, result.output
     assert "ignored_properties has no effect" not in result.stderr
+    assert _ignored_lists(out)
 
 
 def test_a_preloaded_graph_resolves_against_its_own_bindings():

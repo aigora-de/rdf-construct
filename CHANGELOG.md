@@ -801,6 +801,37 @@ change, and what to do about it, is listed command by command in the
   without an `owl:Ontology` got `https://brickschema.org/schema/Brick-shapes#`,
   from rdflib's pre-bound prefixes. Its shapes now take the namespace holding
   the most declared classes, plus `-shapes#`.
+- **`shacl-gen`'s `default_severity`, `shape_namespace` and
+  `generate_property_shapes` do what they say, or are refused** (#223). No
+  `sh:severity` was ever written: now `--default-severity` and
+  `default_severity:` put it on every node and property shape, and none is
+  written when neither is set. `shape_namespace` was ignored; it is now a full
+  namespace IRI, honoured, and anything else (the shipped `"shapes#"`) is refused
+  at exit 2. `generate_property_shapes`, which nothing read, is removed and
+  refused at exit 2. The shipped `examples/shacl/shacl_config.yml` describes
+  only keys that work.
+- **`shacl-gen --closed` closes shapes at every level** (#224). It wrote no
+  `sh:closed` below `--level strict` and printed "(closed shapes enabled)"
+  anyway; the line now counts the shapes closed. A closed shape admits
+  `rdf:type`, `ignored_properties` and every property its class's hierarchy
+  declares, superclasses and subclasses alike, so `--no-inherit` no longer
+  closes a subclass against its inherited properties, and a superclass shape no
+  longer rejects a subclass's instances.
+- **`shacl-gen` writes `owl:oneOf` as `sh:in` at the default level, in source
+  order** (#227). It was dropped below strict, and its members came out in hash
+  order. Two lists for one path are intersected, not unioned. `--level strict`
+  is now the same as `standard`.
+- **`shacl-gen` shapes `owl:DeprecatedClass`** (#228). A class declared only so
+  got no shape, and selecting it was refused. Classes come from
+  `core.vocab.CLASS_TYPES`.
+- **`shacl-gen` gives two classes with one local name two shapes** (#485).
+  `a:Cat` and `b:Cat` shared `CatShape`, each with the other's properties. The
+  class in the home namespace keeps the name; the other is qualified with its
+  prefix (`b_CatShape`). A URN class's shape is named after its last segment.
+- **`shacl-gen` no longer writes `sh:class [ ]` or `sh:datatype [ ]`** (#487).
+  A blank-node range or qualification (a union, an inline datatype) was copied
+  into a constraint that takes only IRIs, and pySHACL failed every value against
+  it. The constraint is now dropped, as the guide says.
 - **`sort: topological` no longer turns alphabetical on inferred graphs** (#339).
   RDFS entailment materialises `C rdfs:subClassOf C` for every class (`rdfs10`)
   and `P rdfs:subPropertyOf P` for every property (`rdfs6`). Each self-loop was

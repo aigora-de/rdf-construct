@@ -16,8 +16,7 @@ Case 3 does not exist for an ``is_flag`` option such as ``--no-search``, because
 can only set it, and nor for an option with no default, such as ``--properties``.
 
 Each fixture makes a wrong answer visible in what the command wrote or how it exited, not
-only in a config object. The exception is ``shacl-gen``'s ``default_severity``: nothing reads
-it even once it arrives (#223), so those tests can only assert that it reaches ``ShaclConfig``.
+only in a config object.
 """
 
 from pathlib import Path
@@ -27,11 +26,10 @@ import click
 import pytest
 import yaml
 from click.testing import CliRunner
-from rdflib import Graph
+from rdflib import Graph, URIRef
 
-import rdf_construct.shacl as shacl_package
 from rdf_construct.cli import cli, flag_given
-from rdf_construct.shacl import SH, Severity, ShaclConfig
+from rdf_construct.shacl import SH
 
 REPO = Path(__file__).parent.parent
 DOCS_FIXTURE = REPO / "tests" / "fixtures" / "docs" / "deprecated_terms.ttl"
@@ -46,7 +44,7 @@ ex: a owl:Ontology ; rdfs:label "W" ; rdfs:comment "W" .
 ex:Thing a owl:Class ; rdfs:label "Thing" ; rdfs:comment "A thing." .
 """
 
-# owl:oneOf becomes sh:in, and only at strict.
+# owl:oneOf becomes sh:in from standard up (#227); not at minimal.
 ENUM_ONTOLOGY = """\
 @prefix ex: <http://example.org/enum#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -194,60 +192,49 @@ class TestShaclGen:
     def has_sh_in(shapes: Graph) -> bool:
         return (None, SH["in"], None) in shapes
 
+    # level: since #227, sh:in appears from standard up, so minimal against standard is the
+    # pair a wrong answer shows in (strict is an alias of standard).
+
     def test_level_config_wins_when_the_flag_is_absent(
         self, runner: CliRunner, tmp_path: Path, source: Path
     ) -> None:
-        config = write_yaml(tmp_path / "c.yml", {"level": "strict"})
-        assert self.has_sh_in(self.run(runner, source, config))
+        config = write_yaml(tmp_path / "c.yml", {"level": "minimal"})
+        assert not self.has_sh_in(self.run(runner, source, config))
 
     def test_level_flag_wins_when_given(
         self, runner: CliRunner, tmp_path: Path, source: Path
     ) -> None:
         config = write_yaml(tmp_path / "c.yml", {"level": "standard"})
-        assert self.has_sh_in(self.run(runner, source, config, "--level", "strict"))
+        assert not self.has_sh_in(self.run(runner, source, config, "--level", "minimal"))
 
     def test_level_flag_wins_when_given_at_its_default(
         self, runner: CliRunner, tmp_path: Path, source: Path
     ) -> None:
-        config = write_yaml(tmp_path / "c.yml", {"level": "strict"})
-        assert not self.has_sh_in(self.run(runner, source, config, "--level", "standard"))
+        config = write_yaml(tmp_path / "c.yml", {"level": "minimal"})
+        assert self.has_sh_in(self.run(runner, source, config, "--level", "standard"))
 
-    # default_severity: nothing emits sh:severity yet (#223), so these assert only that the
-    # value reaches the ShaclConfig handed to the generator. They cannot see the output.
-
-    @pytest.fixture
-    def captured(self, monkeypatch: pytest.MonkeyPatch) -> list[ShaclConfig]:
-        configs: list[ShaclConfig] = []
-        real = shacl_package.ShapeGenerator
-
-        def spy(source_graph: Graph, config: ShaclConfig, *args: Any, **kwargs: Any) -> Any:
-            configs.append(config)
-            return real(source_graph, config, *args, **kwargs)
-
-        monkeypatch.setattr(shacl_package, "ShapeGenerator", spy)
-        return configs
+    # default_severity: read from what was written, sh:severity on every shape (#223)
 
     @pytest.mark.parametrize(
         ("flags", "expected"),
         [
-            ((), Severity.WARNING),
-            (("--default-severity", "info"), Severity.INFO),
-            (("--default-severity", "violation"), Severity.VIOLATION),
+            ((), SH.Warning),
+            (("--default-severity", "info"), SH.Info),
+            (("--default-severity", "violation"), SH.Violation),
         ],
         ids=["config-wins-when-absent", "flag-wins", "flag-wins-at-its-default"],
     )
-    def test_default_severity_reaches_the_config(
+    def test_default_severity_is_written(
         self,
         runner: CliRunner,
         tmp_path: Path,
         source: Path,
-        captured: list[ShaclConfig],
         flags: tuple[str, ...],
-        expected: Severity,
+        expected: URIRef,
     ) -> None:
         config = write_yaml(tmp_path / "c.yml", {"default_severity": "warning"})
-        self.run(runner, source, config, *flags)
-        assert [c.default_severity for c in captured] == [expected]
+        shapes = self.run(runner, source, config, *flags)
+        assert set(shapes.objects(None, SH.severity)) == {expected}
 
 
 class TestDocs:

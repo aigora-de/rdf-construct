@@ -35,6 +35,15 @@ class Severity(Enum):
     INFO = "info"
 
 
+# Keys earlier releases accepted and nothing ever read, with why each is gone (#223)
+REMOVED_KEYS: dict[str, str] = {
+    "generate_property_shapes": (
+        "nothing ever read it, and no top-level sh:PropertyShape was ever generated; "
+        "the design is #94's"
+    ),
+}
+
+
 @dataclass
 class ShaclConfig:
     """Configuration for SHACL shape generation.
@@ -43,28 +52,29 @@ class ShaclConfig:
 
     Attributes:
         level: Strictness level for conversion.
-        default_severity: Default severity for generated constraints.
-        closed: Generate closed shapes (no extra properties allowed).
-        shape_namespace: Namespace suffix for generated shapes.
+        default_severity: ``sh:severity`` for every node and property shape; None (the
+            default) emits none, which SHACL reads as ``sh:Violation``.
+        closed: Generate closed shapes (no extra properties allowed), at any level.
+        shape_namespace: The full namespace IRI for generated shapes, ending in ``#``, ``/``
+            or ``:``; None (the default) derives it from the ontology IRI, or from the
+            namespace holding the most declared classes.
         target_classes: Optional list of classes to generate shapes for.
         exclude_classes: Classes to skip during generation.
         include_labels: Include rdfs:label as sh:name.
         include_descriptions: Include rdfs:comment as sh:description.
         inherit_constraints: Inherit property constraints from superclasses.
-        generate_property_shapes: Generate top-level PropertyShapes.
         ignored_properties: Properties to ignore in closed shapes.
     """
 
     level: StrictnessLevel = StrictnessLevel.STANDARD
-    default_severity: Severity = Severity.VIOLATION
+    default_severity: Severity | None = None
     closed: bool = False
-    shape_namespace: str = "shapes#"
+    shape_namespace: str | None = None
     target_classes: list[str] = field(default_factory=list)
     exclude_classes: list[str] = field(default_factory=list)
     include_labels: bool = True
     include_descriptions: bool = True
     inherit_constraints: bool = True
-    generate_property_shapes: bool = False
     ignored_properties: list[str] = field(default_factory=list)
 
     @classmethod
@@ -95,7 +105,17 @@ class ShaclConfig:
 
         Returns:
             Populated ShaclConfig instance.
+
+        Raises:
+            ValueError: If a value is invalid or a key has been removed.
         """
+        for key in data:
+            if str(key) in REMOVED_KEYS:
+                raise ValueError(
+                    f"'{key}' was removed in rdf-construct 0.7.0: {REMOVED_KEYS[str(key)]}. "
+                    "Delete it from the config"
+                )
+
         # Handle enum conversions
         level_str = data.get("level", "standard").lower()
         try:
@@ -104,24 +124,26 @@ class ShaclConfig:
             valid = ", ".join(s.value for s in StrictnessLevel)
             raise ValueError(f"Invalid strictness level '{level_str}'. Valid: {valid}")
 
-        severity_str = data.get("default_severity", "violation").lower()
-        try:
-            severity = Severity(severity_str)
-        except ValueError:
-            valid = ", ".join(s.value for s in Severity)
-            raise ValueError(f"Invalid severity '{severity_str}'. Valid: {valid}")
+        # Absent or null: no sh:severity is written (#223)
+        severity: Severity | None = None
+        if data.get("default_severity") is not None:
+            severity_str = str(data["default_severity"]).lower()
+            try:
+                severity = Severity(severity_str)
+            except ValueError:
+                valid = ", ".join(s.value for s in Severity)
+                raise ValueError(f"Invalid severity '{severity_str}'. Valid: {valid}")
 
         return cls(
             level=level,
             default_severity=severity,
             closed=data.get("closed", False),
-            shape_namespace=data.get("shape_namespace", "shapes#"),
+            shape_namespace=data.get("shape_namespace"),
             target_classes=data.get("target_classes", []),
             exclude_classes=data.get("exclude_classes", []),
             include_labels=data.get("include_labels", True),
             include_descriptions=data.get("include_descriptions", True),
             inherit_constraints=data.get("inherit_constraints", True),
-            generate_property_shapes=data.get("generate_property_shapes", False),
             ignored_properties=data.get("ignored_properties", []),
         )
 

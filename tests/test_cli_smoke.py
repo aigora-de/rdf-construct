@@ -354,6 +354,36 @@ THREE_STATES = [
         Row(
             "shacl-gen",
             "refused",
+            (
+                "shacl-gen",
+                ANIMAL,
+                "-C",
+                str(SMOKE / "shacl_bad_namespace.yml"),
+                "-o",
+                "@tmp/s.ttl",
+            ),
+        ),
+        label="suffix-shape-namespace",
+    ),
+    _row(
+        Row(
+            "shacl-gen",
+            "refused",
+            (
+                "shacl-gen",
+                ANIMAL,
+                "-C",
+                str(SMOKE / "shacl_removed_key.yml"),
+                "-o",
+                "@tmp/s.ttl",
+            ),
+        ),
+        label="removed-key",
+    ),
+    _row(
+        Row(
+            "shacl-gen",
+            "refused",
             ("shacl-gen", "@tmp/animal_ontology.ttl", "-o", "@tmp/animal_ontology.ttl"),
             copied=(ANIMAL,),
         ),
