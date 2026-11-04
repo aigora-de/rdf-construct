@@ -369,7 +369,6 @@ def _classes(graph: Graph) -> set[URIRef]:
             (),
             None,
             id="deprecated-class",
-            marks=pytest.mark.xfail(strict=True, reason="#228"),
         ),
     ],
 )

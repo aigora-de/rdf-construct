@@ -1,0 +1,19 @@
+# A three-level hierarchy for closed shapes (#224): each level declares its own property,
+# Animal restricts `tag`, and `nickname` has no domain at all.
+@prefix ex: <http://example.org/zoo#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/zoo> a owl:Ontology .
+
+ex:Animal a owl:Class ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty ex:tag ; owl:maxCardinality 1 ] .
+ex:Dog a owl:Class ; rdfs:subClassOf ex:Animal .
+ex:Puppy a owl:Class ; rdfs:subClassOf ex:Dog .
+
+ex:name a owl:DatatypeProperty ; rdfs:domain ex:Animal ; rdfs:range xsd:string .
+ex:barks a owl:DatatypeProperty ; rdfs:domain ex:Dog ; rdfs:range xsd:boolean .
+ex:wags a owl:DatatypeProperty ; rdfs:domain ex:Puppy ; rdfs:range xsd:boolean .
+ex:tag a owl:DatatypeProperty .
+ex:nickname a owl:DatatypeProperty .

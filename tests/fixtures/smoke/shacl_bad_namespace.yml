@@ -1,0 +1,2 @@
+# A shape_namespace that is a suffix, not a full namespace IRI: refused (#223)
+shape_namespace: "shapes#"

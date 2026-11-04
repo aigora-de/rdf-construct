@@ -443,19 +443,19 @@ rdf-construct shacl-gen SOURCE [OPTIONS]
 **Options**:
 - `-o, --output PATH`: Output file path (default: `<source>-shapes.ttl`); refused (exit 2) if it names the source or the `--config` file
 - `-f, --format FORMAT`: Output format: `turtle`, `ttl`, `json-ld`, `jsonld` (default: turtle)
-- `-l, --level LEVEL`: Strictness level: `minimal`, `standard`, `strict` (default: standard)
+- `-l, --level LEVEL`: Strictness level: `minimal`, `standard`, `strict` (default: standard; `strict` is currently the same as `standard`)
 - `-C, --config PATH`: YAML configuration file
 - `--classes LIST`: Comma-separated classes to generate shapes for, each a CURIE in the source's own prefixes (`ex:Dog`), an `<IRI>`, a full IRI, or a bare local name (`Dog`), matched exactly. A name that matches no class, or matches classes in two namespaces, is refused (exit 2) with nothing written; see [the guide](SHACL_GUIDE.md#targeting-specific-classes)
-- `--closed`: Generate closed shapes (no extra properties allowed)
-- `--default-severity LEVEL`: Default severity: `violation`, `warning`, `info`
+- `--closed`: Generate closed shapes, at any level. A closed shape admits `rdf:type`, `ignored_properties`, and every property its class's hierarchy declares (superclasses and subclasses); see [the guide](SHACL_GUIDE.md#closed-shapes)
+- `--default-severity LEVEL`: `sh:severity` for every node and property shape: `violation`, `warning`, `info` (default: none written, which SHACL reads as violation)
 - `--no-labels`: Don't include rdfs:label as sh:name
 - `--no-descriptions`: Don't include rdfs:comment as sh:description
 - `--no-inherit`: Don't inherit constraints from superclasses
 
 **Strictness Levels**:
 - `minimal`: Basic type constraints only (sh:class, sh:datatype)
-- `standard`: Adds cardinality and functional property constraints
-- `strict`: Maximum constraints including enumerations, closed shapes
+- `standard`: Adds cardinality, functional property and enumeration (`sh:in`) constraints
+- `strict`: Currently the same as `standard`
 
 **Examples**:
 
@@ -463,8 +463,8 @@ rdf-construct shacl-gen SOURCE [OPTIONS]
 # Basic generation
 rdf-construct shacl-gen ontology.ttl
 
-# Generate with strict constraints
-rdf-construct shacl-gen ontology.ttl --level strict --closed
+# Generate closed shapes
+rdf-construct shacl-gen ontology.ttl --closed
 
 # Custom output path and format
 rdf-construct shacl-gen ontology.ttl -o shapes.ttl --format turtle

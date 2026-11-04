@@ -2040,7 +2040,8 @@ def docs(
     "-l",
     type=click.Choice(["minimal", "standard", "strict"], case_sensitive=False),
     default="standard",
-    help="Strictness level for constraint generation (default: standard)",
+    help="Strictness level for constraint generation (default: standard; strict is "
+    "currently the same as standard)",
 )
 @click.option(
     "--config",
@@ -2058,13 +2059,15 @@ def docs(
 @click.option(
     "--closed",
     is_flag=True,
-    help="Generate closed shapes (no extra properties allowed)",
+    help="Generate closed shapes, at any level: a node may carry only the properties its "
+    "class's hierarchy declares, rdf:type and ignored_properties",
 )
 @click.option(
     "--default-severity",
     type=click.Choice(["violation", "warning", "info"], case_sensitive=False),
     default="violation",
-    help="Default severity for generated constraints",
+    help="sh:severity for every generated shape (default: none written, which SHACL "
+    "reads as violation)",
 )
 @click.option(
     "--no-labels",
@@ -2105,16 +2108,17 @@ def shacl_gen(
     \b
     Strictness levels:
       minimal   - Basic type constraints only (sh:class, sh:datatype)
-      standard  - Adds cardinality and functional property constraints
-      strict    - Maximum constraints including sh:closed, enumerations
+      standard  - Adds cardinality, functional property and enumeration
+                  (sh:in) constraints
+      strict    - Currently the same as standard
 
     \b
     Examples:
         # Basic generation
         rdf-construct shacl-gen ontology.ttl
 
-        # Generate with strict constraints
-        rdf-construct shacl-gen ontology.ttl --level strict --closed
+        # Generate closed shapes
+        rdf-construct shacl-gen ontology.ttl --closed
 
         # Custom output path and format
         rdf-construct shacl-gen ontology.ttl -o shapes.ttl --format turtle
@@ -2211,11 +2215,13 @@ def shacl_gen(
         from rdf_construct.shacl import SH
 
         num_shapes = len(list(shapes_graph.subjects(predicate=None, object=SH.NodeShape)))
+        num_closed = len(set(shapes_graph.subjects(SH.closed, None)))
 
         click.secho(f"\u2713 Generated {num_shapes} shape(s) to {output}", fg="green")
 
-        if shacl_config.closed:
-            click.echo("  (closed shapes enabled)")
+        # Derived from what was written, not from the flag (#224)
+        if num_closed:
+            click.echo(f"  (closed shapes enabled: {num_closed} closed)")
 
     except ShaclSelectionError as e:
         raise Refusal(f"Selection refused, nothing written:\n{e}") from e

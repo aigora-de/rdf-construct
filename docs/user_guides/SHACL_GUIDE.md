@@ -95,7 +95,8 @@ rdf-construct shacl-gen ontology.ttl --level minimal
 ```
 
 Converts only:
-- `rdfs:range` → `sh:class` or `sh:datatype`
+- `rdfs:range` → `sh:class` or `sh:datatype`, when the range is an IRI (see
+  [OWL Pattern Coverage](#owl-pattern-coverage) for a blank-node range)
 
 Useful for lightweight validation or when you want to add constraints manually.
 
@@ -109,6 +110,9 @@ Adds:
 - Cardinality restrictions (`owl:cardinality`, `owl:minCardinality`, etc.)
 - Functional properties → `sh:maxCount 1`
 - `owl:someValuesFrom` → `sh:minCount 1`
+- Enumerations (`owl:oneOf` → `sh:in`), whether the range is a named enumerated class, an inline
+  `[ owl:oneOf ( … ) ]` or an inline enumerated datatype. Members keep the order the ontology
+  lists them in, each once.
 
 ### Strict Level
 
@@ -116,21 +120,59 @@ Adds:
 rdf-construct shacl-gen ontology.ttl --level strict
 ```
 
-Maximum constraints:
-- All standard level conversions
-- Enumerations (`owl:oneOf` → `sh:in`)
-- Support for closed shapes
+Currently the same as standard. It is kept for constraints a later release may add. Closed shapes
+are not a level: `--closed` works at every level (see below).
 
 ## Closed Shapes
 
-Generate shapes that reject unexpected properties:
+Generate shapes that reject unexpected properties, at any level:
 
 ```bash
-rdf-construct shacl-gen ontology.ttl --level strict --closed
+rdf-construct shacl-gen ontology.ttl --closed
 ```
 
-This adds `sh:closed true` to all shapes. Instances with properties not
-defined in the shape will fail validation.
+This adds `sh:closed true` to every shape. A closed shape admits `rdf:type`, your
+`ignored_properties`, and **every property the class's hierarchy declares**, by `rdfs:domain` or
+by an `owl:Restriction`: its own, its superclasses' and its subclasses'. Those that are not already
+`sh:property` paths go in `sh:ignoredProperties`, after `rdf:type`. For an `Animal` with a `Dog`
+subclass and a `Puppy` below that, each declaring one property, `Animal` restricting `ex:tag`:
+
+```text
+shape:AnimalShape a sh:NodeShape ;
+    sh:closed true ;
+    sh:ignoredProperties ( rdf:type ex:barks ex:wags ) ;
+    sh:property [ sh:maxCount 1 ;
+            sh:order 2 ;
+            sh:path ex:tag ],
+        [ sh:datatype xsd:string ;
+            sh:order 1 ;
+            sh:path ex:name ] ;
+    sh:targetClass ex:Animal .
+```
+
+**Why both directions:**
+
+- **Superclasses:** an instance carries its superclasses' properties. This holds under
+  `--no-inherit` too, where those paths become ignored properties instead of property shapes.
+- **Subclasses:** SHACL's `sh:targetClass` also selects instances of subclasses wherever the data
+  graph says `rdfs:subClassOf` (data validated together with its ontology, or inferred data). A
+  closed `AnimalShape` that didn't admit `ex:barks` would reject every dog.
+
+**The price is on upper classes.** On `tests/fixtures/ies/ies-common.ttl`, the closed shape for
+`ies:Thing` admits 174 of the file's 187 domained properties: 8 of its own and 166 from its
+subclasses. The more general the class, the less its closure says.
+
+**Still rejected by every closed shape:**
+
+- a property the ontology gives no `rdfs:domain` and no restriction;
+- one whose domain is a class expression (`rdfs:domain [ owl:unionOf … ]`);
+- one restricted only inside an `owl:equivalentClass` definition, which the generator does not read;
+- a subproperty used in place of a domained one.
+
+List them in `ignored_properties`.
+
+The summary line says how many shapes were closed: `(closed shapes enabled: 3 closed)`. It is
+printed only when `sh:closed` was written.
 
 Configure ignored properties in the config file:
 
@@ -156,9 +198,9 @@ Error: Selection refused, nothing written:
 ignored_properties: 'dcterms:modified': prefix 'dcterms' is not bound in this source (bound: bld, owl, rdf, rdfs, xml, xsd); write <http://purl.org/dc/terms/modified> if you mean dcterms: as http://purl.org/dc/terms/
 ```
 
-Write the IRI in angle brackets, as above, or bind the prefix in the ontology. Shapes are closed only
-with `--closed` at `--level strict`. Otherwise `ignored_properties` has no effect, and the run says so
-in a note.
+Write the IRI in angle brackets, as above, or bind the prefix in the ontology. `ignored_properties`
+takes effect only with `--closed` (or `closed: true`). Without it, the list has no effect, and the
+run says so in a note.
 
 ## Targeting Specific Classes
 
@@ -206,8 +248,6 @@ nothing, these are refused:
 - a bare name that matches classes in two namespaces (`a:Cat` and `b:Cat`); the message lists the
   CURIEs to choose from;
 - a CURIE whose prefix the ontology does not bind;
-- a class declared only as `owl:DeprecatedClass`, which `shacl-gen` does not shape yet
-  ([#228](https://github.com/aigora-de/rdf-construct/issues/228));
 - an IRI the ontology only refers to, such as an imported superclass, without declaring it a class.
 
 ### Using Configuration File
@@ -265,8 +305,9 @@ Example `shacl-config.yml`:
 
 ```yaml
 level: standard
-default_severity: violation
+default_severity: warning
 closed: false
+shape_namespace: "http://example.org/building-shapes#"
 
 target_classes:
   - Building
@@ -282,7 +323,14 @@ ignored_properties:
 ```
 
 An option given on the command line overrides the configuration file, and the configuration file
-overrides the option's default: `level: strict` in the file applies unless you pass `--level`.
+overrides the option's default: `level: minimal` in the file applies unless you pass `--level`.
+
+`shape_namespace` is a full namespace IRI, ending in `#`, `/` or `:`. Anything else, such as the
+suffix `"shapes#"`, is refused at exit 2 with nothing written. Leave it out to derive the namespace
+(see [Shape IRIs](#shape-iris)).
+
+`generate_property_shapes` was removed in 0.7.0. Nothing ever read it, so a config that still sets
+it, even to `false`, is refused at exit 2: delete the line.
 
 ## Output Formats
 
@@ -300,49 +348,63 @@ rdf-construct shacl-gen ontology.ttl -o shapes.json --format json-ld
 
 ## Severity Levels
 
-Control how constraint violations are reported:
+Set the `sh:severity` of every generated shape:
 
 ```bash
 rdf-construct shacl-gen ontology.ttl --default-severity warning
 ```
 
-Options:
-- `violation` - Validation fails (default)
-- `warning` - Logged as warning but validation passes
-- `info` - Informational only
+`sh:severity` goes on every node shape (results from `sh:closed`) and on every property shape. The
+values are `violation`, `warning` and `info`. With neither the flag nor `default_severity:` in the
+config, no `sh:severity` is written, and SHACL reads that as `sh:Violation`. Setting `violation`
+explicitly writes `sh:Violation`.
+
+**Severity doesn't decide conformance.** In SHACL a report conforms only when it has no results at
+all, whatever their severity: `sh:Warning` and `sh:Info` change how a result is labelled, not
+whether the data conforms. pySHACL reports `Conforms: False` for a report holding only warnings. To
+treat warnings as passing, filter the report's results by `sh:resultSeverity`; some processors have
+an option for this (pySHACL's `--allow-warnings`).
 
 ## OWL Pattern Coverage
 
 ### Fully Supported
 
-| OWL Pattern | SHACL Equivalent |
-|-------------|------------------|
-| `rdfs:domain` | `sh:targetClass` + `sh:property` |
-| `rdfs:range` (class) | `sh:class` |
-| `rdfs:range` (datatype) | `sh:datatype` |
-| `owl:cardinality` | `sh:minCount` + `sh:maxCount` |
-| `owl:minCardinality` | `sh:minCount` |
-| `owl:maxCardinality` | `sh:maxCount` |
-| `owl:FunctionalProperty` | `sh:maxCount 1` |
-| `owl:someValuesFrom` | `sh:minCount 1` + type |
-| `owl:allValuesFrom` | `sh:class` or `sh:datatype` |
-| `owl:oneOf` | `sh:in` |
-| `owl:qualifiedCardinality` | Cardinality + type |
-| `rdfs:label` | `sh:name` |
-| `rdfs:comment` | `sh:description` |
+| OWL Pattern | SHACL Equivalent | From level |
+|-------------|------------------|------------|
+| `owl:Class`, `rdfs:Class`, `owl:DeprecatedClass` | one `sh:NodeShape` each, `sh:targetClass` | minimal |
+| `rdfs:domain` | `sh:property` on the domain's shape | minimal |
+| `rdfs:range` (class IRI) | `sh:class` | minimal |
+| `rdfs:range` (datatype IRI) | `sh:datatype` | minimal |
+| `owl:cardinality` | `sh:minCount` + `sh:maxCount` | standard |
+| `owl:minCardinality` | `sh:minCount` | standard |
+| `owl:maxCardinality` | `sh:maxCount` | standard |
+| `owl:FunctionalProperty` | `sh:maxCount 1` | standard |
+| `owl:someValuesFrom` | `sh:minCount 1` + type | standard |
+| `owl:allValuesFrom` (IRI) | `sh:class` or `sh:datatype` | standard |
+| `owl:oneOf` | `sh:in`, in the ontology's order | standard |
+| `owl:qualifiedCardinality` | Cardinality + type (the type only when `owl:onClass`/`owl:onDataRange` is an IRI) | standard |
+| `rdfs:label` | `sh:name` | minimal |
+| `rdfs:comment` | `sh:description` | minimal |
+
+A deprecated class (`owl:DeprecatedClass`, or `owl:deprecated true`) gets an ordinary shape: its
+instances still exist while data migrates, and they still need validating.
 
 ### Not Converted (Requires Manual SHACL)
 
 Some OWL patterns cannot be directly expressed in SHACL Core:
 
-- **Complex class expressions** (unions, intersections)
+- **Complex class expressions** (unions, intersections, inline datatype restrictions). When
+  `rdfs:range`, `owl:onClass` or `owl:onDataRange` is a blank node, no `sh:class` or
+  `sh:datatype` is written for it. The property shape keeps its other constraints, and an inline
+  `owl:oneOf` still gives `sh:in`. `sh:class` and `sh:datatype` take only IRIs.
 - **Inverse functional uniqueness** (requires SPARQL)
 - **Transitive property closures**
 - **Property chains**
 - **owl:complementOf**
 
-When these patterns are encountered, the generator continues without them.
-Consider adding SPARQL-based SHACL constraints manually.
+When these patterns are encountered, the generator continues without them, and nothing reports
+that they were dropped ([#229](https://github.com/aigora-de/rdf-construct/issues/229)). Consider
+adding SPARQL-based SHACL constraints manually.
 
 ## Programmatic Usage
 
@@ -402,11 +464,29 @@ without generating anything, and `ShapeGenerator(...).selection` holds the one i
 
 ### Shape IRIs
 
-Shapes are named `<namespace><LocalName>Shape`. With an `owl:Ontology`, the namespace is the
-ontology IRI with `-shapes#` appended (`http://example.org/animals` gives
-`http://example.org/animals-shapes#`). Without one, it is the namespace that holds the most declared
-classes, with its trailing `#`, `/` or `:` replaced by `-shapes#`; ties go to the alphabetically first
-namespace. It is taken over the whole ontology, so `--classes` never moves a shape's IRI.
+Shapes are named `<namespace><LocalName>Shape`. `shape_namespace` sets the namespace when it is
+given. Otherwise:
+
+- **With an `owl:Ontology`**, the namespace is the ontology IRI with `-shapes#` appended
+  (`http://example.org/animals` gives `http://example.org/animals-shapes#`).
+- **Without one**, it is the **home namespace**, the namespace that holds the most declared classes
+  (ties go to the alphabetically first), with its trailing `#`, `/` or `:` replaced by `-shapes#`.
+
+The local name is the part after the last `#`, else `/`, else `:`, so `<urn:example:Cat>` gives
+`CatShape`.
+
+**When two classes share a local name** (`a:Cat` and `b:Cat`), each still gets its own shape:
+
+- the one in the home namespace keeps `CatShape`;
+- any other is qualified with its namespace's prefix in the ontology (`b_CatShape`);
+- with no prefix bound, it is qualified with a short hash of its namespace (`ns1a2b3c4d_CatShape`).
+
+A home-namespace shape keeps its name when another class with the same local name is added. Only
+adding enough classes in another namespace to change which one is home can rename a shape, and then
+only a colliding one.
+
+Names and the namespace are worked out over the whole ontology, never the selection, so
+`--classes` never renames or moves a shape.
 
 ## Validation with pySHACL
 
@@ -466,9 +546,10 @@ Example GitHub Actions workflow:
 
 | Limitation | Issue |
 |---|---|
-| A class declared only as `owl:DeprecatedClass` gets no shape, and selecting it is refused | [#228](https://github.com/aigora-de/rdf-construct/issues/228) |
-| `--closed` has no effect below `--level strict` | [#224](https://github.com/aigora-de/rdf-construct/issues/224) |
-| Two classes with one local name (`a:Cat`, `b:Cat`) share one shape, and each gets the other's constraints | [#485](https://github.com/aigora-de/rdf-construct/issues/485) |
+| A construct that cannot be expressed (a blank-node range, `owl:hasValue`) is dropped without a report | [#229](https://github.com/aigora-de/rdf-construct/issues/229) |
+| An enumerated class's own shape has no `sh:in`, and `sh:class` fails an enumerated member the data does not type | [#488](https://github.com/aigora-de/rdf-construct/issues/488) |
+| A property with several `rdfs:range` values is constrained by one of them | [#489](https://github.com/aigora-de/rdf-construct/issues/489) |
+| A declared `owl:Thing` gets a shape that targets every typed node | [#490](https://github.com/aigora-de/rdf-construct/issues/490) |
 | Output is not byte-identical between runs: blank-node property shapes come out in varying order | [#94](https://github.com/aigora-de/rdf-construct/issues/94) |
 
 ## See Also
