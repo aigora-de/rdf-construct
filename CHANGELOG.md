@@ -777,6 +777,30 @@ change, and what to do about it, is listed command by command in the
   typed `xsd:gYearMonth` was read as the type `xsd`; a CURIE type is now read
   whole, and one in `xsd:`, `rdf:`, `rdfs:` or `owl:` that names no datatype
   is refused at exit 2.
+- **`shacl-gen` selects the classes it is given** (#226). `--classes`,
+  `target_classes` and `exclude_classes` matched by substring, so `Cat` also
+  selected `Category` and `Catalogue`, and the documented CURIE form
+  (`--classes "ex:Animal,ex:Dog"`) matched nothing and wrote an empty shapes
+  file at exit 0. Entries now match exactly: a CURIE in the source's own
+  prefixes, an `<IRI>`, a full IRI, or a bare local name. An entry that names
+  no class, a bare name matching two classes, an unbound prefix, a scalar where
+  a list belongs, and an empty selection are refused at exit 2, every problem
+  listed, nothing written. Exclusions now apply alongside `--classes`, and one
+  that names nothing is a note. `ShaclConfig.should_generate_for` is replaced
+  by `resolve_selection`. See the
+  [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#shacl-gen).
+- **`shacl-gen`'s `ignored_properties` uses the ontology's own prefixes** (#356).
+  It resolved CURIEs against rdflib's built-in table, so a file with its own
+  `org:` got W3C's `org:secret` in `sh:ignoredProperties`, and the closed shape
+  rejected the property it was told to ignore; the file's prefix was written
+  back as `org1:`, and an entry that did not resolve was dropped. An unbound
+  prefix is now refused at exit 2, with the IRI rdflib would have used; the list
+  is de-duplicated; and a list that cannot take effect, without closed shapes,
+  gets a note.
+- **`shacl-gen` no longer mints shapes in Brick's namespace** (#484). A source
+  without an `owl:Ontology` got `https://brickschema.org/schema/Brick-shapes#`,
+  from rdflib's pre-bound prefixes. Its shapes now take the namespace holding
+  the most declared classes, plus `-shapes#`.
 - **`sort: topological` no longer turns alphabetical on inferred graphs** (#339).
   RDFS entailment materialises `C rdfs:subClassOf C` for every class (`rdfs10`)
   and `P rdfs:subPropertyOf P` for every property (`rdfs6`). Each self-loop was

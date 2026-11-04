@@ -218,15 +218,13 @@ class TestShaclGen:
     @pytest.fixture
     def captured(self, monkeypatch: pytest.MonkeyPatch) -> list[ShaclConfig]:
         configs: list[ShaclConfig] = []
-        real = shacl_package.generate_shapes_to_file
+        real = shacl_package.ShapeGenerator
 
-        def spy(
-            source: Path, output: Path, config: ShaclConfig, *args: Any, **kwargs: Any
-        ) -> Graph:
+        def spy(source_graph: Graph, config: ShaclConfig, *args: Any, **kwargs: Any) -> Any:
             configs.append(config)
-            return real(source, output, config, *args, **kwargs)
+            return real(source_graph, config, *args, **kwargs)
 
-        monkeypatch.setattr(shacl_package, "generate_shapes_to_file", spy)
+        monkeypatch.setattr(shacl_package, "ShapeGenerator", spy)
         return configs
 
     @pytest.mark.parametrize(

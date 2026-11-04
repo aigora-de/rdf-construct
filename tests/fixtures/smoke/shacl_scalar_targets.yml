@@ -1,0 +1,2 @@
+# A scalar where a list is expected (#226).
+target_classes: Cat

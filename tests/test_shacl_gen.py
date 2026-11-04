@@ -6,6 +6,7 @@ from rdflib import Graph, Literal, Namespace, RDF, RDFS, URIRef, XSD
 from rdflib.namespace import OWL
 
 from rdf_construct.shacl import (
+    resolve_selection,
     generate_shapes,
     PropertyConstraint,
     SH,
@@ -493,21 +494,29 @@ class TestShaclConfig:
         with pytest.raises(ValueError, match="Invalid strictness level"):
             ShaclConfig.from_dict({"level": "invalid"})
 
-    def test_should_generate_for_with_targets(self):
-        """Test should_generate_for with target classes."""
+    def test_resolve_selection_with_targets(self):
+        """A bare target selects the declared class with that local name, and only it."""
         config = ShaclConfig(target_classes=["Building"])
+        classes = [URIRef("http://example.org/Building"), URIRef("http://example.org/Floor")]
         g = Graph()
+        for cls in classes:
+            g.add((cls, RDF.type, OWL.Class))
 
-        assert config.should_generate_for(URIRef("http://example.org/Building"), g)
-        assert not config.should_generate_for(URIRef("http://example.org/Floor"), g)
+        selected = resolve_selection(g, config, classes).classes
+        assert URIRef("http://example.org/Building") in selected
+        assert URIRef("http://example.org/Floor") not in selected
 
-    def test_should_generate_for_with_excludes(self):
-        """Test should_generate_for with excluded classes."""
+    def test_resolve_selection_with_excludes(self):
+        """A bare exclusion removes the declared class with that local name, and only it."""
         config = ShaclConfig(exclude_classes=["Thing"])
+        classes = [URIRef("http://example.org/Building"), URIRef("http://example.org/Thing")]
         g = Graph()
+        for cls in classes:
+            g.add((cls, RDF.type, OWL.Class))
 
-        assert config.should_generate_for(URIRef("http://example.org/Building"), g)
-        assert not config.should_generate_for(URIRef("http://example.org/Thing"), g)
+        selected = resolve_selection(g, config, classes).classes
+        assert URIRef("http://example.org/Building") in selected
+        assert URIRef("http://example.org/Thing") not in selected
 
 
 class TestEnumerationConverter:

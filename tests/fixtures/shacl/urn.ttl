@@ -1,0 +1,6 @@
+# Classes named by URNs, which have no `#` or `/`.
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+<urn:example:zoo> a owl:Ontology .
+<urn:example:Cat> a owl:Class .
+<urn:example:Kitten> a owl:Class .

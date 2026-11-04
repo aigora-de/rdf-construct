@@ -15,6 +15,7 @@ from rdflib.namespace import OWL
 from .config import ShaclConfig, Severity, StrictnessLevel
 from .converters import PropertyConstraint, get_converters_for_level
 from .namespaces import SH, SHACL_PREFIXES
+from .selection import declared_classes, namespace_of, resolve_selection
 
 
 class ShapeGenerator:
@@ -32,13 +33,21 @@ class ShapeGenerator:
     def __init__(self, source_graph: Graph, config: ShaclConfig | None = None):
         """Initialise generator.
 
+        The class selection and the ignored properties are resolved here, against the
+        source graph's own prefix bindings, so a selection that cannot be honoured is
+        refused before anything is generated.
+
         Args:
             source_graph: The OWL ontology graph.
             config: Optional configuration (defaults provided).
+
+        Raises:
+            ShaclSelectionError: If the selection or an ignored property cannot be resolved.
         """
         self.config = config or ShaclConfig()
         self.source_graph = source_graph
-        self.shapes_graph = Graph()
+        self.selection = resolve_selection(source_graph, self.config, self._get_target_classes())
+        self.shapes_graph = Graph(bind_namespaces="core")
 
         # Bind prefixes
         for prefix, ns in SHACL_PREFIXES.items():
@@ -68,20 +77,19 @@ class ShapeGenerator:
                     return base[:-1] + "-shapes#"
                 return base + "-shapes#"
 
-        # Fallback: use first non-standard namespace
-        for prefix, ns in self.source_graph.namespaces():
-            ns_str = str(ns)
-            if not any(
-                ns_str.startswith(std)
-                for std in (
-                    "http://www.w3.org/",
-                    "http://purl.org/dc/",
-                    "http://xmlns.com/",
-                )
-            ):
-                if ns_str.endswith("#") or ns_str.endswith("/"):
-                    return ns_str[:-1] + "-shapes#"
-                return ns_str + "-shapes#"
+        # Fallback: the namespace holding the most declared classes, ties to the smaller
+        # IRI. Taken over the whole source, never the selection, so the selection cannot
+        # move a shape's IRI (#484).
+        counts: dict[str, int] = defaultdict(int)
+        for cls in declared_classes(self.source_graph):
+            ns = namespace_of(str(cls))
+            if ns:
+                counts[ns] += 1
+        if counts:
+            ns_str = min(counts, key=lambda ns: (-counts[ns], ns))
+            if ns_str.endswith(("#", "/", ":")):
+                ns_str = ns_str[:-1]
+            return ns_str + "-shapes#"
 
         return "http://example.org/shapes#"
 
@@ -91,17 +99,11 @@ class ShapeGenerator:
         Returns:
             Graph containing the generated SHACL shapes.
         """
-        # Get all classes from ontology
-        classes = self._get_target_classes()
-
         # Get converters for current strictness level
         converters = get_converters_for_level(self.config.level)
 
-        # Generate shape for each class
-        for cls in classes:
-            if not self.config.should_generate_for(cls, self.source_graph):
-                continue
-
+        # Generate shape for each selected class
+        for cls in self.selection.classes:
             self._create_node_shape(cls, converters)
 
         return self.shapes_graph
@@ -254,31 +256,8 @@ class ShapeGenerator:
         return inherited
 
     def _get_ignored_properties(self) -> list[URIRef]:
-        """Get list of properties to ignore in closed shapes."""
-        ignored = [RDF.type]  # Always ignore rdf:type
-
-        # Add user-configured ignored properties
-        for prop_str in self.config.ignored_properties:
-            # Expand CURIE if possible
-            expanded = self._expand_curie(prop_str)
-            if expanded:
-                ignored.append(expanded)
-
-        return ignored
-
-    def _expand_curie(self, curie: str) -> URIRef | None:
-        """Expand a CURIE to full URI."""
-        if ":" in curie and not curie.startswith("http"):
-            prefix, local = curie.split(":", 1)
-            for p, ns in self.source_graph.namespaces():
-                if p == prefix:
-                    return URIRef(str(ns) + local)
-
-        # Already a URI?
-        if curie.startswith("http"):
-            return URIRef(curie)
-
-        return None
+        """Get list of properties to ignore in closed shapes: rdf:type first, no repeats."""
+        return list(self.selection.ignored_properties)
 
     def _create_rdf_list(self, items: list[URIRef]) -> BNode:
         """Create an RDF list from items."""
@@ -317,10 +296,15 @@ def generate_shapes(
 
     Returns:
         Tuple of (shapes graph, serialised string).
+
+    Raises:
+        ShaclSelectionError: If the selection or an ignored property cannot be resolved;
+            nothing is generated.
     """
-    # Load source if path
+    # Load source if path. A pre-loaded graph's selection resolves against its own
+    # bindings, whatever they are.
     if isinstance(source, Path):
-        source_graph = Graph()
+        source_graph = Graph(bind_namespaces="core")
         source_graph.parse(str(source), format="turtle")
     else:
         source_graph = source

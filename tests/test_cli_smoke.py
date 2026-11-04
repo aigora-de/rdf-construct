@@ -55,6 +55,7 @@ TRANSLATIONS = str(SMOKE / "translations_de.yml")
 GB_ONLY = str(REPO / "tests" / "fixtures" / "ies" / "ies-env-building-classification.ttl")
 MALFORMED_TTL = str(SMOKE / "malformed.ttl")
 MALFORMED_YAML = str(SMOKE / "malformed.yml")
+TWO_CATS = str(REPO / "tests" / "fixtures" / "shacl" / "two_cats.ttl")
 ORDER_BAD_SORT = str(SMOKE / "order_bad_sort.yml")
 ORDER_BAD_PREFIX_ORDER = str(SMOKE / "order_bad_prefix_order.yml")
 ORDER_BAD_ROOTS = str(SMOKE / "order_bad_roots.yml")
@@ -304,6 +305,50 @@ THREE_STATES = [
     _row(Row("shacl-gen", "clean", ("shacl-gen", ANIMAL, "-o", "@tmp/shapes.ttl"))),
     _row(
         Row("shacl-gen", "refused", ("shacl-gen", ANIMAL, "-C", MALFORMED_YAML, "-o", "@tmp/s.ttl"))
+    ),
+    _row(
+        Row(
+            "shacl-gen",
+            "refused",
+            ("shacl-gen", ANIMAL, "--classes", "ex:Nope", "-o", "@tmp/s.ttl"),
+        ),
+        label="unmatched-target",
+    ),
+    _row(
+        Row(
+            "shacl-gen", "refused", ("shacl-gen", TWO_CATS, "--classes", "Cat", "-o", "@tmp/s.ttl")
+        ),
+        label="ambiguous-target",
+    ),
+    _row(
+        Row(
+            "shacl-gen",
+            "refused",
+            (
+                "shacl-gen",
+                ANIMAL,
+                "-C",
+                str(SMOKE / "shacl_scalar_targets.yml"),
+                "-o",
+                "@tmp/s.ttl",
+            ),
+        ),
+        label="scalar-targets",
+    ),
+    _row(
+        Row(
+            "shacl-gen",
+            "refused",
+            (
+                "shacl-gen",
+                ANIMAL,
+                "-C",
+                str(SMOKE / "shacl_unbound_ignored.yml"),
+                "-o",
+                "@tmp/s.ttl",
+            ),
+        ),
+        label="unbound-ignored-prefix",
     ),
     _row(
         Row(
