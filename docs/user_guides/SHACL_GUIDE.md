@@ -139,34 +139,99 @@ closed: true
 ignored_properties:
   - rdf:type
   - rdfs:label
-  - dcterms:modified
+  - <http://purl.org/dc/terms/modified>
 ```
+
+`rdf:type` is always ignored, and is listed first; an entry given twice is listed once. Each entry is
+a CURIE, an IRI in angle brackets, or a full `http(s)://` IRI. A CURIE resolves against **the source
+ontology's own prefixes**, plus `rdf`, `rdfs`, `owl`, `xsd` and `xml`. If your ontology binds `org:`
+to its own namespace, `org:secret` means that namespace, not W3C's Organization ontology.
+
+An entry whose prefix the ontology does not bind is refused at exit 2, and nothing is written. Where
+the prefix is a well-known one, the message gives the IRI to write instead. Written as
+`dcterms:modified`, on an ontology that does not bind `dcterms:`, the entry above is refused:
+
+```text
+Error: Selection refused, nothing written:
+ignored_properties: 'dcterms:modified': prefix 'dcterms' is not bound in this source (bound: bld, owl, rdf, rdfs, xml, xsd); write <http://purl.org/dc/terms/modified> if you mean dcterms: as http://purl.org/dc/terms/
+```
+
+Write the IRI in angle brackets, as above, or bind the prefix in the ontology. Shapes are closed only
+with `--closed` at `--level strict`. Otherwise `ignored_properties` has no effect, and the run says so
+in a note.
 
 ## Targeting Specific Classes
 
 ### Include Only Certain Classes
 
+Name each class by its local name:
+
 ```bash
 rdf-construct shacl-gen ontology.ttl --classes "Building,Floor,Room"
 ```
+
+Or by a CURIE in one of the ontology's own prefixes:
+
+```bash
+rdf-construct shacl-gen ontology.ttl --classes "bld:Building,bld:Floor"
+```
+
+An entry is matched exactly against the classes the ontology declares. `Building` selects
+`bld:Building`, not `bld:BuildingPart`. The accepted spellings are:
+
+| Spelling | Example | Matches |
+|---|---|---|
+| Bare local name (no `:`) | `Building` | the declared class whose local name is exactly `Building` |
+| CURIE | `bld:Building` | the IRI, using the ontology's prefixes plus `rdf`, `rdfs`, `owl`, `xsd`, `xml` |
+| IRI in angle brackets | `<http://example.org/building#Building>` | that IRI; use this for a URN (`<urn:x:Cat>`) |
+| Full IRI | `http://example.org/building#Building` | that IRI |
+
+A local name is what follows the IRI's last `#`, else its last `/`, else its last `:`.
+
+Each entry must select a class, or the run is refused at exit 2 with nothing written. Every problem
+is listed:
+
+```bash
+rdf-construct shacl-gen ontology.ttl --classes "Buildng,Floor"
+```
+
+```text
+Error: Selection refused, nothing written:
+target_classes: 'Buildng' names no class in this source; did you mean Building, BuildingPart?
+```
+
+`--classes` fills `target_classes`, so the message uses that name. Besides a name that matches
+nothing, these are refused:
+
+- a bare name that matches classes in two namespaces (`a:Cat` and `b:Cat`); the message lists the
+  CURIEs to choose from;
+- a CURIE whose prefix the ontology does not bind;
+- a class declared only as `owl:DeprecatedClass`, which `shacl-gen` does not shape yet
+  ([#228](https://github.com/aigora-de/rdf-construct/issues/228));
+- an IRI the ontology only refers to, such as an imported superclass, without declaring it a class.
 
 ### Using Configuration File
 
 ```yaml
 target_classes:
   - Building
-  - Floor
-  - http://example.org/Room
+  - bld:Floor
+  - <http://example.org/building#Room>
 ```
+
+`target_classes`, `exclude_classes` and `ignored_properties` must be lists. `target_classes: Building`
+on its own is refused; write `target_classes: [Building]`.
 
 ### Exclude Classes
 
 ```yaml
 exclude_classes:
-  - owl:Thing
-  - rdfs:Resource
-  - DeprecatedClass
+  - BuildingPart
 ```
+
+Exclusions use the same spellings, and they apply alongside `--classes`: the shapes are the targets
+minus the exclusions. An exclusion that names no class here is a note, not a refusal, so one config
+can serve several ontologies. A run whose selection ends up empty is refused.
 
 ## Constraint Inheritance
 
@@ -205,7 +270,7 @@ closed: false
 
 target_classes:
   - Building
-  - Floor
+  - bld:Floor
 
 include_labels: true
 include_descriptions: true
@@ -313,6 +378,36 @@ generate_shapes_to_file(
 )
 ```
 
+The selection and `ignored_properties` are resolved before anything is generated. A selection that
+cannot be honoured raises `ShaclSelectionError`, whose `problems` lists every entry at fault, and
+`generate_shapes_to_file` then writes nothing:
+
+```python
+from rdf_construct.shacl import ShaclSelectionError
+
+try:
+    generate_shapes(Path("ontology.ttl"), ShaclConfig(target_classes=["Buildng"]))
+except ShaclSelectionError as error:
+    for problem in error.problems:
+        print(problem)
+```
+
+Given a `Path`, the source is parsed with only its own prefixes plus the core five bound. Given a
+`Graph` you loaded yourself, CURIEs resolve against **that graph's bindings, whatever they are**: a
+bare `rdflib.Graph()` also binds rdflib's built-in prefixes (`dcterms:`, `skos:`, W3C's `org:` …), so
+`dcterms:title` resolves there and is refused from a `Path`. Build your graph with
+`Graph(bind_namespaces="core")` to get the command's behaviour. `resolve_selection(graph, config,
+shaped)` returns the resolved `Selection` (`classes`, `targets`, `ignored_properties`, `notes`)
+without generating anything, and `ShapeGenerator(...).selection` holds the one it used.
+
+### Shape IRIs
+
+Shapes are named `<namespace><LocalName>Shape`. With an `owl:Ontology`, the namespace is the
+ontology IRI with `-shapes#` appended (`http://example.org/animals` gives
+`http://example.org/animals-shapes#`). Without one, it is the namespace that holds the most declared
+classes, with its trailing `#`, `/` or `:` replaced by `-shapes#`; ties go to the alphabetically first
+namespace. It is taken over the whole ontology, so `--classes` never moves a shape's IRI.
+
 ## Validation with pySHACL
 
 Use the generated shapes with pySHACL:
@@ -366,6 +461,15 @@ Example GitHub Actions workflow:
 
 5. **Version control shapes** - Generated shapes are deterministic. Commit
    them alongside your ontology for traceability.
+
+## Known Limitations
+
+| Limitation | Issue |
+|---|---|
+| A class declared only as `owl:DeprecatedClass` gets no shape, and selecting it is refused | [#228](https://github.com/aigora-de/rdf-construct/issues/228) |
+| `--closed` has no effect below `--level strict` | [#224](https://github.com/aigora-de/rdf-construct/issues/224) |
+| Two classes with one local name (`a:Cat`, `b:Cat`) share one shape, and each gets the other's constraints | [#485](https://github.com/aigora-de/rdf-construct/issues/485) |
+| Output is not byte-identical between runs: blank-node property shapes come out in varying order | [#94](https://github.com/aigora-de/rdf-construct/issues/94) |
 
 ## See Also
 

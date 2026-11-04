@@ -363,7 +363,6 @@ def _classes(graph: Graph) -> set[URIRef]:
             ("--classes", "ex:Dog"),
             {URIRef("http://example.org/animals#Dog")},
             id="classes-curie",
-            marks=pytest.mark.xfail(strict=True, reason="#226"),
         ),
         pytest.param(
             FIXTURES / "docs" / "deprecated_terms.ttl",

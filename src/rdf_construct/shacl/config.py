@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from rdflib import URIRef
 
 
 class StrictnessLevel(Enum):
@@ -125,28 +124,6 @@ class ShaclConfig:
             generate_property_shapes=data.get("generate_property_shapes", False),
             ignored_properties=data.get("ignored_properties", []),
         )
-
-    def should_generate_for(self, class_uri: URIRef, graph: "Graph") -> bool:
-        """Check if a shape should be generated for this class.
-
-        Args:
-            class_uri: The class URI to check.
-            graph: The source graph (for CURIE expansion).
-
-        Returns:
-            True if shape should be generated.
-        """
-        class_str = str(class_uri)
-
-        # If explicit targets specified, only generate for those
-        if self.target_classes:
-            return any(class_str.endswith(t) or t in class_str for t in self.target_classes)
-
-        # Check exclusions
-        if self.exclude_classes:
-            return not any(class_str.endswith(e) or e in class_str for e in self.exclude_classes)
-
-        return True
 
 
 def load_shacl_config(path: Path | None) -> ShaclConfig:

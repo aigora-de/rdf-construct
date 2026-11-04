@@ -2051,7 +2051,9 @@ def docs(
 @click.option(
     "--classes",
     type=str,
-    help="Comma-separated list of classes to generate shapes for",
+    help="Comma-separated classes to generate shapes for: CURIEs (ex:Dog), <IRI>s, full "
+    "IRIs, or bare local names (Dog). A name that matches no class, or more than one, "
+    "is refused.",
 )
 @click.option(
     "--closed",
@@ -2126,13 +2128,18 @@ def shacl_gen(
         # Generate warnings instead of violations
         rdf-construct shacl-gen ontology.ttl --default-severity warning
     """
+    from rdflib import Graph
+
+    from rdf_construct.core.utils import extract_prefix_map
     from rdf_construct.shacl import (
-        generate_shapes_to_file,
+        ShaclSelectionError,
+        ShapeGenerator,
         load_shacl_config,
         ShaclConfig,
         StrictnessLevel,
         Severity,
     )
+    from rdf_construct.shacl.selection import display
 
     # Determine output path
     if output is None:
@@ -2181,15 +2188,24 @@ def shacl_gen(
         click.echo(f"Generating SHACL shapes from {source}...")
         click.echo(f"  Level: {shacl_config.level.value}")
 
-        if shacl_config.target_classes:
-            click.echo(f"  Target classes: {', '.join(shacl_config.target_classes)}")
+        source_graph = Graph(bind_namespaces="core")
+        source_graph.parse(str(source), format="turtle")
+        generator = ShapeGenerator(source_graph, shacl_config)
+        selection = generator.selection
 
-        shapes_graph = generate_shapes_to_file(
-            source,
-            output,
-            shacl_config,
-            output_format,
-        )
+        if selection.targets:
+            prefixes = extract_prefix_map(source_graph)
+            shown = ", ".join(display(t, prefixes) for t in selection.targets)
+            click.echo(f"  Target classes: {shown}")
+
+        if selection.notes:
+            click.secho("Notes:", err=True)
+            for note in selection.notes:
+                click.echo(f"  {note}", err=True)
+
+        shapes_graph = generator.generate()
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(shapes_graph.serialize(format=output_format))
 
         # Count generated shapes
         from rdf_construct.shacl import SH
@@ -2201,6 +2217,8 @@ def shacl_gen(
         if shacl_config.closed:
             click.echo("  (closed shapes enabled)")
 
+    except ShaclSelectionError as e:
+        raise Refusal(f"Selection refused, nothing written:\n{e}") from e
     except FileNotFoundError as e:
         click.secho(f"Error: {e}", fg="red", err=True)
         raise SystemExit(2)

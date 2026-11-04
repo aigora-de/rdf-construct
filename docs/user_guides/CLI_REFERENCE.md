@@ -445,7 +445,7 @@ rdf-construct shacl-gen SOURCE [OPTIONS]
 - `-f, --format FORMAT`: Output format: `turtle`, `ttl`, `json-ld`, `jsonld` (default: turtle)
 - `-l, --level LEVEL`: Strictness level: `minimal`, `standard`, `strict` (default: standard)
 - `-C, --config PATH`: YAML configuration file
-- `--classes LIST`: Comma-separated list of classes to generate shapes for
+- `--classes LIST`: Comma-separated classes to generate shapes for, each a CURIE in the source's own prefixes (`ex:Dog`), an `<IRI>`, a full IRI, or a bare local name (`Dog`), matched exactly. A name that matches no class, or matches classes in two namespaces, is refused (exit 2) with nothing written; see [the guide](SHACL_GUIDE.md#targeting-specific-classes)
 - `--closed`: Generate closed shapes (no extra properties allowed)
 - `--default-severity LEVEL`: Default severity: `violation`, `warning`, `info`
 - `--no-labels`: Don't include rdfs:label as sh:name
