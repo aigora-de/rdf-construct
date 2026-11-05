@@ -1,0 +1,6 @@
+@prefix : <http://b.example/ont#> .
+@prefix ex: <http://b.example/ex#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+:B a owl:Class .
+ex:Y a owl:Class .

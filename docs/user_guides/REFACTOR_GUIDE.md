@@ -288,6 +288,12 @@ counts every substitution. The shipped `examples/refactor/renames.yml` fixes fou
 the property `ex:hasAddres`, and migrating `examples/refactor/instances.ttl` with it reports
 `Migrated instances.ttl: 7 changes`, two of them the `ex:hasAddres` triples.
 
+Each migrated file keeps its data file's own prefixes (`org:` stays `org:`), and a prefix moves
+with its namespace. After `--from-namespace`, the data's own prefix for the old namespace is
+written for the new one, as the ontology's is. A namespace the data uses without declaring it, as
+in an N-Triples file, gets rdflib's usual prefix for it (`foaf:`) when no prefix of the data's
+holds that name.
+
 ### Configuration File
 
 For complex renames, use a YAML configuration:

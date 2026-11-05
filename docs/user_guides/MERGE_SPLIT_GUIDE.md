@@ -147,21 +147,28 @@ that.
 
 #### Moving a predicate between tiers
 
-The tiers can be overridden in the configuration file, by full IRI:
+The tiers can be overridden in the configuration file, by IRI or CURIE:
 
 ```yaml
+namespaces:
+  preferred_prefixes:
+    dcterms: "http://purl.org/dc/terms/"
 conflicts:
   ignore_predicates:            # never a conflict: the same as repeatable
-    - "http://www.w3.org/2000/01/rdf-schema#isDefinedBy"
+    - "rdfs:isDefinedBy"
   predicate_tiers:
-    repeatable:   ["http://www.w3.org/2000/01/rdf-schema#label"]
-    per_language: ["http://purl.org/dc/terms/title"]
+    repeatable:   ["rdfs:label"]
+    per_language: ["dcterms:title"]
     load_bearing: ["<http://example.org/maxOccupancy>"]
 ```
 
-The configuration wins over the defaults and over a source's `owl:FunctionalProperty`
-declaration. A predicate placed in two tiers, an unknown tier name, or a prefixed name such as
-`rdfs:label` is refused with exit 2.
+A CURIE here resolves against `rdf`, `rdfs`, `owl`, `xsd`, `xml` and the prefixes the configuration
+binds under `namespaces.preferred_prefixes`: the prefixes the merged output is written with,
+whatever the sources declare. The sources' own prefixes are not used, because two sources may give
+one prefix two meanings. The configuration wins over the defaults and over a source's
+`owl:FunctionalProperty` declaration. A predicate placed in two tiers, an unknown tier name, or a
+CURIE whose prefix is not bound there (such as `skos:prefLabel` with no `skos` preference) is
+refused with exit 2.
 
 #### Resolution Strategies
 
@@ -269,7 +276,6 @@ The Markdown report includes:
 | Limitation | Issue |
 |------------|-------|
 | The ontology header (`owl:Ontology` subjects) is not checked: two sources' header labels are both written | #171 |
-| Predicates in the configuration must be full IRIs; prefixed names are refused rather than resolved | #357 |
 | Conflict markers come out in a different order from run to run | #173 |
 | Values are compared as written, so `"1.0"` and `"1.00"` (`xsd:decimal`) on a functional property are reported as a conflict | — |
 
@@ -333,16 +339,45 @@ with the namespaces they name.
 When keys overlap, each IRI moves by the **longest** key that contains it, whatever order they are
 written in, and moves once. `merge` names each pair of keys where one lies within the other.
 
-#### Preferred Prefixes
+#### Prefixes in the Output
 
-Standardise prefix bindings in output:
+Each source's prefixes are written as it declares them: a source's `org:` stays `org:`, even
+though rdflib binds `org` to the W3C Organization ontology. When sources disagree, one rule
+decides:
+
+- **One prefix, two namespaces:** the first source on the command line keeps the prefix (the
+  first under `sources:` in a configuration file). The other namespace is written as `ex1:`,
+  `ex2:` and so on. For the empty prefix `:` it is named after its namespace's last path segment
+  (`http://b.example.org/ont#` → `ont:`, numbered if taken), or `default1:` when that segment is
+  not a valid prefix. A generated name never takes a prefix that any source declares.
+- **One namespace, two prefixes:** the first is kept, and the other source's CURIEs are written
+  with it.
+- **A namespace no source names**, as in an N-Triples source, takes rdflib's usual prefix for it
+  (`foaf:`, `skos:`) when no source uses that prefix. A namespace rdflib has no prefix for is
+  written with a generated `ns1:`.
+
+Every declaration that is not written as declared is named on stderr, and the run still exits 0:
+
+```bash
+rdf-construct merge examples/animal_ontology.ttl examples/simple_ontology.ttl -o merged.ttl
+```
+
+```
+Note: simple_ontology.ttl declares "ex:" for <http://example.org/test#>, which animal_ontology.ttl uses for <http://example.org/animals#>; written as "ex1:". Set namespaces.preferred_prefixes to choose.
+```
+
+To choose instead, set `namespaces.preferred_prefixes`. A preference claims its prefix before any
+source does, even one a source holds, and the source that held it is renamed by the rule above:
 
 ```yaml
 namespaces:
   preferred_prefixes:
-    ex: "http://example.org/"
-    rdfs: "http://www.w3.org/2000/01/rdf-schema#"
+    animal: "http://example.org/animals#"
+    ex: "http://example.org/test#"
 ```
+
+The same rule applies to data migration's output when several `--migrate-data` files are combined
+(`preferred_prefixes` applies to the ontology only).
 
 ### owl:imports Handling
 

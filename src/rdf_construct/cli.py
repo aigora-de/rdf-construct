@@ -135,6 +135,7 @@ from rdf_construct.merge import (
     split_by_namespace,
     create_default_split_config,
 )
+from rdf_construct.merge.prefixes import fill_table_gaps
 
 from rdf_construct.refactor import (
     RenameConfig,
@@ -3296,6 +3297,8 @@ def merge(
     use_colour = not no_colour
     text_formatter = get_formatter("text", use_colour=use_colour)
     click.echo(text_formatter.format_merge_result(result, result.merged_graph))
+    for note in result.prefix_notes:
+        click.echo(note, err=True)
 
     # Write output (unless dry run)
     if not dry_run and result.merged_graph and config.output:
@@ -3342,6 +3345,8 @@ def merge(
 
         if migration_result.success:
             click.echo(text_formatter.format_migration_result(migration_result))
+            for note in migration_result.prefix_notes:
+                click.echo(note, err=True)
             if config.migrate_data.output_path and not dry_run:
                 click.secho(
                     f"\u2713 Wrote migrated data to {config.migrate_data.output_path}",
@@ -4419,7 +4424,8 @@ def refactor_rename(
     data_graphs: list[tuple[Path, Graph]] = []
     if migrate_data:
         for data_path in migrate_data:
-            data_graph = Graph()
+            # "core", so the data's own org: is not pushed aside to org1: (#358)
+            data_graph = Graph(bind_namespaces="core")
             try:
                 data_graph.parse(data_path.as_posix())
             except Exception as e:
@@ -4532,11 +4538,15 @@ def refactor_rename(
         if uri_map:
             migrator = DataMigrator()
             for data_path, data_graph in data_graphs:
-                migration_result = migrator.migrate(data_graph, uri_map=uri_map)
+                # The data's prefixes move with a renamed namespace, as the ontology's do (#358)
+                migration_result = migrator.migrate(
+                    data_graph, uri_map=uri_map, namespace_rules=config.rename.namespaces
+                )
 
                 if migration_result.success and migration_result.migrated_graph:
                     out_path = planned.data[data_path]
                     out_path.parent.mkdir(parents=True, exist_ok=True)
+                    fill_table_gaps(migration_result.migrated_graph)
                     migration_result.migrated_graph.serialize(
                         destination=out_path.as_posix(), format="turtle"
                     )

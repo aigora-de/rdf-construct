@@ -22,6 +22,7 @@ from rdflib.namespace import RDF, RDFS, XSD
 from rdflib.term import Node
 
 from rdf_construct.merge.config import MigrationRule
+from rdf_construct.merge.prefixes import table_gaps
 
 
 @dataclass
@@ -155,8 +156,11 @@ class RuleEngine:
         Args:
             graph: Graph to extract namespaces from
         """
+        bound = list(graph.namespace_manager.namespaces())
+        # rdflib's table only where the data names neither the prefix nor the namespace, as the
+        # migrated output is written: a graph parsed with "core" has no foaf: of its own (#358)
         self.parser.namespaces = {
-            prefix: Namespace(str(ns)) for prefix, ns in graph.namespace_manager.namespaces()
+            prefix: Namespace(str(ns)) for prefix, ns in [*bound, *table_gaps(bound)]
         }
 
     def apply_rule(self, graph: Graph, rule: MigrationRule) -> dict[str, int]:

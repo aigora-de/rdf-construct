@@ -127,6 +127,7 @@ src/rdf_construct/
 │   ├── formatters.py
 │   ├── merger.py
 │   ├── migrator.py
+│   ├── prefixes.py
 │   ├── rules.py
 │   └── splitter.py
 ├── refactor/
@@ -517,6 +518,12 @@ Combine multiple RDF ontologies with conflict detection, namespace management, a
 - Simple URI substitution
 - Build URI map from namespace remappings
 - Shared infrastructure for split/refactor commands
+
+**`merge/prefixes.py`**
+- `combine_prefixes()` - one prefix per namespace across several sources, with a note for each
+  declaration not written as declared (#357, #358)
+- `table_gaps()`, `fill_table_gaps()` - rdflib's prefix table, only where it displaces nothing
+- `bind_exactly()` - bind a decided prefix map into a `core` graph
 
 **`merge/rules.py`**
 - `RuleEngine` class - execute transformation rules
