@@ -46,8 +46,8 @@ rdf-construct merge [OPTIONS] [SOURCES]...
 | Option | Description | Default |
 |--------|-------------|---------|
 | `-o, --output PATH` | Output file (required); see [Where Output Goes](#where-output-goes) | - |
-| `-c, --config PATH` | YAML configuration file | - |
-| `-p, --priority INT` | Priority for each source (repeatable) | 1, 2, 3... |
+| `-c, --config PATH` | YAML configuration file; see [Configuration File](#configuration-file) for how options and source arguments combine with it | - |
+| `-p, --priority INT` | Priority for each source, in order (repeatable); a source without one keeps its own; more values than sources is refused | 1, 2, 3... |
 | `--strategy` | Conflict resolution: `priority`, `first`, `last`, `mark_all` | `priority` |
 | `-r, --report PATH` | Write conflict report; see [Where Output Goes](#where-output-goes) | - |
 | `--report-format` | Report format: `text`, `markdown` | `markdown` |
@@ -55,7 +55,7 @@ rdf-construct merge [OPTIONS] [SOURCES]...
 | `--migrate-data PATH` | Data file(s) to migrate (repeatable) | - |
 | `--migration-rules PATH` | YAML file with migration rules | - |
 | `--data-output PATH` | Output path for migrated data; see [Where Output Goes](#where-output-goes) | - |
-| `--dry-run` | Show what would happen without writing | `False` |
+| `--dry-run` | Write nothing; list the files a real run would write | `False` |
 | `--no-colour` | Disable coloured output | `False` |
 | `--init` | Generate default configuration file | - |
 
@@ -65,7 +65,7 @@ rdf-construct merge [OPTIONS] [SOURCES]...
 |------|---------|
 | 0 | Merged; every conflict was resolved by `--strategy`, or there were none |
 | 1 | Merged, with conflicts marked in the output for review: always for `rdfs:domain`, `rdfs:range` and functional properties; for labels under `mark_all`, or when the highest-priority sources are tied |
-| 2 | Input refused or run failed (invalid options or config, file not found, parse error, an output that names an input or another output) |
+| 2 | Input refused or run failed (invalid options or config, file not found, parse error, a data file that cannot be read, an output that names an input or another output) |
 
 #### Where Output Goes
 
@@ -89,6 +89,10 @@ Error: Nothing was written:
 The report is written only when the merge has conflicts, but the check doesn't depend on that:
 `--report` naming `-o` is refused even for sources that agree. There is no flag that allows it.
 To merge `b.ttl` into `a.ttl`, write the merge to a new file and move it into place yourself.
+
+Every data file is read before anything is written, so one that is missing or cannot be parsed is
+refused at exit 2 with nothing written. `--dry-run` makes the same checks, writes nothing, and ends
+by naming each file a real run would write.
 
 ### Conflict Detection
 
@@ -512,6 +516,13 @@ Use with:
 rdf-construct merge --config merge.yml
 ```
 
+An option given on the command line overrides the file, even at its default value:
+`--strategy priority` overrides `strategy: mark_all`. `-p` replaces the sources' priorities in
+order, `--migrate-data` replaces `migrate_data: sources:` and `--data-output` its `output:`; the
+file's `rules:` still apply. Source files given on the command line replace `sources:` (a `Note:`
+on stderr says so). A run that would replace a source with a `namespace_remap` is refused, since
+the remap would be lost.
+
 ### Merge Examples
 
 #### Merge with Priorities
@@ -551,10 +562,22 @@ rdf-construct merge --config migrate-config.yml
 
 ```bash
 # Check for conflicts without writing
-rdf-construct merge core.ttl ext.ttl -o merged.ttl --dry-run
+rdf-construct merge examples/merge/merge_core.ttl examples/merge/merge_conflicting.ttl \
+    -o merged.ttl --report conflicts.md --dry-run
 
 # Exit code 0 = merged, 1 = conflicts marked for review, 2 = refused or failed
 echo "Exit code: $?"
+```
+
+The run ends by saying what it would have written; the report is named only when there are
+conflicts to put in it:
+
+```
+Dry run: would write -o merged.ttl
+Dry run: would write --report conflicts.md (4 conflict(s))
+Dry run: nothing was written.
+
+⚠ 2 unresolved conflict(s) marked in output
 ```
 
 ### Merge Best Practices

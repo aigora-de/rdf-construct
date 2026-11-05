@@ -5,6 +5,10 @@
 #
 # Usage:
 #   rdf-construct merge --config merge_config.yml -o merged.ttl
+#
+# An option given on the command line (--strategy, --imports, -p, --migrate-data,
+# --data-output) overrides this file. Source files given on the command line
+# replace sources:.
 
 # Source files to merge (in order of priority, lowest to highest)
 # Higher priority sources win in conflict resolution with "priority" strategy

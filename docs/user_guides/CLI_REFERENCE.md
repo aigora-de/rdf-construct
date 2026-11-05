@@ -628,8 +628,8 @@ rdf-construct merge [SOURCES...] -o OUTPUT [OPTIONS]
 
 **Options**:
 - `-o, --output PATH`: Output file for merged ontology (required); refused (exit 2) if it names an input (a source, a data file, the config or the migration rules)
-- `-c, --config PATH`: YAML configuration file
-- `-p, --priority INT`: Priority for each source (can specify multiple, higher wins conflicts)
+- `-c, --config PATH`: YAML configuration file; an option given on the command line overrides it, and source files given replace its `sources:` (refused, exit 2, if a replaced source has a `namespace_remap`)
+- `-p, --priority INT`: Priority for each source, in order (can specify multiple, higher wins conflicts); a source without one keeps its own; more values than sources is refused (exit 2)
 - `--strategy STRATEGY`: Conflict resolution: `priority`, `first`, `last`, `mark_all` (default: priority)
 - `-r, --report PATH`: Write conflict report to file; refused (exit 2) if it names an input or the same file as `-o` or `--data-output`, whether or not the merge has conflicts
 - `--report-format FORMAT`: Report format: `text`, `markdown`, `md` (default: markdown)
@@ -637,9 +637,11 @@ rdf-construct merge [SOURCES...] -o OUTPUT [OPTIONS]
 - `--migrate-data PATH`: Data file(s) to migrate (can specify multiple)
 - `--migration-rules PATH`: YAML file with migration rules
 - `--data-output PATH`: Output path for migrated data; refused (exit 2) if it names an input or the same file as `-o` or `--report`
-- `--dry-run`: Show what would happen without writing files
+- `--dry-run`: Write nothing; list the files a real run would write
 - `--no-colour`: Disable coloured output
 - `--init`: Generate a default merge configuration file
+
+A data file that is missing or cannot be parsed is refused (exit 2) before anything is written.
 
 **Conflict Resolution Strategies**:
 

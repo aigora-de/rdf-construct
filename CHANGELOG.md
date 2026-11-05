@@ -453,6 +453,15 @@ change, and what to do about it, is listed command by command in the
   `--include-deprecated` were silently discarded whenever a config file was
   passed. An option given on the command line now overrides the config file,
   and the config file overrides the option's default.
+- **`merge -c` honours the flags and source files given alongside it** (#351,
+  #496). `--strategy`, `--imports`, `-p`, `--migrate-data` and `--data-output`
+  were silently discarded whenever a config file was passed, and so were source
+  files: none of their triples reached the output. A flag given on the command
+  line now overrides the config, even at its default value. Source files
+  replace the config's `sources:`, with a note on stderr, and a run that would
+  lose a source's `namespace_remap` that way is refused at exit 2. More `-p`
+  values than sources is refused at exit 2, with or without `-c`; the extra
+  values were dropped.
 - **`localise` translates every labelled term** (#157, #406). An entity is any
   IRI subject carrying a requested property as a literal: a term typed only
   `owl:TransitiveProperty` or `owl:DeprecatedClass`, a SKOS concept or scheme,
@@ -651,6 +660,14 @@ change, and what to do about it, is listed command by command in the
   now resolves against `rdf`, `rdfs`, `owl`, `xsd`, `xml` and the config's own
   `namespaces.preferred_prefixes` (#357), and any other prefixed name is refused
   with exit 2.
+- **`merge` reads every data file before it writes anything** (#437). A
+  `--migrate-data` file, or one under the config's `migrate_data:`, that was
+  missing or could not be parsed was reported after the merged ontology and
+  report were written, and the run exited 0. It is now refused at exit 2 with
+  nothing written, under `--dry-run` too.
+- **`merge --dry-run` writes nothing** (#436). It wrote the conflict report,
+  over a source if `--report` named one. It now ends by naming each file a real
+  run would write.
 - **`merge` writes a blank-node structure its sources share once** (#170).
   Every restriction, `owl:unionOf` list or `owl:AllDisjointClasses` that two
   sources both stated was written twice, because each parse gives blank nodes
