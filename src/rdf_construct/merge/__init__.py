@@ -83,6 +83,7 @@ from rdf_construct.merge.migrator import (
     MigrationResult,
     MigrationStats,
     migrate_data_files,
+    migrate_data_graphs,
 )
 
 from rdf_construct.merge.rules import (
@@ -144,6 +145,7 @@ __all__ = [
     "MigrationResult",
     "MigrationStats",
     "migrate_data_files",
+    "migrate_data_graphs",
     # Rules
     "RuleEngine",
     "PatternParser",

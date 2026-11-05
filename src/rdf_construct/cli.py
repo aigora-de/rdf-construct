@@ -119,10 +119,11 @@ from rdf_construct.merge import (
     ImportsStrategy,
     DataMigrationConfig,
     OntologyMerger,
+    MergeResult,
     load_merge_config,
     create_default_config,
     get_formatter,
-    migrate_data_files,
+    migrate_data_graphs,
     # Split imports
     OntologySplitter,
     SplitConfig,
@@ -3064,6 +3065,108 @@ def describe(
         sys.exit(2)
 
 
+def _replace_config_sources(config: MergeConfig, sources: Sequence[Path]) -> None:
+    """Replace a merge config's sources with the ones given on the command line (#496).
+
+    A config source carries a priority and a ``namespace_remap`` as well as a path. The
+    priorities are replaced, and a note on stderr says so. A remap rewrites IRIs, so losing one
+    in silence would change the merged graph without a word: a run that would drop one is
+    refused instead.
+
+    Args:
+        config: The loaded merge config, changed in place.
+        sources: The source arguments, in command-line order.
+
+    Raises:
+        Refusal: A config source that would be replaced has a ``namespace_remap``.
+    """
+    remapped = [src.path for src in config.sources if src.namespace_remap]
+    if remapped:
+        raise Refusal(
+            "Sources given on the command line replace the config's sources:, and "
+            + ", ".join(str(path) for path in remapped)
+            + " there "
+            + ("has a namespace_remap" if len(remapped) == 1 else "have namespace_remaps")
+            + " that would be dropped. List the sources in the config, or give none on the "
+            "command line."
+        )
+    if config.sources:
+        click.echo(
+            f"Note: {len(sources)} source(s) from the command line replace the config's "
+            f"{len(config.sources)}; their priorities come from -p, or their order.",
+            err=True,
+        )
+    config.sources = [SourceConfig(path=path, priority=i) for i, path in enumerate(sources, 1)]
+
+
+def _apply_priorities(sources: Sequence[SourceConfig], priority: Sequence[int]) -> None:
+    """Give the sources the ``-p`` values in order; a source without one keeps its own.
+
+    A source's own priority is its config ``priority:``, or its position on the command line.
+    A value with no source to apply to was dropped in silence; it is refused.
+
+    Args:
+        sources: The sources the run merges, changed in place.
+        priority: The ``-p`` values, in the order given.
+
+    Raises:
+        Refusal: More values than sources.
+    """
+    if len(priority) > len(sources):
+        raise Refusal(
+            f"-p gives {len(priority)} priorities for {len(sources)} source(s). "
+            "Give at most one per source, in the order of the sources."
+        )
+    for src, value in zip(sources, priority):
+        src.priority = value
+
+
+def _load_merge_data(paths: Sequence[Path]) -> list[tuple[Path, Graph]]:
+    """Read every data file a merge migrates, before anything is written (#437).
+
+    Args:
+        paths: The data files, from ``--migrate-data`` or the config's ``migrate_data``.
+
+    Returns:
+        Each path with its parsed graph, in order.
+
+    Raises:
+        Refusal: A file is missing or cannot be parsed.
+    """
+    graphs: list[tuple[Path, Graph]] = []
+    for path in paths:
+        # A config's paths are not checked by Click, as --migrate-data's are
+        if not path.exists():
+            raise Refusal(f"Data file not found: {path}")
+        # "core", so the data's own org: is not pushed aside to org1: (#358)
+        graph = Graph(bind_namespaces="core")
+        try:
+            graph.parse(path.as_posix())
+        except Exception as e:
+            raise Refusal(f"Could not parse data file {path}: {e}") from e
+        graphs.append((path, graph))
+    return graphs
+
+
+def _echo_merge_dry_run(config: MergeConfig, report: Path | None, result: MergeResult) -> None:
+    """Say what a merge would have written, after a dry run that wrote nothing (#436).
+
+    Args:
+        config: The run's config, after every option is applied.
+        report: The ``--report`` path, if one was given.
+        result: The merge's result.
+    """
+    click.echo()
+    if result.merged_graph and config.output:
+        click.echo(f"Dry run: would write -o {config.output.path}")
+    if report and result.conflicts:
+        click.echo(f"Dry run: would write --report {report} ({len(result.conflicts)} conflict(s))")
+    migration = config.migrate_data
+    if migration and migration.data_sources and migration.output_path:
+        click.echo(f"Dry run: would write --data-output {migration.output_path}")
+    click.echo("Dry run: nothing was written.")
+
+
 @cli.command()
 @click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
 @click.option(
@@ -3078,14 +3181,14 @@ def describe(
     "-c",
     "config_file",
     type=click.Path(exists=True, path_type=Path),
-    help="YAML configuration file",
+    help="YAML configuration file; options given override it, and SOURCES replace its sources:",
 )
 @click.option(
     "--priority",
     "-p",
     multiple=True,
     type=int,
-    help="Priority for each source (order matches sources)",
+    help="Priority for each source, in order (higher wins); more values than sources is refused",
 )
 @click.option(
     "--strategy",
@@ -3130,7 +3233,7 @@ def describe(
 @click.option(
     "--dry-run",
     is_flag=True,
-    help="Show what would happen without writing files",
+    help="Write nothing; list the files that would be written",
 )
 @click.option(
     "--no-colour",
@@ -3173,7 +3276,12 @@ def merge(
       1 - Merged, with conflicts marked in the output for review: always for
           rdfs:domain, rdfs:range and functional properties; for labels under
           mark_all, or when the highest-priority sources are tied
-      2 - Input refused or run failed (invalid options or config, parse error, etc.)
+      2 - Input refused or run failed (invalid options or config, parse error,
+          a data file that cannot be read, etc.)
+
+    \b
+    With --config, an option given on the command line overrides the file,
+    and SOURCES replace its sources:.
 
     \b
     Examples:
@@ -3230,17 +3338,28 @@ def merge(
                 config.output = OutputConfig(path=output)
         except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
             raise Refusal(f"Could not load config {config_file}: {e}") from e
+
+        # An option given on the command line overrides the config, and the config overrides
+        # the option's default (#160, #351). Source arguments replace the config's sources:,
+        # as they replace refactor's source_files: (#496).
+        if sources:
+            _replace_config_sources(config, sources)
+        if flag_given("strategy"):
+            config.conflicts.strategy = ConflictStrategy[strategy.upper()]
+        if flag_given("imports"):
+            config.imports = ImportsStrategy[imports.upper()]
+        if flag_given("migrate_data"):
+            if config.migrate_data is None:
+                config.migrate_data = DataMigrationConfig()
+            config.migrate_data.data_sources = list(migrate_data)
+        if flag_given("data_output") and config.migrate_data is not None:
+            config.migrate_data.output_path = data_output
+        _apply_priorities(config.sources, priority)
     else:
-        # Build config from CLI arguments
-        priorities_list = list(priority) if priority else list(range(1, len(sources) + 1))
-
-        # Pad priorities if needed
-        while len(priorities_list) < len(sources):
-            priorities_list.append(len(priorities_list) + 1)
-
-        source_configs = [
-            SourceConfig(path=p, priority=pri) for p, pri in zip(sources, priorities_list)
-        ]
+        # Build config from CLI arguments: each source's priority is its position, unless -p
+        # gives one
+        source_configs = [SourceConfig(path=p, priority=i) for i, p in enumerate(sources, 1)]
+        _apply_priorities(source_configs, priority)
 
         conflict_strategy = ConflictStrategy[strategy.upper()]
         imports_strategy = ImportsStrategy[imports.upper()]
@@ -3282,6 +3401,10 @@ def merge(
     ]
     check_outputs(planned, read)
 
+    # Read every data file before writing anything, so that one that is missing or cannot be
+    # parsed refuses the run instead of failing after the ontology is written (#437)
+    data_graphs = _load_merge_data(migration.data_sources if migration else [])
+
     # Execute merge
     click.echo("Merging ontologies...")
     _note_nested_rules(*(src.namespace_remap for src in config.sources))
@@ -3306,8 +3429,8 @@ def merge(
         click.echo()
         click.secho(f"\u2713 Wrote {config.output.path}", fg="green")
 
-    # Generate conflict report if requested
-    if report and result.conflicts:
+    # Generate conflict report if requested; a dry run writes nothing (#436)
+    if report and result.conflicts and not dry_run:
         report_formatter = get_formatter(report_format)
         report_content = report_formatter.format_conflict_report(
             result.conflicts, result.merged_graph
@@ -3336,8 +3459,8 @@ def merge(
                     pass
 
         # Apply migration
-        migration_result = migrate_data_files(
-            data_paths=config.migrate_data.data_sources,
+        migration_result = migrate_data_graphs(
+            data_graphs,
             uri_map=uri_map if uri_map else None,
             rules=config.migrate_data.rules if config.migrate_data.rules else None,
             output_path=config.migrate_data.output_path if not dry_run else None,
@@ -3353,11 +3476,16 @@ def merge(
                     fg="green",
                 )
         else:
+            # A migration that did not happen is a 2, never the merge's 0 or 1 (#286, #437)
             click.secho(
                 f"\u2717 Data migration failed: {migration_result.error}",
                 fg="red",
                 err=True,
             )
+            raise SystemExit(2)
+
+    if dry_run:
+        _echo_merge_dry_run(config, report, result)
 
     # Exit code based on unresolved conflicts
     if result.unresolved_conflicts:

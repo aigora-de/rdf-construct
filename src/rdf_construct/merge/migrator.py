@@ -7,7 +7,7 @@ This module handles migrating instance data when ontologies change:
 The migrator is reusable by merge, split, and refactor commands.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -302,8 +302,48 @@ def migrate_data_files(
 ) -> MigrationResult:
     """Convenience function to migrate multiple data files.
 
+    Reads every file first, then migrates them with ``migrate_data_graphs``. A caller that must
+    refuse a bad file before writing anything else (the ``merge`` command, #437) reads the files
+    itself and calls ``migrate_data_graphs`` directly.
+
     Args:
         data_paths: Paths to data files to migrate
+        uri_map: URI substitution map
+        rules: Migration rules to apply
+        output_path: Path to write combined migrated output
+
+    Returns:
+        MigrationResult with combined statistics, or with ``success`` False and ``error`` set
+        when a file is missing or cannot be parsed, in which case nothing is written
+    """
+    graphs: list[tuple[Path, Graph]] = []
+    for data_path in data_paths:
+        if not data_path.exists():
+            return MigrationResult(success=False, error=f"Data file not found: {data_path}")
+
+        # Load the data file
+        data = Graph(bind_namespaces="core")
+        try:
+            data.parse(data_path.as_posix())
+        except Exception as e:
+            return MigrationResult(success=False, error=f"Failed to parse {data_path}: {e}")
+        graphs.append((data_path, data))
+
+    return migrate_data_graphs(graphs, uri_map=uri_map, rules=rules, output_path=output_path)
+
+
+def migrate_data_graphs(
+    graphs: Sequence[tuple[Path, Graph]],
+    uri_map: dict[URIRef, URIRef] | None = None,
+    rules: list[MigrationRule] | None = None,
+    output_path: Path | None = None,
+) -> MigrationResult:
+    """Migrate data graphs that have already been read, and combine them into one.
+
+    Args:
+        graphs: Each data file's path, which names it in the prefix notes, with its parsed
+            graph. Parse with ``Graph(bind_namespaces="core")``, so a file's own ``org:`` is
+            not pushed aside to ``org1:`` by rdflib's table (#358).
         uri_map: URI substitution map
         rules: Migration rules to apply
         output_path: Path to write combined migrated output
@@ -317,21 +357,7 @@ def migrate_data_files(
     bindings: list[tuple[str, list[tuple[str, str]]]] = []
     combined_stats = MigrationStats()
 
-    for data_path in data_paths:
-        if not data_path.exists():
-            combined_result.success = False
-            combined_result.error = f"Data file not found: {data_path}"
-            return combined_result
-
-        # Load the data file
-        data = Graph(bind_namespaces="core")
-        try:
-            data.parse(data_path.as_posix())
-        except Exception as e:
-            combined_result.success = False
-            combined_result.error = f"Failed to parse {data_path}: {e}"
-            return combined_result
-
+    for data_path, data in graphs:
         # Migrate this file
         result = migrator.migrate(data, uri_map=uri_map, rules=rules)
 
