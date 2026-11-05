@@ -1,0 +1,2 @@
+<http://e.example/p1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://xmlns.com/foaf/0.1/Person> .
+<http://e.example/p1> <http://www.w3.org/2004/02/skos/core#prefLabel> "P" .

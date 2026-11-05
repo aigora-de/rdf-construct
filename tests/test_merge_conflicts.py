@@ -286,8 +286,11 @@ class TestTheOverride:
     @pytest.mark.parametrize(
         ("conflicts", "message"),
         [
-            ({"ignore_predicates": ["rdfs:label"]}, "'rdfs:label' is not an IRI"),
-            ({"predicate_tiers": {"load_bearing": ["rdfs:label"]}}, "'rdfs:label' is not an IRI"),
+            ({"ignore_predicates": ["skos:prefLabel"]}, "'skos:prefLabel' is not an IRI"),
+            (
+                {"predicate_tiers": {"load_bearing": ["skos:prefLabel"]}},
+                "'skos:prefLabel' is not an IRI",
+            ),
             ({"predicate_tiers": {"single": [DCTERMS_TITLE]}}, "unknown tier 'single'"),
             (
                 {

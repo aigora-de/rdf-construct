@@ -31,6 +31,7 @@ from rdf_construct.merge.conflicts import (
     generate_conflict_marker,
     generate_conflict_end_marker,
 )
+from rdf_construct.merge.prefixes import bind_exactly, combine_prefixes
 
 
 @dataclass
@@ -46,6 +47,7 @@ class MergeResult:
         total_triples: Total triples in merged output
         success: Whether merge completed without errors
         error: Error message if success is False
+        prefix_notes: One line per source prefix not written as declared (#357)
     """
 
     merged_graph: Graph | None = None
@@ -56,6 +58,7 @@ class MergeResult:
     total_triples: int = 0
     success: bool = True
     error: str | None = None
+    prefix_notes: list[str] = field(default_factory=list)
 
     @property
     def has_conflicts(self) -> bool:
@@ -145,7 +148,8 @@ class OntologyMerger:
         if not src_config.path.exists():
             raise FileNotFoundError(f"Source file not found: {src_config.path}")
 
-        graph = Graph()
+        # "core", not rdflib's table, so a source's own org: is not pushed aside to org1: (#357)
+        graph = Graph(bind_namespaces="core")
 
         # Determine format from extension
         ext = src_config.path.suffix.lower()
@@ -194,7 +198,7 @@ class OntologyMerger:
         if not remappings:
             return graph
 
-        new_graph = Graph()
+        new_graph = Graph(bind_namespaces="core")
 
         # Copy namespace bindings, moving each one the same way as the IRIs in it
         for prefix, ns in graph.namespace_manager.namespaces():
@@ -259,19 +263,15 @@ class OntologyMerger:
         Returns:
             Merged RDF graph
         """
-        merged = Graph()
+        merged = Graph(bind_namespaces="core")
 
-        # Collect and merge namespace bindings
-        for source in sources:
-            for prefix, ns in source.graph.namespace_manager.namespaces():
-                try:
-                    merged.bind(prefix, ns, override=False)
-                except Exception:
-                    pass  # Skip conflicting bindings
-
-        # Apply preferred prefixes from config
-        for prefix, ns in self.config.namespaces.preferred_prefixes.items():
-            merged.bind(prefix, Namespace(ns), override=True)
+        # One prefix per namespace and one namespace per prefix, decided across every source
+        # with preferred_prefixes first; each source prefix not written as declared is noted (#357)
+        prefixes, result.prefix_notes = combine_prefixes(
+            [(Path(source.path).name, source.graph.namespaces()) for source in sources],
+            self.config.namespaces.preferred_prefixes,
+        )
+        bind_exactly(merged, prefixes)
 
         # Add all triples from all sources
         for source in sources:

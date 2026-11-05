@@ -7,6 +7,7 @@ This module handles migrating instance data when ontologies change:
 The migrator is reusable by merge, split, and refactor commands.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ from rdflib.namespace import RDF
 
 from rdf_construct.core.utils import rebase_by_rules
 from rdf_construct.merge.config import MigrationRule, DataMigrationConfig
+from rdf_construct.merge.prefixes import bind_exactly, combine_prefixes
 from rdf_construct.merge.rules import RuleEngine
 
 
@@ -63,6 +65,7 @@ class MigrationResult:
         error: Error message if success is False
         source_triples: Original triple count
         result_triples: Final triple count
+        prefix_notes: One line per data-file prefix not written as declared (#358)
     """
 
     migrated_graph: Graph | None = None
@@ -71,6 +74,7 @@ class MigrationResult:
     error: str | None = None
     source_triples: int = 0
     result_triples: int = 0
+    prefix_notes: list[str] = field(default_factory=list)
 
 
 class DataMigrator:
@@ -104,13 +108,19 @@ class DataMigrator:
         data: Graph,
         uri_map: dict[URIRef, URIRef] | None = None,
         rules: list[MigrationRule] | None = None,
+        namespace_rules: Mapping[str, str] | None = None,
     ) -> MigrationResult:
         """Migrate a data graph.
+
+        The migrated graph carries the data's own prefix bindings and no others, so a caller that
+        combines several can tell a declaration from rdflib's table (#358).
 
         Args:
             data: Source data graph to migrate
             uri_map: Simple URI substitution map (old -> new)
             rules: Complex migration rules to apply
+            namespace_rules: Old namespace -> new namespace; a prefix binding moves with its
+                namespace, as `refactor rename` moves the ontology's (#358)
 
         Returns:
             MigrationResult with migrated graph and statistics
@@ -118,12 +128,14 @@ class DataMigrator:
         result = MigrationResult()
         result.source_triples = len(data)
 
-        # Create a new graph for the migrated data
-        migrated = Graph()
+        # Create a new graph for the migrated data. "core", so the data's own org: is not
+        # pushed aside to org1: by rdflib's table (#358)
+        migrated = Graph(bind_namespaces="core")
 
-        # Copy namespace bindings
+        # Copy namespace bindings, moving each one with its namespace
         for prefix, ns in data.namespace_manager.namespaces():
-            migrated.bind(prefix, ns)
+            moved = rebase_by_rules(str(ns), namespace_rules) if namespace_rules else None
+            migrated.bind(prefix, ns if moved is None else moved)
 
         # Phase 1: Apply simple URI substitutions
         if uri_map:
@@ -230,7 +242,7 @@ class DataMigrator:
         Returns:
             New graph with substitutions applied
         """
-        new_graph = Graph()
+        new_graph = Graph(bind_namespaces="core")
 
         # Copy namespace bindings, updating if needed
         for prefix, ns in graph.namespace_manager.namespaces():
@@ -301,7 +313,8 @@ def migrate_data_files(
     """
     migrator = DataMigrator()
     combined_result = MigrationResult()
-    combined_graph = Graph()
+    combined_graph = Graph(bind_namespaces="core")
+    bindings: list[tuple[str, list[tuple[str, str]]]] = []
     combined_stats = MigrationStats()
 
     for data_path in data_paths:
@@ -311,7 +324,7 @@ def migrate_data_files(
             return combined_result
 
         # Load the data file
-        data = Graph()
+        data = Graph(bind_namespaces="core")
         try:
             data.parse(data_path.as_posix())
         except Exception as e:
@@ -331,12 +344,9 @@ def migrate_data_files(
             for triple in result.migrated_graph:
                 combined_graph.add(triple)
 
-            # Copy namespace bindings
-            for prefix, ns in result.migrated_graph.namespace_manager.namespaces():
-                try:
-                    combined_graph.bind(prefix, ns, override=False)
-                except Exception:
-                    pass
+            bindings.append(
+                (data_path.name, [(p, str(ns)) for p, ns in result.migrated_graph.namespaces()])
+            )
 
         # Combine stats
         combined_stats.subjects_updated += result.stats.subjects_updated
@@ -348,6 +358,11 @@ def migrate_data_files(
             combined_stats.rules_applied[rule_name] = (
                 combined_stats.rules_applied.get(rule_name, 0) + count
             )
+
+    # One prefix per namespace across every data file, decided as merge decides it (#358)
+    # preferred_prefixes applies to the ontology only, so the notes offer no advice
+    prefixes, combined_result.prefix_notes = combine_prefixes(bindings, advice="")
+    bind_exactly(combined_graph, prefixes)
 
     combined_result.migrated_graph = combined_graph
     combined_result.stats = combined_stats

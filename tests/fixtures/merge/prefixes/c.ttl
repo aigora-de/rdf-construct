@@ -1,0 +1,4 @@
+@prefix y: <http://example.org/organisation#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+y:Unit a owl:Class .

@@ -1,0 +1,4 @@
+@prefix ex1: <http://a.example/ex#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+ex1:H a owl:Class .

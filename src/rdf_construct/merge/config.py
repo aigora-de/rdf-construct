@@ -17,6 +17,7 @@ from rdflib import URIRef
 
 from rdf_construct.core.predicate_tiers import PredicateTier, build_tiers
 from rdf_construct.core.utils import CurieError, resolve_curie
+from rdf_construct.merge.prefixes import core_bindings
 
 
 class ConflictStrategy(Enum):
@@ -268,7 +269,10 @@ class MergeConfig:
         # Parse conflicts
         conf_data = data.get("conflicts", {})
         strategy_str = conf_data.get("strategy", "priority").upper()
-        ignore_predicates, predicate_tiers = _parse_predicate_tiers(conf_data)
+        # A CURIE in the conflicts section means what the output's prefixes say: rdf, rdfs, owl,
+        # xsd and xml, and the config's own preferred_prefixes (#357)
+        prefixes = {**dict(core_bindings()), **(namespaces.preferred_prefixes or {})}
+        ignore_predicates, predicate_tiers = _parse_predicate_tiers(conf_data, prefixes)
         conflicts = ConflictConfig(
             strategy=ConflictStrategy[strategy_str],
             report_path=Path(conf_data["report"]) if conf_data.get("report") else None,
@@ -303,24 +307,27 @@ class MergeConfig:
         )
 
 
-def _predicate_iri(text: Any, key: str) -> str:
+def _predicate_iri(text: Any, key: str, prefixes: dict[str, str]) -> str:
     """Resolve one predicate in the conflicts config to an IRI.
 
-    Only IRIs are accepted for now: `merge` does not yet parse its sources with the project's
-    binding rule (#357), so there is no prefix table a CURIE could honestly be resolved against.
+    A CURIE resolves against rdf, rdfs, owl, xsd and xml and the config's own
+    ``namespaces.preferred_prefixes``: the prefixes the merged output is written with whatever
+    the sources declare (#357). The sources' prefixes are not used, because two sources may give
+    one prefix two meanings.
     """
     try:
-        return str(resolve_curie({}, str(text)))
+        return str(resolve_curie(prefixes, str(text)))
     except CurieError as e:
         raise ValueError(
-            f"conflicts.{key}: {text!r} is not an IRI. Give the full IRI, as "
-            f"'http://www.w3.org/2000/01/rdf-schema#label' or "
-            f"'<http://www.w3.org/2000/01/rdf-schema#label>'; prefixed names are not "
-            f"resolved here yet"
+            f"conflicts.{key}: {text!r} is not an IRI, and its prefix is not bound here. Bind "
+            f"the prefix under namespaces.preferred_prefixes, or give the full IRI, as "
+            f"'http://www.w3.org/2004/02/skos/core#prefLabel'"
         ) from e
 
 
-def _parse_predicate_tiers(conf_data: dict[str, Any]) -> tuple[set[str], dict[str, list[str]]]:
+def _parse_predicate_tiers(
+    conf_data: dict[str, Any], prefixes: dict[str, str]
+) -> tuple[set[str], dict[str, list[str]]]:
     """Read and check `ignore_predicates` and `predicate_tiers` from the conflicts section.
 
     Raises:
@@ -328,7 +335,8 @@ def _parse_predicate_tiers(conf_data: dict[str, Any]) -> tuple[set[str], dict[st
             placed in two tiers.
     """
     ignore = {
-        _predicate_iri(p, "ignore_predicates") for p in conf_data.get("ignore_predicates") or []
+        _predicate_iri(p, "ignore_predicates", prefixes)
+        for p in conf_data.get("ignore_predicates") or []
     }
 
     raw = conf_data.get("predicate_tiers") or {}
@@ -343,7 +351,7 @@ def _parse_predicate_tiers(conf_data: dict[str, Any]) -> tuple[set[str], dict[st
             )
         if not isinstance(predicates, list):
             raise ValueError(f"conflicts.predicate_tiers.{name} must be a list of predicates")
-        tiers[name] = [_predicate_iri(p, f"predicate_tiers.{name}") for p in predicates]
+        tiers[name] = [_predicate_iri(p, f"predicate_tiers.{name}", prefixes) for p in predicates]
 
     overrides: dict[PredicateTier, list[URIRef]] = {
         PredicateTier.REPEATABLE: [URIRef(p) for p in sorted(ignore)]

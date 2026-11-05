@@ -1,0 +1,4 @@
+@prefix : <http://d.example/2024#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+:D a owl:Class .

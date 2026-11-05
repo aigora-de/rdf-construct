@@ -646,10 +646,11 @@ change, and what to do about it, is listed command by command in the
   second `skos:prefLabel` in one tag is reported as malformed (SKOS S14), a
   second `rdfs:label` as ambiguous. Sources tied at the highest priority are
   not picked between: the conflict is marked and the run exits 1.
-- **`merge` refuses a predicate in `ignore_predicates` that is not an IRI**
-  (#193). `ignore_predicates: ["rdfs:label"]` silently matched nothing; a
-  prefixed name is now refused with exit 2 until `merge` resolves prefixes by
-  the project's binding rule (#357).
+- **`merge` refuses a predicate in `ignore_predicates` that it cannot resolve**
+  (#193). `ignore_predicates: ["rdfs:label"]` silently matched nothing. A CURIE
+  now resolves against `rdf`, `rdfs`, `owl`, `xsd`, `xml` and the config's own
+  `namespaces.preferred_prefixes` (#357), and any other prefixed name is refused
+  with exit 2.
 - **`merge` writes a blank-node structure its sources share once** (#170).
   Every restriction, `owl:unionOf` list or `owl:AllDisjointClasses` that two
   sources both stated was written twice, because each parse gives blank nodes
@@ -832,6 +833,20 @@ change, and what to do about it, is listed command by command in the
   A blank-node range or qualification (a union, an inline datatype) was copied
   into a constraint that takes only IRIs, and pySHACL failed every value against
   it. The constraint is now dropped, as the guide says.
+- **`merge` keeps each source's own prefixes, and says when sources disagree**
+  (#357). Sources and the merged graph were bare `Graph()`s, whose default
+  bindings pushed a source's `org:`, `dc:`, `foaf:` and the like to `org1:`.
+  When two sources declare one prefix for different namespaces, the first on
+  the command line keeps it. The other is written as `ex1:`, or, for the empty
+  prefix, named after its namespace (`…/ont#` → `ont:`) instead of `default1:`.
+  Each declaration not written as declared is named in a `Note:` on stderr.
+  `namespaces.preferred_prefixes` now claims its prefix even when a source holds
+  it, where it was renamed `ex1:` in silence. A namespace no source names takes
+  rdflib's prefix for it only when no source uses that prefix.
+- **Data migration keeps the data file's own prefixes** (#358), in `merge
+  --migrate-data` and `refactor rename --migrate-data` (`org:`, not `org1:`).
+  Data files `merge` combines follow #357's rule, and after a namespace rename
+  the data's prefix moves to the new namespace instead of leaving it as `ns1:`.
 - **`sort: topological` no longer turns alphabetical on inferred graphs** (#339).
   RDFS entailment materialises `C rdfs:subClassOf C` for every class (`rdfs10`)
   and `P rdfs:subPropertyOf P` for every property (`rdfs6`). Each self-loop was
