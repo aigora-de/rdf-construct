@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `merge` refuses migration sources without an output, or a data output without
+  migration sources, before writing any files (#497). Supply `--data-output` /
+  `migrate_data.output` and `--migrate-data` / `migrate_data.sources` together.
+
 **If you gate CI on `lint`'s exit code, it has changed.** Error findings now exit
 1, not 2, and a run with only warnings exits 0. Pass `--fail-on warning` to keep
 failing on warnings. Every command now uses one convention: 0 success, 1
