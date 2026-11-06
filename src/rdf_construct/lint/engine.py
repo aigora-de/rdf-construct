@@ -191,6 +191,7 @@ class LintResult:
         error_count: Number of error-level issues.
         warning_count: Number of warning-level issues.
         info_count: Number of info-level issues.
+        parse_failed: Whether the source could not be parsed, independently of findings.
     """
 
     file_path: Path
@@ -199,6 +200,7 @@ class LintResult:
     error_count: int = 0
     warning_count: int = 0
     info_count: int = 0
+    parse_failed: bool = False
 
     def add_issue(self, issue: LintIssue) -> None:
         """Add an issue and update counts."""
@@ -283,11 +285,11 @@ class LintEngine:
             file_path: Path to the RDF file.
 
         Returns:
-            LintResult containing all issues found.
+            LintResult containing all issues found. A parse failure sets ``parse_failed``
+            and retains a ``parse-error`` issue rather than running rules on the source.
 
         Raises:
-            FileNotFoundError: If file doesn't exist.
-            ValueError: If file can't be parsed, or the rule selection is refused.
+            ValueError: If the rule selection is refused.
         """
         # Resolve rules before reading the file, so a refused selection never
         # depends on whether the file parses
@@ -317,6 +319,7 @@ class LintEngine:
             result.graph = graph  # Store for namespace resolution
         except Exception as e:
             # Return result with parse error
+            result.parse_failed = True
             result.add_issue(
                 LintIssue(
                     rule_id="parse-error",
