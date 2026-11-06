@@ -15,7 +15,7 @@ import yaml
 from click.testing import CliRunner, Result
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.compare import isomorphic
-from rdflib.namespace import RDFS, SKOS, XSD
+from rdflib.namespace import OWL, RDF, RDFS, SKOS, XSD
 
 from rdf_construct.cli import cli
 from rdf_construct.core.predicate_tiers import (
@@ -109,12 +109,27 @@ class TestDetectionComparesSources:
         assert _detected(result) == 0
         assert isomorphic(merged, Graph().parse(a) + Graph().parse(b))
 
-    def test_the_ontology_header_is_left_for_171(self, tmp_path):
+    def test_the_ontology_header_is_a_subject_like_any_other(self, tmp_path):
+        # Two parts of one identity keep their shared header, and its labels go through the
+        # tiers like any subject's (#171): two English labels conflict, and B's wins
         a, b = _f("header_a.ttl"), _f("header_b.ttl")
-        result, merged, _ = _merge(tmp_path, a, b)
+        result, merged, _ = _merge(tmp_path, a, b, "-p", "1", "-p", "2")
         assert result.exit_code == 0, result.output
-        assert _detected(result) == 0
-        assert isomorphic(merged, Graph().parse(a) + Graph().parse(b))
+        assert _detected(result) == 1
+        ontology = URIRef("http://example.org/ontology")
+        assert (ontology, RDF.type, OWL.Ontology) in merged
+        assert set(merged.objects(ontology, RDFS.label)) == {Literal("Ontology B", lang="en")}
+
+    def test_mark_all_marks_the_ontology_header_label(self, tmp_path):
+        a, b = _f("header_a.ttl"), _f("header_b.ttl")
+        result, merged, text = _merge(tmp_path, a, b, "--strategy", "mark_all")
+        assert result.exit_code == 1, result.output
+        assert "=== CONFLICT ===" in text
+        ontology = URIRef("http://example.org/ontology")
+        assert set(merged.objects(ontology, RDFS.label)) == {
+            Literal("Ontology A", lang="en"),
+            Literal("Ontology B", lang="en"),
+        }
 
 
 class TestTheMiddleTier:

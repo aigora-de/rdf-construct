@@ -120,6 +120,8 @@ from rdf_construct.merge import (
     DataMigrationConfig,
     OntologyMerger,
     MergeResult,
+    MergeIdentity,
+    NamespaceConfig,
     load_merge_config,
     create_default_config,
     get_formatter,
@@ -359,6 +361,26 @@ def check_default_output_dir(
     )
 
 
+INVOCATION = "rdf_construct.invocation"
+"""``ctx.meta`` key for the arguments the program was run with, as given (#171)."""
+
+
+def rerun_command(*extra: str) -> str:
+    """The command the user ran, shell-quoted, with ``extra`` appended.
+
+    Read from the root context, so it is the same under a shell and under ``CliRunner``; a
+    command invoked without the root group falls back to ``sys.argv``.
+
+    Args:
+        *extra: Arguments to append.
+
+    Returns:
+        A command line that can be pasted into a shell.
+    """
+    given = click.get_current_context().meta.get(INVOCATION) or sys.argv[1:]
+    return shlex.join(["rdf-construct", *given, *extra])
+
+
 class CrashHandlingGroup(click.Group):
     """The top-level group: an exception no command handled exits 2, with its traceback (#320).
 
@@ -420,6 +442,29 @@ class CrashHandlingGroup(click.Group):
             )
             traceback.print_exception(exc, file=sys.stderr)
             raise SystemExit(2) from exc
+
+    def make_context(
+        self,
+        info_name: str | None,
+        args: list[str],
+        parent: click.Context | None = None,
+        **extra: Any,
+    ) -> click.Context:
+        """Make the root context, keeping the arguments as given for a command to quote back.
+
+        Args:
+            info_name: The program name.
+            args: The arguments to parse.
+            parent: The parent context, if any.
+            **extra: Passed through to ``click.Group.make_context``.
+
+        Returns:
+            The context, with the arguments under ``ctx.meta[INVOCATION]``.
+        """
+        given = list(args)
+        ctx = super().make_context(info_name, args, parent=parent, **extra)
+        ctx.meta[INVOCATION] = given
+        return ctx
 
 
 @click.group(cls=CrashHandlingGroup)
@@ -3068,6 +3113,65 @@ def describe(
         sys.exit(2)
 
 
+def _report_merge_identity(
+    identity: MergeIdentity, config_file: Path | None, use_colour: bool
+) -> None:
+    """Say what the merge did to ontology headers (#171): the summary, notes and warning.
+
+    Args:
+        identity: What the merge did.
+        config_file: The config the run used, if any, to point at ``namespaces.base``.
+        use_colour: Whether to colour the warning.
+    """
+    from rdf_construct.merge.identity import describe as describe_header
+
+    if identity.kept:
+        kept = f"<{identity.ontology}>" if identity.ontology is not None else "a blank-node header"
+        click.echo(f"Ontology: {kept} (kept: every source declares this one)")
+    elif identity.ontology is not None:
+        given_as = "--ontology-iri" if flag_given("ontology_iri") else "namespaces.base"
+        click.echo(f"Ontology: <{identity.ontology}> (from: {given_as})")
+    elif identity.demoted:
+        click.echo("Ontology: none")
+    for header, name in identity.demoted:
+        click.echo(f"  Demoted: {describe_header(header, name)}")
+    for name, targets in identity.stamped:
+        click.echo(f"  Derived from: {', '.join(f'<{t}>' for t in targets)} ({name})")
+    for reason in identity.unstamped:
+        click.echo(f"  Not recorded as derived from: {reason}")
+    if identity.moved_imports:
+        click.echo(f"  Imports kept on the merged header: {len(identity.moved_imports)}")
+    if identity.self_imports:
+        click.echo(
+            f"  Imports dropped, as the merge contains them: "
+            f"{', '.join(f'<{t}>' for t in identity.self_imports)}"
+        )
+    for note in identity.notes:
+        click.echo(note, err=True)
+    if not identity.unnamed:
+        return
+    colour = "yellow" if use_colour else None
+    click.secho(
+        f"\u26a0 No ontology header written: {len(identity.demoted)} source header(s) demoted, "
+        "and nothing names the merged ontology.",
+        fg=colour,
+        err=True,
+    )
+    if identity.dropped_imports:
+        shown = identity.dropped_imports[:5]
+        more = len(identity.dropped_imports) - len(shown)
+        listed = ", ".join(f"<{t}>" for t in shown) + (f" and {more} more" if more else "")
+        click.secho(f"  Their imports are not written: {listed}", fg=colour, err=True)
+    click.secho(
+        "  To name it, run this again with IRI replaced by the merged ontology's IRI:",
+        fg=colour,
+        err=True,
+    )
+    click.echo(f"    {rerun_command('--ontology-iri', 'IRI')}", err=True)
+    if config_file is not None:
+        click.secho(f"  or set namespaces.base: IRI in {config_file}", fg=colour, err=True)
+
+
 def _replace_config_sources(config: MergeConfig, sources: Sequence[Path]) -> None:
     """Replace a merge config's sources with the ones given on the command line (#496).
 
@@ -3248,6 +3352,13 @@ def _echo_merge_dry_run(config: MergeConfig, report: Path | None, result: MergeR
     help="Disable coloured output",
 )
 @click.option(
+    "--ontology-iri",
+    help=(
+        "IRI of the merged ontology: its one owl:Ontology header (overrides the config's "
+        "namespaces.base). Without one, a merge of headed sources writes no header"
+    ),
+)
+@click.option(
     "--init",
     "init_config",
     is_flag=True,
@@ -3267,6 +3378,7 @@ def merge(
     data_output: Path | None,
     dry_run: bool,
     no_colour: bool,
+    ontology_iri: str | None,
     init_config: bool,
 ):
     """Merge multiple RDF ontology files.
@@ -3292,9 +3404,22 @@ def merge(
     and SOURCES replace its sources:.
 
     \b
+    The output has at most one owl:Ontology header (#171). --ontology-iri,
+    or namespaces.base in a config, names it, and each source is recorded
+    with prov:wasDerivedFrom. Without either, sources that share one header
+    keep it; otherwise the output has no header and the run warns, showing
+    the command that names it. Unless kept, each source header is demoted: it
+    loses owl:Ontology, owl:versionIRI, owl:imports, owl:priorVersion,
+    owl:backwardCompatibleWith and owl:incompatibleWith, and keeps the rest.
+
+    \b
     Examples:
       # Basic merge of two files
       rdf-construct merge core.ttl ext.ttl -o merged.ttl
+
+      # Name the merged ontology
+      rdf-construct merge core.ttl ext.ttl -o merged.ttl \\
+          --ontology-iri http://example.org/merged
 
       # With priorities (higher wins conflicts)
       rdf-construct merge core.ttl ext.ttl -o merged.ttl -p 1 -p 2
@@ -3362,6 +3487,8 @@ def merge(
             config.migrate_data.data_sources = list(migrate_data)
         if flag_given("data_output") and config.migrate_data is not None:
             config.migrate_data.output_path = data_output
+        if flag_given("ontology_iri"):
+            config.namespaces.base = ontology_iri
         _apply_priorities(config.sources, priority)
     else:
         # Build config from CLI arguments: each source's priority is its position, unless -p
@@ -3383,6 +3510,7 @@ def merge(
         config = MergeConfig(
             sources=source_configs,
             output=OutputConfig(path=output),
+            namespaces=NamespaceConfig(base=ontology_iri),
             conflicts=ConflictConfig(
                 strategy=conflict_strategy,
                 report_path=report,
@@ -3391,6 +3519,16 @@ def merge(
             migrate_data=data_migration,
             dry_run=dry_run,
         )
+
+    # The merged ontology's IRI must be one, before anything is read or written (#171)
+    if config.namespaces.base is not None:
+        from rdf_construct.merge.identity import check_ontology_iri
+
+        given_as = "--ontology-iri" if flag_given("ontology_iri") else "namespaces.base"
+        try:
+            check_ontology_iri(config.namespaces.base)
+        except ValueError as e:
+            raise Refusal(f"{given_as} is not an ontology IRI: {e}") from e
 
     # Every output is known now, before anything is read or written (#412)
     planned: list[tuple[str, Path]] = []
@@ -3446,6 +3584,8 @@ def merge(
     click.echo(text_formatter.format_merge_result(result, result.merged_graph))
     for note in result.prefix_notes:
         click.echo(note, err=True)
+    if result.identity is not None:
+        _report_merge_identity(result.identity, config_file, use_colour)
 
     # Write output (unless dry run)
     if not dry_run and result.merged_graph and config.output:

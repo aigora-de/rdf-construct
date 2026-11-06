@@ -251,9 +251,11 @@ class TestConflictDetector:
         detector = ConflictDetector()
         conflicts = detector.detect_conflicts(sources)
 
-        # The two ex:Ontology labels differ, but the header is #171's to merge, so it is left
-        # out; nothing else overlaps (#193)
-        assert conflicts == []
+        # Both sources declare ex:Ontology, with different English labels: a header's annotations
+        # go through the tiers like any subject's (#171), and nothing else overlaps (#193)
+        assert [(str(c.subject), str(c.predicate)) for c in conflicts] == [
+            ("http://example.org/Ontology", str(RDFS.label))
+        ]
 
     def test_detect_label_conflict(self, core_ontology, conflicting_ontology):
         """Test detection of conflicting labels."""

@@ -77,7 +77,8 @@ class NamespaceConfig:
     """Configuration for namespace handling.
 
     Attributes:
-        base: Base namespace for the merged output.
+        base: The merged ontology's IRI, used as given (#171). Without it, a merge of
+            headed sources writes no ontology header.
         remappings: Global namespace remapping rules.
         preferred_prefixes: Preferred prefix bindings for output.
     """
@@ -400,7 +401,9 @@ output:
 
 # Namespace handling
 namespaces:
-  # base: "http://example.org/merged#"
+  # The merged ontology's IRI; without it, a merge of headed sources writes no
+  # ontology header (#171). --ontology-iri overrides it.
+  # base: "http://example.org/merged"
   remappings: {}
   preferred_prefixes: {}
 

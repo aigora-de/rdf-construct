@@ -23,8 +23,9 @@ A graph that leaves that declaration to an ``owl:imports`` is beyond what this m
 composes the three for every header in an extract. ``split`` (#178) names each module by its own
 ladder and calls :func:`stamp_derivation` on the module's IRI with the source's
 :func:`derivation_targets`. ``merge`` (#171) names the merged ontology itself, demotes each source
-header — :func:`strip_version_iri` plus removing that subject's ``a owl:Ontology``, and nothing
-else, since an IRI may be punned — and calls :func:`stamp_derivation` with one target per source.
+header — :func:`strip_version_iri` plus removing that subject's ``a owl:Ontology`` and the
+predicates only an ontology takes, and nothing else, since an IRI may be punned — and calls
+:func:`stamp_derivation` with one target per source.
 The ladders and the demotion are those commands' own; nothing here mints an IRI.
 
 **It reports and never decides.** Nothing here prints, and whether a run is derived at all is the
