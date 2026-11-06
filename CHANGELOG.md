@@ -184,9 +184,11 @@ change, and what to do about it, is listed command by command in the
   `is_foreign(iri)` is true for a borrowed vocabulary's term (one in a namespace
   none of the file's ontologies owns: another host, or, on `purl.org`,
   `w3id.org` and `www.w3.org`, outside the ontology's own IRI) or one in an
-  external namespace. It is `split`'s rule from #383, moved here; `lint`,
-  `docs` and `stats` use it. `ontology_references(graph)` names the IRIs that
-  point at ontologies rather than terms.
+  external namespace. It is `split`'s rule from #383, moved here, except that a
+  namespace the file describes (more than `rdf:type` about two or more of its
+  terms) is its own whatever the host; `lint`, `docs` and `stats` use it.
+  `ontology_references(graph)` names the IRIs that point at documents rather
+  than terms.
 - **`external_namespaces:` in `.rdf-lint.yml`** (#69): namespaces, as IRIs or
   CURIEs, whose terms are not the ontology's own.
 - **`docs` shows "Derived from"** (#371): the header's `prov:wasDerivedFrom`
@@ -549,8 +551,8 @@ change, and what to do about it, is listed command by command in the
   (#69). A namespace is checked only when the file defines two or more entities
   in it, or the reference lies within the file's own ontology IRI, and a
   borrowed vocabulary is never checked. The objects of `owl:imports`,
-  `owl:versionIRI` and the other ontology-naming predicates, and of a header's
-  `prov:wasDerivedFrom`, are no longer reported (#209). `LINT_GUIDE.md` no
+  `owl:versionIRI` and the other ontology-naming predicates, and every object
+  of an ontology header's own triples, are no longer reported (#209). `LINT_GUIDE.md` no
   longer tells you to name the imported file on the command line, which did
   nothing.
 - **`missing-label` and `missing-comment` no longer fire on a borrowed

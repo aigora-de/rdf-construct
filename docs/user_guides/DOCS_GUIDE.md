@@ -480,7 +480,9 @@ documents the ontology's own terms only.
 ontology (`<…> a owl:Ontology`) and none of its ontologies owns the term's
 namespace. An ontology owns everything on its own host; on `purl.org`,
 `w3id.org` and `www.w3.org`, which many publishers share, it owns only the
-space under its own IRI. This is the same answer `lint` and `stats` use
+space under its own IRI. A namespace the file *describes* (saying more than
+`rdf:type` about two or more of its terms) is its own whatever the host.
+This is the same answer `lint` and `stats` use
 (see [Whose terms are checked](LINT_GUIDE.md#whose-terms-are-checked)).
 
 Such a term gets no page, no entry in the index or the search, and no

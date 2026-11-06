@@ -49,9 +49,12 @@ class or property the file declares but does not own, such as
 `dcterms:creator a owl:AnnotationProperty` or the `prov:wasDerivedFrom` that
 `order`, `split` and `merge` stamp a derived file with, is not counted, and
 is not counted as an individual either. A term is not the ontology's own
-when the file names an ontology and none of its ontologies owns the term's
-namespace: the same answer `lint` and `docs` use (see
-[Whose terms are checked](LINT_GUIDE.md#whose-terms-are-checked)).
+when the file names an ontology, none of its ontologies owns the term's
+namespace, and the file describes fewer than two terms there beyond their
+type: the same answer `lint` and `docs` use (see
+[Whose terms are checked](LINT_GUIDE.md#whose-terms-are-checked)). A class
+whose only superclass is foreign counts as a root, and as an orphan if it has
+no subclasses, as it would if the superclass were not declared at all.
 
 ### Hierarchy
 

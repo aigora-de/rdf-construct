@@ -231,7 +231,12 @@ reports on the ontology's own terms only.
   ontologies owns the term's namespace. An ontology owns everything on its own host, so
   `http://example.org/lib` owns `http://example.org/lib#Book` and `http://example.org/other#X`,
   and nothing on `http://purl.org/dc/terms/`. On `purl.org`, `w3id.org` and `www.w3.org`, which
-  many publishers share, it owns only the space under its own IRI.
+  many publishers share, it owns only the space under its own IRI. **But a namespace the file
+  describes is its own whatever the host:** where the file says something beyond `rdf:type`
+  (a label, a superclass, a domain) about two or more terms in one namespace, those terms are
+  its own. So an ontology at `<https://w3id.org/x/ontology>` keeps its terms at
+  `https://w3id.org/x/`, while `dcterms:creator a owl:AnnotationProperty`, a declaration and
+  nothing more, stays borrowed.
 - **It is in an `external_namespaces` entry.**
 
 `missing-label` and `missing-comment` skip such a term. `dangling-reference` never checks a
@@ -245,9 +250,10 @@ reference to an undefined term is reported when the term is the ontology's own a
 - the term lies within one of the file's own ontology IRIs, so a typo in a one-class ontology is
   still caught.
 
-**References to ontologies are not term references.** The objects of `owl:imports`,
-`owl:versionIRI`, `owl:priorVersion`, `owl:backwardCompatibleWith` and `owl:incompatibleWith`, and
-of `prov:wasDerivedFrom` on an ontology header, are never reported.
+**References to documents are not term references.** The objects of `owl:imports`,
+`owl:versionIRI`, `owl:priorVersion`, `owl:backwardCompatibleWith` and `owl:incompatibleWith`,
+and every object of the ontology header's own triples (its `prov:wasDerivedFrom`,
+`rdfs:seeAlso`, `dcterms:hasVersion` and the rest), are never reported.
 
 ### A worked example
 
@@ -332,6 +338,8 @@ Found 1 error, 0 warnings, 0 info in 1 file
 | Limitation | What you see | Issue |
 |---|---|---|
 | `lint` does not resolve `owl:imports`. A term an import defines is reported as dangling wherever the file claims its namespace. | On the public IES `ies-env-building.ttl`, `external_namespaces: [ies:]` clears the 46 `ies:` terms that `ies-common.ttl` 5.0.3 defines, and also the seven it does not (`ies:Flow`, `ies:Member` and five more), because they share one namespace. | [#309](https://github.com/aigora-de/rdf-construct/issues/309) |
+| An ontology whose terms are off its header's host (or, on `purl.org`, `w3id.org` and `www.w3.org`, outside its header's IRI) and which describes fewer than two of them beyond their type is treated as borrowing them: its terms get no `missing-label`, no `dangling-reference`, no `docs` page and no count. | A skeleton such as `<https://w3id.org/x/ontology> a owl:Ontology` over bare `x:A a owl:Class` declarations. Labelling two of its terms makes them its own. | — |
+| A file that describes two or more terms of another vocabulary claims that vocabulary. | A file that labels `prov:Entity` and `prov:used` owns `prov:`, so the `prov:wasDerivedFrom` stamp is asked for a label again. List the namespace in `external_namespaces`. | — |
 | A file that names no ontology borrows nothing: every term in it is its own. | `dcterms:creator a owl:AnnotationProperty` with no `owl:Ontology` header still gets `missing-label`. List the namespace in `external_namespaces`. | — |
 | Two publishers on one host are not told apart, except on `purl.org`, `w3id.org` and `www.w3.org`. | An ontology at `http://example.org/a` treats `http://example.org/b#` as its own. List it in `external_namespaces`. | — |
 

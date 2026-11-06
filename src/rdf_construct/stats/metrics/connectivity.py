@@ -50,15 +50,17 @@ def _count_property_references(graph: Graph, classes: set) -> dict:
         Dictionary mapping class -> reference count.
     """
     counts: dict = defaultdict(int)
+    # A property that is not the ontology's own is in no count (#371)
+    owned = ownership(graph)
 
     # Count domain references
     for s, p, o in graph.triples((None, RDFS.domain, None)):
-        if o in classes:
+        if o in classes and not owned.is_foreign(s):
             counts[o] += 1
 
     # Count range references
     for s, p, o in graph.triples((None, RDFS.range, None)):
-        if o in classes:
+        if o in classes and not owned.is_foreign(s):
             counts[o] += 1
 
     return dict(counts)

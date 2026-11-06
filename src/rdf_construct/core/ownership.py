@@ -13,19 +13,28 @@ it. This module is the answer all of them use, so that none ships its own.
   namespace (:func:`is_borrowed`). An ontology owns its own host; on a host many publishers share
   (:data:`SHARED_HOSTS`) it owns only the space under its own IRI. This is the rule ``split``
   decided for #383, moved here unchanged. A file that names no ontology gives nothing to judge by,
-  so it borrows nothing;
+  so it borrows nothing. **Unless the file describes the namespace's terms:** where it says
+  something beyond ``rdf:type`` about two or more typed subjects in the term's namespace
+  (:func:`term_namespace`), the namespace is its own whatever the host. A declaration alone
+  (``dcterms:creator a owl:AnnotationProperty``) describes nothing, so the stamp and a borrowed
+  vocabulary's declarations stay foreign, while an ontology whose terms live off its header's host
+  or IRI (``<https://w3id.org/x/ontology>`` with terms at ``https://w3id.org/x/``, or PROV-O's
+  ``…/prov-o#`` header over ``…/prov#``) keeps them;
 - **external**: within a namespace the caller names as external, matched at a boundary
   (:func:`~rdf_construct.core.utils.in_namespace`). ``lint`` reads these from
   ``external_namespaces:`` in ``.rdf-lint.yml``; resolving a CURIE to an IRI is the caller's job.
 
-No namespace is cut here: the rule compares hosts and matches IRIs, and never derives a namespace
-from a term (#384). ``lint``'s ``dangling-reference`` adds its own threshold, two or more
-definitions in a namespace before it checks references there (#69); that is evidence for checking
-references, not a claim about who owns the namespace, so it stays in ``lint``.
+:func:`term_namespace` is ``lint``'s namespace cut (up to the last ``#``, else the last ``/``),
+moved here so that the "describes" count and ``lint``'s ``dangling-reference`` threshold cut alike.
+It is not a new rule; unifying it with the other cuts is #384. ``dangling-reference``'s threshold
+itself, two or more definitions in a namespace before it checks references there (#69), is
+evidence for checking references, not a claim about who owns the namespace, so it stays in
+``lint``.
 
-:func:`ontology_references` names the IRIs a file uses to point at ontologies, not at terms: the
-objects of the predicates only an ontology takes, of ``owl:versionIRI``, and of the derivation
-stamp on a header.
+:func:`ontology_references` names the IRIs a file uses to point at documents, not at terms: the
+objects of the predicates only an ontology takes and of ``owl:versionIRI``, wherever they occur,
+and every object of an ontology header's own triples, which are metadata about the document
+(``rdfs:seeAlso``, ``dcterms:hasVersion``, the derivation stamp).
 
 ``describe``'s local namespaces (#295) adopt :meth:`Ownership.is_foreign` when they land. Like the
 rest of ``core/``, this module reports and never decides, and imports no Click.
@@ -40,13 +49,34 @@ from urllib.parse import urlsplit
 from rdflib import Graph, URIRef
 from rdflib.namespace import OWL, RDF
 
-from .provenance import ONTOLOGY, ONTOLOGY_ONLY, VERSION_IRI, WAS_DERIVED_FROM
+from .provenance import ONTOLOGY, ONTOLOGY_ONLY, VERSION_IRI
 from .utils import in_namespace
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from rdflib.term import Node
+
+
+def term_namespace(uri: str) -> str:
+    """Extract namespace from a URI (everything before the local name).
+
+    Up to and including the last ``#`` if there is one, else the last ``/``; an IRI with neither
+    is its own namespace. Moved unchanged from ``lint`` (``lint.rules.get_namespace``).
+
+    Args:
+        uri: The IRI.
+
+    Returns:
+        The namespace.
+    """
+    uri_str = str(uri)
+    if "#" in uri_str:
+        return uri_str.rsplit("#", 1)[0] + "#"
+    elif "/" in uri_str:
+        return uri_str.rsplit("/", 1)[0] + "/"
+    return uri_str
+
 
 ONTOLOGY_REFERENCES: tuple[URIRef, ...] = (*ONTOLOGY_ONLY, VERSION_IRI)
 """Predicates whose objects name an ontology or one of its versions, never a term."""
@@ -122,11 +152,12 @@ def is_borrowed(namespace: str, ontologies: list[URIRef]) -> bool:
 
 
 def ontology_references(graph: Graph) -> set[Node]:
-    """The objects in a graph that name an ontology or a version of one, not a term.
+    """The objects in a graph that point at documents, ontologies or versions, not at terms.
 
-    These are the objects of :data:`ONTOLOGY_REFERENCES` wherever they occur, and of
-    ``prov:wasDerivedFrom`` on an ``owl:Ontology`` subject: the derivation stamp names the
-    ontologies or versions a document was derived from (#90, #171, #178).
+    These are the objects of :data:`ONTOLOGY_REFERENCES` wherever they occur, and every object of
+    a triple whose subject is an ``owl:Ontology`` header: the header is metadata about the
+    document, so its ``prov:wasDerivedFrom`` (#90, #171, #178), ``rdfs:seeAlso`` or
+    ``dcterms:hasVersion`` names a document, not a term of this ontology.
 
     Args:
         graph: The graph.
@@ -138,7 +169,7 @@ def ontology_references(graph: Graph) -> set[Node]:
     for predicate in ONTOLOGY_REFERENCES:
         refs.update(graph.objects(None, predicate))
     for header in graph.subjects(RDF.type, ONTOLOGY):
-        refs.update(graph.objects(header, WAS_DERIVED_FROM))
+        refs.update(graph.objects(header, None))
     return refs
 
 
@@ -149,10 +180,13 @@ class Ownership:
     Attributes:
         ontologies: The file's ontology IRIs, from :func:`source_ontologies`.
         external: Namespaces the caller names as external, as IRIs.
+        described: Namespaces (:func:`term_namespace`) in which the file says something beyond
+            ``rdf:type`` about two or more typed subjects: its own, whatever the host.
     """
 
     ontologies: tuple[URIRef, ...] = ()
     external: tuple[str, ...] = ()
+    described: frozenset[str] = frozenset()
 
     def is_foreign(self, iri: Node) -> bool:
         """Whether a term belongs to someone other than this file.
@@ -161,14 +195,17 @@ class Ownership:
             iri: The term. A blank node or a literal is never foreign.
 
         Returns:
-            True if the term lies within an external namespace, or is borrowed.
+            True if the term lies within an external namespace, or is borrowed from a namespace
+            the file does not describe.
         """
         if not isinstance(iri, URIRef):
             return False
         text = str(iri)
         if any(in_namespace(text, namespace) for namespace in self.external):
             return True
-        return is_borrowed(text, list(self.ontologies))
+        if not is_borrowed(text, list(self.ontologies)):
+            return False
+        return term_namespace(text) not in self.described
 
 
 def ownership(graph: Graph, external: Iterable[str] = ()) -> Ownership:
@@ -181,7 +218,15 @@ def ownership(graph: Graph, external: Iterable[str] = ()) -> Ownership:
     Returns:
         The graph's :class:`Ownership`.
     """
+    counts: dict[str, int] = {}
+    for subject in set(graph.subjects(RDF.type, None)):
+        if isinstance(subject, URIRef) and any(
+            p != RDF.type for p in graph.predicates(subject, None)
+        ):
+            ns = term_namespace(subject)
+            counts[ns] = counts.get(ns, 0) + 1
     return Ownership(
         ontologies=tuple(source_ontologies(graph)),
         external=tuple(dict.fromkeys(str(n) for n in external)),
+        described=frozenset(ns for ns, n in counts.items() if n >= 2),
     )

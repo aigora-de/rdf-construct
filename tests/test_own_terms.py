@@ -126,8 +126,58 @@ class TestOwnership:
             "http://e.org/o/1.0",
             "http://e.org/base",
             "http://e.org/src",
+            "http://www.w3.org/2002/07/owl#Ontology",  # the header's type, a built-in
         }
         assert ownership(graph).ontologies == (URIRef("http://e.org/o"),)
+
+    def test_a_namespace_the_file_describes_is_its_own_whatever_the_host(
+        self, tmp_path: Path
+    ) -> None:
+        # Review finding 1: terms off the header's IRI on a shared host, PROV-O's own pattern
+        path = _write(
+            tmp_path,
+            "w3id.ttl",
+            """\
+@prefix ex: <https://w3id.org/myont/> .
+<https://w3id.org/myont/ontology> a owl:Ontology ; rdfs:label "My ontology" .
+ex:A a owl:Class ; rdfs:label "A" .
+ex:B a owl:Class ; rdfs:subClassOf ex:A, ex:Typo .
+""",
+        )
+        owned = ownership(Graph().parse(path))
+        assert not owned.is_foreign(URIRef("https://w3id.org/myont/A"))
+        findings = _findings(path)
+        assert "https://w3id.org/myont/Typo" in _dangling(findings)
+        assert "missing-comment" in _on(findings, "https://w3id.org/myont/A")
+        assert _stats_json(path)["basic"]["classes"] == 2
+
+    def test_declarations_alone_describe_nothing(self, tmp_path: Path) -> None:
+        path = _write(
+            tmp_path,
+            "decl.ttl",
+            """\
+<http://example.org/x> a owl:Ontology ; dcterms:creator "D" ; dcterms:title "X" .
+dcterms:creator a owl:AnnotationProperty .
+dcterms:title a owl:AnnotationProperty .
+""",
+        )
+        owned = ownership(Graph().parse(path))
+        assert owned.is_foreign(URIRef("http://purl.org/dc/terms/creator"))
+
+    def test_describing_two_terms_of_a_vocabulary_claims_it(self, tmp_path: Path) -> None:
+        # The ruled trade-off: a file that describes two PROV terms owns prov:, stamp included
+        path = _write(
+            tmp_path,
+            "prov.ttl",
+            """\
+<http://example.org/x> a owl:Ontology ; rdfs:label "X" .
+prov:Entity a owl:Class ; rdfs:label "Entity" .
+prov:used a owl:ObjectProperty ; rdfs:label "used" .
+prov:wasDerivedFrom a owl:AnnotationProperty .
+""",
+        )
+        owned = ownership(Graph().parse(path))
+        assert not owned.is_foreign(PROV.wasDerivedFrom)
 
     def test_split_still_imports_is_borrowed(self) -> None:
         from rdf_construct.core.ownership import is_borrowed as moved
@@ -213,6 +263,23 @@ class TestDanglingReference:
         # The two definitions still claim the namespace: the imported class is still reported,
         # because lint does not resolve imports (#309)
         assert dangling == {"https://example.org/SomeClass"}
+
+    def test_header_metadata_links_are_not_term_references(self, tmp_path: Path) -> None:
+        # Review finding 2: clean on the base, and must stay clean
+        path = _write(
+            tmp_path,
+            "seealso.ttl",
+            """\
+@prefix v: <http://example.org/vocab#> .
+<http://example.org/ont> a owl:Ontology ; rdfs:label "O" ;
+    rdfs:seeAlso <http://example.org/ont/spec.html> ;
+    dcterms:hasVersion <http://example.org/ont/2.0> .
+v:A a owl:Class ; rdfs:label "A" ; rdfs:comment "a" .
+v:B a owl:Class ; rdfs:label "B" ; rdfs:comment "b" ; rdfs:subClassOf v:A .
+""",
+        )
+        assert _dangling(_findings(path)) == set()
+        assert _run("lint", path).exit_code == 0
 
     def test_a_borrowed_namespace_is_never_checked(self, tmp_path: Path) -> None:
         path = _write(
@@ -363,6 +430,16 @@ ex:A a owl:Class ; rdfs:label "A" ; rdfs:comment "A." ; rdfs:subClassOf ex:Missi
         result = _run("lint", source, "-c", config)
         assert result.exit_code == 2
         assert "nope" in result.output and str(source) in result.output
+        assert "dangling-reference" not in result.output
+
+    def test_a_prefix_one_file_binds_and_another_does_not_is_refused(self, tmp_path: Path) -> None:
+        first = self._source(tmp_path)
+        second = _write(tmp_path, "other.ttl", "<http://example.org/z> a owl:Class .\n")
+        config = tmp_path / ".rdf-lint.yml"
+        config.write_text("external_namespaces:\n  - ex:\n")
+        result = _run("lint", first, second, "-c", config)
+        assert result.exit_code == 2
+        assert str(second) in result.output
         assert "dangling-reference" not in result.output
 
     @pytest.mark.parametrize(
@@ -524,8 +601,9 @@ class TestDocs:
     SOURCE = """\
 @prefix ex: <http://example.org/lib#> .
 <http://example.org/lib> a owl:Ontology ; rdfs:label "Lib" ; prov:wasDerivedFrom <http://example.org/up> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
 prov:wasDerivedFrom a owl:AnnotationProperty ; rdfs:label "was derived from" .
-prov:wasAttributedTo a owl:ObjectProperty ; rdfs:domain ex:Book .
+foaf:maker a owl:ObjectProperty ; rdfs:domain ex:Book .
 ex:Book a owl:Class ; rdfs:label "Book" ; rdfs:comment "A book." .
 ex:title a owl:DatatypeProperty ; rdfs:label "title" ; rdfs:domain ex:Book .
 """
@@ -538,7 +616,7 @@ ex:title a owl:DatatypeProperty ; rdfs:label "title" ; rdfs:domain ex:Book .
         pages = {p.relative_to(site).as_posix() for p in site.rglob("*.html")}
         assert "classes/Book.html" in pages
         assert "properties/datatype/title.html" in pages
-        assert not [p for p in pages if "wasDerivedFrom" in p or "wasAttributedTo" in p]
+        assert not [p for p in pages if "wasDerivedFrom" in p or "maker" in p]
 
     def test_a_class_page_does_not_link_a_foreign_property(self, tmp_path: Path) -> None:
         path = _write(tmp_path, "lib.ttl", self.SOURCE)
@@ -546,7 +624,7 @@ ex:title a owl:DatatypeProperty ; rdfs:label "title" ; rdfs:domain ex:Book .
         assert _run("docs", path, "-o", site).exit_code == 0
         book = (site / "classes" / "Book.html").read_text()
         assert "title" in book
-        assert "wasAttributedTo" not in book
+        assert "maker" not in book
 
     def test_a_foreign_class_gets_no_page(self, tmp_path: Path) -> None:
         path = _write(
@@ -590,6 +668,23 @@ class TestStats:
         assert data["basic"]["individuals"] == 0
         assert data["documentation"]["properties_labelled"] == 1
         assert data["documentation"]["properties_labelled_pct"] == 1.0
+
+    def test_a_foreign_property_connects_nothing(self, tmp_path: Path) -> None:
+        # Review finding 3: connectivity and complexity counted it through its domain and range
+        path = _write(
+            tmp_path,
+            "conn.ttl",
+            """\
+<http://example.org/ont> a owl:Ontology ; rdfs:label "O" .
+<http://example.org/ont#A> a owl:Class .
+prov:used a owl:ObjectProperty ; rdfs:domain <http://example.org/ont#A> ;
+    rdfs:range <http://example.org/ont#A> .
+""",
+        )
+        data = _stats_json(path)
+        assert data["complexity"]["avg_properties_per_class"] == 0
+        assert data["connectivity"]["most_connected_class"] is None
+        assert data["connectivity"]["isolated_classes"] == 1
 
     def test_a_foreign_class_is_not_an_individual(self, tmp_path: Path) -> None:
         path = _write(

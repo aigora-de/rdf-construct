@@ -62,6 +62,7 @@ from .ownership import (
     ontology_references,
     ownership,
     source_ontologies,
+    term_namespace,
 )
 from .default_order import (
     IncompleteSubjectOrderError,
@@ -154,6 +155,7 @@ __all__ = [
     "ontology_references",
     "ownership",
     "source_ontologies",
+    "term_namespace",
     # Default ordering
     "default_subject_order",
     "check_subject_order_complete",

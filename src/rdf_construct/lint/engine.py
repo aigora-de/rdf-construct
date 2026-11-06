@@ -445,6 +445,12 @@ class LintEngine:
         Returns:
             LintResult containing all issues found.
 
+        An ``external_namespaces`` CURIE resolves against the prefixes `graph` binds. A graph
+        built with rdflib's default ``Graph()`` binds rdflib's own table too, so ``prov:``
+        resolves there whether or not the data declares it; build the graph with
+        ``Graph(bind_namespaces="core")``, as `lint_file` does, to resolve against the data's own
+        prefixes plus rdf, rdfs, owl, xsd and xml only.
+
         Raises:
             ValueError: If the rule selection is refused, or an ``external_namespaces`` CURIE
                 uses a prefix the graph does not bind.
