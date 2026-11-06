@@ -55,6 +55,14 @@ from .provenance import (
     stamp_extract,
     strip_version_iri,
 )
+from .ownership import (
+    ONTOLOGY_REFERENCES,
+    Ownership,
+    is_borrowed,
+    ontology_references,
+    ownership,
+    source_ontologies,
+)
 from .default_order import (
     IncompleteSubjectOrderError,
     check_subject_order_complete,
@@ -139,6 +147,13 @@ __all__ = [
     "stamp_derivation",
     "stamp_extract",
     "strip_version_iri",
+    # Ownership
+    "ONTOLOGY_REFERENCES",
+    "Ownership",
+    "is_borrowed",
+    "ontology_references",
+    "ownership",
+    "source_ontologies",
     # Default ordering
     "default_subject_order",
     "check_subject_order_complete",

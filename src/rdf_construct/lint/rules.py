@@ -13,6 +13,9 @@ from typing import Callable
 from rdflib import Graph, Namespace, RDF, RDFS, URIRef
 from rdflib.namespace import OWL
 
+from rdf_construct.core.ownership import Ownership, ontology_references, ownership
+from rdf_construct.core.utils import in_namespace
+
 
 class Severity(Enum):
     """Severity levels for lint issues."""
@@ -60,13 +63,16 @@ class RuleSpec:
         category: Category grouping (structural/documentation/best-practice).
         default_severity: Default severity level.
         check_fn: Function that performs the check.
+        uses_ownership: Whether `check_fn` takes the file's `Ownership` as ``ownership=``, so
+            that it can skip terms that are not the file's own (#69, #368).
     """
 
     rule_id: str
     description: str
     category: str
     default_severity: Severity
-    check_fn: Callable[[Graph], list[LintIssue]]
+    check_fn: Callable[..., list[LintIssue]]
+    uses_ownership: bool = False
 
 
 # Registry of all lint rules
@@ -78,6 +84,7 @@ def lint_rule(
     description: str,
     category: str,
     default_severity: Severity,
+    uses_ownership: bool = False,
 ) -> Callable:
     """Decorator to register a lint rule.
 
@@ -86,18 +93,20 @@ def lint_rule(
         description: What this rule checks.
         category: 'structural', 'documentation', or 'best-practice'.
         default_severity: Default severity level.
+        uses_ownership: Whether the rule takes ``ownership=`` (see `RuleSpec`).
 
     Returns:
         Decorator function.
     """
 
-    def decorator(fn: Callable[[Graph], list[LintIssue]]) -> Callable:
+    def decorator(fn: Callable[..., list[LintIssue]]) -> Callable:
         spec = RuleSpec(
             rule_id=rule_id,
             description=description,
             category=category,
             default_severity=default_severity,
             check_fn=fn,
+            uses_ownership=uses_ownership,
         )
         _RULE_REGISTRY[rule_id] = spec
         return fn
@@ -246,6 +255,11 @@ def get_namespace(uri: URIRef) -> str:
     return uri_str
 
 
+def _default_ownership(graph: Graph) -> Ownership:
+    """The ownership answer for a rule called without one: the graph's own, nothing external."""
+    return ownership(graph)
+
+
 # -----------------------------------------------------------------------------
 # Structural Rules (default: ERROR)
 # -----------------------------------------------------------------------------
@@ -288,23 +302,45 @@ def check_orphan_class(graph: Graph) -> list[LintIssue]:
     description="Reference to an entity that is not defined in the ontology",
     category="structural",
     default_severity=Severity.ERROR,
+    uses_ownership=True,
 )
-def check_dangling_reference(graph: Graph) -> list[LintIssue]:
-    """Check for references to undefined entities."""
+def check_dangling_reference(graph: Graph, ownership: Ownership | None = None) -> list[LintIssue]:
+    """Check for references to undefined entities.
+
+    A reference is checked only where the file has claimed the namespace (#69): the file defines
+    two or more entities in it, so one node minted at a bare base claims nothing, or the reference
+    lies within one of the file's own ontology IRIs. A term that is not the file's own
+    (`Ownership.is_foreign`) is never checked, and neither is an IRI that names an ontology or a
+    version of one (`ontology_references`), such as an ``owl:imports`` target (#209).
+
+    Args:
+        graph: The graph to check.
+        ownership: Which terms are the file's own; derived from `graph` when not given.
+
+    Returns:
+        One issue per dangling reference.
+    """
+    if ownership is None:
+        ownership = _default_ownership(graph)
     issues = []
     defined = get_defined_entities(graph)
-    referenced = get_all_referenced_uris(graph)
+    referenced = get_all_referenced_uris(graph) - ontology_references(graph)
 
-    # Get namespaces of all defined entities
-    defined_namespaces = {get_namespace(d) for d in defined}
+    # A namespace is claimed by two or more definitions in it, not by one (#69)
+    counts: dict[str, int] = {}
+    for d in defined:
+        ns = get_namespace(d)
+        counts[ns] = counts.get(ns, 0) + 1
+    claimed_namespaces = {ns for ns, n in counts.items() if n >= 2}
 
     for uri in referenced:
-        if is_builtin(uri):
+        if is_builtin(uri) or ownership.is_foreign(uri):
             continue
         if uri not in defined:
-            # Only report if it's in a namespace we define things in
-            uri_namespace = get_namespace(uri)
-            if uri_namespace in defined_namespaces:
+            claimed = get_namespace(uri) in claimed_namespaces or any(
+                in_namespace(str(uri), str(o)) for o in ownership.ontologies
+            )
+            if claimed:
                 issues.append(
                     LintIssue(
                         rule_id="dangling-reference",
@@ -455,14 +491,28 @@ def check_empty_ontology(graph: Graph) -> list[LintIssue]:
     description="Entity lacks rdfs:label annotation",
     category="documentation",
     default_severity=Severity.WARNING,
+    uses_ownership=True,
 )
-def check_missing_label(graph: Graph) -> list[LintIssue]:
-    """Check for classes and properties without labels."""
+def check_missing_label(graph: Graph, ownership: Ownership | None = None) -> list[LintIssue]:
+    """Check for classes and properties without labels.
+
+    A term that is not the file's own (`Ownership.is_foreign`), such as a borrowed vocabulary's
+    annotation property the file declares for OWL 2 DL, is not the file's to document (#368).
+
+    Args:
+        graph: The graph to check.
+        ownership: Which terms are the file's own; derived from `graph` when not given.
+
+    Returns:
+        One issue per class or property without one.
+    """
+    if ownership is None:
+        ownership = _default_ownership(graph)
     issues = []
 
     # Check classes
     for cls in get_classes(graph):
-        if is_builtin(cls):
+        if is_builtin(cls) or ownership.is_foreign(cls):
             continue
         if (cls, RDFS.label, None) not in graph:
             issues.append(
@@ -476,7 +526,7 @@ def check_missing_label(graph: Graph) -> list[LintIssue]:
 
     # Check properties
     for prop in get_properties(graph):
-        if is_builtin(prop):
+        if is_builtin(prop) or ownership.is_foreign(prop):
             continue
         if (prop, RDFS.label, None) not in graph:
             issues.append(
@@ -496,14 +546,28 @@ def check_missing_label(graph: Graph) -> list[LintIssue]:
     description="Class or property lacks rdfs:comment annotation",
     category="documentation",
     default_severity=Severity.WARNING,
+    uses_ownership=True,
 )
-def check_missing_comment(graph: Graph) -> list[LintIssue]:
-    """Check for classes and properties without comments."""
+def check_missing_comment(graph: Graph, ownership: Ownership | None = None) -> list[LintIssue]:
+    """Check for classes and properties without comments.
+
+    A term that is not the file's own (`Ownership.is_foreign`), such as a borrowed vocabulary's
+    annotation property the file declares for OWL 2 DL, is not the file's to document (#368).
+
+    Args:
+        graph: The graph to check.
+        ownership: Which terms are the file's own; derived from `graph` when not given.
+
+    Returns:
+        One issue per class or property without one.
+    """
+    if ownership is None:
+        ownership = _default_ownership(graph)
     issues = []
 
     # Check classes
     for cls in get_classes(graph):
-        if is_builtin(cls):
+        if is_builtin(cls) or ownership.is_foreign(cls):
             continue
         if (cls, RDFS.comment, None) not in graph:
             issues.append(
@@ -517,7 +581,7 @@ def check_missing_comment(graph: Graph) -> list[LintIssue]:
 
     # Check properties
     for prop in get_properties(graph):
-        if is_builtin(prop):
+        if is_builtin(prop) or ownership.is_foreign(prop):
             continue
         if (prop, RDFS.comment, None) not in graph:
             issues.append(

@@ -13,6 +13,8 @@ from typing import Iterable, Sequence
 
 from rdflib import Graph, URIRef
 
+from rdf_construct.core.ownership import ownership
+from rdf_construct.core.utils import CurieError, extract_prefix_map, resolve_curie
 from rdf_construct.lint.rules import (
     get_all_rules,
     get_rule,
@@ -106,12 +108,16 @@ class LintConfig:
         enabled_rules: Specific rules to enable (empty = all).
         disabled_rules: Specific rules to disable.
         severity_overrides: Override default severity for specific rules.
+        external_namespaces: Namespaces whose terms are not the file's own, as written: full
+            IRIs, ``<…>`` or CURIEs such as ``ies:``. A CURIE resolves against each linted
+            file's own prefixes plus rdf, rdfs, owl, xsd and xml (#69).
     """
 
     level: str = "standard"
     enabled_rules: set[str] = field(default_factory=set)
     disabled_rules: set[str] = field(default_factory=set)
     severity_overrides: dict[str, Severity] = field(default_factory=dict)
+    external_namespaces: list[str] = field(default_factory=list)
 
     def get_effective_rules(self) -> list[RuleSpec]:
         """Get the list of rules that should run based on config.
@@ -255,6 +261,44 @@ class LintSummary:
         return sum(1 for r in self.results if r.total_issues > 0)
 
 
+def needs_prefixes(entry: str) -> bool:
+    """Whether an ``external_namespaces`` entry is a CURIE, which needs a file's prefixes.
+
+    Args:
+        entry: The entry as written.
+
+    Returns:
+        False for ``<…>`` and for a full IRI (one containing ``://``), True otherwise.
+    """
+    s = entry.strip()
+    return not (s.startswith("<") and s.endswith(">")) and "://" not in s
+
+
+def resolve_external_namespaces(
+    entries: Sequence[str], prefixes: dict[str, str], where: str
+) -> list[str]:
+    """Resolve ``external_namespaces`` entries to namespace IRIs for one file.
+
+    Args:
+        entries: The entries as written.
+        prefixes: The file's own prefixes plus the core five.
+        where: The file, for the message.
+
+    Returns:
+        The namespace IRIs, in the entries' order.
+
+    Raises:
+        ValueError: If a CURIE's prefix is not bound in the file.
+    """
+    resolved = []
+    for entry in entries:
+        try:
+            resolved.append(str(resolve_curie(prefixes, entry)))
+        except CurieError as e:
+            raise ValueError(f"external_namespaces entry {entry!r} for {where}: {e}") from e
+    return resolved
+
+
 class LintEngine:
     """Engine for running lint rules against RDF graphs.
 
@@ -287,7 +331,8 @@ class LintEngine:
 
         Raises:
             FileNotFoundError: If file doesn't exist.
-            ValueError: If file can't be parsed, or the rule selection is refused.
+            ValueError: If file can't be parsed, the rule selection is refused, or an
+                ``external_namespaces`` CURIE uses a prefix the file does not bind.
         """
         # Resolve rules before reading the file, so a refused selection never
         # depends on whether the file parses
@@ -327,10 +372,25 @@ class LintEngine:
             )
             return result
 
+        # Which terms are the file's own (#69, #368): a CURIE entry resolves against the file's
+        # own prefixes, which lint's own parse cannot tell apart from rdflib's defaults
+        entries = self.config.external_namespaces
+        prefixes: dict[str, str] = {}
+        if any(needs_prefixes(e) for e in entries):
+            declared = Graph(bind_namespaces="core")
+            declared.parse(file_path.as_posix(), format=fmt)
+            prefixes = extract_prefix_map(declared)
+        owned = ownership(
+            graph, resolve_external_namespaces(entries, prefixes, file_path.as_posix())
+        )
+
         # Run rules
         for rule in rules:
             try:
-                issues = rule.check_fn(graph)
+                if rule.uses_ownership:
+                    issues = rule.check_fn(graph, ownership=owned)
+                else:
+                    issues = rule.check_fn(graph)
                 for issue in issues:
                     # Apply severity override
                     effective_severity = self.config.get_effective_severity(issue.rule_id)
@@ -384,14 +444,27 @@ class LintEngine:
 
         Returns:
             LintResult containing all issues found.
+
+        Raises:
+            ValueError: If the rule selection is refused, or an ``external_namespaces`` CURIE
+                uses a prefix the graph does not bind.
         """
         result = LintResult(file_path=Path(source_name), graph=graph)
 
         rules = self.config.get_effective_rules()
+        owned = ownership(
+            graph,
+            resolve_external_namespaces(
+                self.config.external_namespaces, extract_prefix_map(graph), source_name
+            ),
+        )
 
         for rule in rules:
             try:
-                issues = rule.check_fn(graph)
+                if rule.uses_ownership:
+                    issues = rule.check_fn(graph, ownership=owned)
+                else:
+                    issues = rule.check_fn(graph)
                 for issue in issues:
                     effective_severity = self.config.get_effective_severity(issue.rule_id)
                     adjusted_issue = LintIssue(

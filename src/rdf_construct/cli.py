@@ -1615,7 +1615,11 @@ def lint(
     click.echo(f"Scanning {len(sources)} file(s)...")
     click.echo()
 
-    summary = engine.lint_files(list(sources))
+    # An external_namespaces CURIE a file does not bind is refused before any finding is shown
+    try:
+        summary = engine.lint_files(list(sources))
+    except ValueError as e:
+        raise Refusal(str(e)) from e
 
     # Format and output results
     use_colour = not no_colour and output_format == "text"

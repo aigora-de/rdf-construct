@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from rdflib import Graph, RDF, RDFS
 from rdflib.namespace import OWL
 
+from rdf_construct.core.ownership import ownership
+
 
 @dataclass
 class PropertyStats:
@@ -42,7 +44,9 @@ def _get_all_properties(graph: Graph) -> set:
         RDF.Property,
     ):
         props |= set(graph.subjects(RDF.type, prop_type))
-    return props
+    # Only the ontology's own: not a borrowed vocabulary's term it declares (#371)
+    owned = ownership(graph)
+    return {p for p in props if not owned.is_foreign(p)}
 
 
 def collect_property_stats(graph: Graph) -> PropertyStats:

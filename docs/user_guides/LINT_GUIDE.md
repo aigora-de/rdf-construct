@@ -80,7 +80,7 @@ rdf-construct lint ontology.ttl --level relaxed
 | Rule ID | Description |
 |---------|-------------|
 | `orphan-class` | Class has no `rdfs:subClassOf` declaration (and isn't `owl:Thing`) |
-| `dangling-reference` | Reference to an entity not defined in the ontology |
+| `dangling-reference` | Reference to an entity not defined in the ontology, in a namespace the file claims (see [Whose terms are checked](#whose-terms-are-checked)) |
 | `circular-subclass` | Class is a subclass of itself (directly or transitively) |
 | `property-no-type` | Property has domain/range but no `rdf:type` declaration |
 | `empty-ontology` | `owl:Ontology` declaration has no metadata |
@@ -89,8 +89,12 @@ rdf-construct lint ontology.ttl --level relaxed
 
 | Rule ID | Description |
 |---------|-------------|
-| `missing-label` | Class or property lacks `rdfs:label` |
-| `missing-comment` | Class or property lacks `rdfs:comment` |
+| `missing-label` | One of the ontology's own classes or properties lacks `rdfs:label` |
+| `missing-comment` | One of the ontology's own classes or properties lacks `rdfs:comment` |
+
+A term the file only borrows, such as `dcterms:creator a owl:AnnotationProperty`, which OWL 2 DL
+asks you to declare, is not the file's to document, and neither rule reports it. See
+[Whose terms are checked](#whose-terms-are-checked).
 
 ### Best Practice Rules (Default: Info)
 
@@ -186,7 +190,21 @@ disable:
 severity:
   missing-comment: info
   property-no-domain: warning
+
+# Namespaces whose terms are not this ontology's own
+external_namespaces:
+  - base:
+  - http://purl.org/dc/terms/
 ```
+
+`external_namespaces` lists namespaces that belong to someone else: a reference into one is never
+reported as dangling, and its terms need no label or comment here. Each entry is a full IRI, an
+IRI in angle brackets (`<urn:example:>`), or a CURIE such as `base:`, which is resolved against the
+prefixes each linted file declares, plus `rdf`, `rdfs`, `owl`, `xsd` and `xml`. An entry matches at
+a boundary, so `http://example.org/ont` takes `http://example.org/ont#X` but not
+`http://example.org/ontology#X`. A malformed list or entry is refused with exit code 2 before any
+file is read, and so is a CURIE whose prefix a linted file does not declare. See
+[Whose terms are checked](#whose-terms-are-checked).
 
 ### Config File Discovery
 
@@ -199,6 +217,123 @@ The linter automatically searches for configuration files in this order:
 
 An option given on the command line overrides the config file, and the config file overrides the
 option's default: a `.rdf-lint.yml` that says `level: strict` applies unless you pass `--level`.
+
+## Whose terms are checked
+
+A file declares terms it does not own. OWL 2 DL asks it to declare every annotation property it
+uses, so `dcterms:creator a owl:AnnotationProperty`, or the `prov:wasDerivedFrom` that `order`,
+`split` and `merge` stamp a derived file with, sits beside the ontology's own classes. `lint`
+reports on the ontology's own terms only.
+
+**A term is not the ontology's own** when either of these holds:
+
+- **It is borrowed.** The file names an ontology (`<…> a owl:Ontology`), and none of its
+  ontologies owns the term's namespace. An ontology owns everything on its own host, so
+  `http://example.org/lib` owns `http://example.org/lib#Book` and `http://example.org/other#X`,
+  and nothing on `http://purl.org/dc/terms/`. On `purl.org`, `w3id.org` and `www.w3.org`, which
+  many publishers share, it owns only the space under its own IRI.
+- **It is in an `external_namespaces` entry.**
+
+`missing-label` and `missing-comment` skip such a term. `dangling-reference` never checks a
+reference to one.
+
+**`dangling-reference` checks a reference only where the file claims the namespace.** A
+reference to an undefined term is reported when the term is the ontology's own and either:
+
+- the file defines two or more entities (any IRI subject with an `rdf:type`) in the term's
+  namespace, so a single node minted at a bare base namespace claims nothing; or
+- the term lies within one of the file's own ontology IRIs, so a typo in a one-class ontology is
+  still caught.
+
+**References to ontologies are not term references.** The objects of `owl:imports`,
+`owl:versionIRI`, `owl:priorVersion`, `owl:backwardCompatibleWith` and `owl:incompatibleWith`, and
+of `prov:wasDerivedFrom` on an ontology header, are never reported.
+
+### A worked example
+
+`domain.ttl` imports a base vocabulary and adds two classes to it:
+
+```turtle
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix base: <https://example.org/base#> .
+@prefix ex: <https://example.org/domain#> .
+
+<https://example.org/domain> a owl:Ontology ;
+    rdfs:label "Domain" ;
+    owl:imports <https://example.org/base> ;
+    dcterms:creator "A. Author" .
+
+dcterms:creator a owl:AnnotationProperty .
+
+# Two terms this file adds to the base vocabulary
+base:Annex a owl:Class ;
+    rdfs:label "Annex" ;
+    rdfs:comment "A building joined to another." ;
+    rdfs:subClassOf base:Structure .
+
+base:Shed a owl:Class ;
+    rdfs:label "Shed" ;
+    rdfs:comment "A small outbuilding." ;
+    rdfs:subClassOf base:Structure .
+
+ex:Building a owl:Class ;
+    rdfs:label "Building" ;
+    rdfs:comment "A built structure." ;
+    rdfs:subClassOf base:Structure .
+
+ex:House a owl:Class ;
+    rdfs:label "House" ;
+    rdfs:comment "A dwelling." ;
+    rdfs:subClassOf ex:Building, ex:Dwelling .
+```
+
+```bash
+rdf-construct lint domain.ttl
+```
+
+```text
+Scanning 1 file(s)...
+
+domain.ttl:18 error[dangling-reference] base:Structure: Referenced entity is not defined in this ontology
+domain.ttl:33 error[dangling-reference] ex:Dwelling: Referenced entity is not defined in this ontology
+
+Found 2 errors, 0 warnings, 0 info in 1 file
+```
+
+`dcterms:creator` is borrowed, so it needs no label, and the `owl:imports` target is not a term
+reference. But the file defines two classes in `base:`, so it claims that namespace, and
+`base:Structure`, which the base vocabulary defines, is reported. Say that `base:` is someone
+else's with `external.yml`:
+
+```yaml
+external_namespaces:
+  - base:
+```
+
+```bash
+rdf-construct lint domain.ttl -c external.yml
+```
+
+```text
+Using config: external.yml
+Scanning 1 file(s)...
+
+domain.ttl:33 error[dangling-reference] ex:Dwelling: Referenced entity is not defined in this ontology
+
+Found 1 error, 0 warnings, 0 info in 1 file
+```
+
+`ex:Dwelling` is a real finding: the file claims `ex:` and defines no such class.
+
+### Known limitations
+
+| Limitation | What you see | Issue |
+|---|---|---|
+| `lint` does not resolve `owl:imports`. A term an import defines is reported as dangling wherever the file claims its namespace. | On the public IES `ies-env-building.ttl`, `external_namespaces: [ies:]` clears the 46 `ies:` terms that `ies-common.ttl` 5.0.3 defines, and also the seven it does not (`ies:Flow`, `ies:Member` and five more), because they share one namespace. | [#309](https://github.com/aigora-de/rdf-construct/issues/309) |
+| A file that names no ontology borrows nothing: every term in it is its own. | `dcterms:creator a owl:AnnotationProperty` with no `owl:Ontology` header still gets `missing-label`. List the namespace in `external_namespaces`. | — |
+| Two publishers on one host are not told apart, except on `purl.org`, `w3id.org` and `www.w3.org`. | An ontology at `http://example.org/a` treats `http://example.org/b#` as its own. List it in `external_namespaces`. | — |
 
 ## Output Formats
 
@@ -393,7 +528,8 @@ To run fewer checks, disable the rules that do not apply to your ontology:
    single run with `--disable`
 2. Lower a rule's severity under `severity:` if you still want to see its findings without them
    failing your gate
-3. Check whether your ontology imports external definitions that aren't loaded
+3. If the findings are on another vocabulary's terms, list its namespace in
+   `external_namespaces` (see [Whose terms are checked](#whose-terms-are-checked))
 
 `--level relaxed` makes the output quieter, not shorter: warnings are reported as info, but every
 rule still runs and every finding is still listed.
@@ -416,12 +552,10 @@ rdf-construct lint ontology.ttl --level relaxed \
 
 ### External References Flagged as Dangling
 
-The linter only checks entities within the loaded files. If your ontology imports external definitions:
-
-```bash
-# Load the imported ontology too
-rdf-construct lint domain.ttl foundation.ttl
-```
+`lint` reads each file on its own and does not follow `owl:imports`, so naming the imported
+ontology on the same command line changes nothing: each file is linted in its own graph. Add the
+imported vocabulary's namespace to `external_namespaces` instead. See
+[Whose terms are checked](#whose-terms-are-checked).
 
 ### Parse Errors
 

@@ -7,6 +7,9 @@ from dataclasses import dataclass, field
 
 from rdflib import Graph, RDF, RDFS
 from rdflib.namespace import OWL
+from rdflib.term import Node
+
+from rdf_construct.core.ownership import ownership
 
 
 @dataclass
@@ -35,29 +38,15 @@ class BasicStats:
         return self.object_properties + self.datatype_properties + self.annotation_properties
 
 
-def get_all_classes(graph: Graph) -> set:
-    """Get all classes from the graph (owl:Class + rdfs:Class).
-
-    Args:
-        graph: RDF graph to query.
-
-    Returns:
-        Set of class URIRefs.
-    """
+def _declared_classes(graph: Graph) -> set[Node]:
+    """Every subject typed owl:Class or rdfs:Class, the ontology's own or not."""
     classes = set(graph.subjects(RDF.type, OWL.Class))
     classes |= set(graph.subjects(RDF.type, RDFS.Class))
     return classes
 
 
-def get_all_properties(graph: Graph) -> set:
-    """Get all properties from the graph.
-
-    Args:
-        graph: RDF graph to query.
-
-    Returns:
-        Set of property URIRefs (object, datatype, annotation).
-    """
+def _declared_properties(graph: Graph) -> set[Node]:
+    """Every subject typed as a property, the ontology's own or not."""
     props = set()
     for prop_type in (
         OWL.ObjectProperty,
@@ -67,6 +56,38 @@ def get_all_properties(graph: Graph) -> set:
     ):
         props |= set(graph.subjects(RDF.type, prop_type))
     return props
+
+
+def _own(graph: Graph, terms: set[Node]) -> set[Node]:
+    """The terms that are the ontology's own: not a borrowed vocabulary's it declares (#371)."""
+    owned = ownership(graph)
+    return {t for t in terms if not owned.is_foreign(t)}
+
+
+def get_all_classes(graph: Graph) -> set:
+    """Get all classes from the graph (owl:Class + rdfs:Class).
+
+    Args:
+        graph: RDF graph to query.
+
+    Returns:
+        Set of class URIRefs, except those that are not the ontology's own
+        (`rdf_construct.core.ownership`).
+    """
+    return _own(graph, _declared_classes(graph))
+
+
+def get_all_properties(graph: Graph) -> set:
+    """Get all properties from the graph.
+
+    Args:
+        graph: RDF graph to query.
+
+    Returns:
+        Set of property URIRefs (object, datatype, annotation), except those that are not the
+        ontology's own (`rdf_construct.core.ownership`).
+    """
+    return _own(graph, _declared_properties(graph))
 
 
 def get_individuals(graph: Graph) -> set:
@@ -80,8 +101,10 @@ def get_individuals(graph: Graph) -> set:
     Returns:
         Set of individual URIRefs.
     """
-    classes = get_all_classes(graph)
-    properties = get_all_properties(graph)
+    # Every declared class and property is excluded, the ontology's own or not: a borrowed
+    # vocabulary's term is left out of the counts, never moved into this one (#371)
+    classes = _declared_classes(graph)
+    properties = _declared_properties(graph)
 
     # Get all typed subjects
     all_typed = set()
@@ -126,13 +149,13 @@ def collect_basic_stats(graph: Graph) -> BasicStats:
     classes = len(get_all_classes(graph))
 
     # Object properties
-    obj_props = len(set(graph.subjects(RDF.type, OWL.ObjectProperty)))
+    obj_props = len(_own(graph, set(graph.subjects(RDF.type, OWL.ObjectProperty))))
 
     # Datatype properties
-    data_props = len(set(graph.subjects(RDF.type, OWL.DatatypeProperty)))
+    data_props = len(_own(graph, set(graph.subjects(RDF.type, OWL.DatatypeProperty))))
 
     # Annotation properties
-    ann_props = len(set(graph.subjects(RDF.type, OWL.AnnotationProperty)))
+    ann_props = len(_own(graph, set(graph.subjects(RDF.type, OWL.AnnotationProperty))))
 
     # Individuals
     individuals = len(get_individuals(graph))

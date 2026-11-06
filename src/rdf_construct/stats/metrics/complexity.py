@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from rdflib import Graph, RDF, RDFS
 from rdflib.namespace import OWL
 
+from rdf_construct.core.ownership import ownership
+
 
 @dataclass
 class ComplexityStats:
@@ -33,7 +35,9 @@ def _get_all_classes(graph: Graph) -> set:
     """Get all classes from the graph."""
     classes = set(graph.subjects(RDF.type, OWL.Class))
     classes |= set(graph.subjects(RDF.type, RDFS.Class))
-    return classes
+    # Only the ontology's own: not a borrowed vocabulary's term it declares (#371)
+    owned = ownership(graph)
+    return {c for c in classes if not owned.is_foreign(c)}
 
 
 def _count_properties_per_class(graph: Graph, classes: set) -> dict:
