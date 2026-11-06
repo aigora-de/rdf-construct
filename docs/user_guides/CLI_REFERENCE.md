@@ -561,17 +561,23 @@ rdf-construct lint SOURCE [SOURCE...] [OPTIONS]
 - `--fail-on SEVERITY`: Lowest severity that makes the run exit 1: `error`, `warning`, `info` or
   `never` (default: error)
 
+`.rdf-lint.yml` takes `level`, `enable`, `disable`, `severity` and `external_namespaces`: a
+list of namespaces (IRIs, `<IRIs>` or CURIEs such as `ies:`) whose terms are not the ontology's
+own. A reference into one is never dangling, and its terms need no label or comment. A borrowed
+vocabulary's terms, on another host from the file's own ontology, are skipped without it. See
+[Whose terms are checked](LINT_GUIDE.md#whose-terms-are-checked).
+
 **Available Rules**:
 
 | Rule | Category | Severity | Description |
 |------|----------|----------|-------------|
 | `orphan-class` | Structural | warning | Class with no superclass or subclasses |
-| `dangling-reference` | Structural | error | Reference to undefined entity |
+| `dangling-reference` | Structural | error | Reference to an undefined entity in a namespace the file claims |
 | `circular-subclass` | Structural | error | Circular subclass hierarchy |
 | `property-no-type` | Structural | error | Property without type declaration |
 | `empty-ontology` | Structural | error | Ontology with no classes or properties |
-| `missing-label` | Documentation | warning | Entity without rdfs:label |
-| `missing-comment` | Documentation | warning | Entity without rdfs:comment |
+| `missing-label` | Documentation | warning | One of the ontology's own entities without rdfs:label |
+| `missing-comment` | Documentation | warning | One of the ontology's own entities without rdfs:comment |
 | `redundant-subclass` | Best Practice | info | Redundant subclass declaration |
 | `property-no-domain` | Best Practice | info | Property without rdfs:domain |
 | `property-no-range` | Best Practice | info | Property without rdfs:range |

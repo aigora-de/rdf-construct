@@ -58,6 +58,14 @@ VERSION_IRI: URIRef = OWL.versionIRI
 WAS_DERIVED_FROM: URIRef = PROV.wasDerivedFrom
 """The stamp a derived artefact carries, naming what it was derived from."""
 
+ONTOLOGY_ONLY: tuple[URIRef, ...] = (
+    OWL.imports,
+    OWL.priorVersion,
+    OWL.backwardCompatibleWith,
+    OWL.incompatibleWith,
+)
+"""Predicates whose ``rdfs:domain`` is ``owl:Ontology``: a demoted header loses them too."""
+
 PROV_PREFIX = "prov"
 """The prefix the stamp is written under, unless the graph already binds PROV-O to another."""
 

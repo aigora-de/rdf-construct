@@ -10,6 +10,8 @@ from typing import Optional
 from rdflib import Graph, RDF, RDFS, URIRef
 from rdflib.namespace import OWL
 
+from rdf_construct.core.ownership import ownership
+
 
 @dataclass
 class ConnectivityStats:
@@ -30,7 +32,9 @@ def _get_all_classes(graph: Graph) -> set:
     """Get all classes from the graph."""
     classes = set(graph.subjects(RDF.type, OWL.Class))
     classes |= set(graph.subjects(RDF.type, RDFS.Class))
-    return classes
+    # Only the ontology's own: not a borrowed vocabulary's term it declares (#371)
+    owned = ownership(graph)
+    return {c for c in classes if not owned.is_foreign(c)}
 
 
 def _count_property_references(graph: Graph, classes: set) -> dict:
@@ -46,15 +50,17 @@ def _count_property_references(graph: Graph, classes: set) -> dict:
         Dictionary mapping class -> reference count.
     """
     counts: dict = defaultdict(int)
+    # A property that is not the ontology's own is in no count (#371)
+    owned = ownership(graph)
 
     # Count domain references
     for s, p, o in graph.triples((None, RDFS.domain, None)):
-        if o in classes:
+        if o in classes and not owned.is_foreign(s):
             counts[o] += 1
 
     # Count range references
     for s, p, o in graph.triples((None, RDFS.range, None)):
-        if o in classes:
+        if o in classes and not owned.is_foreign(s):
             counts[o] += 1
 
     return dict(counts)

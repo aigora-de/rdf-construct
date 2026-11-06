@@ -276,6 +276,8 @@ class TestLintExitCode:
             """\
             ex:Child a owl:Class ; rdfs:label "Child" ; rdfs:comment "C." ;
                 rdfs:subClassOf ex:Missing .
+            ex:Sibling a owl:Class ; rdfs:label "Sibling" ; rdfs:comment "S." ;
+                rdfs:subClassOf ex:Child .
             """,
         )
         result = runner.invoke(cli, ["lint", str(path)])

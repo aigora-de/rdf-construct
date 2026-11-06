@@ -11,8 +11,9 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from rdflib import BNode, RDF, RDFS, Literal, URIRef
-from rdflib.namespace import DCTERMS, OWL, SH, SKOS
+from rdflib.namespace import DCTERMS, OWL, PROV, SH, SKOS
 
+from rdf_construct.core.ownership import Ownership, ownership
 from rdf_construct.core.vocab import (
     ALL_PROPERTY_TYPES,
     ANNOTATION_PROPERTY_TYPES,
@@ -217,6 +218,7 @@ class OntologyInfo:
     imports: list[URIRef] = field(default_factory=list)
     namespaces: dict[str, str] = field(default_factory=dict)
     annotations: dict[str, list[str]] = field(default_factory=dict)
+    derived_from: list[URIRef] = field(default_factory=list)
 
 
 # First-class SHACL constraints rendered explicitly by the renderers.
@@ -578,6 +580,11 @@ def extract_ontology_info(graph: Graph) -> OntologyInfo:
             if isinstance(obj, URIRef):
                 info.imports.append(obj)
 
+        # What the document was derived from: the stamp order, split and merge write (#371)
+        info.derived_from = sorted(
+            obj for obj in graph.objects(info.uri, PROV.wasDerivedFrom) if isinstance(obj, URIRef)
+        )
+
         # Annotations
         info.annotations = get_annotations(graph, info.uri)
 
@@ -660,12 +667,15 @@ def _is_named_individual(graph: Graph, uri: URIRef) -> bool:
     return (uri, RDF.type, OWL.NamedIndividual) in graph
 
 
-def extract_class_info(graph: Graph, uri: URIRef) -> ClassInfo:
+def extract_class_info(graph: Graph, uri: URIRef, owned: Ownership | None = None) -> ClassInfo:
     """Extract comprehensive information about a class.
 
     Args:
         graph: RDF graph to query.
         uri: Class URI to extract info for.
+        owned: Which terms are the ontology's own; derived from `graph` when not given. A
+            property that is not (`Ownership.is_foreign`) has no page, so it is left out of the
+            class's domain and range lists (#371).
 
     Returns:
         ClassInfo with all available metadata.
@@ -690,15 +700,18 @@ def extract_class_info(graph: Graph, uri: URIRef) -> ClassInfo:
         if isinstance(subj, URIRef):
             info.subclasses.append(subj)
 
+    if owned is None:
+        owned = ownership(graph)
+
     # Properties with this class as domain
     for prop in graph.subjects(RDFS.domain, uri):
-        if isinstance(prop, URIRef):
+        if isinstance(prop, URIRef) and not owned.is_foreign(prop):
             prop_info = extract_property_info(graph, prop)
             info.domain_of.append(prop_info)
 
     # Properties with this class as range
     for prop in graph.subjects(RDFS.range, uri):
-        if isinstance(prop, URIRef):
+        if isinstance(prop, URIRef) and not owned.is_foreign(prop):
             prop_info = extract_property_info(graph, prop)
             info.range_of.append(prop_info)
 
@@ -1528,10 +1541,14 @@ def extract_all_classes(graph: Graph) -> list[ClassInfo]:
         graph: RDF graph to query.
 
     Returns:
-        List of ClassInfo objects for all classes.
+        List of ClassInfo objects for all classes, except those that are not the
+        ontology's own (`rdf_construct.core.ownership`).
     """
     classes = []
     seen: set[URIRef] = set()
+    # A class that is not the ontology's own, such as a borrowed vocabulary's term the file
+    # declares, gets no page (#371)
+    owned = ownership(graph)
 
     # Every type that declares its subject a class — owl:Class and rdfs:Class,
     # but also owl:DeprecatedClass, which is otherwise misfiled as an
@@ -1539,9 +1556,9 @@ def extract_all_classes(graph: Graph) -> list[ClassInfo]:
     # here and elsewhere independently.
     for class_type in sorted(CLASS_TYPES):
         for uri in graph.subjects(RDF.type, class_type):
-            if isinstance(uri, URIRef) and uri not in seen:
+            if isinstance(uri, URIRef) and uri not in seen and not owned.is_foreign(uri):
                 seen.add(uri)
-                classes.append(extract_class_info(graph, uri))
+                classes.append(extract_class_info(graph, uri, owned))
 
     # Sort by qname for consistent ordering
     classes.sort(key=lambda c: c.qname)
@@ -1555,16 +1572,20 @@ def extract_all_properties(graph: Graph) -> list[PropertyInfo]:
         graph: RDF graph to query.
 
     Returns:
-        List of PropertyInfo objects for all properties.
+        List of PropertyInfo objects for all properties, except those that are not the
+        ontology's own (`rdf_construct.core.ownership`).
     """
     properties = []
     seen: set[URIRef] = set()
+    # A property that is not the ontology's own, such as the prov:wasDerivedFrom a derived
+    # document declares for its stamp, gets no page (#371)
+    owned = ownership(graph)
 
     # Every type that declares its subject a property, including the OWL
     # characteristics (#76). Sorted for deterministic extraction order.
     for prop_type in sorted(ALL_PROPERTY_TYPES):
         for uri in graph.subjects(RDF.type, prop_type):
-            if isinstance(uri, URIRef) and uri not in seen:
+            if isinstance(uri, URIRef) and uri not in seen and not owned.is_foreign(uri):
                 seen.add(uri)
                 properties.append(extract_property_info(graph, uri))
 

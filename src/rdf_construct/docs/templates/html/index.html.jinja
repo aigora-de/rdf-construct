@@ -3,6 +3,13 @@
 {% block title %}{{ ontology.title or "Ontology Documentation" }}{% endblock %}
 
 {% block content %}
+{% if ontology.derived_from %}
+<section class="derivation">
+    <p><strong>Derived from:</strong>
+    {%- for target in ontology.derived_from %} <code>{{ target }}</code>{% if not loop.last %},{% endif %}{% endfor %}</p>
+</section>
+{% endif %}
+
 <section class="stats">
     {% if config.include_classes %}
     <div class="stat-card">

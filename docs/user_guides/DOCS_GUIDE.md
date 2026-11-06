@@ -114,7 +114,7 @@ The top-level shape of `index.json` is:
 
 ```json
 {
-  "ontology": { "uri": "...", "title": "...", ... },
+  "ontology": { "uri": "...", "title": "...", "derived_from": ["..."], ... },
   "statistics": {
     "classes": 12,
     "object_properties": 8,
@@ -467,6 +467,42 @@ terms the source never marked.
 Deprecated terms are still documented. Hiding them behind a flag would
 need per-entity link handling — the `--include` / `--exclude` machinery
 works per entity *type* — so it is not offered yet.
+
+## Terms the Ontology Does Not Own
+
+A file declares terms it does not own. OWL 2 DL asks it to declare every
+annotation property it uses, so `dcterms:creator a owl:AnnotationProperty`,
+or the `prov:wasDerivedFrom` that `order`, `split` and `merge` stamp a
+derived file with, sits beside the ontology's own classes. `docs`
+documents the ontology's own terms only.
+
+**A class or property is not the ontology's own** when the file names an
+ontology (`<…> a owl:Ontology`) and none of its ontologies owns the term's
+namespace. An ontology owns everything on its own host; on `purl.org`,
+`w3id.org` and `www.w3.org`, which many publishers share, it owns only the
+space under its own IRI. A namespace the file *describes* (saying more than
+`rdf:type` about two or more of its terms) is its own whatever the host.
+This is the same answer `lint` and `stats` use
+(see [Whose terms are checked](LINT_GUIDE.md#whose-terms-are-checked)).
+
+Such a term gets no page, no entry in the index or the search, and no
+count, and a class page does not list it among the properties whose
+domain or range the class is. That holds even when the source labels it.
+A file that names no ontology borrows nothing, so every term in it is
+documented.
+
+**The derivation is shown as metadata.** The `prov:wasDerivedFrom` targets
+on the ontology header are listed as **Derived from** at the top of the
+index (HTML and Markdown, single-page too) and as `derived_from` in the
+JSON `ontology` object:
+
+```json
+"ontology": {
+  "uri": "http://example.org/merged",
+  "derived_from": ["http://example.org/Ontology", "http://example.org/extension"],
+  ...
+}
+```
 
 ## Named Individuals
 

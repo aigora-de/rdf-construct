@@ -32,15 +32,12 @@ from rdflib import RDF, BNode, Graph, URIRef
 from rdflib.namespace import OWL, PROV
 from rdflib.term import Node
 
-from rdf_construct.core.provenance import derivation_targets, stamp_derivation, strip_version_iri
-
-ONTOLOGY_ONLY: tuple[URIRef, ...] = (
-    OWL.imports,
-    OWL.priorVersion,
-    OWL.backwardCompatibleWith,
-    OWL.incompatibleWith,
+from rdf_construct.core.provenance import (
+    ONTOLOGY_ONLY,
+    derivation_targets,
+    stamp_derivation,
+    strip_version_iri,
 )
-"""Predicates whose ``rdfs:domain`` is ``owl:Ontology``: a demoted header loses them too."""
 
 CORE_PREFIXES: dict[str, str] = {
     "rdf": str(RDF),

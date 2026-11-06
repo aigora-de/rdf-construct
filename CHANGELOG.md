@@ -164,11 +164,35 @@ directory. `-c` with an operation flag is refused for both. See
 [`refactor`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#refactor)
 in the migration note.
 
+**`lint`, `docs` and `stats` report on the ontology's own terms only.** A
+term a file declares but does not own, such as `dcterms:creator a
+owl:AnnotationProperty` or the `prov:wasDerivedFrom` that derived files are
+stamped with, is no longer asked for a label, given a `docs` page or counted.
+`lint` no longer lets one node at a bare base namespace turn every reference to
+an imported term into an error. New `external_namespaces:` in `.rdf-lint.yml`
+names other vocabularies. See
+[`lint`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#lint)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
 
 ### Added
+- **`core.ownership`, one answer to "this ontology's own terms"** (#69, #368,
+  #371). `ownership(graph, external=())` gives an `Ownership` whose
+  `is_foreign(iri)` is true for a borrowed vocabulary's term (one in a namespace
+  none of the file's ontologies owns: another host, or, on `purl.org`,
+  `w3id.org` and `www.w3.org`, outside the ontology's own IRI) or one in an
+  external namespace. It is `split`'s rule from #383, moved here, except that a
+  namespace the file describes (more than `rdf:type` about two or more of its
+  terms) is its own whatever the host; `lint`, `docs` and `stats` use it.
+  `ontology_references(graph)` names the IRIs that point at documents rather
+  than terms.
+- **`external_namespaces:` in `.rdf-lint.yml`** (#69): namespaces, as IRIs or
+  CURIEs, whose terms are not the ontology's own.
+- **`docs` shows "Derived from"** (#371): the header's `prov:wasDerivedFrom`
+  targets, at the top of the index and as `derived_from` in the JSON.
 - **`docs/MIGRATION_v0.7.0.md`, the single migration note for v0.7.0** (#312).
   It has a section for changes that cut across commands (exit codes, default
   output directories, flags versus configuration files) and then one section
@@ -523,6 +547,19 @@ change, and what to do about it, is listed command by command in the
   counts entity and property pairs. The CLI output is unchanged.
 
 ### Fixed
+- **`lint`'s `dangling-reference` no longer claims a namespace from one node**
+  (#69). A namespace is checked only when the file defines two or more entities
+  in it, or the reference lies within the file's own ontology IRI, and a
+  borrowed vocabulary is never checked. The objects of `owl:imports`,
+  `owl:versionIRI` and the other ontology-naming predicates, and every object
+  of an ontology header's own triples, are no longer reported (#209). `LINT_GUIDE.md` no
+  longer tells you to name the imported file on the command line, which did
+  nothing.
+- **`missing-label` and `missing-comment` no longer fire on a borrowed
+  vocabulary's term** (#368), including the `prov:wasDerivedFrom` that `order`,
+  `split` and a named `merge` declare for their stamp.
+- **`docs` no longer documents, and `stats` no longer counts, a term the
+  ontology does not own** (#371).
 - **An inline blank node with several objects for one predicate is valid
   Turtle again** (#343). `order` wrote the predicate again before every object
   after the comma, and the grammar expects another object there, so rdflib

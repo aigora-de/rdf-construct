@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote
 
 import yaml
 from rdflib import BNode, Graph, URIRef, Namespace
@@ -22,6 +22,7 @@ from rdflib.namespace import RDF, RDFS, OWL, SKOS
 from rdflib.term import Node
 
 from rdf_construct.core.blank_nodes import component_digest
+from rdf_construct.core.ownership import is_borrowed, source_ontologies
 from rdf_construct.core.outdir import OUTPUT_MARKER, mark_output_dir
 from rdf_construct.core.output_paths import PlannedOutput, colliding_outputs, outputs_over_inputs
 from rdf_construct.core.provenance import WAS_DERIVED_FROM, derivation_targets, stamp_derivation
@@ -97,75 +98,6 @@ def _fallback_name(namespace: str) -> str:
     segments = [s for s in re.split(r"[#/:]", namespace.rstrip(_NAMESPACE_DELIMITERS)) if s]
     name = re.sub(r"[^A-Za-z0-9_.-]", "_", segments[-1] if segments else "").strip(".")
     return name or "namespace"
-
-
-def source_ontologies(graph: Graph) -> list[URIRef]:
-    """The ontology IRIs a source declares: its named ``owl:Ontology`` subjects, sorted.
-
-    Args:
-        graph: The source graph.
-
-    Returns:
-        The IRIs, sorted. A blank-node header has no IRI and is left out.
-    """
-    return sorted(s for s in graph.subjects(RDF.type, OWL.Ontology) if isinstance(s, URIRef))
-
-
-def _host(iri: str) -> str:
-    """The authority part of an IRI, lower-cased: ``www.w3.org`` for W3C's vocabularies."""
-    return urlsplit(iri).netloc.lower()
-
-
-#: Hosts where many publishers each own a part of the space: a persistent-identifier service, or
-#: W3C's, whose vocabularies are separate ontologies with separate owners. On these, sharing the
-#: host says nothing about who owns a namespace (#385's panel). ``purl.obolibrary.org`` is not
-#: here: OBO terms all share ``…/obo/``, so no test by namespace can tell one ontology's from
-#: another's.
-SHARED_HOSTS: frozenset[str] = frozenset({"purl.org", "w3id.org", "www.w3.org"})
-
-
-def _owns(ontology: URIRef, namespace: str) -> bool:
-    """Whether an ontology owns a namespace: on its own host, or within its own IRI.
-
-    On an ordinary host, the whole host is the ontology's. On one of :data:`SHARED_HOSTS`, only
-    the space under the ontology's own IRI is: ``http://purl.org/myont`` owns
-    ``http://purl.org/myont#`` but not ``http://purl.org/dc/terms/``.
-    """
-    host = _host(str(ontology))
-    if host != _host(namespace):
-        return False
-    if host in SHARED_HOSTS:
-        return in_namespace(
-            _lower_authority(namespace), _lower_authority(str(ontology)).rstrip("#/")
-        )
-    return True
-
-
-def _lower_authority(iri: str) -> str:
-    """The IRI with its scheme and host lower-cased, which RFC 3986 compares without case."""
-    parts = urlsplit(iri)
-    authority = f"{parts.scheme}://{parts.netloc}"
-    if not iri.startswith(authority):
-        return iri
-    return authority.lower() + iri[len(authority) :]
-
-
-def is_borrowed(namespace: str, ontologies: list[URIRef]) -> bool:
-    """Whether a namespace belongs to someone other than the source (#383, #178).
-
-    A namespace is borrowed when no ontology the source declares owns it (:func:`_owns`):
-    ``dcterms:`` or GeoSPARQL's in a file whose ontology lives elsewhere, or ``dcterms:`` in one
-    that lives elsewhere on ``purl.org``. A source that declares no ontology gives nothing to
-    judge by, so nothing is borrowed.
-
-    Args:
-        namespace: The namespace IRI.
-        ontologies: The source's ontology IRIs, from :func:`source_ontologies`.
-
-    Returns:
-        True if the namespace is borrowed.
-    """
-    return bool(ontologies) and not any(_owns(o, namespace) for o in ontologies)
 
 
 #: The reasons a subject goes to the unmatched module, as the run reports them (#176)
