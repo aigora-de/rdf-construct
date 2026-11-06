@@ -289,7 +289,7 @@ class TestKept:
         assert result.exit_code == 0, result.output
         assert isomorphic(_read(out), _read(A))
         assert "No ontology header written" not in result.stderr
-        assert "Ontology: kept" in result.output
+        assert f"Ontology: <{ONT_A}> (kept: every source declares this one)" in result.output
 
     def test_a_different_version_is_not_one_identity(self, tmp_path):
         later = tmp_path / "a2.ttl"
@@ -389,3 +389,131 @@ def test_the_example_config_runs_and_names_the_merge(tmp_path, monkeypatch):
     result = _run("--config", "examples/merge/merge_config.yml", "-o", out)
     assert result.exit_code == 0, result.output
     assert _headers(_read(out)) == {MERGED}
+
+
+class TestReviewFindings:
+    """Cases the independent review of #504 found unguarded."""
+
+    def test_the_merged_ontology_is_never_derived_from_itself(self, tmp_path):
+        nv = tmp_path / "nv.ttl"
+        nv.write_text(
+            "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n"
+            "<http://example.org/nv> a owl:Ontology .\n"
+            "<http://example.org/nv#C> a owl:Class .\n"
+        )
+        out = tmp_path / "m.ttl"
+        result = _run(nv, PLAIN, "-o", out, "--ontology-iri", "http://example.org/nv")
+        assert result.exit_code == 0, result.output
+        graph = _read(out)
+        assert (None, PROV.wasDerivedFrom, None) not in graph
+        assert "nv.ttl (its ontology IRI is the merged one)" in result.output
+
+    def test_naming_it_after_a_version_iri_does_not_cite_that_version(self, tmp_path):
+        out = tmp_path / "m.ttl"
+        version = URIRef("http://example.org/a/1.0.0")
+        _run(A, B, "-o", out, "--ontology-iri", version)
+        assert set(_read(out).objects(version, PROV.wasDerivedFrom)) == {
+            URIRef("http://example.org/b/2.0.0")
+        }
+
+    def test_a_curie_base_from_the_config_is_refused(self, tmp_path):
+        argv = ["-c", str(_config(tmp_path, base="a:Merged")), "-o", str(tmp_path / "m.ttl")]
+        before = snapshot(argv, tmp_path)
+        result = _run(*argv)
+        assert result.exit_code == 2, result.output
+        assert "reads as a prefixed name" in result.output
+        assert_wrote_nothing(before, snapshot(argv, tmp_path))
+
+    def test_a_curie_in_the_preferred_prefixes_is_refused(self, tmp_path):
+        config = _config(
+            tmp_path,
+            base="mine:merged",
+            preferred_prefixes={"mine": "http://example.org/mine#"},
+        )
+        argv = ["-c", str(config), "-o", str(tmp_path / "m.ttl")]
+        before = snapshot(argv, tmp_path)
+        result = _run(*argv)
+        assert result.exit_code == 2, result.output
+        assert "namespaces.preferred_prefixes" in result.output
+        assert_wrote_nothing(before, snapshot(argv, tmp_path))
+
+    @pytest.mark.parametrize("value", ["merged", "a:Merged"])
+    def test_a_refusal_writes_no_report_or_data(self, tmp_path, value):
+        data = tmp_path / "data.ttl"
+        data.write_text("<http://example.org/x> <http://example.org/p> 1 .\n")
+        argv = [
+            str(A), str(B), "-o", str(tmp_path / "m.ttl"),
+            "--report", str(tmp_path / "r.md"),
+            "--migrate-data", str(data), "--data-output", str(tmp_path / "d.ttl"),
+            "--ontology-iri", value,
+        ]  # fmt: skip
+        before = snapshot(argv, tmp_path)
+        result = _run(*argv)
+        assert result.exit_code == 2, result.output
+        assert_wrote_nothing(before, snapshot(argv, tmp_path))
+
+    def test_one_header_in_two_sources_under_a_named_merge(self, tmp_path):
+        later = tmp_path / "a2.ttl"
+        later.write_text(A.read_text().replace("a/1.0.0", "a/1.1.0"))
+        out = tmp_path / "m.ttl"
+        result = _run(A, later, "-o", out, "--ontology-iri", MERGED)
+        assert result.exit_code == 0, result.output
+        graph = _read(out)
+        assert _headers(graph) == {MERGED}
+        assert set(graph.objects(MERGED, PROV.wasDerivedFrom)) == {
+            URIRef("http://example.org/a/1.0.0"),
+            URIRef("http://example.org/a/1.1.0"),
+        }
+        assert result.output.count(f"Demoted: <{ONT_A}>") == 2
+
+    def test_sources_with_one_file_name_are_told_apart(self, tmp_path):
+        (tmp_path / "d1").mkdir()
+        (tmp_path / "d2").mkdir()
+        first, second = tmp_path / "d1" / "a.ttl", tmp_path / "d2" / "a.ttl"
+        first.write_text(A.read_text())
+        second.write_text(A.read_text().replace("a/1.0.0", "a/2.0.0"))
+        result = _run(first, second, "-o", tmp_path / "m.ttl", "--ontology-iri", MERGED)
+        assert result.exit_code == 0, result.output
+        assert f"Demoted: <{ONT_A}> ({first})" in result.output
+        assert f"Demoted: <{ONT_A}> ({second})" in result.output
+        assert result.output.count("Derived from:") == 2
+
+    @pytest.mark.parametrize("copies", [1, 2])
+    def test_a_lone_blank_node_header_is_kept(self, tmp_path, copies):
+        out = tmp_path / "m.ttl"
+        result = _run(*([BLANK] * copies), "-o", out)
+        assert result.exit_code == 0, result.output
+        assert isomorphic(_read(out), _read(BLANK))
+        assert "Ontology: a blank-node header (kept" in result.output
+        assert "No ontology header written" not in result.stderr
+
+    def test_removed_is_exactly_what_demotion_took_out(self, tmp_path):
+        result = merge_files([A, B], tmp_path / "m.ttl")
+        assert result.identity is not None
+        expected = set()
+        for source in (A, B):
+            graph = _read(source)
+            for header in graph.subjects(RDF.type, OWL.Ontology):
+                expected.add((header, RDF.type, OWL.Ontology))
+                for predicate in (
+                    OWL.versionIRI,
+                    OWL.imports,
+                    OWL.priorVersion,
+                    OWL.backwardCompatibleWith,
+                    OWL.incompatibleWith,
+                ):
+                    expected.update(
+                        (header, predicate, o) for o in graph.objects(header, predicate)
+                    )
+        assert set(result.identity.removed) == expected
+
+    def test_a_control_character_is_refused(self, tmp_path):
+        result = _run(A, B, "-o", tmp_path / "m.ttl", "--ontology-iri", "http://example.org/\x07")
+        assert result.exit_code == 2, result.output
+
+    def test_a_term_used_only_as_a_predicate_gets_the_note(self, tmp_path):
+        out = tmp_path / "m.ttl"
+        predicate = "http://purl.org/dc/terms/title"
+        result = _run(A, B, "-o", out, "--ontology-iri", predicate)
+        assert result.exit_code == 0, result.output
+        assert "is already a term in the sources" in result.stderr

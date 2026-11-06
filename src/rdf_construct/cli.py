@@ -3125,16 +3125,17 @@ def _report_merge_identity(
     """
     from rdf_construct.merge.identity import describe as describe_header
 
-    if identity.ontology is not None:
+    if identity.kept:
+        kept = f"<{identity.ontology}>" if identity.ontology is not None else "a blank-node header"
+        click.echo(f"Ontology: {kept} (kept: every source declares this one)")
+    elif identity.ontology is not None:
         given_as = "--ontology-iri" if flag_given("ontology_iri") else "namespaces.base"
         click.echo(f"Ontology: <{identity.ontology}> (from: {given_as})")
-    elif identity.kept:
-        click.echo("Ontology: kept: every source declares the same one")
     elif identity.demoted:
         click.echo("Ontology: none")
     for header, name in identity.demoted:
         click.echo(f"  Demoted: {describe_header(header, name)}")
-    for name, targets in identity.stamped.items():
+    for name, targets in identity.stamped:
         click.echo(f"  Derived from: {', '.join(f'<{t}>' for t in targets)} ({name})")
     for reason in identity.unstamped:
         click.echo(f"  Not recorded as derived from: {reason}")
@@ -3407,7 +3408,7 @@ def merge(
     or namespaces.base in a config, names it, and each source is recorded
     with prov:wasDerivedFrom. Without either, sources that share one header
     keep it; otherwise the output has no header and the run warns, showing
-    the command that names it. Either way, each source header is demoted: it
+    the command that names it. Unless kept, each source header is demoted: it
     loses owl:Ontology, owl:versionIRI, owl:imports, owl:priorVersion,
     owl:backwardCompatibleWith and owl:incompatibleWith, and keeps the rest.
 

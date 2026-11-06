@@ -8,7 +8,7 @@ This module provides the main OntologyMerger class that:
 - Writes merged output with conflict markers
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TextIO
 
@@ -143,8 +143,14 @@ class OntologyMerger:
             clash = curie_clash(
                 str(self._ontology),
                 [
-                    (Path(s.path).name, {p: str(n) for p, n in s.graph.namespaces()})
-                    for s in sources
+                    (
+                        "namespaces.preferred_prefixes",
+                        dict(self.config.namespaces.preferred_prefixes),
+                    ),
+                    *(
+                        (Path(s.path).name, {p: str(n) for p, n in s.graph.namespaces()})
+                        for s in sources
+                    ),
                 ],
             )
             if clash:
@@ -322,10 +328,19 @@ class OntologyMerger:
         # Handle owl:imports
         merged = self._handle_imports(merged, sources)
 
-        # At most one ontology header: named, kept, or none, the sources' demoted (#171)
+        # At most one ontology header: named, kept, or none, the sources' demoted (#171). Two
+        # sources with one file name are told apart by their paths
+        names = [Path(s.path).name for s in sources]
+        shown = [s.path if names.count(n) > 1 else n for s, n in zip(sources, names, strict=True)]
         result.identity = apply_identity(
             merged,
-            [(s.headers or read_headers(Graph(), Path(s.path).name), s.graph) for s in sources],
+            [
+                (
+                    replace(s.headers, name=name) if s.headers else read_headers(Graph(), name),
+                    s.graph,
+                )
+                for s, name in zip(sources, shown, strict=True)
+            ],
             self._ontology,
             carry_imports=self.config.imports is not ImportsStrategy.REMOVE,
         )

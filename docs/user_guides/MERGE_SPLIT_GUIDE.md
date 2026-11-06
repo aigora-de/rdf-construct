@@ -66,7 +66,7 @@ rdf-construct merge [OPTIONS] [SOURCES]...
 |------|---------|
 | 0 | Merged; every conflict was resolved by `--strategy`, or there were none |
 | 1 | Merged, with conflicts marked in the output for review: always for `rdfs:domain`, `rdfs:range` and functional properties; for labels under `mark_all`, or when the highest-priority sources are tied |
-| 2 | Input refused or run failed (invalid options or config, file not found, parse error, a data file that cannot be read, an output that names an input or another output, an `--ontology-iri` that is not an absolute IRI) |
+| 2 | Input refused or run failed (invalid options or config, file not found, parse error, a data file that cannot be read, an output that names an input or another output, an `--ontology-iri` or `namespaces.base` that is not an absolute IRI, or reads as a prefixed name) |
 
 A merge that writes no ontology header still exits 0: see [Ontology Identity](#ontology-identity).
 
@@ -295,7 +295,8 @@ from the first of these that applies, and the run prints it as `Ontology:`:
    used exactly as given. The output gets one header at it, with no `owl:versionIRI`, and one
    `prov:wasDerivedFrom` per source, naming the source's version IRI, or its ontology IRI where it
    has none. A source is named as it was read, before any `namespace_remap`. A source with no
-   header, or only a blank-node one, cannot be named, and the run says so.
+   header, or only a blank-node one, cannot be named, and neither is one whose IRI is the merged
+   one; the run says so.
 2. **Kept:** every source declares exactly one header, all at one IRI with the same version IRIs:
    a single file, a file merged with itself, or modules split under one `ontology_iri:`. That
    header is left as it is.
@@ -340,7 +341,7 @@ ex:merged a owl:Ontology ;
 
 `--ontology-iri` must be an absolute IRI. An empty value, one with no scheme, one containing a
 space, `<`, `>`, `"`, `{`, `}`, `|`, `\`, `^` or a backtick, and one that reads as a prefixed name
-in a source's prefixes (`ex:Merged`) are refused at exit 2 before anything is written. An IRI that
+in a source's prefixes or `namespaces.preferred_prefixes` (`ex:Merged`) are refused at exit 2 before anything is written. An IRI that
 is already a source's ontology IRI, or one of its terms, is accepted with a `Note:`.
 
 | Limitation | Issue |

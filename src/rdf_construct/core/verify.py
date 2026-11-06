@@ -215,10 +215,11 @@ CONTRACTS: Mapping[str, CommandContract] = MappingProxyType(
                 Contract.SUPERSET,
                 note=(
                     "The losing values of the conflicts the merge reports as resolved are excluded. "
-                    "A blank-node component the sources share is written once (#170). So are the "
-                    "triples a demoted source header loses (#171): its owl:Ontology type, its "
-                    "owl:versionIRI, and owl:imports, owl:priorVersion, owl:backwardCompatibleWith "
-                    "and owl:incompatibleWith. The merged header and its stamps are additions."
+                    "A blank-node component the sources share is written once (#170). The triples "
+                    "a demoted source header loses are excluded too (#171): its owl:Ontology type, "
+                    "its owl:versionIRI, and owl:imports, owl:priorVersion, "
+                    "owl:backwardCompatibleWith and owl:incompatibleWith. The merged header and its "
+                    "stamps are additions."
                 ),
             ),
             CommandContract(

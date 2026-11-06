@@ -77,18 +77,20 @@ class MergeIdentity:
     """What the merge did to ontology headers.
 
     Attributes:
-        ontology: The merged ontology's IRI, or ``None`` when the output has no header of its own
-            (unnamed, kept, or no source had a header).
+        ontology: The merged ontology's IRI: the one given, or the sources' shared one when
+            ``kept``. ``None`` when the output has no header, or keeps a blank-node one.
         kept: True when the sources' one shared header was left as it is.
         demoted: Each demoted header and the source that declared it, in source order.
         moved_imports: Imports carried onto the named header.
         dropped_imports: Imports of a demoted header that an unnamed merge could not carry. Naming
             the merge carries them.
         self_imports: Imports dropped because the merge contains what they import.
-        stamped: Per source name, the ``prov:wasDerivedFrom`` targets the named header gives it.
+        stamped: Per source, its name and the ``prov:wasDerivedFrom`` targets the named header
+            gives it.
         unstamped: Sources a named merge could not name, each with the reason.
         notes: Lines the caller should show, about an IRI the user chose.
-        removed: Source triples the demotion removed, which the output no longer holds.
+        removed: Source triples the demotion removed, which the output no longer holds. A
+            blank-node header's are under the label the merge gave its node (#170).
     """
 
     ontology: URIRef | None = None
@@ -97,7 +99,7 @@ class MergeIdentity:
     moved_imports: list[URIRef] = field(default_factory=list)
     dropped_imports: list[URIRef] = field(default_factory=list)
     self_imports: list[URIRef] = field(default_factory=list)
-    stamped: dict[str, list[URIRef]] = field(default_factory=dict)
+    stamped: list[tuple[str, list[URIRef]]] = field(default_factory=list)
     unstamped: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     removed: list[Triple] = field(default_factory=list)
@@ -143,7 +145,7 @@ def check_ontology_iri(value: object) -> URIRef:
         raise ValueError(f"{value!r} is not an IRI")
     if not value.strip():
         raise ValueError("it is empty")
-    bad = sorted({c for c in value if c in _FORBIDDEN or c.isspace()})
+    bad = sorted({c for c in value if c in _FORBIDDEN or c.isspace() or not c.isprintable()})
     if bad:
         shown = ", ".join(repr(c) for c in bad)
         raise ValueError(f"{value!r} contains {shown}, which an IRI cannot")
@@ -180,15 +182,17 @@ def curie_clash(value: str, declared: list[tuple[str, dict[str, str]]]) -> str |
 
 
 def _same_identity(sources: list[tuple[SourceHeaders, Graph]]) -> bool:
-    """Whether every source declares exactly one header, all one IRI with one set of versions."""
+    """Whether every source declares exactly one header, all one subject with one set of versions.
+
+    A blank-node header counts: copies of one file share it once blank nodes are labelled by
+    content (#170), so a file with an anonymous ontology, alone or with itself, is kept.
+    """
     seen: set[tuple[Node, frozenset[Node]]] = set()
     for _, graph in sources:
         headers = set(graph.subjects(RDF.type, OWL.Ontology))
         if len(headers) != 1:
             return False
         [header] = headers
-        if not isinstance(header, URIRef):
-            return False
         seen.add((header, frozenset(graph.objects(header, OWL.versionIRI))))
     return len(seen) == 1
 
@@ -221,6 +225,8 @@ def apply_identity(
         return identity
     if ontology is None and _same_identity(sources):
         identity.kept = True
+        [header] = {h for h, _ in declared}
+        identity.ontology = header if isinstance(header, URIRef) else None
         return identity
 
     own: set[Node] = set()
@@ -238,7 +244,10 @@ def apply_identity(
                 f"Note: {ontology} is the ontology IRI of {', '.join(named_as)}; the merged "
                 "ontology takes that identity, and every other source's content joins it."
             )
-        elif (ontology, None, None) in merged or (None, None, ontology) in merged:
+        elif any(
+            pattern in merged
+            for pattern in ((ontology, None, None), (None, ontology, None), (None, None, ontology))
+        ):
             identity.notes.append(
                 f"Note: {ontology} is already a term in the sources; the merged header "
                 "shares its IRI."
@@ -283,9 +292,12 @@ def apply_identity(
     for target in identity.moved_imports:
         merged.add((ontology, OWL.imports, target))
     for read, _ in sources:
-        if read.targets:
-            stamp_derivation(merged, ontology, list(read.targets))
-            identity.stamped[read.name] = list(read.targets)
+        targets = [t for t in read.targets if t != ontology]
+        if targets:
+            stamp_derivation(merged, ontology, targets)
+            identity.stamped.append((read.name, targets))
+        elif read.targets:
+            identity.unstamped.append(f"{read.name} (its ontology IRI is the merged one)")
         elif read.headers:
             identity.unstamped.append(f"{read.name} (a blank-node header, which nothing names)")
         else:
