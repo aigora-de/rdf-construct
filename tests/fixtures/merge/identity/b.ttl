@@ -1,0 +1,19 @@
+@prefix b: <http://example.org/b#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# A second ontology at its own IRI. It imports A, which a merge of the two contains, and
+# describes prov:wasDerivedFrom as PROV-O does, which a derivation stamp must keep (#171).
+<http://example.org/b> a owl:Ontology ;
+    owl:versionIRI <http://example.org/b/2.0.0> ;
+    owl:backwardCompatibleWith <http://example.org/b/1.0.0> ;
+    owl:imports <http://example.org/a>, <http://example.org/other> ;
+    dcterms:title "Ontology B"@en .
+
+prov:wasDerivedFrom a owl:ObjectProperty ;
+    rdfs:label "was derived from"@en .
+
+b:Thing a owl:Class ;
+    rdfs:label "Thing"@en .

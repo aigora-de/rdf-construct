@@ -5,7 +5,7 @@
 @prefix ex: <http://example.org/> .
 
 # Ontology metadata
-ex:Ontology a owl:Ontology ;
+ex:extension a owl:Ontology ;
     rdfs:label "Extension Ontology"@en ;
     rdfs:comment "An extension ontology adding building subtypes."@en .
 

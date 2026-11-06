@@ -1,0 +1,16 @@
+@prefix a: <http://example.org/a#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# An ontology header whose IRI is also a class (punning): demotion must keep the class (#171).
+# It imports B's version IRI, which a merge of the two contains.
+<http://example.org/a> a owl:Ontology, owl:Class ;
+    owl:versionIRI <http://example.org/a/1.0.0> ;
+    owl:versionInfo "1.0.0" ;
+    owl:priorVersion <http://example.org/a/0.9.0> ;
+    owl:imports <http://example.org/common>, <http://example.org/b/2.0.0> ;
+    dcterms:title "Ontology A"@en .
+
+a:Thing a owl:Class ;
+    rdfs:label "Thing"@en .

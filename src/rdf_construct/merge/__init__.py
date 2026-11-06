@@ -78,6 +78,8 @@ from rdf_construct.merge.merger import (
     merge_files,
 )
 
+from rdf_construct.merge.identity import MergeIdentity
+
 from rdf_construct.merge.migrator import (
     DataMigrator,
     MigrationResult,
@@ -144,6 +146,7 @@ __all__ = [
     "OntologyMerger",
     "MergeResult",
     "merge_files",
+    "MergeIdentity",
     # Migrator
     "DataMigrator",
     "MigrationResult",

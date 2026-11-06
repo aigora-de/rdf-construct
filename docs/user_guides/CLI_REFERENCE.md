@@ -634,12 +634,15 @@ rdf-construct merge [SOURCES...] -o OUTPUT [OPTIONS]
 - `-r, --report PATH`: Write conflict report to file; refused (exit 2) if it names an input or the same file as `-o` or `--data-output`, whether or not the merge has conflicts
 - `--report-format FORMAT`: Report format: `text`, `markdown`, `md` (default: markdown)
 - `--imports STRATEGY`: owl:imports handling: `preserve`, `remove`, `merge` (default: preserve)
+- `--ontology-iri IRI`: IRI of the merged ontology, its one `owl:Ontology` header; overrides the config's `namespaces.base`. Refused (exit 2) unless it is an absolute IRI, or if it reads as a prefixed name in a source's prefixes
 - `--migrate-data PATH`: Data file(s) to migrate (can specify multiple)
 - `--migration-rules PATH`: YAML file with migration rules; **not read yet** ([#172](https://github.com/aigora-de/rdf-construct/issues/172)): give rules under the config's `migrate_data: rules:`
 - `--data-output PATH`: Output path for migrated data; refused (exit 2) if it names an input or the same file as `-o` or `--report`
 - `--dry-run`: Write nothing; list the files a real run would write
 - `--no-colour`: Disable coloured output
 - `--init`: Generate a default merge configuration file
+
+The output has at most one `owl:Ontology` header. `--ontology-iri` (or `namespaces.base`) names it, with one `prov:wasDerivedFrom` per source; sources that all declare the same one header keep it; otherwise the output has no header, and the run warns, showing the command that names it, and exits 0. Each source header is demoted: it loses `owl:Ontology`, `owl:versionIRI`, `owl:imports`, `owl:priorVersion`, `owl:backwardCompatibleWith` and `owl:incompatibleWith`, and keeps the rest. See [Ontology Identity](MERGE_SPLIT_GUIDE.md#ontology-identity).
 
 A data file that is missing or cannot be parsed is refused (exit 2) before anything is written, and so is a migration rule that cannot be read: a prefix no data file or `namespaces.preferred_prefixes` binds, a pattern that is not three terms, an unknown `type:` or `bind:`. A rule that matches nothing in any data file, or a match left unchanged because a `bind` found no value, is listed on stderr and the run exits 1. See [Complex Migration](MERGE_SPLIT_GUIDE.md#complex-migration-transformation-rules).
 
@@ -657,6 +660,9 @@ A data file that is missing or cannot be parsed is refused (exit 2) before anyth
 ```bash
 # Basic merge of two ontologies
 rdf-construct merge core.ttl extension.ttl -o merged.ttl
+
+# Name the merged ontology
+rdf-construct merge core.ttl extension.ttl -o merged.ttl --ontology-iri http://example.org/merged
 
 # With priorities (extension wins conflicts)
 rdf-construct merge core.ttl extension.ttl -o merged.ttl -p 1 -p 2

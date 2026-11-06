@@ -232,7 +232,7 @@ change, and what to do about it, is listed command by command in the
   `owl:AnnotationProperty` unless the graph already gives it a property type,
   and binds `prov:`. `order` composes them through
   `stamp_extract()`, with `missing_triples()` as the trigger. `split` (#178) and
-  `merge` (#171) will call the same functions.
+  `merge` (#171) call the same functions.
 - **`header: false` on an `order` profile, or in `defaults:`** (#90), the one
   way to leave the ontology header out. Combined with a `header` section in the
   same profile, or given anything but `true` or `false`, it is refused at exit 2
@@ -644,7 +644,7 @@ change, and what to do about it, is listed command by command in the
   case; `rdfs:domain`, `rdfs:range` and any property a source declares
   `owl:FunctionalProperty` are load-bearing. A configuration file can move a
   predicate between tiers with `conflicts.predicate_tiers`. The ontology header
-  is not checked until #171. Detection no longer slows quadratically with the
+  is checked like any subject since #171. Detection no longer slows quadratically with the
   values on one subject: 20,000 labels on one subject took 118.6 s and now take
   0.28 s.
 - **`merge` applies the resolution it reports** (#169). The losing values of a
@@ -665,6 +665,20 @@ change, and what to do about it, is listed command by command in the
   missing or could not be parsed was reported after the merged ontology and
   report were written, and the run exited 0. It is now refused at exit 2 with
   nothing written, under `--dry-run` too.
+- **`merge` writes at most one ontology header** (#171). Two headed sources
+  were both written, each with its `owl:versionIRI`, at exit 0. A new
+  `--ontology-iri`, or `namespaces.base` (used as given; the flag wins), names
+  the merged ontology: one header, no `owl:versionIRI`, and one
+  `prov:wasDerivedFrom` per source. Sources sharing one header keep it.
+  Otherwise the output has no header, and the run warns with the command that
+  names it, at exit 0. Each source header is demoted: it loses `owl:Ontology`,
+  `owl:versionIRI`, `owl:imports`, `owl:priorVersion`,
+  `owl:backwardCompatibleWith` and `owl:incompatibleWith`, and keeps the rest,
+  a punned class included. A named header carries the demoted imports, except
+  of what the merge contains. Header annotations now go through the conflict
+  tiers. A value that is not an absolute IRI, or reads as a prefixed name, is
+  refused at exit 2 before anything is written. `MergeResult.identity` reports
+  it all to library callers.
 - **`merge --dry-run` writes nothing** (#436). It wrote the conflict report,
   over a source if `--report` named one. It now ends by naming each file a real
   run would write.
