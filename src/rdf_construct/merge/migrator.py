@@ -18,7 +18,7 @@ from rdflib.namespace import RDF
 from rdf_construct.core.utils import extract_prefix_map, rebase_by_rules
 from rdf_construct.merge.config import MigrationRule, DataMigrationConfig
 from rdf_construct.merge.prefixes import bind_exactly, combine_prefixes
-from rdf_construct.merge.rules import ResolvedRule, RuleEngine, resolve_rules
+from rdf_construct.merge.rules import ResolvedRule, RuleEngine, parse_declaring, resolve_rules
 
 
 @dataclass
@@ -132,8 +132,8 @@ class DataMigrator:
             MigrationResult with migrated graph and statistics
 
         Raises:
-            RuleError: If a rule cannot be read against the data's own prefixes, before the
-                data is touched (#492)
+            RuleError: If a rule cannot be read against the data's own bindings and the core
+                five, before the data is touched (#492)
         """
         resolved = resolve_rules(rules, [(Path("data"), extract_prefix_map(data))]) if rules else []
         result, _ = self._migrate(data, uri_map, resolved, namespace_rules)
@@ -196,7 +196,9 @@ class DataMigrator:
                 stats.triples_removed += changes["removed"]
                 count = changes["instances"]
                 if changes["kept"]:
-                    stats.rules_kept[label] = stats.rules_kept.get(label, 0) + changes["kept"]
+                    stats.rules_kept[rule.name] = (
+                        stats.rules_kept.get(rule.name, 0) + changes["kept"]
+                    )
             stats.rules_applied[label] = stats.rules_applied.get(label, 0) + count
             counts.append(count)
 
@@ -204,7 +206,7 @@ class DataMigrator:
         result.result_triples = len(migrated)
         result.success = True
         result.unmatched_rules = [
-            rule.label for rule, n in zip(rules, counts, strict=True) if n == 0
+            rule.name for rule, n in zip(rules, counts, strict=True) if n == 0
         ]
 
         return result, counts
@@ -348,8 +350,13 @@ def migrate_data_files(
     Returns:
         MigrationResult with combined statistics, or with ``success`` False and ``error`` set
         when a file is missing or cannot be parsed, in which case nothing is written
+
+    Raises:
+        RuleError: If a rule cannot be read against every file's declared prefixes, before
+            anything is written (#492)
     """
     graphs: list[tuple[Path, Graph]] = []
+    declared: list[tuple[Path, dict[str, str]]] = []
     for data_path in data_paths:
         if not data_path.exists():
             return MigrationResult(success=False, error=f"Data file not found: {data_path}")
@@ -357,12 +364,14 @@ def migrate_data_files(
         # Load the data file
         data = Graph(bind_namespaces="core")
         try:
-            data.parse(data_path.as_posix())
+            declared.append((data_path, parse_declaring(data, data_path)))
         except Exception as e:
             return MigrationResult(success=False, error=f"Failed to parse {data_path}: {e}")
         graphs.append((data_path, data))
 
-    return migrate_data_graphs(graphs, uri_map=uri_map, rules=rules, output_path=output_path)
+    return migrate_data_graphs(
+        graphs, uri_map=uri_map, rules=rules, output_path=output_path, prefixes=declared
+    )
 
 
 def migrate_data_graphs(
@@ -379,12 +388,13 @@ def migrate_data_graphs(
             graph. Parse with ``Graph(bind_namespaces="core")``, so a file's own ``org:`` is
             not pushed aside to ``org1:`` by rdflib's table (#358).
         uri_map: URI substitution map
-        rules: Migration rules to apply. A CURIE in one resolves once across every data file's
-            prefixes and ``prefixes``; one no source binds, or two bind differently, is refused
-            (#492).
+        rules: Migration rules to apply. A CURIE in one resolves once across every data
+            graph's bindings, ``prefixes`` and the core five; one no source binds, or two bind
+            differently, is refused (#492). A default ``Graph()`` binds rdflib's table.
         output_path: Path to write combined migrated output
         prefixes: More prefixes for the rules, each with the file that gives them: a merge
-            config's ``namespaces.preferred_prefixes``, named by the config file
+            config's ``namespaces.preferred_prefixes``, named by the config file, and each data
+            file's declared prefixes (`parse_declaring`), which its graph may not keep
 
     Returns:
         MigrationResult with combined statistics
@@ -450,7 +460,7 @@ def migrate_data_graphs(
     combined_result.result_triples = len(combined_graph)
     combined_result.success = True
     combined_result.unmatched_rules = [
-        rule.label for rule, total in zip(resolved, totals, strict=True) if total == 0
+        rule.name for rule, total in zip(resolved, totals, strict=True) if total == 0
     ]
 
     # Write output if path provided

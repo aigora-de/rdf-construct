@@ -18,7 +18,13 @@ from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.namespace import OWL, RDF, XSD
 
 from rdf_construct.cli import cli
-from rdf_construct.merge import DataMigrator, MigrationRule, RuleError, migrate_data_graphs
+from rdf_construct.merge import (
+    DataMigrator,
+    MigrationRule,
+    RuleError,
+    migrate_data_files,
+    migrate_data_graphs,
+)
 from tests.test_cli_smoke import assert_no_crash, assert_wrote_nothing, snapshot
 
 REPO = Path(__file__).resolve().parent.parent
@@ -287,7 +293,10 @@ class TestBinds:
         data = DATA + 'd:cher <http://example.org/ont#fullName> "Cher" .\n'
         result, g = _migrate(tmp_path, [SPLIT], data=data)
         assert result.exit_code == 1, result.output
-        assert "split: 1 match(es) left unchanged: a construct built no value" in result.stderr
+        assert (
+            "Left 1 match(es) unchanged, as a construct built no value: migration rule 1 ('split')"
+            in result.stderr
+        )
         assert (d("cher"), ex("fullName"), Literal("Cher")) in g
         assert not list(g.triples((d("cher"), ex("givenName"), None)))
         assert (d("ann"), ex("givenName"), Literal("Ann", lang="en")) in g
@@ -307,8 +316,49 @@ class TestBinds:
         assert result.exit_code == 0, result.output
         assert "e+" not in dout.read_text().lower()
         values = {str(o) for o in Graph().parse(dout).objects(d("x"), ex("c"))}
-        assert values == {"100", "37.0", "55555555555555555537.77777778"}
+        # A quotient that does not terminate keeps its integer part and 28 more digits
+        assert values == {"100", "37.0", "55555555555555555537.7777777777777777777777777778"}
         assert all(o.datatype == XSD.decimal for o in Graph().parse(dout).objects(d("x"), ex("c")))
+
+    def test_arithmetic_rounds_no_operand(self, tmp_path):
+        big = "12345678901234567890123456789012"
+        data = DATA + f"d:x <http://example.org/ont#n> {big} .\n"
+        rules = [
+            {
+                "type": "transform",
+                "description": "n",
+                "match": "?s ex:n ?n",
+                "construct": [{"pattern": "?s ex:m ?m", "bind": "((?n - 2) * 1/1) AS ?m"}],
+            }
+        ]
+        result, g = _migrate(tmp_path, rules, data=data)
+        assert result.exit_code == 0, result.output
+        assert [str(o) for o in g.objects(d("x"), ex("m"))] == [big[:-1] + "0"]
+
+    def test_arithmetic_on_a_value_that_is_not_numeric_leaves_its_match_unchanged(self, tmp_path):
+        data = DATA + (
+            "@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n"
+            'd:p <http://example.org/ont#n> "40" .\n'
+            'd:q <http://example.org/ont#n> "40"@en .\n'
+            'd:r <http://example.org/ont#n> "4e1"^^xsd:string .\n'
+            'd:s <http://example.org/ont#n> "4e1"^^xsd:double .\n'
+            'd:t <http://example.org/ont#n> "NaN"^^xsd:double .\n'
+        )
+        rules = [
+            {
+                "type": "transform",
+                "description": "double",
+                "match": "?s ex:n ?n",
+                "construct": [{"pattern": "?s ex:m ?m", "bind": "((?n - 0) * 2/1) AS ?m"}],
+            }
+        ]
+        result, g = _migrate(tmp_path, rules, data=data)
+        assert result.exit_code == 1, result.output
+        assert "Left 4 match(es) unchanged" in result.stderr
+        assert [str(o) for o in g.objects(d("s"), ex("m"))] == ["80"]
+        for local in "pqrt":
+            assert not list(g.objects(d(local), ex("m")))
+            assert len(list(g.objects(d(local), ex("n")))) == 1
 
 
 class TestNothingMatched:
@@ -322,10 +372,30 @@ class TestNothingMatched:
         config, merged, dout = _setup(tmp_path, rules)
         result = _run("merge", "-c", config, "-o", merged, *(["--dry-run"] if dry_run else []))
         assert result.exit_code == 1, result.output
-        assert "Rule matched nothing in any data file: typo" in result.stderr
-        assert "Rule matched nothing in any data file: gone" in result.stderr
+        assert "Matched nothing in any data file: migration rule 2 ('typo')" in result.stderr
+        assert "Matched nothing in any data file: migration rule 3 ('gone')" in result.stderr
         assert "split" not in result.stderr
         assert dout.exists() is not dry_run
+
+    def test_rules_without_a_description_are_told_apart(self, tmp_path):
+        rules = [
+            {"type": "transform", "match": "?s ex:fulName ?n"},
+            {"type": "transform", "match": "?s ex:nam ?n"},
+            {"type": "transform", "match": "?s ex:fullName ?n",
+             "construct": [{"pattern": "?s ex:g ?g", "bind": "STRBEFORE(?n, '#') AS ?g"}]},
+            {"type": "transform", "match": "?s ex:label ?n",
+             "construct": [{"pattern": "?s ex:g ?g", "bind": "STRBEFORE(?n, '#') AS ?g"}]},
+        ]  # fmt: skip
+        result, _ = _migrate(tmp_path, rules)
+        assert result.exit_code == 1, result.output
+        assert "Matched nothing in any data file: migration rule 1 ('transform')" in result.stderr
+        assert "Matched nothing in any data file: migration rule 2 ('transform')" in result.stderr
+        assert "Left 2 match(es) unchanged, as a construct built no value: migration rule 3" in (
+            result.stderr
+        )
+        assert "Left 1 match(es) unchanged, as a construct built no value: migration rule 4" in (
+            result.stderr
+        )
 
     def test_a_rule_that_matches_in_one_data_file_of_two_is_not_listed(self, tmp_path):
         other = f'@prefix ex: <{EX}> .\n<{D}cy> ex:note "x" .\n'
@@ -412,6 +482,47 @@ class TestRefusals:
         result, g = _migrate(tmp_path, rules, namespaces={"preferred_prefixes": {"foaf": FOAF}})
         assert result.exit_code == 0, result.output
         assert (d("bob"), URIRef(FOAF + "name"), Literal("Bob Ray")) in g
+
+
+class TestPrefixes:
+    """A rule may use any prefix a data file declares, and the core five (#492)."""
+
+    def test_xsd_resolves_when_the_data_declares_xs_for_its_namespace(self, tmp_path):
+        data = DATA.replace(
+            "@prefix ex:", "@prefix xs: <http://www.w3.org/2001/XMLSchema#> .\n@prefix ex:"
+        )
+        rules = [
+            {"type": "transform", "description": "typed", "match": '?s ex:age "40"^^xsd:integer',
+             "construct": [{"pattern": "?s ex:forty true"}], "delete_matched": False},
+        ]  # fmt: skip
+        result, g = _migrate(tmp_path, rules, data=data)
+        assert result.exit_code == 0, result.output
+        assert (d("ann"), ex("forty"), Literal(True)) in g
+
+    def test_both_prefixes_a_file_declares_for_one_namespace_resolve(self, tmp_path):
+        # rdflib keeps the last prefix declared for a namespace, so the graph has ont: and no ex:
+        data = DATA + f"@prefix ont: <{EX}> .\n"
+        result, g = _migrate(tmp_path, [SPLIT], data=data)
+        assert result.exit_code == 0, result.output
+        assert (d("bob"), ex("givenName"), Literal("Bob")) in g
+
+    def test_a_data_file_binding_a_core_prefix_differently_is_refused(self, tmp_path):
+        data = DATA.replace("@prefix ex:", f"@prefix xsd: <{OTHER}> .\n@prefix ex:")
+        rules = [{"type": "transform", "match": '?s ex:age "40"^^xsd:integer'}]
+        config, merged, _ = _setup(tmp_path, rules, data=data)
+        argv = ["merge", "-c", str(config), "-o", str(merged)]
+        before = snapshot(argv, tmp_path)
+        result = _run(*argv)
+        assert result.exit_code == 2, result.output
+        assert "means different IRIs" in result.output and "the core prefixes" in result.output
+        assert_wrote_nothing(before, snapshot(argv, tmp_path))
+
+    def test_migrate_data_files_reads_each_files_declarations(self, tmp_path):
+        path = tmp_path / "data.ttl"
+        path.write_text(DATA + f"@prefix ont: <{EX}> .\n")
+        result = migrate_data_files([path], rules=[MigrationRule.from_dict(SPLIT)])
+        assert result.success and result.migrated_graph is not None
+        assert (d("bob"), ex("givenName"), Literal("Bob")) in result.migrated_graph
 
 
 class TestLibrary:

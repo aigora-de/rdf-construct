@@ -93,6 +93,7 @@ from rdf_construct.merge.rules import (
     Binding,
     ResolvedRule,
     RuleError,
+    parse_declaring,
     resolve_rules,
 )
 
@@ -156,6 +157,7 @@ __all__ = [
     "Binding",
     "ResolvedRule",
     "RuleError",
+    "parse_declaring",
     "resolve_rules",
     # Formatters
     "TextFormatter",

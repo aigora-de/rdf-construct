@@ -16,17 +16,20 @@ A pattern is three terms, written as in Turtle: ``?name`` is a variable; ``<…>
 CURIE is an IRI; ``a`` in the predicate position is ``rdf:type``; ``"…"``, ``"…"@en``,
 ``"…"^^xsd:integer``, a bare number and ``true``/``false`` are literals. ``_:x`` is allowed in a
 construct pattern only, where it is a fresh blank node for each match. A match matches by RDF term
-equality, so ``40`` matches ``"40"^^xsd:integer`` and not ``"040"^^xsd:integer``.
+equality, so ``40`` matches ``"40"^^xsd:integer`` and not ``"40"`` or ``"40.0"^^xsd:decimal``.
 
-A CURIE resolves strictly: against the prefixes the caller gives (`resolve_rules`), never
-rdflib's built-in table (#492). A rule that cannot be read raises `RuleError` before any graph is
-changed.
+A CURIE resolves strictly, against the core five prefixes (rdf, rdfs, owl, xsd, xml) and the
+sources the caller gives (`resolve_rules`), and nothing else (#492). The ``merge`` command's
+sources are the prefixes each data file declares and the config's ``preferred_prefixes``; a
+library caller that gives a graph's own map gives whatever that graph binds, which for a default
+``Graph()`` includes rdflib's table. A rule that cannot be read raises `RuleError` before any
+graph is changed.
 """
 
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation
+from decimal import MAX_EMAX, MAX_PREC, MIN_EMIN, Decimal, Inexact, InvalidOperation, localcontext
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +41,78 @@ from rdflib.util import from_n3
 from rdf_construct.core.utils import CurieError, extract_prefix_map, resolve_curie
 from rdf_construct.merge.config import MigrationRule
 from rdf_construct.refactor.config import AmbiguousCurieError, resolve_term
+
+# Bound for every rule, whatever the data declares; a source that binds one of them differently
+# is a disagreement, refused like any other (#492)
+CORE_PREFIXES: dict[str, str] = {
+    "rdf": str(RDF),
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "owl": "http://www.w3.org/2002/07/owl#",
+    "xsd": str(XSD),
+    "xml": "http://www.w3.org/XML/1998/namespace",
+}
+
+# The datatypes an arithmetic bind computes on: xsd:decimal, xsd:double, xsd:float and the
+# integer types derived from xsd:decimal. Anything else is a type error in SPARQL, so its match
+# is left unchanged (#492)
+_NUMERIC_TYPES = frozenset(
+    XSD[name]
+    for name in (
+        "decimal",
+        "double",
+        "float",
+        "integer",
+        "nonPositiveInteger",
+        "negativeInteger",
+        "long",
+        "int",
+        "short",
+        "byte",
+        "nonNegativeInteger",
+        "unsignedLong",
+        "unsignedInt",
+        "unsignedShort",
+        "unsignedByte",
+        "positiveInteger",
+    )
+)
+
+# Significant digits kept when a division does not terminate: Python's default
+_DIVISION_DIGITS = 28
+
+
+def parse_declaring(graph: Graph, source: str | Path, **parse_args: Any) -> dict[str, str]:
+    """Parse ``source`` into ``graph``, and return every prefix the source declares.
+
+    rdflib keeps one prefix for each namespace, so a file that declares ``xs:`` for XSD loses
+    ``xsd:``, and one that declares ``ex:`` and ``ont:`` for one namespace loses one of them.
+    A rule may use any prefix the file declares, so the declarations are recorded as rdflib
+    reads them (#492).
+
+    Args:
+        graph: The graph to parse into.
+        source: The file to parse.
+        **parse_args: Passed to `Graph.parse`.
+
+    Returns:
+        Each prefix the source declares, with its namespace; a prefix declared twice keeps its
+        last namespace, as Turtle reads it.
+    """
+    declared: dict[str, str] = {}
+    manager = graph.namespace_manager
+    bind = manager.bind
+
+    def recording(prefix: str | None, namespace: Any, *args: Any, **kwargs: Any) -> None:
+        if prefix is not None:
+            declared[prefix] = str(namespace)
+        bind(prefix, namespace, *args, **kwargs)
+
+    manager.bind = recording  # type: ignore[method-assign]
+    try:
+        graph.parse(source.as_posix() if isinstance(source, Path) else source, **parse_args)
+    finally:
+        del manager.bind
+    return declared
 
 
 class RuleError(ValueError):
@@ -141,6 +216,11 @@ class ResolvedRule:
     def label(self) -> str:
         """The name the migration summary gives the rule: its description, else its type."""
         return self.rule.description or self.rule.type
+
+    @property
+    def name(self) -> str:
+        """The rule as a finding names it: its number, as `RuleError` gives it, and its label."""
+        return f"migration rule {self.index + 1} ({self.label!r})"
 
 
 # A quoted literal with its tag or datatype is one term, whatever it contains; anything else
@@ -385,12 +465,13 @@ def resolve_rules(
     """Resolve every rule's terms and check every rule, before any graph is changed (#492).
 
     A CURIE means one IRI across ``sources``: a source that does not bind its prefix is not a
-    disagreement, two that bind it differently are. rdflib's built-in prefix table is never used.
+    disagreement, two that bind it differently are. The core five (`CORE_PREFIXES`) are a
+    source of their own; rdflib's built-in prefix table is never consulted.
 
     Args:
         rules: The rules, in the order they run.
-        sources: Each source of prefixes: the data files, and the config's
-            ``namespaces.preferred_prefixes`` named by the config file.
+        sources: Each source of prefixes: the data files (see `parse_declaring`), and the
+            config's ``namespaces.preferred_prefixes`` named by the config file.
 
     Returns:
         One `ResolvedRule` per rule, in order.
@@ -398,7 +479,8 @@ def resolve_rules(
     Raises:
         RuleError: Naming the first rule that cannot be read, and why.
     """
-    parser = PatternParser(resolve=lambda text: resolve_term(text, sources))
+    every = [*sources, (Path("the core prefixes"), CORE_PREFIXES)]
+    parser = PatternParser(resolve=lambda text: resolve_term(text, every))
     resolved: list[ResolvedRule] = []
     for index, rule in enumerate(rules):
         try:
@@ -573,7 +655,7 @@ class RuleEngine:
 
         Returns:
             Evaluated value, or None when there is none: the delimiter is absent, or the value
-            is not a number
+            is not a literal of a numeric datatype (`_NUMERIC_TYPES`), or is not finite
         """
         value = bindings.get(bind.variable)
         if value is None:
@@ -588,11 +670,47 @@ class RuleEngine:
             language = value.language if isinstance(value, Literal) else None
             return Literal(part, lang=language) if language else Literal(part)
 
+        if not isinstance(value, Literal) or value.datatype not in _NUMERIC_TYPES:
+            return None
         try:
-            number = Decimal(str(value))
-            result = ((number - bind.subtract) * bind.multiply) / bind.divide
+            result = _arithmetic(Decimal(str(value)), bind)
         except (InvalidOperation, ArithmeticError):
+            # Not the datatype's lexical form
             return None
         if not result.is_finite():
             return None
         return Literal(format(result, "f"), datatype=XSD.decimal)
+
+
+def _arithmetic(number: Decimal, bind: Bind) -> Decimal:
+    """Compute ``((number - subtract) * multiply) / divide`` without rounding any operand.
+
+    The subtraction and multiplication are exact, however many digits the value has. A division
+    that terminates is exact too; one that does not (``1/3``) is rounded to `_DIVISION_DIGITS`
+    significant digits, or more when the integer part needs them, so the integer part is never
+    rounded.
+
+    Args:
+        number: The bound value.
+        bind: The arithmetic expression.
+
+    Returns:
+        The result.
+    """
+    with localcontext() as context:
+        context.prec, context.Emax, context.Emin = MAX_PREC, MAX_EMAX, MIN_EMIN
+        numerator = (number - bind.subtract) * bind.multiply
+        if not numerator.is_finite():
+            return numerator
+        digits = len(numerator.as_tuple().digits) + len(bind.divide.as_tuple().digits)
+        # A terminating quotient of these has at most this many significant digits
+        context.prec = 4 * digits + 2
+        context.traps[Inexact] = False
+        context.clear_flags()
+        result = numerator / bind.divide
+        if context.flags[Inexact]:
+            quotient = abs(numerator) // bind.divide
+            whole = len(str(quotient)) if quotient else 0
+            context.prec = max(_DIVISION_DIGITS, whole + _DIVISION_DIGITS)
+            result = numerator / bind.divide
+    return result

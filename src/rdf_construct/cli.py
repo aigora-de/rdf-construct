@@ -126,6 +126,7 @@ from rdf_construct.merge import (
     migrate_data_graphs,
     resolve_rules,
     RuleError,
+    parse_declaring,
     # Split imports
     OntologySplitter,
     SplitConfig,
@@ -3123,19 +3124,23 @@ def _apply_priorities(sources: Sequence[SourceConfig], priority: Sequence[int]) 
         src.priority = value
 
 
-def _load_merge_data(paths: Sequence[Path]) -> list[tuple[Path, Graph]]:
+def _load_merge_data(
+    paths: Sequence[Path],
+) -> tuple[list[tuple[Path, Graph]], list[tuple[Path, dict[str, str]]]]:
     """Read every data file a merge migrates, before anything is written (#437).
 
     Args:
         paths: The data files, from ``--migrate-data`` or the config's ``migrate_data``.
 
     Returns:
-        Each path with its parsed graph, in order.
+        Each path with its parsed graph, in order; and each path with every prefix it declares,
+        which its graph may not keep (#492).
 
     Raises:
         Refusal: A file is missing or cannot be parsed.
     """
     graphs: list[tuple[Path, Graph]] = []
+    declared: list[tuple[Path, dict[str, str]]] = []
     for path in paths:
         # A config's paths are not checked by Click, as --migrate-data's are
         if not path.exists():
@@ -3143,11 +3148,11 @@ def _load_merge_data(paths: Sequence[Path]) -> list[tuple[Path, Graph]]:
         # "core", so the data's own org: is not pushed aside to org1: (#358)
         graph = Graph(bind_namespaces="core")
         try:
-            graph.parse(path.as_posix())
+            declared.append((path, parse_declaring(graph, path)))
         except Exception as e:
             raise Refusal(f"Could not parse data file {path}: {e}") from e
         graphs.append((path, graph))
-    return graphs
+    return graphs, declared
 
 
 def _echo_merge_dry_run(config: MergeConfig, report: Path | None, result: MergeResult) -> None:
@@ -3406,13 +3411,15 @@ def merge(
 
     # Read every data file before writing anything, so that one that is missing or cannot be
     # parsed refuses the run instead of failing after the ontology is written (#437)
-    data_graphs = _load_merge_data(migration.data_sources if migration else [])
+    data_graphs, declared = _load_merge_data(migration.data_sources if migration else [])
 
-    # A rule's CURIE means one IRI across every data file and the config's preferred_prefixes,
-    # and a rule that cannot be read refuses the run before anything is written (#492)
+    # A rule's CURIE means one IRI across every data file's declarations and the config's
+    # preferred_prefixes, and a rule that cannot be read refuses the run before anything is
+    # written (#492)
     rule_prefixes: list[tuple[Path, dict[str, str]]] = []
     if config_file and config.namespaces.preferred_prefixes:
         rule_prefixes.append((config_file, dict(config.namespaces.preferred_prefixes)))
+    rule_prefixes.extend(declared)
     if migration and migration.rules and data_graphs:
         try:
             resolve_rules(
@@ -3490,14 +3497,17 @@ def merge(
             for note in migration_result.prefix_notes:
                 click.echo(note, err=True)
             # A rule that did nothing, or left a match alone, is a finding: exit 1 (#492)
-            for label in migration_result.unmatched_rules:
+            for name in migration_result.unmatched_rules:
                 click.secho(
-                    f"\u26a0 Rule matched nothing in any data file: {label}", fg="yellow", err=True
+                    f"\u26a0 Matched nothing in any data file: {name}",
+                    fg="yellow",
+                    err=True,
                 )
                 rule_findings = True
-            for label, kept in migration_result.stats.rules_kept.items():
+            for name, kept in migration_result.stats.rules_kept.items():
                 click.secho(
-                    f"\u26a0 {label}: {kept} match(es) left unchanged: a construct built no value",
+                    f"\u26a0 Left {kept} match(es) unchanged, as a construct built no value: "
+                    f"{name}",
                     fg="yellow",
                     err=True,
                 )

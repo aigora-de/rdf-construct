@@ -478,18 +478,22 @@ default). Only the triples the pattern matches are touched. How a rule is read:
 
 - A pattern is three terms, written as in Turtle. `?name` is a variable, and a variable used twice
   must match one value. `a` in the predicate position is `rdf:type`.
-- An IRI is written in full, as `<…>`, or as a CURIE. A CURIE's prefix must be bound by a data file
-  or by `namespaces.preferred_prefixes`, or be one of `rdf`, `rdfs`, `owl`, `xsd` and `xml`. Two
-  files that bind it to different namespaces are refused, since the rule would mean two things.
+- An IRI is written in full, as `<…>`, or as a CURIE. A CURIE's prefix must be declared by a data
+  file or bound by `namespaces.preferred_prefixes`, or be one of `rdf`, `rdfs`, `owl`, `xsd` and
+  `xml`. Two files that bind it to different namespaces are refused, since the rule would mean two
+  things; so is a data file that binds one of those five elsewhere.
   rdflib's built-in prefixes (`foaf:`, `skos:`…) are not used: bind them under
   `preferred_prefixes`.
 - A literal is `"text"`, `"text"@en`, `"7"^^xsd:integer`, a bare number or `true`/`false`. A match
-  compares terms exactly, so `40` matches `"40"^^xsd:integer` and not `"040"^^xsd:integer`.
+  compares terms exactly, so `40` matches `"40"^^xsd:integer` and not `"40"` or
+  `"40.0"^^xsd:decimal`. `"x"` does not match `"x"^^xsd:string`, though RDF 1.1 says they are one
+  term: rdflib tells them apart.
 - `_:name` in a construct pattern is a new blank node for each match, shared by that match's
   construct patterns. A match pattern cannot hold one; use a variable.
 - `bind:` gives the construct pattern's object a value, in one of three forms:
   `STRBEFORE(?var, ' ') AS ?v`, `STRAFTER(?var, ' ') AS ?v`, which keep a language tag, and
-  `((?var - n) * m/d) AS ?v`, computed in decimal and written as an `xsd:decimal`.
+  `((?var - n) * m/d) AS ?v`, computed in decimal and written as an `xsd:decimal`. It computes on
+  a literal of a numeric datatype only; `"40"` or `"40"@en` leaves its match unchanged.
   `STRBEFORE` and `STRAFTER` read an IRI as its text, where SPARQL would refuse it.
 - Rules run in order, each on the data the one before it left.
 
@@ -497,7 +501,8 @@ A rule that cannot be read is refused at exit 2, before anything is written: a p
 three terms, a prefix that is not bound, an unknown `type:` or `bind:` form, a `rename` without
 `from:` or `to:`, or a construct variable the match does not bind. A rule that matches nothing in
 any data file is listed on stderr, and so is a match left unchanged because a `bind` found no
-value (`STRBEFORE` on a name with no space). The data is still written, and the run exits 1.
+value (`STRBEFORE` on a name with no space). Each is named as `migration rule N ('description')`.
+The data is still written, and the run exits 1.
 
 ### Configuration File
 
