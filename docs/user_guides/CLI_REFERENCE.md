@@ -635,13 +635,13 @@ rdf-construct merge [SOURCES...] -o OUTPUT [OPTIONS]
 - `--report-format FORMAT`: Report format: `text`, `markdown`, `md` (default: markdown)
 - `--imports STRATEGY`: owl:imports handling: `preserve`, `remove`, `merge` (default: preserve)
 - `--migrate-data PATH`: Data file(s) to migrate (can specify multiple)
-- `--migration-rules PATH`: YAML file with migration rules
+- `--migration-rules PATH`: YAML file with migration rules; **not read yet** ([#172](https://github.com/aigora-de/rdf-construct/issues/172)): give rules under the config's `migrate_data: rules:`
 - `--data-output PATH`: Output path for migrated data; refused (exit 2) if it names an input or the same file as `-o` or `--report`
 - `--dry-run`: Write nothing; list the files a real run would write
 - `--no-colour`: Disable coloured output
 - `--init`: Generate a default merge configuration file
 
-A data file that is missing or cannot be parsed is refused (exit 2) before anything is written.
+A data file that is missing or cannot be parsed is refused (exit 2) before anything is written, and so is a migration rule that cannot be read: a prefix no data file or `namespaces.preferred_prefixes` binds, a pattern that is not three terms, an unknown `type:` or `bind:`. A rule that matches nothing in any data file, or a match left unchanged because a `bind` found no value, is listed on stderr and the run exits 1. See [Complex Migration](MERGE_SPLIT_GUIDE.md#complex-migration-transformation-rules).
 
 **Conflict Resolution Strategies**:
 
@@ -731,8 +731,8 @@ migrate_data:
 
 **Exit Codes**:
 - `0`: Merge successful, no unresolved conflicts
-- `1`: Merge successful, but unresolved conflicts marked in output
-- `2`: Input refused or run failed (invalid options or config, file not found, parse error)
+- `1`: Merge successful, but unresolved conflicts marked in output, or a migration rule matched nothing or left a match unchanged
+- `2`: Input refused or run failed (invalid options or config, file not found, parse error, a migration rule that cannot be read)
 
 ---
 

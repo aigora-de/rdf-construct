@@ -73,7 +73,7 @@ imports: preserve
 # migrate_data:
 #   # Data files to migrate
 #   sources:
-#     - examples/merge_instances.ttl
+#     - examples/merge/merge_instances.ttl
 #
 #   # Output path for migrated data
 #   output: migrated_instances.ttl

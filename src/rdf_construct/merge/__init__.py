@@ -91,6 +91,9 @@ from rdf_construct.merge.rules import (
     PatternParser,
     Match,
     Binding,
+    ResolvedRule,
+    RuleError,
+    resolve_rules,
 )
 
 from rdf_construct.merge.formatters import (
@@ -151,6 +154,9 @@ __all__ = [
     "PatternParser",
     "Match",
     "Binding",
+    "ResolvedRule",
+    "RuleError",
+    "resolve_rules",
     # Formatters
     "TextFormatter",
     "MarkdownFormatter",
