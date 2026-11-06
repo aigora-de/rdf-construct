@@ -414,50 +414,95 @@ rdf-construct merge core.ttl ext.ttl -o merged.ttl \
 
 #### Complex Migration (Transformation Rules)
 
-For structural changes, define migration rules in YAML:
+For structural changes, give migration rules under `migrate_data: rules:` in a merge config:
 
 ```yaml
-# migration-rules.yml
-migrations:
-  # Simple rename
-  - type: rename
-    from: "http://old.example.org/ont#LegacyClass"
-    to: "http://example.org/ont#ModernClass"
-    description: "Rename legacy class"
+# merge.yml
+sources:
+  - core.ttl
+  - ext.ttl
 
-  # Property split
-  - type: transform
-    description: "Split fullName into givenName and familyName"
-    match: "?s ex:fullName ?name"
-    construct:
-      - pattern: "?s ex:givenName ?given"
-        bind: "STRBEFORE(?name, ' ') AS ?given"
-      - pattern: "?s ex:familyName ?family"
-        bind: "STRAFTER(?name, ' ') AS ?family"
-    delete_matched: true
+namespaces:
+  preferred_prefixes:
+    ex: "http://example.org/ont#"
 
-  # Type migration
-  - type: transform
-    description: "Migrate Company to Organisation"
-    match: "?s a ex:Company"
-    construct:
-      - pattern: "?s a ex:Organisation"
-      - pattern: "?s ex:organisationType ex:Commercial"
-    delete_matched: true
+migrate_data:
+  sources:
+    - data/people.ttl
+  output: migrated.ttl
+  rules:
+    # Simple rename
+    - type: rename
+      from: "http://old.example.org/ont#LegacyClass"
+      to: "http://example.org/ont#ModernClass"
+      description: "Rename legacy class"
+
+    # Property split
+    - type: transform
+      description: "Split fullName into givenName and familyName"
+      match: "?s ex:fullName ?name"
+      construct:
+        - pattern: "?s ex:givenName ?given"
+          bind: "STRBEFORE(?name, ' ') AS ?given"
+        - pattern: "?s ex:familyName ?family"
+          bind: "STRAFTER(?name, ' ') AS ?family"
+      delete_matched: true
+
+    # Type migration
+    - type: transform
+      description: "Migrate Company to Organisation"
+      match: "?s a ex:Company"
+      construct:
+        - pattern: "?s a ex:Organisation"
+        - pattern: "?s ex:organisationType ex:Commercial"
+      delete_matched: true
 ```
+
+Apply with:
+
+```bash
+rdf-construct merge -c merge.yml -o merged.ttl
+```
+
+`--migration-rules` and `migrate_data: rules_file:` are **not read yet**
+([#172](https://github.com/aigora-de/rdf-construct/issues/172)): a rules file given either way has
+no effect. Put the rules inline, as above.
 
 A `rename` rule moves the IRI wherever the data uses it: as a subject, as an object, or as a
 predicate, so the same rule renames a property or a class. The migration summary counts each
 position on its own line: `Subjects updated`, `Predicates updated` and `Objects updated`.
 
-Apply with:
+A `transform` rule finds every triple its `match:` pattern matches, builds the `construct:`
+triples from each match, and removes the matched triples when `delete_matched` is true (the
+default). Only the triples the pattern matches are touched. How a rule is read:
 
-```bash
-rdf-construct merge core.ttl ext.ttl -o merged.ttl \
-    --migrate-data data/*.ttl \
-    --migration-rules migration-rules.yml \
-    --data-output migrated/
-```
+- A pattern is three terms, written as in Turtle. `?name` is a variable, and a variable used twice
+  must match one value. `a` in the predicate position is `rdf:type`.
+- An IRI is written in full, as `<…>`, or as a CURIE. A CURIE's prefix must be declared by a data
+  file or bound by `namespaces.preferred_prefixes`, or be one of `rdf`, `rdfs`, `owl`, `xsd` and
+  `xml`. Two files that bind it to different namespaces are refused, since the rule would mean two
+  things; so is a data file that binds one of those five elsewhere.
+  rdflib's built-in prefixes (`foaf:`, `skos:`…) are not used: bind them under
+  `preferred_prefixes`.
+- A literal is `"text"`, `"text"@en`, `"7"^^xsd:integer`, a bare number or `true`/`false`. A match
+  compares terms exactly, so `40` matches `"40"^^xsd:integer` and not `"40"` or
+  `"40.0"^^xsd:decimal`. `"x"` does not match `"x"^^xsd:string`, though RDF 1.1 says they are one
+  term: rdflib tells them apart.
+- `_:name` in a construct pattern is a new blank node for each match, shared by that match's
+  construct patterns. A match pattern cannot hold one; use a variable.
+- `bind:` gives the construct pattern's object a value, in one of three forms:
+  `STRBEFORE(?var, ' ') AS ?v`, `STRAFTER(?var, ' ') AS ?v`, which keep a language tag, and
+  `((?var - n) * m/d) AS ?v`, computed in decimal and written as an `xsd:decimal`. It computes on
+  a literal of a numeric datatype only; `"40"` or `"40"@en` leaves its match unchanged.
+  `STRBEFORE` and `STRAFTER` read an IRI as its text, where SPARQL would refuse it.
+- Rules run in order, each on the data the one before it left.
+
+A rule that cannot be read is refused at exit 2, before anything is written: a pattern that is not
+three terms, a prefix that is not bound, an unknown `type:` or `bind:` form, a `rename` without
+`from:` or `to:`, or a construct variable the match does not bind. A rule that matches nothing in
+any data file is listed on stderr, and so is a match left unchanged because a `bind` found no
+value (`STRBEFORE` on a name with no space). Each is named as `migration rule N ('description')`.
+The data is still written, and the run exits 1.
 
 ### Configuration File
 
@@ -507,7 +552,7 @@ migrate_data:
     - data/split_instances.ttl
     - data/relationships.ttl
   output: data/migrated.ttl
-  rules_file: migration-rules.yml
+  rules_file: migration-rules.yml  # not read yet (#172); give rules: inline
 ```
 
 Use with:

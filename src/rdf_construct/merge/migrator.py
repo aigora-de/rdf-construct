@@ -15,10 +15,10 @@ from typing import Any
 from rdflib import Graph, URIRef, Literal, BNode
 from rdflib.namespace import RDF
 
-from rdf_construct.core.utils import rebase_by_rules
+from rdf_construct.core.utils import extract_prefix_map, rebase_by_rules
 from rdf_construct.merge.config import MigrationRule, DataMigrationConfig
 from rdf_construct.merge.prefixes import bind_exactly, combine_prefixes
-from rdf_construct.merge.rules import RuleEngine
+from rdf_construct.merge.rules import ResolvedRule, RuleEngine, parse_declaring, resolve_rules
 
 
 @dataclass
@@ -30,8 +30,10 @@ class MigrationStats:
         objects_updated: Number of object URIs substituted
         triples_added: Number of triples added by transformations
         triples_removed: Number of triples removed by transformations
-        rules_applied: Count of each rule applied
+        rules_applied: For each rule, the matches (transform) or positions substituted (rename)
         predicates_updated: Number of predicate URIs substituted
+        rules_kept: For each transform rule, the matches left unchanged because a construct
+            built no value (#492)
     """
 
     subjects_updated: int = 0
@@ -41,6 +43,7 @@ class MigrationStats:
     rules_applied: dict[str, int] = field(default_factory=dict)
     # Last, so that positional construction from before #415 keeps its meaning.
     predicates_updated: int = 0
+    rules_kept: dict[str, int] = field(default_factory=dict)
 
     @property
     def total_changes(self) -> int:
@@ -66,6 +69,8 @@ class MigrationResult:
         source_triples: Original triple count
         result_triples: Final triple count
         prefix_notes: One line per data-file prefix not written as declared (#358)
+        unmatched_rules: The rules that matched nothing (transform) or substituted nothing
+            (rename) in any data file, by the name the summary gives them (#492)
     """
 
     migrated_graph: Graph | None = None
@@ -75,6 +80,7 @@ class MigrationResult:
     source_triples: int = 0
     result_triples: int = 0
     prefix_notes: list[str] = field(default_factory=list)
+    unmatched_rules: list[str] = field(default_factory=list)
 
 
 class DataMigrator:
@@ -99,7 +105,7 @@ class DataMigrator:
         result = migrator.migrate(data_graph, uri_map=uri_map)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the data migrator."""
         self.rule_engine = RuleEngine()
 
@@ -124,8 +130,30 @@ class DataMigrator:
 
         Returns:
             MigrationResult with migrated graph and statistics
+
+        Raises:
+            RuleError: If a rule cannot be read against the data's own bindings and the core
+                five, before the data is touched (#492)
+        """
+        resolved = resolve_rules(rules, [(Path("data"), extract_prefix_map(data))]) if rules else []
+        result, _ = self._migrate(data, uri_map, resolved, namespace_rules)
+        return result
+
+    def _migrate(
+        self,
+        data: Graph,
+        uri_map: dict[URIRef, URIRef] | None,
+        rules: Sequence[ResolvedRule],
+        namespace_rules: Mapping[str, str] | None = None,
+    ) -> tuple[MigrationResult, list[int]]:
+        """Migrate a data graph with rules already resolved.
+
+        Returns:
+            The result, and for each rule the matches or positions substituted, so a caller
+            combining several graphs can tell a rule that did nothing in any of them (#492)
         """
         result = MigrationResult()
+        counts: list[int] = []
         result.source_triples = len(data)
 
         # Create a new graph for the migrated data. "core", so the data's own org: is not
@@ -149,32 +177,39 @@ class DataMigrator:
             for triple in data:
                 migrated.add(triple)
 
-        # Phase 2: Apply complex transformation rules
-        if rules:
-            for rule in rules:
-                if rule.type == "rename":
-                    # Handle rename rules that weren't in uri_map
-                    if rule.from_uri and rule.to_uri:
-                        single_map = {URIRef(rule.from_uri): URIRef(rule.to_uri)}
-                        migrated = self._apply_uri_substitution(migrated, single_map, result.stats)
-                        result.stats.rules_applied[rule.description or "rename"] = (
-                            result.stats.rules_applied.get(rule.description or "rename", 0) + 1
-                        )
-
-                elif rule.type == "transform":
-                    changes = self.rule_engine.apply_rule(migrated, rule)
-                    result.stats.triples_added += changes.get("added", 0)
-                    result.stats.triples_removed += changes.get("removed", 0)
-                    result.stats.rules_applied[rule.description or "transform"] = (
-                        result.stats.rules_applied.get(rule.description or "transform", 0)
-                        + changes.get("instances", 0)
+        # Phase 2: Apply complex transformation rules, each one already resolved and checked
+        stats = result.stats
+        for rule in rules:
+            label = rule.label
+            if rule.from_iri is not None and rule.to_iri is not None:
+                # Handle rename rules that weren't in uri_map
+                before = stats.subjects_updated + stats.predicates_updated + stats.objects_updated
+                migrated = self._apply_uri_substitution(
+                    migrated, {rule.from_iri: rule.to_iri}, stats
+                )
+                count = (
+                    stats.subjects_updated + stats.predicates_updated + stats.objects_updated
+                ) - before
+            else:
+                changes = self.rule_engine.apply_rule(migrated, rule)
+                stats.triples_added += changes["added"]
+                stats.triples_removed += changes["removed"]
+                count = changes["instances"]
+                if changes["kept"]:
+                    stats.rules_kept[rule.name] = (
+                        stats.rules_kept.get(rule.name, 0) + changes["kept"]
                     )
+            stats.rules_applied[label] = stats.rules_applied.get(label, 0) + count
+            counts.append(count)
 
         result.migrated_graph = migrated
         result.result_triples = len(migrated)
         result.success = True
+        result.unmatched_rules = [
+            rule.name for rule, n in zip(rules, counts, strict=True) if n == 0
+        ]
 
-        return result
+        return result, counts
 
     def _substitute_uri(
         self,
@@ -315,8 +350,13 @@ def migrate_data_files(
     Returns:
         MigrationResult with combined statistics, or with ``success`` False and ``error`` set
         when a file is missing or cannot be parsed, in which case nothing is written
+
+    Raises:
+        RuleError: If a rule cannot be read against every file's declared prefixes, before
+            anything is written (#492)
     """
     graphs: list[tuple[Path, Graph]] = []
+    declared: list[tuple[Path, dict[str, str]]] = []
     for data_path in data_paths:
         if not data_path.exists():
             return MigrationResult(success=False, error=f"Data file not found: {data_path}")
@@ -324,12 +364,14 @@ def migrate_data_files(
         # Load the data file
         data = Graph(bind_namespaces="core")
         try:
-            data.parse(data_path.as_posix())
+            declared.append((data_path, parse_declaring(data, data_path)))
         except Exception as e:
             return MigrationResult(success=False, error=f"Failed to parse {data_path}: {e}")
         graphs.append((data_path, data))
 
-    return migrate_data_graphs(graphs, uri_map=uri_map, rules=rules, output_path=output_path)
+    return migrate_data_graphs(
+        graphs, uri_map=uri_map, rules=rules, output_path=output_path, prefixes=declared
+    )
 
 
 def migrate_data_graphs(
@@ -337,6 +379,7 @@ def migrate_data_graphs(
     uri_map: dict[URIRef, URIRef] | None = None,
     rules: list[MigrationRule] | None = None,
     output_path: Path | None = None,
+    prefixes: Sequence[tuple[Path, Mapping[str, str]]] = (),
 ) -> MigrationResult:
     """Migrate data graphs that have already been read, and combine them into one.
 
@@ -345,12 +388,29 @@ def migrate_data_graphs(
             graph. Parse with ``Graph(bind_namespaces="core")``, so a file's own ``org:`` is
             not pushed aside to ``org1:`` by rdflib's table (#358).
         uri_map: URI substitution map
-        rules: Migration rules to apply
+        rules: Migration rules to apply. A CURIE in one resolves once across every data
+            graph's bindings, ``prefixes`` and the core five; one no source binds, or two bind
+            differently, is refused (#492). A default ``Graph()`` binds rdflib's table.
         output_path: Path to write combined migrated output
+        prefixes: More prefixes for the rules, each with the file that gives them: a merge
+            config's ``namespaces.preferred_prefixes``, named by the config file, and each data
+            file's declared prefixes (`parse_declaring`), which its graph may not keep
 
     Returns:
         MigrationResult with combined statistics
+
+    Raises:
+        RuleError: If a rule cannot be read, before any graph is migrated (#492)
     """
+    resolved = (
+        resolve_rules(
+            rules,
+            [*prefixes, *((path, extract_prefix_map(graph)) for path, graph in graphs)],
+        )
+        if rules
+        else []
+    )
+    totals = [0] * len(resolved)
     migrator = DataMigrator()
     combined_result = MigrationResult()
     combined_graph = Graph(bind_namespaces="core")
@@ -359,7 +419,8 @@ def migrate_data_graphs(
 
     for data_path, data in graphs:
         # Migrate this file
-        result = migrator.migrate(data, uri_map=uri_map, rules=rules)
+        result, counts = migrator._migrate(data, uri_map, resolved)
+        totals = [total + n for total, n in zip(totals, counts, strict=True)]
 
         if not result.success:
             return result
@@ -384,16 +445,23 @@ def migrate_data_graphs(
             combined_stats.rules_applied[rule_name] = (
                 combined_stats.rules_applied.get(rule_name, 0) + count
             )
+        for rule_name, count in result.stats.rules_kept.items():
+            combined_stats.rules_kept[rule_name] = (
+                combined_stats.rules_kept.get(rule_name, 0) + count
+            )
 
     # One prefix per namespace across every data file, decided as merge decides it (#358)
     # preferred_prefixes applies to the ontology only, so the notes offer no advice
-    prefixes, combined_result.prefix_notes = combine_prefixes(bindings, advice="")
-    bind_exactly(combined_graph, prefixes)
+    combined, combined_result.prefix_notes = combine_prefixes(bindings, advice="")
+    bind_exactly(combined_graph, combined)
 
     combined_result.migrated_graph = combined_graph
     combined_result.stats = combined_stats
     combined_result.result_triples = len(combined_graph)
     combined_result.success = True
+    combined_result.unmatched_rules = [
+        rule.name for rule, total in zip(resolved, totals, strict=True) if total == 0
+    ]
 
     # Write output if path provided
     if output_path and combined_result.migrated_graph:

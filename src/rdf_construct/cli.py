@@ -124,6 +124,9 @@ from rdf_construct.merge import (
     create_default_config,
     get_formatter,
     migrate_data_graphs,
+    resolve_rules,
+    RuleError,
+    parse_declaring,
     # Split imports
     OntologySplitter,
     SplitConfig,
@@ -3121,19 +3124,23 @@ def _apply_priorities(sources: Sequence[SourceConfig], priority: Sequence[int]) 
         src.priority = value
 
 
-def _load_merge_data(paths: Sequence[Path]) -> list[tuple[Path, Graph]]:
+def _load_merge_data(
+    paths: Sequence[Path],
+) -> tuple[list[tuple[Path, Graph]], list[tuple[Path, dict[str, str]]]]:
     """Read every data file a merge migrates, before anything is written (#437).
 
     Args:
         paths: The data files, from ``--migrate-data`` or the config's ``migrate_data``.
 
     Returns:
-        Each path with its parsed graph, in order.
+        Each path with its parsed graph, in order; and each path with every prefix it declares,
+        which its graph may not keep (#492).
 
     Raises:
         Refusal: A file is missing or cannot be parsed.
     """
     graphs: list[tuple[Path, Graph]] = []
+    declared: list[tuple[Path, dict[str, str]]] = []
     for path in paths:
         # A config's paths are not checked by Click, as --migrate-data's are
         if not path.exists():
@@ -3141,11 +3148,11 @@ def _load_merge_data(paths: Sequence[Path]) -> list[tuple[Path, Graph]]:
         # "core", so the data's own org: is not pushed aside to org1: (#358)
         graph = Graph(bind_namespaces="core")
         try:
-            graph.parse(path.as_posix())
+            declared.append((path, parse_declaring(graph, path)))
         except Exception as e:
             raise Refusal(f"Could not parse data file {path}: {e}") from e
         graphs.append((path, graph))
-    return graphs
+    return graphs, declared
 
 
 def _echo_merge_dry_run(config: MergeConfig, report: Path | None, result: MergeResult) -> None:
@@ -3223,7 +3230,7 @@ def _echo_merge_dry_run(config: MergeConfig, report: Path | None, result: MergeR
 @click.option(
     "--migration-rules",
     type=click.Path(exists=True, path_type=Path),
-    help="YAML file with migration rules",
+    help="YAML file with migration rules; not read yet (#172): use the config's migrate_data rules",
 )
 @click.option(
     "--data-output",
@@ -3275,9 +3282,10 @@ def merge(
       0 - Merged; every conflict was resolved by --strategy, or there were none
       1 - Merged, with conflicts marked in the output for review: always for
           rdfs:domain, rdfs:range and functional properties; for labels under
-          mark_all, or when the highest-priority sources are tied
+          mark_all, or when the highest-priority sources are tied; or a data
+          migration rule matched nothing, or left a match unchanged
       2 - Input refused or run failed (invalid options or config, parse error,
-          a data file that cannot be read, etc.)
+          a data file or migration rule that cannot be read, etc.)
 
     \b
     With --config, an option given on the command line overrides the file,
@@ -3403,7 +3411,23 @@ def merge(
 
     # Read every data file before writing anything, so that one that is missing or cannot be
     # parsed refuses the run instead of failing after the ontology is written (#437)
-    data_graphs = _load_merge_data(migration.data_sources if migration else [])
+    data_graphs, declared = _load_merge_data(migration.data_sources if migration else [])
+
+    # A rule's CURIE means one IRI across every data file's declarations and the config's
+    # preferred_prefixes, and a rule that cannot be read refuses the run before anything is
+    # written (#492)
+    rule_prefixes: list[tuple[Path, dict[str, str]]] = []
+    if config_file and config.namespaces.preferred_prefixes:
+        rule_prefixes.append((config_file, dict(config.namespaces.preferred_prefixes)))
+    rule_prefixes.extend(declared)
+    if migration and migration.rules and data_graphs:
+        try:
+            resolve_rules(
+                migration.rules,
+                [*rule_prefixes, *((path, extract_prefix_map(g)) for path, g in data_graphs)],
+            )
+        except RuleError as e:
+            raise Refusal(f"Cannot read {e}") from e
 
     # Execute merge
     click.echo("Merging ontologies...")
@@ -3440,6 +3464,7 @@ def merge(
         click.echo(f"  Conflict report: {report}")
 
     # Handle data migration
+    rule_findings = False
     if config.migrate_data and config.migrate_data.data_sources:
         click.echo()
         click.echo("Migrating data...")
@@ -3464,12 +3489,29 @@ def merge(
             uri_map=uri_map if uri_map else None,
             rules=config.migrate_data.rules if config.migrate_data.rules else None,
             output_path=config.migrate_data.output_path if not dry_run else None,
+            prefixes=rule_prefixes,
         )
 
         if migration_result.success:
             click.echo(text_formatter.format_migration_result(migration_result))
             for note in migration_result.prefix_notes:
                 click.echo(note, err=True)
+            # A rule that did nothing, or left a match alone, is a finding: exit 1 (#492)
+            for name in migration_result.unmatched_rules:
+                click.secho(
+                    f"\u26a0 Matched nothing in any data file: {name}",
+                    fg="yellow",
+                    err=True,
+                )
+                rule_findings = True
+            for name, kept in migration_result.stats.rules_kept.items():
+                click.secho(
+                    f"\u26a0 Left {kept} match(es) unchanged, as a construct built no value: "
+                    f"{name}",
+                    fg="yellow",
+                    err=True,
+                )
+                rule_findings = True
             if config.migrate_data.output_path and not dry_run:
                 click.secho(
                     f"\u2713 Wrote migrated data to {config.migrate_data.output_path}",
@@ -3494,6 +3536,8 @@ def merge(
             f"\u26a0 {len(result.unresolved_conflicts)} unresolved conflict(s) " "marked in output",
             fg="yellow",
         )
+        raise SystemExit(1)
+    elif rule_findings:
         raise SystemExit(1)
     else:
         raise SystemExit(0)

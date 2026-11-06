@@ -668,6 +668,29 @@ change, and what to do about it, is listed command by command in the
 - **`merge --dry-run` writes nothing** (#436). It wrote the conflict report,
   over a source if `--report` named one. It now ends by naming each file a real
   run would write.
+- **A data-migration `transform` rule matches only what its pattern says**
+  (#492). It matched every triple in the data, because a constant in the pattern
+  was taken for a variable, so the guide's own "split fullName" rule, with
+  `delete_matched: true` (the default), deleted every `rdf:type` and every other
+  property at exit 0. A rule's CURIE now resolves only against every prefix the
+  data files declare, `namespaces.preferred_prefixes` and `rdf`, `rdfs`, `owl`,
+  `xsd` and `xml`, never rdflib's built-in table. A `rename` rule's CURIE `from:`/`to:`,
+  which renamed nothing, now resolves the same way. A rule that cannot be read
+  (an unbound prefix, a pattern that is not three terms, an unknown `type:` or
+  `bind:`, a construct variable the match does not bind) is refused at exit 2
+  before anything is written; each of these did nothing, in silence. Literals
+  with a language tag or datatype, and bare numbers, now match. A rule that
+  matches nothing in any data file, or a match left unchanged because a `bind`
+  found no value, is listed on stderr as `migration rule N`, and the run exits 1.
+  A split on a name with no space used to delete it and build nothing. `STRBEFORE`/`STRAFTER` keep the
+  language tag.
+- **An arithmetic `bind` writes a valid `xsd:decimal`** (#465). It was computed
+  in a Python float and written from the float's `repr`, so `1e20` came out as
+  `"1e+20"^^xsd:decimal`, which is not a decimal. It is now computed in decimal
+  arithmetic, with no operand rounded, and written in plain notation. It computes
+  on a literal of a numeric datatype only: `"40"`, `"40"@en` and
+  `"4e1"^^xsd:string` were computed on as numbers, and now leave their match
+  unchanged, as SPARQL's type error would.
 - **`merge` writes a blank-node structure its sources share once** (#170).
   Every restriction, `owl:unionOf` list or `owl:AllDisjointClasses` that two
   sources both stated was written twice, because each parse gives blank nodes
