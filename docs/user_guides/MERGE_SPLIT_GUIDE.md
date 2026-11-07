@@ -284,6 +284,7 @@ The Markdown report includes:
 |------------|-------|
 | Conflict markers come out in a different order from run to run | #173 |
 | Values are compared as written, so `"1.0"` and `"1.00"` (`xsd:decimal`) on a functional property are reported as a conflict | — |
+| A named merge of sources none of which has an `owl:Ontology` header writes a header with nothing but its type, and `lint` reports it as `empty-ontology` | #520 |
 
 ### Ontology Identity
 
@@ -1169,6 +1170,7 @@ One module for each of the file's `ex:`, `org:` and `building:` namespaces, name
 | `--no-manifest`, `--migrate-data` and `--data-output` have no effect with `--by-namespace` | #179 |
 | The order of a module's `imports` and `dependencies` (and of the `deps:` shown above) changes from run to run | #181 |
 | Module files are written in rdflib's alphabetical order, not in semantic order | #305 |
+| A source with no `owl:Ontology` header gives each module a header with nothing but its type, or its type and `owl:imports`, and `lint` reports each one as `empty-ontology`. Until it is fixed, put `severity: {empty-ontology: warning}` in `.rdf-lint.yml` | #517 |
 
 #### Split with Data Migration
 

@@ -84,7 +84,7 @@ rdf-construct lint ontology.ttl --level relaxed
 | `dangling-reference` | Reference to an entity not defined in the ontology, in a namespace the file claims (see [Whose terms are checked](#whose-terms-are-checked)) |
 | `circular-subclass` | Class is a subclass of itself (directly or transitively) |
 | `property-no-type` | Property has domain/range but no `rdf:type` declaration |
-| `empty-ontology` | `owl:Ontology` declaration has no metadata |
+| `empty-ontology` | `owl:Ontology` header says nothing about the ontology: no annotation and no `owl:versionIRI` (see [Ontology headers](#ontology-headers)) |
 
 ### Documentation Rules (Default: Warning)
 
@@ -121,6 +121,50 @@ is never a term.
 `property-no-domain` and `property-no-range` look at `owl:ObjectProperty` only, so far; a term
 declared only by a characteristic, or as `owl:FunctionalProperty`, gets neither yet
 ([#205](https://github.com/aigora-de/rdf-construct/issues/205)).
+
+### Ontology headers
+
+`empty-ontology` reports a named `owl:Ontology` header that says nothing about the ontology. Any
+triple on the header counts as metadata **except `rdf:type` and `owl:imports`**: an `rdfs:label`
+or `rdfs:comment`, `owl:versionInfo`, `owl:priorVersion`, `owl:deprecated`, `dcterms:title`,
+`skos:prefLabel`, `vann:preferredNamespacePrefix`, the `prov:wasDerivedFrom` stamp that `merge`,
+`split` and `order` write, or any other annotation, and also `owl:versionIRI`. A header whose only
+triples are its type and its imports is reported. A blank-node header is not checked.
+
+`headers.ttl` declares three:
+
+```turtle
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+
+# A title is metadata
+<https://example.org/catalogue> a owl:Ontology ;
+    dcterms:title "Catalogue" .
+
+# So is the derivation a named merge writes
+<https://example.org/catalogue-merged> a owl:Ontology ;
+    prov:wasDerivedFrom <https://example.org/catalogue> .
+
+# Imports alone are not
+<https://example.org/catalogue-stub> a owl:Ontology ;
+    owl:imports <https://example.org/catalogue> .
+```
+
+```bash
+rdf-construct lint headers.ttl
+```
+
+```text
+Scanning 1 file(s)...
+
+headers.ttl:14 error[empty-ontology] ns1:catalogue-stub: owl:Ontology has no metadata: no annotation (label, comment, title, provenance, …) and no owl:versionIRI
+
+Found 1 error, 0 warnings, 0 info in 1 file
+```
+
+The run exits 1. (`ns1:` is rdflib's name for a namespace the file binds no prefix to:
+[#507](https://github.com/aigora-de/rdf-construct/issues/507).)
 
 ### Deprecated terms
 

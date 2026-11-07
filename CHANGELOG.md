@@ -561,6 +561,13 @@ change, and what to do about it, is listed command by command in the
   counts entity and property pairs. The CLI output is unchanged.
 - **`lint` reports findings on deprecated terms at info** (#204, #233), at every
   level, unless a `severity:` override names the rule.
+- **`lint`'s `empty-ontology` counts every annotation on a header as
+  metadata** (#505). Any triple other than `rdf:type` and `owl:imports` counts,
+  `owl:versionIRI` included, so a named `merge`'s header, which carries only
+  `prov:wasDerivedFrom` when a source has a header, no longer fails `lint`
+  (a merge of headerless sources still does: #520), and neither does a header with
+  only `dcterms:title`. `lint.rules.HEADER_STRUCTURE` holds the two predicates
+  that do not count.
 - **`lint` reports an unparseable file apart from the findings, and exits 2**
   (#322). `LintResult.parse_error` and `LintSummary.unparsed` replace the
   `parse-error` issue; the text reads `Could not parse <file> as <format>: …`
