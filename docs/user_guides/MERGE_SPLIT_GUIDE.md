@@ -1169,6 +1169,7 @@ One module for each of the file's `ex:`, `org:` and `building:` namespaces, name
 | `--no-manifest`, `--migrate-data` and `--data-output` have no effect with `--by-namespace` | #179 |
 | The order of a module's `imports` and `dependencies` (and of the `deps:` shown above) changes from run to run | #181 |
 | Module files are written in rdflib's alphabetical order, not in semantic order | #305 |
+| A source with no `owl:Ontology` header gives each module a header with nothing but its type, or its type and `owl:imports`, and `lint` reports each one as `empty-ontology`. Until it is fixed, put `severity: {empty-ontology: warning}` in `.rdf-lint.yml` | #517 |
 
 #### Split with Data Migration
 

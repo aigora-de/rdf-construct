@@ -575,7 +575,7 @@ vocabulary's terms, on another host from the file's own ontology, are skipped wi
 | `dangling-reference` | Structural | error | Reference to an undefined entity in a namespace the file claims |
 | `circular-subclass` | Structural | error | Circular subclass hierarchy |
 | `property-no-type` | Structural | error | Property without type declaration |
-| `empty-ontology` | Structural | error | Ontology with no classes or properties |
+| `empty-ontology` | Structural | error | `owl:Ontology` header says nothing about the ontology: no annotation and no `owl:versionIRI` |
 | `missing-label` | Documentation | warning | One of the ontology's own entities without rdfs:label |
 | `missing-comment` | Documentation | warning | One of the ontology's own entities without rdfs:comment |
 | `redundant-subclass` | Best Practice | info | Redundant subclass declaration |
