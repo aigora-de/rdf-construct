@@ -564,7 +564,8 @@ change, and what to do about it, is listed command by command in the
 - **`lint`'s `empty-ontology` counts every annotation on a header as
   metadata** (#505). Any triple other than `rdf:type` and `owl:imports` counts,
   `owl:versionIRI` included, so a named `merge`'s header, which carries only
-  `prov:wasDerivedFrom`, no longer fails `lint`, and neither does a header with
+  `prov:wasDerivedFrom` when a source has a header, no longer fails `lint`
+  (a merge of headerless sources still does: #520), and neither does a header with
   only `dcterms:title`. `lint.rules.HEADER_STRUCTURE` holds the two predicates
   that do not count.
 - **`lint` reports an unparseable file apart from the findings, and exits 2**

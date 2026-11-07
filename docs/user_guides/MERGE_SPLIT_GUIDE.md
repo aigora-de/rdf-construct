@@ -284,6 +284,7 @@ The Markdown report includes:
 |------------|-------|
 | Conflict markers come out in a different order from run to run | #173 |
 | Values are compared as written, so `"1.0"` and `"1.00"` (`xsd:decimal`) on a functional property are reported as a conflict | — |
+| A named merge of sources none of which has an `owl:Ontology` header writes a header with nothing but its type, and `lint` reports it as `empty-ontology` | #520 |
 
 ### Ontology Identity
 

@@ -186,6 +186,13 @@ class TestEdgeShapes:
         )
         assert _flagged(path) == {str(other)}
 
+    def test_two_bare_headers_are_both_findings(self, tmp_path: Path) -> None:
+        other = URIRef(EX + "other")
+        path = _header_file(
+            tmp_path, (ONT, RDF.type, OWL.Ontology), (other, RDF.type, OWL.Ontology)
+        )
+        assert _flagged(path) == {str(ONT), str(other)}
+
     @pytest.mark.parametrize(
         "label",
         [Literal(""), Literal("Ontologie", lang="fr"), Literal("x", datatype=XSD.string)],
@@ -310,6 +317,22 @@ class TestWhatTheToolWrites:
         converted = _run("puml2rdf", FIXTURES / "smoke" / "diagram.puml", "-o", out)
         assert converted.exit_code == 0, converted.output
         assert _flagged(out) == _headers(out) != set()
+
+    def test_a_named_merge_of_headerless_sources_stays_a_finding(self, tmp_path: Path) -> None:
+        # No source has a header, so nothing is stamped and the header is bare: #520.
+        sources = []
+        for name in ("a", "b"):
+            path = tmp_path / f"{name}.ttl"
+            path.write_text(
+                "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n"
+                "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n"
+                f'<{EX}{name.upper()}> a owl:Class ; rdfs:label "{name}" .\n'
+            )
+            sources.append(path)
+        out = tmp_path / "merged.ttl"
+        merged = _run("merge", *sources, "--ontology-iri", EX + "x", "-o", out)
+        assert merged.exit_code == 0, merged.output
+        assert _flagged(out) == _headers(out) == {EX + "x"}
 
 
 class TestWording:
