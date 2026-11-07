@@ -435,41 +435,44 @@ def check_property_no_type(graph: Graph) -> list[LintIssue]:
     return issues
 
 
+HEADER_STRUCTURE: frozenset[URIRef] = frozenset({RDF.type, OWL.imports})
+"""Header predicates that say nothing *about* the ontology, so are not metadata (#505).
+
+Metadata is defined by exclusion because annotation vocabularies are open: every other triple on a
+header counts — any OWL 2 ontology annotation (``rdfs:label``, ``owl:versionInfo``,
+``owl:priorVersion``, ``owl:deprecated``, ``dcterms:*``, ``skos:*``, ``vann:*``, the
+``prov:wasDerivedFrom`` stamp, …) and ``owl:versionIRI``, which identifies a version rather than
+describing one. This is not ``core.provenance.ONTOLOGY_ONLY``: that set groups predicates by their
+``rdfs:domain``, and three of its four members are annotations.
+"""
+
+
 @lint_rule(
     rule_id="empty-ontology",
-    description="owl:Ontology declaration has no metadata (label, version, etc.)",
+    description="owl:Ontology header says nothing about the ontology (no annotation or owl:versionIRI)",
     category="structural",
     default_severity=Severity.ERROR,
 )
 def check_empty_ontology(graph: Graph) -> list[LintIssue]:
-    """Check for owl:Ontology with no metadata."""
+    """Check for an owl:Ontology header that carries nothing but its type and imports.
+
+    A blank-node header is skipped.
+    """
     issues = []
 
-    # Common ontology metadata predicates
-    metadata_predicates = {
-        RDFS.label,
-        RDFS.comment,
-        OWL.versionInfo,
-        OWL.versionIRI,
-    }
-
     for ont in graph.subjects(RDF.type, OWL.Ontology):
-        if isinstance(ont, URIRef):
-            has_metadata = False
-            for pred in metadata_predicates:
-                if (ont, pred, None) in graph:
-                    has_metadata = True
-                    break
-
-            if not has_metadata:
-                issues.append(
-                    LintIssue(
-                        rule_id="empty-ontology",
-                        severity=Severity.ERROR,
-                        entity=ont,
-                        message="owl:Ontology has no metadata (label, comment, or version)",
-                    )
+        if isinstance(ont, URIRef) and set(graph.predicates(ont)) <= HEADER_STRUCTURE:
+            issues.append(
+                LintIssue(
+                    rule_id="empty-ontology",
+                    severity=Severity.ERROR,
+                    entity=ont,
+                    message=(
+                        "owl:Ontology has no metadata: no annotation "
+                        "(label, comment, title, provenance, …) and no owl:versionIRI"
+                    ),
                 )
+            )
 
     return issues
 

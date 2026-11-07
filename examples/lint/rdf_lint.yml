@@ -32,7 +32,8 @@ severity:
 #   - dangling-reference: Reference to undefined entity
 #   - circular-subclass: Class is subclass of itself
 #   - property-no-type: Property lacks rdf:type declaration
-#   - empty-ontology: owl:Ontology has no metadata
+#   - empty-ontology: owl:Ontology header says nothing about the ontology
+#     (no annotation and no owl:versionIRI)
 #
 # Documentation (default: warning):
 #   - missing-label: Entity lacks rdfs:label
