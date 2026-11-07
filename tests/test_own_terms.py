@@ -463,7 +463,7 @@ ex:A a owl:Class ; rdfs:label "A" ; rdfs:comment "A." ; rdfs:subClassOf ex:Missi
         assert result.exit_code == 2
         assert "external_namespaces" in result.output
         assert message in result.output
-        assert "parse-error" not in result.output  # refused before the file was read
+        assert "could not be parsed" not in result.output  # refused before the file was read
 
     def test_the_init_template_shows_the_key(self) -> None:
         assert "# external_namespaces:" in create_default_config()

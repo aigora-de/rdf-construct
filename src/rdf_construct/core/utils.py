@@ -1,9 +1,29 @@
 """Utilities for handling prefixes, CURIEs, and namespace operations."""
 
 from collections.abc import Container, Iterable, Mapping
+from pathlib import Path
 from typing import Optional
 
 from rdflib import Graph, Namespace, URIRef
+
+
+def parse_failure_message(source: Path, rdf_format: str, exc: BaseException) -> str:
+    """The one wording for a source that could not be parsed (#301, #322).
+
+    It names the file and the format it was read as, then rdflib's own text, which carries the
+    line and an excerpt pointing at the column. ``cli.parse_into`` refuses with it; ``lint``
+    reports it beside the other files' results.
+
+    Args:
+        source: The file that failed.
+        rdf_format: The rdflib format name it was read as.
+        exc: What rdflib raised.
+
+    Returns:
+        ``Could not parse {source} as {rdf_format}: {detail}``.
+    """
+    detail = str(exc) or type(exc).__name__
+    return f"Could not parse {source} as {rdf_format}: {detail}"
 
 
 def extract_prefix_map(graph: Graph) -> dict[str, str]:

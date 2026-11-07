@@ -52,6 +52,7 @@ from rdf_construct.core.formats import (
     normalise_format,
 )
 from rdf_construct.core.literal_forms import preserve_literal_forms
+from rdf_construct.core.utils import parse_failure_message
 from rdf_construct.core.outdir import OUTPUT_MARKER, foreign_entries, mark_output_dir, read_marker
 from rdf_construct.core.output_paths import (
     PlannedOutput,
@@ -268,8 +269,7 @@ def parse_into(graph: Graph, source: Path, rdf_format: str) -> None:
     try:
         graph.parse(str(source), format=rdf_format)
     except Exception as exc:
-        detail = str(exc) or type(exc).__name__
-        raise Refusal(f"Could not parse {source} as {rdf_format}: {detail}") from exc
+        raise Refusal(parse_failure_message(source, rdf_format, exc)) from exc
 
 
 def check_outputs(outputs: Sequence[tuple[str, Path]], inputs: Sequence[Path]) -> None:
@@ -1391,7 +1391,7 @@ def contexts(config: Path):
 
 
 @cli.command()
-@click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
+@click.argument("sources", nargs=-1, type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option(
     "--level",
     "-l",
@@ -1448,7 +1448,10 @@ def contexts(config: Path):
     type=click.Choice(LINT_FAIL_ON),
     default="error",
     show_default=True,
-    help="Lowest severity that makes the run exit 1 ('never' always exits 0)",
+    help=(
+        "Lowest severity that makes the run exit 1 ('never' exits 0 unless a file "
+        "could not be parsed)"
+    ),
 )
 def lint(
     sources: tuple[Path, ...],
@@ -1474,7 +1477,7 @@ def lint(
     Exit codes:
       0 - No findings at or above --fail-on (default: error)
       1 - Findings at or above --fail-on
-      2 - Input refused or run failed
+      2 - Input refused, a file could not be parsed, or run failed
 
     \b
     Examples:
@@ -1641,8 +1644,11 @@ def _lint_exit_code(summary: LintSummary, fail_on: str) -> int:
         fail_on: Lowest severity that counts as a finding: error, warning, info or never.
 
     Returns:
-        1 if any finding is at or above ``fail_on``, otherwise 0.
+        2 if any file could not be parsed, whatever ``fail_on`` says (#322); otherwise 1 if any
+        finding is at or above ``fail_on``, and 0 if none is.
     """
+    if summary.unparsed:
+        return 2
     counts = {
         "error": summary.total_errors,
         "warning": summary.total_errors + summary.total_warnings,
