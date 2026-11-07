@@ -8,7 +8,9 @@ graph carries at most one ``owl:Ontology``:
   split under a shared ``ontology_iri:``), and the header is left as it is.
 - **Named.** Given an IRI (``--ontology-iri``, or ``namespaces.base`` in a config), the merged
   graph gets one header at it, no ``owl:versionIRI``, and one ``prov:wasDerivedFrom`` per source
-  naming that source's version IRI, or its ontology IRI where it has none.
+  naming that source's version IRI, or its ontology IRI where it has none. A header that would
+  then say nothing but its type and imports (no source has a header to record) is not written,
+  and the caller warns (#520).
 - **Unnamed.** Otherwise, no header at all. The caller warns and shows the command that names it.
 
 Either of the last two **demotes** every source header: it removes the ``owl:Ontology`` type, the
@@ -38,6 +40,7 @@ from rdf_construct.core.provenance import (
     stamp_derivation,
     strip_version_iri,
 )
+from rdf_construct.lint.rules import HEADER_STRUCTURE
 
 CORE_PREFIXES: dict[str, str] = {
     "rdf": str(RDF),
@@ -86,6 +89,9 @@ class MergeIdentity:
             gives it.
         unstamped: Sources a named merge could not name, each with the reason.
         notes: Lines the caller should show, about an IRI the user chose.
+        declined: The IRI given, when its header was not written because it would hold nothing
+            but its type and imports (#520). ``ontology`` is then ``None``, and the imports it
+            would have carried are in ``dropped_imports``.
         removed: Source triples the demotion removed, which the output no longer holds. A
             blank-node header's are under the label the merge gave its node (#170).
     """
@@ -99,6 +105,7 @@ class MergeIdentity:
     stamped: list[tuple[str, list[URIRef]]] = field(default_factory=list)
     unstamped: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    declined: URIRef | None = None
     removed: list[Triple] = field(default_factory=list)
 
     @property
@@ -299,6 +306,14 @@ def apply_identity(
             identity.unstamped.append(f"{read.name} (a blank-node header, which nothing names)")
         else:
             identity.unstamped.append(f"{read.name} (no ontology header)")
+    # A header that says nothing about the ontology is not written: lint's own test (#520)
+    if set(merged.predicates(ontology)) <= HEADER_STRUCTURE:
+        merged.remove((ontology, RDF.type, OWL.Ontology))
+        for target in identity.moved_imports:
+            merged.remove((ontology, OWL.imports, target))
+        identity.dropped_imports.extend(identity.moved_imports)
+        identity.moved_imports = []
+        identity.declined, identity.ontology = ontology, None
     # A source that holds prov: for another namespace keeps it, and the stamp's is renamed (#357)
     written_as = {str(ns): prefix for prefix, ns in merged.namespaces()}.get(str(PROV))
     if identity.stamped and not prov_bound and written_as not in (None, "prov"):

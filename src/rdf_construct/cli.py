@@ -3141,6 +3141,8 @@ def _report_merge_identity(
     elif identity.ontology is not None:
         given_as = "--ontology-iri" if flag_given("ontology_iri") else "namespaces.base"
         click.echo(f"Ontology: <{identity.ontology}> (from: {given_as})")
+    elif identity.declined is not None:
+        click.echo(f"Ontology: none (<{identity.declined}> not written: nothing to say about it)")
     elif identity.demoted:
         click.echo("Ontology: none")
     for header, name in identity.demoted:
@@ -3158,20 +3160,26 @@ def _report_merge_identity(
         )
     for note in identity.notes:
         click.echo(note, err=True)
+    colour = "yellow" if use_colour else None
+    if identity.declined is not None:
+        click.secho(
+            f"\u26a0 No ontology header written: <{identity.declined}> would say nothing but its "
+            "type, as no source has a header to record it as derived from.",
+            fg=colour,
+            err=True,
+        )
+        _report_dropped_imports(identity.dropped_imports, colour)
+        click.secho("  To keep it, give one source an ontology header.", fg=colour, err=True)
+        return
     if not identity.unnamed:
         return
-    colour = "yellow" if use_colour else None
     click.secho(
         f"\u26a0 No ontology header written: {len(identity.demoted)} source header(s) demoted, "
         "and nothing names the merged ontology.",
         fg=colour,
         err=True,
     )
-    if identity.dropped_imports:
-        shown = identity.dropped_imports[:5]
-        more = len(identity.dropped_imports) - len(shown)
-        listed = ", ".join(f"<{t}>" for t in shown) + (f" and {more} more" if more else "")
-        click.secho(f"  Their imports are not written: {listed}", fg=colour, err=True)
+    _report_dropped_imports(identity.dropped_imports, colour)
     click.secho(
         "  To name it, run this again with IRI replaced by the merged ontology's IRI:",
         fg=colour,
@@ -3180,6 +3188,21 @@ def _report_merge_identity(
     click.echo(f"    {rerun_command('--ontology-iri', 'IRI')}", err=True)
     if config_file is not None:
         click.secho(f"  or set namespaces.base: IRI in {config_file}", fg=colour, err=True)
+
+
+def _report_dropped_imports(dropped: list[URIRef], colour: str | None) -> None:
+    """List the imports a merge could not carry onto a header, five at most.
+
+    Args:
+        dropped: The imports not written.
+        colour: The warning's colour, or ``None``.
+    """
+    if not dropped:
+        return
+    shown = dropped[:5]
+    more = len(dropped) - len(shown)
+    listed = ", ".join(f"<{t}>" for t in shown) + (f" and {more} more" if more else "")
+    click.secho(f"  Their imports are not written: {listed}", fg=colour, err=True)
 
 
 def _replace_config_sources(config: MergeConfig, sources: Sequence[Path]) -> None:

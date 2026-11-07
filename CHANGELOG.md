@@ -564,8 +564,8 @@ change, and what to do about it, is listed command by command in the
 - **`lint`'s `empty-ontology` counts every annotation on a header as
   metadata** (#505). Any triple other than `rdf:type` and `owl:imports` counts,
   `owl:versionIRI` included, so a named `merge`'s header, which carries only
-  `prov:wasDerivedFrom` when a source has a header, no longer fails `lint`
-  (a merge of headerless sources still does: #520), and neither does a header with
+  `prov:wasDerivedFrom` when a source has a header, no longer fails `lint`,
+  and neither does a header with
   only `dcterms:title`. `lint.rules.HEADER_STRUCTURE` holds the two predicates
   that do not count.
 - **`lint` reports an unparseable file apart from the findings, and exits 2**
@@ -734,7 +734,9 @@ change, and what to do about it, is listed command by command in the
   were both written, each with its `owl:versionIRI`, at exit 0. A new
   `--ontology-iri`, or `namespaces.base` (used as given; the flag wins), names
   the merged ontology: one header, no `owl:versionIRI`, and one
-  `prov:wasDerivedFrom` per source. Sources sharing one header keep it.
+  `prov:wasDerivedFrom` per source. A named header that would then hold nothing
+  but its type and imports (no source has a header to record) is not written,
+  and the run warns, at exit 0 (#520). Sources sharing one header keep it.
   Otherwise the output has no header, and the run warns with the command that
   names it, at exit 0. Each source header is demoted: it loses `owl:Ontology`,
   `owl:versionIRI`, `owl:imports`, `owl:priorVersion`,

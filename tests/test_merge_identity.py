@@ -17,9 +17,9 @@ from pathlib import Path
 import pytest
 import yaml
 from click.testing import CliRunner, Result
-from rdflib import Graph, Literal, URIRef
+from rdflib import BNode, Graph, Literal, URIRef
 from rdflib.compare import isomorphic
-from rdflib.namespace import DCTERMS, OWL, PROV, RDF
+from rdflib.namespace import DCTERMS, OWL, PROV, RDF, RDFS
 
 from rdf_construct.cli import cli
 from rdf_construct.core import preserve_literal_forms
@@ -353,7 +353,12 @@ class TestTheGuide:
     def _run_shown(self, command: str, tmp_path: Path, monkeypatch) -> Result:
         examples = tmp_path / "examples" / "merge"
         examples.mkdir(parents=True)
-        for name in ("merge_core.ttl", "merge_extension.ttl"):
+        for name in (
+            "merge_core.ttl",
+            "merge_extension.ttl",
+            "merge_conflicting.ttl",
+            "merge_instances.ttl",
+        ):
             shutil.copy(Path(__file__).parent.parent / "examples" / "merge" / name, examples)
         monkeypatch.chdir(tmp_path)
         argv = shlex.split(command)
@@ -363,13 +368,13 @@ class TestTheGuide:
         return result
 
     def test_the_unnamed_merge_prints_the_warning_shown(self, tmp_path, monkeypatch):
-        command, shown, _, _ = self._blocks()
+        command, shown = self._blocks()[:2]
         result = self._run_shown(command, tmp_path, monkeypatch)
         assert result.exit_code == 0, result.output
         assert result.stderr == shown
 
     def test_the_named_merge_writes_the_header_shown(self, tmp_path, monkeypatch):
-        _, _, command, shown = self._blocks()
+        command, shown = self._blocks()[2:4]
         result = self._run_shown(command, tmp_path, monkeypatch)
         assert result.exit_code == 0, result.output
         prefixes = (
@@ -380,6 +385,15 @@ class TestTheGuide:
         written = _read(tmp_path / "merged.ttl")
         merged = URIRef("http://example.org/merged")
         assert set(written.triples((merged, None, None))) == set(expected)
+
+    def test_a_named_merge_with_nothing_to_say_prints_the_warning_shown(
+        self, tmp_path, monkeypatch
+    ):
+        command, shown = self._blocks()[4:6]
+        result = self._run_shown(command, tmp_path, monkeypatch)
+        assert result.exit_code == 0, result.output
+        assert result.stderr == shown
+        assert _headers(_read(tmp_path / "merged.ttl")) == set()
 
 
 def test_the_example_config_runs_and_names_the_merge(tmp_path, monkeypatch):
@@ -517,3 +531,115 @@ class TestReviewFindings:
         result = _run(A, B, "-o", out, "--ontology-iri", predicate)
         assert result.exit_code == 0, result.output
         assert "is already a term in the sources" in result.stderr
+
+
+class TestNothingToSay:
+    """A named header that would hold nothing but its type and imports is not written (#520)."""
+
+    WARNING = (
+        f"No ontology header written: <{MERGED}> would say nothing but its type, as no source "
+        "has a header to record it as derived from."
+    )
+    SUMMARY = f"Ontology: none (<{MERGED}> not written: nothing to say about it)"
+
+    @staticmethod
+    def _source(tmp_path: Path, name: str, body: str) -> Path:
+        path = tmp_path / name
+        path.write_text(
+            "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n"
+            "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n" + body
+        )
+        return path
+
+    def _assert_declined(self, result: Result, out: Path) -> Graph:
+        assert result.exit_code == 0, result.output
+        graph = _read(out)
+        assert _headers(graph) == set()
+        assert (MERGED, None, None) not in graph
+        assert self.SUMMARY in result.output
+        assert self.WARNING in result.stderr
+        assert "To keep it, give one source an ontology header." in result.stderr
+        return graph
+
+    def test_headerless_sources(self, tmp_path):
+        other = self._source(
+            tmp_path, "other.ttl", '<http://example.org/other#C> a owl:Class ; rdfs:label "C" .\n'
+        )
+        out = tmp_path / "m.ttl"
+        result = _run(PLAIN, other, "-o", out, "--ontology-iri", MERGED)
+        self._assert_declined(result, out)
+        assert "Not recorded as derived from: plain.ttl (no ontology header)" in result.output
+
+    def test_one_headerless_source(self, tmp_path):
+        out = tmp_path / "m.ttl"
+        self._assert_declined(_run(PLAIN, "-o", out, "--ontology-iri", MERGED), out)
+
+    def test_named_by_namespaces_base(self, tmp_path):
+        config = tmp_path / "merge.yml"
+        config.write_text(
+            yaml.safe_dump({"sources": [{"path": str(PLAIN)}], "namespaces": {"base": str(MERGED)}})
+        )
+        out = tmp_path / "m.ttl"
+        self._assert_declined(_run("-c", config, "-o", out), out)
+
+    def test_a_blank_node_header_is_not_copied_up(self, tmp_path):
+        out = tmp_path / "m.ttl"
+        result = _run(BLANK, PLAIN, "-o", out, "--ontology-iri", MERGED)
+        graph = self._assert_declined(result, out)
+        assert "Demoted: a blank-node header in blank.ttl" in result.output
+        # #171 Q8: the demoted node keeps its annotations, and nothing names it
+        [anonymous] = [s for s in graph.subjects(RDFS.comment, None) if isinstance(s, BNode)]
+        assert (anonymous, RDF.type, OWL.Ontology) not in graph
+
+    def test_imports_it_cannot_carry_are_listed(self, tmp_path):
+        ext = "http://example.org/ext"
+        source = self._source(tmp_path, "imp.ttl", f"[] a owl:Ontology ; owl:imports <{ext}> .\n")
+        out = tmp_path / "m.ttl"
+        result = _run(source, PLAIN, "-o", out, "--ontology-iri", MERGED)
+        graph = self._assert_declined(result, out)
+        assert (None, OWL.imports, None) not in graph
+        assert f"Their imports are not written: <{ext}>" in result.stderr
+        assert "Imports kept on the merged header" not in result.output
+
+    def test_a_bare_source_header_at_the_merged_iri(self, tmp_path):
+        source = self._source(tmp_path, "bare.ttl", f"<{MERGED}> a owl:Ontology .\n")
+        out = tmp_path / "m.ttl"
+        result = _run(source, PLAIN, "-o", out, "--ontology-iri", MERGED)
+        self._assert_declined(result, out)
+        assert "bare.ttl (its ontology IRI is the merged one)" in result.output
+
+    def test_a_labelled_source_header_at_the_merged_iri_is_written(self, tmp_path):
+        # Nothing is stamped, but the label stays on the IRI (#171 Q8), so it says something
+        source = self._source(
+            tmp_path, "own.ttl", f'<{MERGED}> a owl:Ontology ; rdfs:label "Merged"@en .\n'
+        )
+        out = tmp_path / "m.ttl"
+        result = _run(source, PLAIN, "-o", out, "--ontology-iri", MERGED)
+        assert result.exit_code == 0, result.output
+        graph = _read(out)
+        assert _headers(graph) == {MERGED}
+        assert (MERGED, RDFS.label, Literal("Merged", lang="en")) in graph
+        assert "No ontology header written" not in result.stderr
+
+    def test_a_stamped_header_is_written(self, tmp_path):
+        out = tmp_path / "m.ttl"
+        result = _run(A, PLAIN, "-o", out, "--ontology-iri", MERGED)
+        assert result.exit_code == 0, result.output
+        assert _headers(_read(out)) == {MERGED}
+        assert "No ontology header written" not in result.stderr
+
+    def test_dry_run_exits_the_same_and_warns_the_same(self, tmp_path):
+        out = tmp_path / "m.ttl"
+        result = _run(PLAIN, "-o", out, "--ontology-iri", MERGED, "--dry-run")
+        assert result.exit_code == 0, result.output
+        assert self.WARNING in result.stderr
+        assert not out.exists()
+
+    def test_the_library_says_it_declined(self, tmp_path):
+        out = tmp_path / "m.ttl"
+        result = merge_files([PLAIN], out, ontology_iri=str(MERGED))
+        assert result.success
+        assert result.identity is not None
+        assert result.identity.declined == MERGED
+        assert result.identity.ontology is None
+        assert _headers(_read(out)) == set()

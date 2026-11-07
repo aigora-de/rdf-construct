@@ -318,8 +318,8 @@ class TestWhatTheToolWrites:
         assert converted.exit_code == 0, converted.output
         assert _flagged(out) == _headers(out) != set()
 
-    def test_a_named_merge_of_headerless_sources_stays_a_finding(self, tmp_path: Path) -> None:
-        # No source has a header, so nothing is stamped and the header is bare: #520.
+    def test_a_named_merge_of_headerless_sources_writes_no_header(self, tmp_path: Path) -> None:
+        # No source has a header, so the named header would be bare, and is not written: #520.
         sources = []
         for name in ("a", "b"):
             path = tmp_path / f"{name}.ttl"
@@ -332,7 +332,8 @@ class TestWhatTheToolWrites:
         out = tmp_path / "merged.ttl"
         merged = _run("merge", *sources, "--ontology-iri", EX + "x", "-o", out)
         assert merged.exit_code == 0, merged.output
-        assert _flagged(out) == _headers(out) == {EX + "x"}
+        assert _headers(out) == set()
+        assert _flagged(out) == set()
 
 
 class TestWording:
