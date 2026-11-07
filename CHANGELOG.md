@@ -735,8 +735,9 @@ change, and what to do about it, is listed command by command in the
   `--ontology-iri`, or `namespaces.base` (used as given; the flag wins), names
   the merged ontology: one header, no `owl:versionIRI`, and one
   `prov:wasDerivedFrom` per source. A named header that would then hold nothing
-  but its type and imports (no source has a header to record) is not written,
-  and the run warns, at exit 0 (#520). Sources sharing one header keep it.
+  but its type and imports (no source header can be recorded) is not written,
+  and the run warns, at exit 0, unless the sources share one header, which is
+  kept (#520). Sources sharing one header keep it.
   Otherwise the output has no header, and the run warns with the command that
   names it, at exit 0. Each source header is demoted: it loses `owl:Ontology`,
   `owl:versionIRI`, `owl:imports`, `owl:priorVersion`,

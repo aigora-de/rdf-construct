@@ -537,8 +537,8 @@ class TestNothingToSay:
     """A named header that would hold nothing but its type and imports is not written (#520)."""
 
     WARNING = (
-        f"No ontology header written: <{MERGED}> would say nothing but its type, as no source "
-        "has a header to record it as derived from."
+        f"No ontology header written: <{MERGED}> would say nothing but its type and imports, as "
+        "no source header can be recorded as derived from."
     )
     SUMMARY = f"Ontology: none (<{MERGED}> not written: nothing to say about it)"
 
@@ -555,10 +555,12 @@ class TestNothingToSay:
         assert result.exit_code == 0, result.output
         graph = _read(out)
         assert _headers(graph) == set()
-        assert (MERGED, None, None) not in graph
+        assert (MERGED, PROV.wasDerivedFrom, None) not in graph
         assert self.SUMMARY in result.output
         assert self.WARNING in result.stderr
-        assert "To keep it, give one source an ontology header." in result.stderr
+        assert "To keep it, give a source a named ontology header." in result.stderr
+        # The notes about the IRI chosen describe a header that is not written
+        assert "Note: " + str(MERGED) not in result.stderr
         return graph
 
     def test_headerless_sources(self, tmp_path):
@@ -567,7 +569,7 @@ class TestNothingToSay:
         )
         out = tmp_path / "m.ttl"
         result = _run(PLAIN, other, "-o", out, "--ontology-iri", MERGED)
-        self._assert_declined(result, out)
+        assert (MERGED, None, None) not in self._assert_declined(result, out)
         assert "Not recorded as derived from: plain.ttl (no ontology header)" in result.output
 
     def test_one_headerless_source(self, tmp_path):
@@ -643,3 +645,69 @@ class TestNothingToSay:
         assert result.identity.declined == MERGED
         assert result.identity.ontology is None
         assert _headers(_read(out)) == set()
+
+    def test_a_source_import_at_the_merged_iri_is_not_removed(self, tmp_path):
+        # A source states <x> owl:imports <ext> without a header; declining takes back only
+        # what the merge added
+        ext = URIRef("http://example.org/ext")
+        blank = self._source(tmp_path, "imp.ttl", f"[] a owl:Ontology ; owl:imports <{ext}> .\n")
+        own = self._source(tmp_path, "own.ttl", f"<{MERGED}> owl:imports <{ext}> .\n")
+        out = tmp_path / "m.ttl"
+        graph = self._assert_declined(_run(blank, own, "-o", out, "--ontology-iri", MERGED), out)
+        assert (MERGED, OWL.imports, ext) in graph
+
+    def test_an_imports_only_header_at_the_merged_iri(self, tmp_path):
+        ext = URIRef("http://example.org/ext")
+        source = self._source(
+            tmp_path, "impx.ttl", f"<{MERGED}> a owl:Ontology ; owl:imports <{ext}> .\n"
+        )
+        out = tmp_path / "m.ttl"
+        result = _run(source, PLAIN, "-o", out, "--ontology-iri", MERGED)
+        self._assert_declined(result, out)
+        assert f"Their imports are not written: <{ext}>" in result.stderr
+        identity = merge_files([source, PLAIN], tmp_path / "l.ttl", ontology_iri=str(MERGED))
+        assert identity.identity is not None
+        removed = set(identity.identity.removed)
+        assert {(MERGED, RDF.type, OWL.Ontology), (MERGED, OWL.imports, ext)} <= removed
+
+    def test_a_punned_merged_iri_keeps_its_class(self, tmp_path):
+        source = self._source(tmp_path, "pun.ttl", f"<{MERGED}> a owl:Class .\n")
+        out = tmp_path / "m.ttl"
+        graph = self._assert_declined(_run(source, PLAIN, "-o", out, "--ontology-iri", MERGED), out)
+        assert (MERGED, RDF.type, OWL.Class) in graph
+
+
+class TestNamingNeverGivesLess:
+    """When the named header would say nothing and the sources share one header, it is kept (#520)."""
+
+    @pytest.mark.parametrize("copies", [1, 2])
+    def test_a_lone_blank_node_header_is_kept(self, tmp_path, copies):
+        out = tmp_path / "m.ttl"
+        result = _run(*[BLANK] * copies, "-o", out, "--ontology-iri", MERGED)
+        assert result.exit_code == 0, result.output
+        graph = _read(out)
+        [header] = _headers(graph)
+        assert isinstance(header, BNode)
+        assert (header, RDFS.comment, None) in graph
+        assert (MERGED, None, None) not in graph
+        assert "Ontology: a blank-node header (kept: every source declares this one)" in (
+            result.output
+        )
+        assert f"Note: {MERGED} is not used" in result.stderr
+        assert "No ontology header written" not in result.stderr
+
+    def test_a_file_named_by_its_own_iri_keeps_its_header_and_imports(self, tmp_path):
+        ext = URIRef("http://example.org/ext")
+        source = tmp_path / "impx.ttl"
+        source.write_text(
+            "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n"
+            f"<{MERGED}> a owl:Ontology ; owl:imports <{ext}> .\n"
+        )
+        out = tmp_path / "m.ttl"
+        result = _run(source, "-o", out, "--ontology-iri", MERGED)
+        assert result.exit_code == 0, result.output
+        graph = _read(out)
+        assert _headers(graph) == {MERGED}
+        assert (MERGED, OWL.imports, ext) in graph
+        assert "No ontology header written" not in result.stderr
+        assert "is not used" not in result.stderr

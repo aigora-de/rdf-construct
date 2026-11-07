@@ -9,8 +9,8 @@ graph carries at most one ``owl:Ontology``:
 - **Named.** Given an IRI (``--ontology-iri``, or ``namespaces.base`` in a config), the merged
   graph gets one header at it, no ``owl:versionIRI``, and one ``prov:wasDerivedFrom`` per source
   naming that source's version IRI, or its ontology IRI where it has none. A header that would
-  then say nothing but its type and imports (no source has a header to record) is not written,
-  and the caller warns (#520).
+  then say nothing but its type and imports (no source header can be recorded) is not written,
+  and the caller warns; when the sources share one header, it is kept instead (#520).
 - **Unnamed.** Otherwise, no header at all. The caller warns and shows the command that names it.
 
 Either of the last two **demotes** every source header: it removes the ``owl:Ontology`` type, the
@@ -219,6 +219,30 @@ def apply_identity(
     Returns:
         What was done.
     """
+    if ontology is not None and _same_identity(sources):
+        # Naming never gives less than not naming: when the named header would say nothing,
+        # the sources' one shared header is kept, as an unnamed merge keeps it (#520)
+        trial = Graph()
+        for triple in merged:
+            trial.add(triple)
+        if _apply_identity(trial, sources, ontology, carry_imports).declined is not None:
+            identity = _apply_identity(merged, sources, None, carry_imports)
+            if identity.ontology != ontology:
+                identity.notes.append(
+                    f"Note: {ontology} is not used: its header would say nothing but its type "
+                    "and imports, so the sources' own header is kept."
+                )
+            return identity
+    return _apply_identity(merged, sources, ontology, carry_imports)
+
+
+def _apply_identity(
+    merged: Graph,
+    sources: list[tuple[SourceHeaders, Graph]],
+    ontology: URIRef | None,
+    carry_imports: bool,
+) -> MergeIdentity:
+    """:func:`apply_identity`, without the fallback to a kept header (#520)."""
     identity = MergeIdentity()
     declared = [
         (header, read.name)
@@ -293,6 +317,8 @@ def apply_identity(
     identity.ontology = ontology
     prov_bound = any(str(ns) == str(PROV) for _, ns in merged.namespaces())
     merged.add((ontology, RDF.type, OWL.Ontology))
+    # Only the imports added here are the header's to take back; a source may state one too
+    added_imports = [t for t in identity.moved_imports if (ontology, OWL.imports, t) not in merged]
     for target in identity.moved_imports:
         merged.add((ontology, OWL.imports, target))
     for read, _ in sources:
@@ -309,11 +335,13 @@ def apply_identity(
     # A header that says nothing about the ontology is not written: lint's own test (#520)
     if set(merged.predicates(ontology)) <= HEADER_STRUCTURE:
         merged.remove((ontology, RDF.type, OWL.Ontology))
-        for target in identity.moved_imports:
+        for target in added_imports:
             merged.remove((ontology, OWL.imports, target))
         identity.dropped_imports.extend(identity.moved_imports)
         identity.moved_imports = []
         identity.declined, identity.ontology = ontology, None
+        # The notes about the IRI chosen describe a header that is not written
+        identity.notes = []
     # A source that holds prov: for another namespace keeps it, and the stamp's is renamed (#357)
     written_as = {str(ns): prefix for prefix, ns in merged.namespaces()}.get(str(PROV))
     if identity.stamped and not prov_bound and written_as not in (None, "prov"):

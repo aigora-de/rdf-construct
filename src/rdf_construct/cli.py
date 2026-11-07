@@ -3164,12 +3164,12 @@ def _report_merge_identity(
     if identity.declined is not None:
         click.secho(
             f"\u26a0 No ontology header written: <{identity.declined}> would say nothing but its "
-            "type, as no source has a header to record it as derived from.",
+            "type and imports, as no source header can be recorded as derived from.",
             fg=colour,
             err=True,
         )
         _report_dropped_imports(identity.dropped_imports, colour)
-        click.secho("  To keep it, give one source an ontology header.", fg=colour, err=True)
+        click.secho("  To keep it, give a source a named ontology header.", fg=colour, err=True)
         return
     if not identity.unnamed:
         return

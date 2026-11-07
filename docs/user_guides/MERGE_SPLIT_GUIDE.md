@@ -299,7 +299,9 @@ from the first of these that applies, and the run prints it as `Ontology:`:
    one; the run says so. When that leaves the header with nothing but its type and imports, it
    is **not written**: the output has no header, the run warns, naming the IRI and any imports it
    could not carry, and it exits 0
-   ([#520](https://github.com/aigora-de/rdf-construct/issues/520)).
+   ([#520](https://github.com/aigora-de/rdf-construct/issues/520)). If the sources share one
+   header, as under 2, that header is kept instead, so naming a merge never gives less than not
+   naming it.
 2. **Kept:** every source declares exactly one header, all at one IRI with the same version IRIs:
    a single file, a file merged with itself, or modules split under one `ontology_iri:`. That
    header is left as it is.
@@ -349,8 +351,8 @@ rdf-construct merge examples/merge/merge_conflicting.ttl examples/merge/merge_in
 ```
 
 ```
-⚠ No ontology header written: <http://example.org/merged> would say nothing but its type, as no source has a header to record it as derived from.
-  To keep it, give one source an ontology header.
+⚠ No ontology header written: <http://example.org/merged> would say nothing but its type and imports, as no source header can be recorded as derived from.
+  To keep it, give a source a named ontology header.
 ```
 
 `--ontology-iri` must be an absolute IRI. An empty value, one with no scheme, one containing a
