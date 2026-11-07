@@ -559,7 +559,7 @@ rdf-construct lint SOURCE [SOURCE...] [OPTIONS]
 - `--list-rules`: List available rules and exit
 - `--init`: Generate a default `.rdf-lint.yml` config file and exit
 - `--fail-on SEVERITY`: Lowest severity that makes the run exit 1: `error`, `warning`, `info` or
-  `never` (default: error)
+  `never` (default: error). A file that could not be parsed exits 2 whatever it says
 
 `.rdf-lint.yml` takes `level`, `enable`, `disable`, `severity` and `external_namespaces`: a
 list of namespaces (IRIs, `<IRIs>` or CURIEs such as `ies:`) whose terms are not the ontology's
@@ -616,8 +616,11 @@ rdf-construct lint --init
 
 **Exit Codes**:
 - `0`: No findings at or above `--fail-on` (default: error)
-- `1`: Findings at or above `--fail-on`
-- `2`: Input refused or run failed (invalid options or config, file not found, parse error)
+- `1`: Findings at or above `--fail-on`. A finding on a deprecated term is info, whatever the
+  level, unless a `severity:` override names its rule
+- `2`: Input refused or run failed (invalid options or config, file not found, a directory given
+  as a file), or a file could not be parsed. The parse failure is printed beside the other
+  files' results
 
 ---
 

@@ -24,10 +24,11 @@ rdf-construct lint ontology.ttl --format json
 |------|---------|
 | 0 | No findings at or above `--fail-on` |
 | 1 | Findings at or above `--fail-on` |
-| 2 | Input refused or run failed (invalid options or config, an unknown rule name, a selection that leaves no rule to run, file not found, parse error) |
+| 2 | Input refused or run failed (invalid options or config, an unknown rule name, a selection that leaves no rule to run, file not found, a directory given as a file), or a file could not be parsed |
 
 `--fail-on` sets the lowest severity that counts: `error` (the default), `warning`, `info` or
-`never`. With the default, a run with only warnings exits 0.
+`never`. With the default, a run with only warnings exits 0. A file that could not be parsed exits
+2 whatever `--fail-on` says, `never` included: no rule ran on it (see [Parse Errors](#parse-errors)).
 
 Use exit codes in CI pipelines:
 
@@ -104,6 +105,70 @@ asks you to declare, is not the file's to document, and neither rule reports it.
 | `property-no-domain` | Object property has no `rdfs:domain` |
 | `property-no-range` | Object property has no `rdfs:range` |
 | `inconsistent-naming` | Entity names don't follow OWL conventions (UpperCamelCase for classes, lowerCamelCase for properties) |
+
+### Which declarations each rule sees
+
+A **class** is any named subject typed `owl:Class`, `rdfs:Class` or `owl:DeprecatedClass`. A
+**property** is any named subject typed with one of the property types: `rdf:Property`,
+`owl:ObjectProperty`, `owl:DatatypeProperty`, `owl:AnnotationProperty`, an OWL characteristic
+(`owl:TransitiveProperty`, `owl:SymmetricProperty`, `owl:AsymmetricProperty`,
+`owl:ReflexiveProperty`, `owl:IrreflexiveProperty`, `owl:InverseFunctionalProperty`,
+`owl:FunctionalProperty`) or `owl:DeprecatedProperty`. A term declared only as
+`ex:ancestorOf a owl:TransitiveProperty` is a property, gets `missing-label` and
+`missing-comment`, and is not `property-no-type`. A blank node (an anonymous class expression)
+is never a term.
+
+`property-no-domain` and `property-no-range` look at `owl:ObjectProperty` only, so far; a term
+declared only by a characteristic, or as `owl:FunctionalProperty`, gets neither yet
+([#205](https://github.com/aigora-de/rdf-construct/issues/205)).
+
+### Deprecated terms
+
+A term is deprecated when it is typed `owl:DeprecatedClass` or `owl:DeprecatedProperty`, or has
+`owl:deprecated` true: `true` or `1`, as an `xsd:boolean` or a plain string
+(`owl:deprecated false` means the opposite, and `"TRUE"` is not a boolean). Every rule still
+reports a deprecated term, **at info**, whatever the level: a withdrawn term is worth knowing
+about, but not worth failing a gate over. A `severity:` override naming the rule in
+`.rdf-lint.yml` still wins, so `severity: {missing-label: error}` makes a deprecated term's
+missing label an error again. Run with `--fail-on info` to fail on them.
+
+`catalogue.ttl` withdraws one class, and declares a property only as `owl:FunctionalProperty`:
+
+```turtle
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <https://example.org/catalogue#> .
+
+ex:Item a owl:Class ;
+    rdfs:label "Item" ;
+    rdfs:comment "Something the catalogue lists." ;
+    rdfs:subClassOf owl:Thing .
+
+# Withdrawn: still reported, at info
+ex:LegacyItem a owl:DeprecatedClass .
+
+# Declared only by a characteristic: still a property
+ex:shelfMark a owl:FunctionalProperty ;
+    rdfs:label "shelf mark" .
+```
+
+```bash
+rdf-construct lint --level strict catalogue.ttl
+```
+
+```text
+Scanning 1 file(s)...
+
+catalogue.ttl:11 info[orphan-class] ex:LegacyItem: Class has no rdfs:subClassOf declaration
+catalogue.ttl:11 info[missing-label] ex:LegacyItem: Class lacks rdfs:label
+catalogue.ttl:11 info[missing-comment] ex:LegacyItem: Class lacks rdfs:comment
+catalogue.ttl:14 error[missing-comment] ex:shelfMark: Property lacks rdfs:comment
+
+Found 1 error, 0 warnings, 3 info in 1 file
+```
+
+`--level strict` makes `ex:shelfMark`'s missing comment an error, and the run exits 1; the
+withdrawn class's findings stay info.
 
 ## Enabling and Disabling Rules
 
@@ -365,7 +430,9 @@ rdf-construct lint ontology.ttl --no-colour | tee results.txt
 
 ### JSON Output
 
-Machine-readable output for CI integration:
+Machine-readable output for CI integration. **`--format json` currently crashes**
+([#201](https://github.com/aigora-de/rdf-construct/issues/201)); the shape below is what it will
+write once that is fixed:
 
 ```bash
 rdf-construct lint ontology.ttl --format json
@@ -376,6 +443,7 @@ rdf-construct lint ontology.ttl --format json
   "files": [
     {
       "path": "ontology.ttl",
+      "parse_error": null,
       "issues": [
         {
           "rule": "orphan-class",
@@ -388,7 +456,7 @@ rdf-construct lint ontology.ttl --format json
       "summary": {"errors": 0, "warnings": 1, "info": 0}
     }
   ],
-  "summary": {"errors": 0, "warnings": 1, "info": 0, "files": 1}
+  "summary": {"errors": 0, "warnings": 1, "info": 0, "files": 1, "unparsed": 0}
 }
 ```
 
@@ -567,8 +635,45 @@ imported vocabulary's namespace to `external_namespaces` instead. See
 
 ### Parse Errors
 
-If your file can't be parsed, you'll see a `parse-error` issue. Check:
+A file that cannot be parsed is reported in its place among the other files' results, in the
+same words every command uses: the file, the format `lint` read it as, and the parser's own
+message with the line. It is not a finding, so it is not counted in the errors; the summary line
+counts it separately, and the run **exits 2**, whatever `--fail-on` says. Here `broken.ttl` uses
+`owl:` without declaring it, beside the `catalogue.ttl` of [Deprecated terms](#deprecated-terms):
+
+```turtle
+@prefix ex: <https://example.org/catalogue#> .
+
+ex:Item a owl:Class .
+```
+
+```bash
+rdf-construct lint catalogue.ttl broken.ttl
+```
+
+```text
+Scanning 2 file(s)...
+
+catalogue.ttl:11 info[orphan-class] ex:LegacyItem: Class has no rdfs:subClassOf declaration
+catalogue.ttl:11 info[missing-label] ex:LegacyItem: Class lacks rdfs:label
+catalogue.ttl:11 info[missing-comment] ex:LegacyItem: Class lacks rdfs:comment
+catalogue.ttl:14 warning[missing-comment] ex:shelfMark: Property lacks rdfs:comment
+
+Could not parse broken.ttl as turtle: at line 3 of <>:
+Bad syntax (Prefix "owl:" not bound) at ^ in:
+"b'@prefix ex: <https://example.org/catalogue#> .\n\nex:Item a '^b'owl:Class .\n'"
+
+Found 0 errors, 1 warning, 3 info in 2 files; 1 file could not be parsed
+```
+
+`lint` reads the format from the file's extension: `.ttl` and `.turtle` as Turtle, `.rdf`,
+`.xml` and `.owl` as RDF/XML, `.nt` and `.ntriples` as N-Triples, `.n3` as N3, `.jsonld` and `.json` as JSON-LD,
+and anything else as Turtle. If the message names a format the file is not in, rename the file.
+Otherwise check:
 
 1. File encoding (should be UTF-8)
-2. Turtle syntax validity
-3. File extension matches format (.ttl for Turtle)
+2. The syntax at the line the message names
+
+An empty Turtle or N-Triples file parses, to no triples, and is reported clean
+([#512](https://github.com/aigora-de/rdf-construct/issues/512)); an empty RDF/XML or JSON-LD file is
+not a valid document in its format, and exits 2. A directory is refused before any file is read.

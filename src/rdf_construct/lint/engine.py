@@ -14,7 +14,13 @@ from typing import Iterable, Sequence
 from rdflib import Graph, URIRef
 
 from rdf_construct.core.ownership import ownership
-from rdf_construct.core.utils import CurieError, extract_prefix_map, resolve_curie
+from rdf_construct.core.utils import (
+    CurieError,
+    extract_prefix_map,
+    parse_failure_message,
+    resolve_curie,
+)
+from rdf_construct.core.vocab import is_deprecated
 from rdf_construct.lint.rules import (
     get_all_rules,
     get_rule,
@@ -197,6 +203,8 @@ class LintResult:
         error_count: Number of error-level issues.
         warning_count: Number of warning-level issues.
         info_count: Number of info-level issues.
+        parse_error: Why the file could not be parsed, or None if it was. A file that could not
+            be parsed has no issues: no rule ran on it, so it is not a finding (#322).
     """
 
     file_path: Path
@@ -205,6 +213,7 @@ class LintResult:
     error_count: int = 0
     warning_count: int = 0
     info_count: int = 0
+    parse_error: str | None = None
 
     def add_issue(self, issue: LintIssue) -> None:
         """Add an issue and update counts."""
@@ -260,6 +269,11 @@ class LintSummary:
         """Number of files that had at least one issue."""
         return sum(1 for r in self.results if r.total_issues > 0)
 
+    @property
+    def unparsed(self) -> list[LintResult]:
+        """The results for files that could not be parsed, in the order they were linted."""
+        return [r for r in self.results if r.parse_error is not None]
+
 
 def needs_prefixes(entry: str) -> bool:
     """Whether an ``external_namespaces`` entry is a CURIE, which needs a file's prefixes.
@@ -314,6 +328,27 @@ class LintEngine:
         """
         self.config = config or LintConfig()
 
+    def _severity(self, issue: LintIssue, graph: Graph) -> Severity:
+        """The severity to report ``issue`` at.
+
+        A finding on a deprecated term is info, whatever the level, unless the configuration
+        overrides that rule's severity by name (#204, #233).
+
+        Args:
+            issue: The issue as the rule returned it.
+            graph: The graph the rule ran on.
+
+        Returns:
+            The severity to report.
+        """
+        if (
+            issue.entity is not None
+            and issue.rule_id not in self.config.severity_overrides
+            and is_deprecated(graph, issue.entity)
+        ):
+            return Severity.INFO
+        return self.config.get_effective_severity(issue.rule_id)
+
     def _populate_line_numbers(self, result: LintResult, file_path: Path) -> None:
         """Add line numbers to issues by searching the source file."""
         for issue in result.issues:
@@ -327,12 +362,12 @@ class LintEngine:
             file_path: Path to the RDF file.
 
         Returns:
-            LintResult containing all issues found.
+            LintResult containing all issues found. If the file cannot be parsed, its
+            ``parse_error`` says why and it has no issues (#322).
 
         Raises:
-            FileNotFoundError: If file doesn't exist.
-            ValueError: If file can't be parsed, the rule selection is refused, or an
-                ``external_namespaces`` CURIE uses a prefix the file does not bind.
+            ValueError: If the rule selection is refused, or an ``external_namespaces`` CURIE
+                uses a prefix the file does not bind.
         """
         # Resolve rules before reading the file, so a refused selection never
         # depends on whether the file parses
@@ -340,36 +375,29 @@ class LintEngine:
 
         result = LintResult(file_path=file_path)
 
+        # Guess format from extension
+        suffix = file_path.suffix.lower()
+        if suffix in (".ttl", ".turtle"):
+            fmt = "turtle"
+        elif suffix in (".rdf", ".xml", ".owl"):
+            fmt = "xml"
+        elif suffix in (".nt", ".ntriples"):
+            fmt = "nt"
+        elif suffix in (".n3",):
+            fmt = "n3"
+        elif suffix in (".jsonld", ".json"):
+            fmt = "json-ld"
+        else:
+            fmt = "turtle"  # Default
+
         # Load the graph
         graph = Graph()
         try:
-            # Guess format from extension
-            suffix = file_path.suffix.lower()
-            if suffix in (".ttl", ".turtle"):
-                fmt = "turtle"
-            elif suffix in (".rdf", ".xml", ".owl"):
-                fmt = "xml"
-            elif suffix in (".nt", ".ntriples"):
-                fmt = "nt"
-            elif suffix in (".n3",):
-                fmt = "n3"
-            elif suffix in (".jsonld", ".json"):
-                fmt = "json-ld"
-            else:
-                fmt = "turtle"  # Default
-
             graph.parse(file_path.as_posix(), format=fmt)
             result.graph = graph  # Store for namespace resolution
         except Exception as e:
-            # Return result with parse error
-            result.add_issue(
-                LintIssue(
-                    rule_id="parse-error",
-                    severity=Severity.ERROR,
-                    entity=None,
-                    message=f"Failed to parse file: {e}",
-                )
-            )
+            # No rule runs on a file that cannot be parsed, so it is not a finding (#322)
+            result.parse_error = parse_failure_message(file_path, fmt, e)
             return result
 
         # Which terms are the file's own (#69, #368): a CURIE entry resolves against the file's
@@ -393,7 +421,7 @@ class LintEngine:
                     issues = rule.check_fn(graph)
                 for issue in issues:
                     # Apply severity override
-                    effective_severity = self.config.get_effective_severity(issue.rule_id)
+                    effective_severity = self._severity(issue, graph)
                     adjusted_issue = LintIssue(
                         rule_id=issue.rule_id,
                         severity=effective_severity,
@@ -472,7 +500,7 @@ class LintEngine:
                 else:
                     issues = rule.check_fn(graph)
                 for issue in issues:
-                    effective_severity = self.config.get_effective_severity(issue.rule_id)
+                    effective_severity = self._severity(issue, graph)
                     adjusted_issue = LintIssue(
                         rule_id=issue.rule_id,
                         severity=effective_severity,

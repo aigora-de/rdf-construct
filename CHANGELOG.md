@@ -174,6 +174,15 @@ names other vocabularies. See
 [`lint`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#lint)
 in the migration note.
 
+**`lint` checks every declared class and property, and a file it cannot parse
+exits 2.** A term declared only as `owl:TransitiveProperty`,
+`owl:FunctionalProperty`, `owl:DeprecatedClass` and the like is now checked, so
+files that linted clean can report missing labels and comments. Findings on
+deprecated terms are info at every level. An unparseable file is reported
+beside the others and exits 2 whatever `--fail-on` says. See
+[`lint`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#lint)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
@@ -263,6 +272,11 @@ change, and what to do about it, is listed command by command in the
   before anything is written.
 - **`ontology_iri:` on a `split` config module** (#178): the module's ontology
   IRI, as an IRI or a CURIE of the source's prefixes.
+- **`core.vocab.is_deprecated` and `DEPRECATED_TYPES`** (#204): whether a term
+  is typed `owl:DeprecatedClass` or `owl:DeprecatedProperty`, or has
+  `owl:deprecated` true (`true` or `1`, as an `xsd:boolean` or a plain string).
+- **`core.utils.parse_failure_message`** (#322): the one wording for a source
+  that could not be parsed, shared by `parse_into` and `lint`.
 
 ### Changed
 - **Typed literals keep the lexical form the source wrote** (#377). rdflib
@@ -545,6 +559,13 @@ change, and what to do about it, is listed command by command in the
   resolves CURIEs too; it reported 0 for `rdfs:label`.
 - **`LanguageCoverage.total_strings` is renamed `total_pairs`** (#421): it
   counts entity and property pairs. The CLI output is unchanged.
+- **`lint` reports findings on deprecated terms at info** (#204, #233), at every
+  level, unless a `severity:` override names the rule.
+- **`lint` reports an unparseable file apart from the findings, and exits 2**
+  (#322). `LintResult.parse_error` and `LintSummary.unparsed` replace the
+  `parse-error` issue; the text reads `Could not parse <file> as <format>: …`
+  and the summary line counts the file separately. A directory given as a
+  source is refused before any file is read.
 
 ### Fixed
 - **`lint`'s `dangling-reference` no longer claims a namespace from one node**
@@ -969,6 +990,11 @@ change, and what to do about it, is listed command by command in the
   position, as it already did in the ontology. `MigrationStats` gains
   `predicates_updated`, counted in `total_changes`, and `merge`'s migration
   summary prints `Predicates updated`.
+- **`lint` sees every declared class and property** (#204). Its class and
+  property selection, and `property-no-type`'s, are `core.vocab`'s
+  `CLASS_TYPES` and `ALL_PROPERTY_TYPES`, so a term declared only by an OWL
+  characteristic, or as `owl:DeprecatedClass` or `owl:DeprecatedProperty`, is
+  no longer invisible to every rule.
 
 ## [0.6.0] - 2026-09-04
 

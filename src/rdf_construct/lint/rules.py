@@ -20,6 +20,7 @@ from rdf_construct.core.ownership import (
     term_namespace,
 )
 from rdf_construct.core.utils import in_namespace
+from rdf_construct.core.vocab import ALL_PROPERTY_TYPES, CLASS_TYPES
 
 
 class Severity(Enum):
@@ -140,26 +141,23 @@ def list_rules() -> list[str]:
 
 
 def get_classes(graph: Graph) -> set[URIRef]:
-    """Get all classes (owl:Class and rdfs:Class)."""
+    """Get every named class: a subject of any type in `core.vocab.CLASS_TYPES` (#204)."""
     classes: set[URIRef] = set()
-    for cls in graph.subjects(RDF.type, OWL.Class):
-        if isinstance(cls, URIRef):
-            classes.add(cls)
-    for cls in graph.subjects(RDF.type, RDFS.Class):
-        if isinstance(cls, URIRef):
-            classes.add(cls)
+    for class_type in CLASS_TYPES:
+        for cls in graph.subjects(RDF.type, class_type):
+            if isinstance(cls, URIRef):
+                classes.add(cls)
     return classes
 
 
 def get_properties(graph: Graph) -> set[URIRef]:
-    """Get all properties (all property types)."""
+    """Get every named property: a subject of any type in `core.vocab.ALL_PROPERTY_TYPES` (#204).
+
+    That includes a term declared only by an OWL characteristic, such as
+    ``owl:TransitiveProperty``, or as ``owl:FunctionalProperty`` or ``owl:DeprecatedProperty``.
+    """
     props: set[URIRef] = set()
-    for prop_type in (
-        RDF.Property,
-        OWL.ObjectProperty,
-        OWL.DatatypeProperty,
-        OWL.AnnotationProperty,
-    ):
+    for prop_type in ALL_PROPERTY_TYPES:
         for prop in graph.subjects(RDF.type, prop_type):
             if isinstance(prop, URIRef):
                 props.add(prop)
@@ -403,12 +401,7 @@ def check_property_no_type(graph: Graph) -> list[LintIssue]:
     issues = []
 
     # Find all subjects that have domain or range but no property type
-    property_types = {
-        RDF.Property,
-        OWL.ObjectProperty,
-        OWL.DatatypeProperty,
-        OWL.AnnotationProperty,
-    }
+    property_types = ALL_PROPERTY_TYPES
 
     for subj in graph.subjects(RDFS.domain, None):
         if isinstance(subj, URIRef) and not is_builtin(subj):
