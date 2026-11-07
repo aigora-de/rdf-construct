@@ -430,7 +430,9 @@ rdf-construct lint ontology.ttl --no-colour | tee results.txt
 
 ### JSON Output
 
-Machine-readable output for CI integration:
+Machine-readable output for CI integration. **`--format json` currently crashes**
+([#201](https://github.com/aigora-de/rdf-construct/issues/201)); the shape below is what it will
+write once that is fixed:
 
 ```bash
 rdf-construct lint ontology.ttl --format json
@@ -665,12 +667,13 @@ Found 0 errors, 1 warning, 3 info in 2 files; 1 file could not be parsed
 ```
 
 `lint` reads the format from the file's extension: `.ttl` and `.turtle` as Turtle, `.rdf`,
-`.xml` and `.owl` as RDF/XML, `.nt` as N-Triples, `.n3` as N3, `.jsonld` and `.json` as JSON-LD,
+`.xml` and `.owl` as RDF/XML, `.nt` and `.ntriples` as N-Triples, `.n3` as N3, `.jsonld` and `.json` as JSON-LD,
 and anything else as Turtle. If the message names a format the file is not in, rename the file.
 Otherwise check:
 
 1. File encoding (should be UTF-8)
 2. The syntax at the line the message names
 
-An empty file parses, to no triples, and is reported clean. A directory is refused before any file
-is read.
+An empty Turtle or N-Triples file parses, to no triples, and is reported clean
+([#512](https://github.com/aigora-de/rdf-construct/issues/512)); an empty RDF/XML or JSON-LD file is
+not a valid document in its format, and exits 2. A directory is refused before any file is read.
