@@ -48,6 +48,7 @@ def _build_json_data(results: CQTestResults, verbose: bool) -> dict[str, Any]:
         "failed": results.failed_count,
         "errors": results.error_count,
         "skipped": results.skipped_count,
+        "not_run": results.not_run_count,
     }
 
     if verbose:

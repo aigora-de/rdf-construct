@@ -113,6 +113,14 @@ CASES = [
     ),
     _case("cq-test", ANIMAL, str(EXAMPLES / "cq-test" / "cq_tests_animal.yml"), label="cq-test"),
     _case(
+        "cq-test",
+        ANIMAL,
+        str(Path(__file__).parent / "fixtures" / "smoke" / "cq_fail_fast.yml"),
+        "--fail-fast",
+        expect_exit=1,
+        label="cq-test-fail-fast",
+    ),
+    _case(
         "refactor",
         "rename",
         str(EXAMPLES / "refactor" / "typos.ttl"),

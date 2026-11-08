@@ -75,6 +75,18 @@ or `contains` is reported as that question's error; `has_results` and
 [`cq-test`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#cq-test)
 in the migration note.
 
+**A `cq-test` run that checked nothing now exits 2, and so does a test file of
+the wrong shape.** A tag that matches no question, a file with no questions, or
+a selection where every question is `skip: true` used to exit 0 with `No tests
+to run`. An unknown key anywhere in the test file, a `data:` source that loads
+no triples, and a quoted `skip: "false"` are refused, naming what is wrong.
+`data: sample.ttl` is now read as `files: [sample.ttl]` instead of being
+dropped, so a `no_results` question that passed on missing data can now fail.
+With `--fail-fast`, the JSON and JUnit totals count every selected question, and
+the ones not reached are reported as not run. See
+[`cq-test`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#cq-test)
+in the migration note.
+
 **If you gate CI on `diff`, its verdict changes for any file with a blank
 node.** Blank nodes are now compared by structure. A file containing
 restrictions or other blank nodes is identical to a copy of itself (exit 0,
@@ -630,6 +642,33 @@ change, and what to do about it, is listed command by command in the
   `examples/diff/v1.ttl` and `v2.ttl` differ only inside blank nodes (#149's
   `diff` slice), and `DIFF_GUIDE.md`'s blank-node sections are rewritten from
   their output.
+- **`cq-test` checks its test file's shape** (#148). The loader read the file
+  with defaulting lookups and validated almost nothing: `data: sample.ttl` was
+  silently dropped, a top-level list crashed with `AttributeError`, and an
+  unknown key anywhere (`prefixs:`, `expectt:`, `tag:`, `max_resultz:`) was
+  ignored, so a question could test something other than what its author wrote.
+  Every level now has an accepted set of keys, and an unknown one is refused at
+  exit 2 with a did-you-mean. `data:` takes a path or a list of paths as
+  shorthand for `files:`, and any other scalar is refused showing the long form.
+  Each `data:` source must load at least one triple. `skip` must be an unquoted
+  boolean (`skip: "false"` skipped a failing question), and an `expect:` mapping
+  takes one form (`{count: 2, max_results: 1}` checked only the count).
+- **An empty `cq-test` selection exits 2** (#135). It exited 0 with `No tests to
+  run (check tag filters)`, even when no tag was given, so a CI build that ran
+  nothing passed. It is now refused, saying why: no `questions:` key, an empty
+  list, a `--tag` no question has (naming the tags the suite defines),
+  exclusions that remove everything, or a selection where every question is
+  `skip: true`.
+- **`cq-test --fail-fast` reports the whole selected suite** (#137). The summary
+  and the JUnit XML counted only the questions that ran, so a four-question
+  suite stopped at the second reported `total: 2` and `tests="2"`. The questions
+  not reached now have a status of their own, `NOT_RUN`, distinct from an
+  author's `skip: true`: JSON reports `"status": "not_run"` and a
+  `summary.not_run` count, JUnit emits each as a `<testcase>` holding
+  `<skipped message="not run: --fail-fast stopped after <id>"/>`, and the text
+  ends `2 of 4 run — stopped by --fail-fast after '<id>'`. A `skip: true`
+  question after the stop stays skipped. The exit code is unchanged. `--fail-fast`'s help said "Stop on first failure"; it also stops on
+  an error, and now says so.
 - **`cq-test` refuses an ASK query checked with a count-based expectation**
   (#134). On an ASK, `has_results`, `no_results` and `count` counted the one
   boolean rdflib yields, so `has_results` and `count: 1` always passed and

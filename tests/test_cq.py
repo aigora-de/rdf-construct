@@ -379,8 +379,14 @@ class TestCQTestRunner:
         runner = CQTestRunner(fail_fast=True)
         results = runner.run(simple_graph, suite)
 
-        # Only first test should have run
-        assert len(results.results) == 1
+        # Only the first test ran; the second is recorded as not run, so the total is the
+        # selected suite (#137, changed deliberately from len(results.results) == 1)
+        assert len(results.results) == 2
+        assert results.results[0].status == CQStatus.FAIL
+        assert results.results[1].status == CQStatus.NOT_RUN
+        assert results.total_count == 2
+        assert results.not_run_count == 1
+        assert results.stopped_after == "test-001"
 
 
 # ============================================
@@ -769,3 +775,260 @@ class TestBooleanExpectationMessage:
         check = BooleanExpectation(True).check(result)
 
         assert check.message == "Query answered True, as expected"
+
+
+# ============================================
+# --fail-fast reports the selected suite (#137)
+# ============================================
+
+FF_YML = """\
+prefixes:
+  ex: "http://example.org/ont#"
+  owl: "http://www.w3.org/2002/07/owl#"
+questions:
+  - id: t1
+    query: "ASK { ex:Animal a owl:Class }"
+    expect: true
+  - id: t2-fails
+    query: "ASK { ex:Unicorn a owl:Class }"
+    expect: true
+  - id: t3
+    query: "ASK { ex:Dog a owl:Class }"
+    expect: true
+    tags: [later]
+  - id: t4
+    query: "ASK { ex:Dog a owl:Class }"
+    expect: true
+"""
+
+FF_BASE = """\
+@prefix ex: <http://example.org/ont#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+ex:Animal a owl:Class .
+ex:Dog a owl:Class .
+"""
+
+
+class TestFailFastReportsTheSelectedSuite:
+    """The total is the selected suite; what --fail-fast didn't reach is NOT_RUN (#137)."""
+
+    @pytest.fixture
+    def ff(self, tmp_path):
+        (tmp_path / "base.ttl").write_text(FF_BASE)
+        (tmp_path / "ff.yml").write_text(FF_YML)
+        return tmp_path
+
+    def _cli(self, d, yml="ff.yml", *args):
+        from click.testing import CliRunner
+
+        from rdf_construct.cli import cli
+
+        return CliRunner().invoke(
+            cli, ["cq-test", str(d / "base.ttl"), str(d / yml), "--fail-fast", *args]
+        )
+
+    def test_json_counts_every_selected_question(self, ff):
+        import json
+
+        result = self._cli(ff, "ff.yml", "--format", "json")
+        assert result.exit_code == 1, result.output
+        data = json.loads(result.stdout)
+        assert data["summary"] == {
+            "total": 4,
+            "passed": 1,
+            "failed": 1,
+            "errors": 0,
+            "skipped": 0,
+            "not_run": 2,
+        }
+        assert [q["status"] for q in data["questions"]] == ["pass", "fail", "not_run", "not_run"]
+        assert data["questions"][2] == {
+            "id": "t3",
+            "name": "t3",
+            "status": "not_run",
+            "tags": ["later"],
+        }
+
+    def test_junit_emits_each_not_run_question_as_a_skipped_testcase(self, ff):
+        import xml.etree.ElementTree as ET
+
+        result = self._cli(ff, "ff.yml", "--format", "junit")
+        assert result.exit_code == 1, result.output
+        suite = ET.fromstring(result.stdout)
+        assert (suite.get("tests"), suite.get("failures"), suite.get("errors")) == ("4", "1", "0")
+        assert suite.get("skipped") == "2"
+        cases = suite.findall("testcase")
+        assert len(cases) == 4
+        skipped = [c.find("skipped") for c in cases[2:]]
+        assert [s.get("message") for s in skipped] == [
+            "not run: --fail-fast stopped after t2-fails"
+        ] * 2
+        # A consumer deriving passes from the attributes gets the real count
+        t, f, e, s = (int(suite.get(k)) for k in ("tests", "failures", "errors", "skipped"))
+        assert t - f - e - s == 1
+
+    def test_text_says_how_many_ran_and_where_it_stopped(self, ff):
+        result = self._cli(ff)
+        assert result.exit_code == 1, result.output
+        assert "[NOT RUN] t3: t3" in result.stdout
+        assert "[NOT RUN] t4: t4" in result.stdout
+        assert "2 of 4 run — stopped by --fail-fast after 't2-fails'" in result.stdout
+
+    def test_a_stop_on_the_last_question_leaves_nothing_not_run(self, ff):
+        import json
+
+        yml = FF_YML.replace("ex:Unicorn", "ex:Dog").replace(
+            '  - id: t4\n    query: "ASK { ex:Dog a owl:Class }"',
+            '  - id: t4\n    query: "ASK { ex:Unicorn a owl:Class }"',
+        )
+        (ff / "last.yml").write_text(yml)
+        text = self._cli(ff, "last.yml")
+        assert text.exit_code == 1, text.output
+        assert "stopped by --fail-fast" not in text.stdout
+        assert "NOT RUN" not in text.stdout
+        data = json.loads(self._cli(ff, "last.yml", "-f", "json").stdout)
+        assert data["summary"]["total"] == 4 and data["summary"]["not_run"] == 0
+
+    def test_a_refused_question_counts_as_run(self, ff):
+        """P19: a refused question is an ERROR; it is run, and stops --fail-fast (#137)."""
+        import xml.etree.ElementTree as ET
+
+        yml = FF_YML.replace(
+            '  - id: t2-fails\n    query: "ASK { ex:Unicorn a owl:Class }"\n    expect: true',
+            '  - id: t2-refused\n    query: "ASK { ex:Dog a owl:Class }"\n    expect: has_results',
+        )
+        (ff / "ref.yml").write_text(yml)
+        result = self._cli(ff, "ref.yml", "-f", "junit")
+        assert result.exit_code == 2, result.output
+        suite = ET.fromstring(result.stdout)
+        assert (suite.get("tests"), suite.get("errors"), suite.get("skipped")) == ("4", "1", "2")
+        assert suite.findall("testcase")[1].find("error").get("type") == "InvalidExpectation"
+        text = self._cli(ff, "ref.yml")
+        assert "2 of 4 run — stopped by --fail-fast after 't2-refused'" in text.stdout
+
+    def test_without_fail_fast_every_question_runs(self, ff):
+        from click.testing import CliRunner
+
+        from rdf_construct.cli import cli
+
+        result = CliRunner().invoke(cli, ["cq-test", str(ff / "base.ttl"), str(ff / "ff.yml")])
+        assert result.exit_code == 1
+        assert "NOT RUN" not in result.stdout
+        assert "Results: 3 passed, 1 failed" in result.stdout
+
+    def test_an_author_skip_is_not_a_not_run(self, ff):
+        """SKIP is the author's choice and NOT_RUN is --fail-fast's; JUnit counts both."""
+        import json
+        import xml.etree.ElementTree as ET
+
+        # t1 skipped by its author, t2-fails stops the run, t3 and t4 not run
+        yml = FF_YML.replace(
+            '    query: "ASK { ex:Animal a owl:Class }"\n    expect: true\n',
+            '    query: "ASK { ex:Animal a owl:Class }"\n    expect: true\n'
+            '    skip: true\n    skip_reason: "pending"\n',
+        )
+        (ff / "skip.yml").write_text(yml)
+        data = json.loads(self._cli(ff, "skip.yml", "-f", "json").stdout)
+        assert [q["status"] for q in data["questions"]] == ["skip", "fail", "not_run", "not_run"]
+        assert (data["summary"]["skipped"], data["summary"]["not_run"]) == (1, 2)
+
+        suite = ET.fromstring(self._cli(ff, "skip.yml", "-f", "junit").stdout)
+        assert suite.get("skipped") == "3"
+        elements = [c.find("skipped") for c in suite.findall("testcase")]
+        messages = [s.get("message") for s in elements if s is not None]
+        assert messages[0] == "pending"
+        assert all(m.startswith("not run: ") for m in messages[1:])
+
+        text = self._cli(ff, "skip.yml").stdout
+        assert "[SKIP] t1: t1 (pending)" in text
+        assert "Results: 1 failed, 1 skipped" in text
+        # "run" counts what --fail-fast reached: the author's skip was reached, not stopped
+        assert "2 of 4 run — stopped by --fail-fast after 't2-fails'" in text
+
+    def test_the_help_says_it_stops_on_an_error_too(self):
+        from click.testing import CliRunner
+
+        from rdf_construct.cli import cli
+
+        result = CliRunner().invoke(cli, ["cq-test", "--help"])
+        help_text = " ".join(result.output.split())
+        assert "Stop after the first question that fails or errors" in help_text
+        assert "Stop on first failure" not in help_text
+
+    def test_run_tests_records_not_run(self, ff):
+        from rdf_construct.cq import run_tests
+
+        results = run_tests(ff / "base.ttl", ff / "ff.yml", fail_fast=True)
+        assert results.total_count == 4
+        assert results.not_run_count == 2
+        assert results.stopped_after == "t2-fails"
+        assert results.results[2].message == "not run: --fail-fast stopped after t2-fails"
+        assert results.results[2].status == CQStatus.NOT_RUN
+        assert results.results[2].status != CQStatus.SKIP
+        assert results.all_passed is False and results.has_failures and not results.has_errors
+
+    def test_no_stop_means_no_stopped_after(self, ff):
+        from rdf_construct.cq import run_tests
+
+        results = run_tests(ff / "base.ttl", ff / "ff.yml")
+        assert results.stopped_after is None and results.not_run_count == 0
+
+
+class TestFailFastKeepsAuthorSkips:
+    """A ``skip: true`` question after the stop keeps its SKIP (ruled on #525's review)."""
+
+    YML = FF_YML.replace(
+        '  - id: t3\n    query: "ASK { ex:Dog a owl:Class }"\n    expect: true\n    tags: [later]\n',
+        '  - id: t3\n    query: "ASK { ex:Dog a owl:Class }"\n    expect: true\n    tags: [later]\n'
+        '    skip: true\n    skip_reason: "pending"\n',
+    )
+
+    @pytest.fixture
+    def d(self, tmp_path):
+        (tmp_path / "base.ttl").write_text(FF_BASE)
+        (tmp_path / "s.yml").write_text(self.YML)
+        return tmp_path
+
+    def _cli(self, d, *args):
+        from click.testing import CliRunner
+
+        from rdf_construct.cli import cli
+
+        return CliRunner().invoke(
+            cli, ["cq-test", str(d / "base.ttl"), str(d / "s.yml"), "--fail-fast", *args]
+        )
+
+    def test_json_keeps_the_skip_and_counts_only_t4_as_not_run(self, d):
+        import json
+
+        data = json.loads(self._cli(d, "-f", "json").stdout)
+        assert [q["status"] for q in data["questions"]] == ["pass", "fail", "skip", "not_run"]
+        assert data["questions"][2]["skip_reason"] == "pending"
+        assert (data["summary"]["skipped"], data["summary"]["not_run"]) == (1, 1)
+
+    def test_junit_keeps_the_skip_reason(self, d):
+        import xml.etree.ElementTree as ET
+
+        suite = ET.fromstring(self._cli(d, "-f", "junit").stdout)
+        skipped = [c.find("skipped").get("message") for c in suite.findall("testcase")[2:]]
+        assert skipped == ["pending", "not run: --fail-fast stopped after t2-fails"]
+        assert suite.get("skipped") == "2"
+
+    def test_text_counts_up_to_the_stop(self, d):
+        text = self._cli(d).stdout
+        assert "[SKIP] t3: t3 (pending)" in text
+        assert "2 of 4 run — stopped by --fail-fast after 't2-fails'" in text
+
+    def test_only_skips_after_the_stop_means_no_not_run_line(self, tmp_path):
+        from rdf_construct.cq import run_tests
+
+        yml = FF_YML.replace("    tags: [later]\n", "    tags: [later]\n    skip: true\n").replace(
+            '  - id: t4\n    query: "ASK { ex:Dog a owl:Class }"\n    expect: true\n',
+            '  - id: t4\n    query: "ASK { ex:Dog a owl:Class }"\n    expect: true\n    skip: true\n',
+        )
+        (tmp_path / "base.ttl").write_text(FF_BASE)
+        (tmp_path / "s.yml").write_text(yml)
+        results = run_tests(tmp_path / "base.ttl", tmp_path / "s.yml", fail_fast=True)
+        assert results.not_run_count == 0 and results.skipped_count == 2
+        assert results.stopped_after is None and results.ran_count == 4
+        assert "stopped by --fail-fast" not in self._cli(tmp_path).stdout

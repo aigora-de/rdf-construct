@@ -68,8 +68,53 @@ questions:
 | `tags` | No | List of tags for filtering |
 | `query` | Yes | SPARQL query (ASK, SELECT, CONSTRUCT or DESCRIBE) |
 | `expect` | Yes | Expected result (see Expectation Types) |
-| `skip` | No | Set to `true` to skip this test |
+| `skip` | No | Set to `true` to skip this test. Unquoted: `"false"` is text, and is refused |
 | `skip_reason` | No | Reason for skipping |
+
+## What a Test File May Contain
+
+The file is checked before anything runs. A test file of the wrong shape is refused at exit 2,
+naming what is wrong and what is accepted, rather than run as something its author did not write.
+
+| Where | Accepted keys |
+|-------|---------------|
+| top level | `version`, `name`, `description`, `prefixes`, `data`, `questions` |
+| a question | `id`, `name`, `description`, `tags`, `query`, `expect`, `skip`, `skip_reason` |
+| `data:` | `inline`, `files` |
+| an `expect:` mapping | one of `count`, `min_results` and/or `max_results`, `results`, `contains` |
+
+Any other key, at any of these levels, is refused. A misspelling gets a suggestion:
+
+```
+Error: Error parsing t1: unknown key 'expectt' in question 't1'. Did you mean 'expect'? Accepted keys: id, name, description, tags, query, expect, skip, skip_reason
+```
+
+The top level must be a mapping: a file that is a bare list of questions is refused with
+`must be a mapping with a 'questions:' list, not a list`. An `expect:` mapping takes one form:
+`{count: 2, max_results: 1}` is refused, because it would check only one of them. YAML anchors
+work, but define one at its first use (`expect: &yes true`, then `expect: *yes`), not under a key
+of its own: an extra top-level key such as `defaults:` is refused like any other.
+
+## Sample Data
+
+`data:` adds triples to the ontology for the questions to query. It takes a file path, a list of
+paths, or a mapping with `inline` Turtle and/or `files`:
+
+```yaml
+data: sample-data.ttl                   # one file
+data: [people.ttl, places.ttl]          # several
+data:                                   # the long form
+  inline: |
+    ex:Thing1 a ex:MyClass .
+  files: [sample-data.ttl]
+```
+
+- Relative paths resolve against the test file's directory, not the working directory.
+- `inline` data is read with the file's `prefixes:`.
+- **Every source must hold at least one triple.** A file or `inline` block that loads none is
+  refused at exit 2, naming it: a `no_results` or `max_results` question would otherwise pass on
+  data that never loaded.
+- Files given with `-d/--data` are loaded as well, not instead.
 
 ## Expectation Types
 
@@ -194,6 +239,9 @@ Test the ontology structure itself. These don't need sample data:
 Test query patterns against instance data. These need sample data:
 
 ```yaml
+prefixes:
+  ex: "http://example.org/building#"
+
 data:
   inline: |
     ex:Building1 a ex:Building ;
@@ -224,7 +272,8 @@ Options:
                             Output format (default: text)
   -o, --output PATH         Write output to file
   -v, --verbose             Show verbose output
-  --fail-fast               Stop on first failure
+  --fail-fast               Stop after the first question that fails or errors;
+                            the rest are reported as not run
   --help                    Show this message and exit
 ```
 
@@ -243,7 +292,7 @@ rdf-construct cq-test ontology.ttl tests.yml --data split_instances.ttl
 # Verbose mode (shows query text and timing)
 rdf-construct cq-test ontology.ttl tests.yml --verbose
 
-# Stop on first failure
+# Stop after the first failure or error
 rdf-construct cq-test ontology.ttl tests.yml --fail-fast
 ```
 
@@ -255,7 +304,53 @@ The command returns meaningful exit codes for CI integration:
 |------|---------|
 | 0 | All tests passed |
 | 1 | One or more tests failed |
-| 2 | Error occurred (file not found, parse error, a question whose query fails or whose expectation does not fit its query form, etc.) |
+| 2 | Error occurred (file not found, parse error, a test file of the wrong shape, no questions to run, a question whose query fails or whose expectation does not fit its query form, etc.) |
+
+### When There Is Nothing to Run
+
+A run that checked nothing did not do what was asked, so it exits 2 and says why, rather than
+passing a CI build that tested nothing:
+
+| Cause | Message |
+|-------|---------|
+| no `questions:` key | `no questions to run: tests.yml has no 'questions:' list (top-level keys found: prefixes)` |
+| `questions: []` | `no questions to run: 'questions:' in tests.yml is an empty list` |
+| a `--tag` no question has, and nothing else selected | `no questions to run: --tag scheme matches no question in tests.yml`, then `Tags defined: …` |
+| exclusions remove everything | `no questions to run: --exclude-tag core removes every question --tag core selected`, then `Tags defined: …` |
+| every selected question has `skip: true` | `no questions to run: every selected question has skip: true` |
+
+A file keyed `tests:` instead of `questions:` is refused first, as an unknown key, with
+`Did you mean 'questions'?`.
+
+A misspelt tag beside one that does select questions is not refused: the run goes ahead with
+what the other tag selected. Check the `Running N test(s)` line.
+
+### `--fail-fast`
+
+`--fail-fast` stops after the first question that fails **or errors**. The questions after it are
+not run, and are reported as such: the total is always every selected question, so a dashboard
+does not see the suite shrink on the run that fails. The exit code is that of the question that
+stopped the run (1 for a failure, 2 for an error); the questions not run add nothing to it.
+
+```
+[PASS] cq-ff-pass: Animal is a class
+[FAIL] cq-ff-fail: A class the ontology does not define
+       Expected: True
+       Actual:   False
+[NOT RUN] cq-ff-not-run: Dog is a class
+
+Results: 1 passed, 1 failed
+2 of 3 run — stopped by --fail-fast after 'cq-ff-fail'
+```
+
+In JSON, a question not run has `"status": "not_run"` and is counted in `summary.not_run`;
+`summary.skipped` counts only questions with `skip: true`. In JUnit XML, each is a `<testcase>`
+holding `<skipped message="not run: --fail-fast stopped after cq-ff-fail"/>`, and the `skipped`
+attribute counts every `<skipped>` element, so *tests − failures − errors − skipped* is the number
+that passed. A skip with a `skip_reason` carries the reason as its `message`, so the two can be
+told apart. A question after the stop that has `skip: true` is still reported as skipped, with its
+reason: it was never going to run. A question that stops the run because its expectation does not fit its query form is
+an error that ran: it is counted in `errors`, and the questions after it are the ones not run.
 
 ## Output Formats
 
@@ -296,7 +391,9 @@ Structured JSON for programmatic use:
     "total": 4,
     "passed": 2,
     "failed": 1,
-    "skipped": 1
+    "errors": 0,
+    "skipped": 1,
+    "not_run": 0
   }
 }
 ```
@@ -520,6 +617,24 @@ rdf-construct cq-test ontology.ttl tests.yml --verbose
 ```
 
 This shows the actual query results and timing.
+
+## Known Limitations
+
+These are open issues, current as of v0.7.0. They are here because a guide that describes intended
+behaviour is worse than no guide. **A fix that lands should delete its row in the same PR.**
+
+| Issue | Behaviour today |
+|---|---|
+| [#386](https://github.com/aigora-de/rdf-construct/issues/386) | A SELECT solution whose projected variables are all unbound is not counted, so a variable-less `SELECT *` that matches counts 0 rows, and `OPTIONAL` columns undercount. |
+| [#439](https://github.com/aigora-de/rdf-construct/issues/439) | `-o` naming a file listed under the test file's `data:` replaces it with the results, at exit 0. (`-o` naming the ontology, the test file or a `-d` file is refused.) |
+| [#136](https://github.com/aigora-de/rdf-construct/issues/136) | `-o` writes the text format's colour escapes into the file, and `--verbose` does not show the query text. |
+| [#523](https://github.com/aigora-de/rdf-construct/issues/523) | A `-d/--data` file that loads no triples is accepted; a `data:` source that loads none is refused. |
+| [#524](https://github.com/aigora-de/rdf-construct/issues/524) | Two questions with the same `id` both run, and are reported under one name. |
+| [#527](https://github.com/aigora-de/rdf-construct/issues/527) | A `--tag` or `--exclude-tag` that matches no question is ignored when another tag still selects some. |
+| [#526](https://github.com/aigora-de/rdf-construct/issues/526) | `query`, `id` and the counts in `expect:` are not type-checked: `count: "2"` fails against 2 results. |
+| [#522](https://github.com/aigora-de/rdf-construct/issues/522) | A SPARQL syntax error's line number counts the `PREFIX` lines added from `prefixes:`, so a one-line query reports `line:3`. |
+| [#146](https://github.com/aigora-de/rdf-construct/issues/146) | The ontology's and data files' formats are read from their extensions by a map of `cq-test`'s own, not the shared one, and a parse error does not name the file. |
+| [#149](https://github.com/aigora-de/rdf-construct/issues/149) | `examples/cq-test/` has no ontology of its own: run it against `examples/animal_ontology.ttl`. |
 
 ## See Also
 
