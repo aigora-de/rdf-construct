@@ -1326,7 +1326,7 @@ rdf-construct cq-test ONTOLOGY TEST_FILE [OPTIONS]
 - `-d, --data PATH`: Additional RDF data files (can specify multiple)
 - `-t, --tag TAG`: Run only tests with this tag (can specify multiple)
 - `-x, --exclude-tag TAG`: Skip tests with this tag (can specify multiple)
-- `--fail-fast`: Stop on first failure
+- `--fail-fast`: Stop after the first question that fails or errors; the rest are reported as not run, and still counted in the total
 - `-v, --verbose`: Show query text and timing
 
 **Test File Format**:
@@ -1334,16 +1334,20 @@ rdf-construct cq-test ONTOLOGY TEST_FILE [OPTIONS]
 ```yaml
 prefixes:
   ex: http://example.org/
+  owl: http://www.w3.org/2002/07/owl#
+  rdfs: http://www.w3.org/2000/01/rdf-schema#
 
 questions:
-  - name: "Animal hierarchy exists"
+  - id: cq-001
+    name: "Animal hierarchy exists"
     description: "Verify Animal is the root class"
     query: |
       ASK { ex:Animal a owl:Class }
     expect: true
     tags: [schema, required]
 
-  - name: "Dogs are mammals"
+  - id: cq-002
+    name: "Dogs are mammals"
     query: |
       SELECT ?dog WHERE {
         ?dog rdfs:subClassOf ex:Mammal
@@ -1368,7 +1372,7 @@ rdf-construct cq-test ontology.ttl tests.yml --format junit -o results.xml
 # Verbose output with timing
 rdf-construct cq-test ontology.ttl tests.yml --verbose
 
-# Stop on first failure
+# Stop after the first failure or error
 rdf-construct cq-test ontology.ttl tests.yml --fail-fast
 
 # Include additional test data
@@ -1378,7 +1382,9 @@ rdf-construct cq-test ontology.ttl tests.yml -d test-data.ttl
 **Exit Codes**:
 - `0`: All tests passed
 - `1`: One or more tests failed
-- `2`: Error occurred (invalid file, parse error, etc.)
+- `2`: Error occurred (invalid file, parse error, a test file of the wrong shape, no questions to run, etc.)
+
+The test file is checked before anything runs: an unknown key, a `data:` source that loads no triples, or a selection with nothing to check (no questions, tags that match none, every question `skip: true`) is refused at exit 2. See [What a Test File May Contain](CQ_TEST_GUIDE.md#what-a-test-file-may-contain).
 
 ---
 

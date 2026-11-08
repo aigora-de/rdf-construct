@@ -102,7 +102,7 @@ from rdf_construct.puml2rdf import (
     validate_rdf,
 )
 
-from rdf_construct.cq import load_test_suite, CQTestRunner, format_results
+from rdf_construct.cq import load_test_suite, CQTestRunner, CQTestSuite, format_results
 
 from rdf_construct.stats import (
     collect_stats,
@@ -2684,7 +2684,7 @@ def puml2rdf(
 @click.option(
     "--fail-fast",
     is_flag=True,
-    help="Stop on first failure",
+    help="Stop after the first question that fails or errors; the rest are reported as not run",
 )
 def cq_test(
     ontology: Path,
@@ -2726,7 +2726,7 @@ def cq_test(
     Exit codes:
         0 - All tests passed
         1 - One or more tests failed
-        2 - Error occurred (invalid file, parse error, etc.)
+        2 - Error occurred (invalid file, parse error, no questions to run, etc.)
     """
     if output:
         check_outputs([("-o", output)], [ontology, test_file, *data])
@@ -2747,15 +2747,8 @@ def cq_test(
         click.echo(f"Loading tests: {test_file.name}...", err=True)
         suite = load_test_suite(test_file)
 
-        # Filter by tags
-        if tag or exclude_tag:
-            include_tags = set(tag) if tag else None
-            exclude_tags = set(exclude_tag) if exclude_tag else None
-            suite = suite.filter_by_tags(include_tags, exclude_tags)
-
-        if not suite.questions:
-            click.secho("No tests to run (check tag filters)", fg="yellow", err=True)
-            sys.exit(0)
+        # An empty selection is refused: a run that checked nothing didn't do it (#135)
+        suite = _cq_selection(suite, test_file, tag, exclude_tag)
 
         # Run tests
         click.echo(f"Running {len(suite.questions)} test(s)...", err=True)
@@ -2782,6 +2775,9 @@ def cq_test(
         else:
             sys.exit(0)
 
+    except click.ClickException:
+        # A Refusal is the command's own answer, not an unexpected error
+        raise
     except FileNotFoundError as e:
         click.secho(f"Error: {e}", fg="red", err=True)
         sys.exit(2)
@@ -2791,6 +2787,58 @@ def cq_test(
     except Exception as e:
         click.secho(f"Error: {type(e).__name__}: {e}", fg="red", err=True)
         sys.exit(2)
+
+
+def _cq_selection(
+    suite: CQTestSuite,
+    test_file: Path,
+    tag: tuple[str, ...],
+    exclude_tag: tuple[str, ...],
+) -> CQTestSuite:
+    """Apply ``--tag``/``--exclude-tag`` and refuse a selection with nothing to check (#135).
+
+    Args:
+        suite: The suite as loaded from ``test_file``
+        test_file: The test file, for the message
+        tag: Tags to include, from ``--tag``
+        exclude_tag: Tags to exclude, from ``--exclude-tag``
+
+    Returns:
+        The selected suite, holding at least one question that is not ``skip: true``
+
+    Raises:
+        Refusal: When the file has no questions, the filters leave none, or every
+            selected question has ``skip: true``. A filter refusal names the tags the
+            suite defines.
+    """
+    name = test_file.name
+    if not suite.questions:
+        raise Refusal(f"no questions to run: 'questions:' in {name} is an empty list")
+
+    selected = suite
+    if tag or exclude_tag:
+        selected = suite.filter_by_tags(set(tag) or None, set(exclude_tag) or None)
+
+    if not selected.questions:
+        defined = sorted({t for q in suite.questions for t in q.tags})
+        unmatched = [t for t in tag if not any(t in q.tags for q in suite.questions)]
+        if unmatched:
+            named = ", ".join(f"--tag {t}" for t in unmatched)
+            verb = "matches" if len(unmatched) == 1 else "match"
+            why = f"{named} {verb} no question in {name}"
+        else:
+            excluded = " ".join(f"--exclude-tag {t}" for t in exclude_tag)
+            if tag:
+                requested = " ".join(f"--tag {t}" for t in tag)
+                why = f"{excluded} removes every question {requested} selected"
+            else:
+                why = f"{excluded} removes every question in {name}"
+        raise Refusal(f"no questions to run: {why}\nTags defined: {', '.join(defined) or '(none)'}")
+
+    if all(q.skip for q in selected.questions):
+        raise Refusal("no questions to run: every selected question has skip: true")
+
+    return selected
 
 
 def _infer_format(path: Path) -> str:

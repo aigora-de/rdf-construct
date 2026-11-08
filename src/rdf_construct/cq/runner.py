@@ -21,6 +21,9 @@ class CQStatus(Enum):
     FAIL = "fail"
     ERROR = "error"
     SKIP = "skip"
+    #: Not reached because ``fail_fast`` stopped the run; distinct from ``SKIP``, which is
+    #: the author's ``skip: true`` (#137)
+    NOT_RUN = "not_run"
 
 
 @dataclass
@@ -36,6 +39,8 @@ class CQTestResult:
         error: Error message if status is ERROR
         error_type: Kind of error: ``QueryError`` when the query could not be run,
             ``InvalidExpectation`` when its expectation cannot be checked against its query form
+        reason: Why a ``NOT_RUN`` question was not run, e.g.
+            ``not run: --fail-fast stopped after t2``
     """
 
     test: CQTest
@@ -45,6 +50,7 @@ class CQTestResult:
     check_result: CheckResult | None = None
     error: str | None = None
     error_type: str = "QueryError"
+    reason: str | None = None
 
     @property
     def passed(self) -> bool:
@@ -60,6 +66,8 @@ class CQTestResult:
             return self.check_result.message
         if self.status == CQStatus.SKIP:
             return self.test.skip_reason or "Skipped"
+        if self.status == CQStatus.NOT_RUN:
+            return self.reason or "Not run"
         return ""
 
 
@@ -81,7 +89,7 @@ class CQTestResults:
 
     @property
     def total_count(self) -> int:
-        """Total number of tests."""
+        """Total number of tests selected, including any ``fail_fast`` did not reach (#137)."""
         return len(self.results)
 
     @property
@@ -103,6 +111,19 @@ class CQTestResults:
     def skipped_count(self) -> int:
         """Number of skipped tests."""
         return sum(1 for r in self.results if r.status == CQStatus.SKIP)
+
+    @property
+    def not_run_count(self) -> int:
+        """Number of tests ``fail_fast`` did not reach."""
+        return sum(1 for r in self.results if r.status == CQStatus.NOT_RUN)
+
+    @property
+    def stopped_after(self) -> str | None:
+        """Id of the question ``fail_fast`` stopped after, or None if every question ran."""
+        if not self.not_run_count:
+            return None
+        ran = [r for r in self.results if r.status != CQStatus.NOT_RUN]
+        return ran[-1].test.id if ran else None
 
     @property
     def all_passed(self) -> bool:
@@ -131,7 +152,8 @@ class CQTestRunner:
     - Timing and error handling
 
     Args:
-        fail_fast: Stop on first failure if True
+        fail_fast: Stop after the first question that fails or errors if True; the
+            questions after it are recorded as ``NOT_RUN``
         verbose: Output verbose logging if True
     """
 
@@ -165,11 +187,16 @@ class CQTestRunner:
             graph.bind(prefix, uri)
 
         results = []
-        for test in suite.questions:
+        for position, test in enumerate(suite.questions):
             result = self._run_test(graph, test, suite.prefixes)
             results.append(result)
 
+            # A refused question is an ERROR, so it counts as run and stops here too
             if self.fail_fast and result.status in (CQStatus.FAIL, CQStatus.ERROR):
+                # The total stays the selected suite: record what was not reached (#137)
+                reason = f"not run: --fail-fast stopped after {test.id}"
+                for rest in suite.questions[position + 1 :]:
+                    results.append(CQTestResult(test=rest, status=CQStatus.NOT_RUN, reason=reason))
                 break
 
         total_duration = (time.perf_counter() - start_time) * 1000

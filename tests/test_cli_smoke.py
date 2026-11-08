@@ -424,7 +424,29 @@ THREE_STATES = [
         )
     ),
     _row(Row("cq-test", "findings", ("cq-test", ANIMAL, str(SMOKE / "cq_failing.yml")))),
+    _row(
+        Row(
+            "cq-test",
+            "findings",
+            ("cq-test", ANIMAL, str(SMOKE / "cq_fail_fast.yml"), "--fail-fast"),
+        ),
+        label="fail-fast",
+    ),
     _row(Row("cq-test", "refused", ("cq-test", ANIMAL, MALFORMED_YAML))),
+    _row(
+        Row(
+            "cq-test",
+            "refused",
+            (
+                "cq-test",
+                ANIMAL,
+                str(EXAMPLES / "cq-test" / "cq_tests_animal.yml"),
+                "--tag",
+                "no-such-tag",
+            ),
+        ),
+        label="empty-selection",
+    ),
     _row(
         Row("cq-test", "refused", ("cq-test", ANIMAL, str(SMOKE / "cq_ask_count.yml"))),
         label="ask-count",

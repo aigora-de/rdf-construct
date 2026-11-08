@@ -8,6 +8,7 @@ Supports various expectation styles:
 - Contains: subset matching
 """
 
+import difflib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
@@ -387,6 +388,44 @@ def query_form_refusal(question_id: str, expectation: Expectation, query_form: s
     )
 
 
+#: The forms an ``expect:`` mapping takes; ``min_results`` and ``max_results`` combine (#148)
+EXPECT_FORMS: tuple[frozenset[str], ...] = (
+    frozenset({"count"}),
+    frozenset({"min_results", "max_results"}),
+    frozenset({"results"}),
+    frozenset({"contains"}),
+)
+
+EXPECT_KEYS = ("count", "min_results", "max_results", "results", "contains")
+
+
+def _check_expect_keys(expect: dict[Any, Any]) -> None:
+    """Refuse an ``expect:`` mapping with an unknown key, or one that mixes forms (#148).
+
+    A mixed mapping such as ``{count: 2, max_results: 1}`` checked only one of them,
+    in silence.
+
+    Raises:
+        ValueError: Naming the key, or the keys that cannot be combined
+    """
+    for key in expect:
+        name = str(key)
+        if name not in EXPECT_KEYS:
+            nearest = difflib.get_close_matches(name, EXPECT_KEYS, n=1)
+            hint = f" Did you mean '{nearest[0]}'?" if nearest else ""
+            raise ValueError(
+                f"unknown key '{name}' in 'expect:'.{hint} "
+                f"Accepted keys: {', '.join(EXPECT_KEYS)}"
+            )
+    keys = {str(k) for k in expect}
+    if keys and not any(keys <= form for form in EXPECT_FORMS):
+        named = ", ".join(k for k in EXPECT_KEYS if k in keys)
+        raise ValueError(
+            f"'expect:' combines {named}, which check different things; use one of them "
+            "(only min_results and max_results combine)"
+        )
+
+
 def parse_expectation(expect: Any) -> Expectation:
     """Parse an expectation from YAML configuration.
 
@@ -425,6 +464,8 @@ def parse_expectation(expect: Any) -> Expectation:
 
     # Dict with specific keys
     if isinstance(expect, dict):
+        _check_expect_keys(expect)
+
         # Exact count
         if "count" in expect:
             return CountExpectation(exact=expect["count"])
