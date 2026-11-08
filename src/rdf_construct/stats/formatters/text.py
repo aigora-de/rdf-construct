@@ -42,7 +42,11 @@ def format_text_stats(stats: OntologyStats, graph: Optional[Graph] = None) -> st
     lines = []
 
     # Header
-    lines.append(f"Ontology Statistics: {stats.source}")
+    if len(stats.sources) == 1:
+        lines.append(f"Ontology Statistics: {stats.sources[0]}")
+    else:
+        lines.append(f"Ontology Statistics: {len(stats.sources)} files (union)")
+        lines.extend(f"  {source}" for source in stats.sources)
     lines.append("=" * 50)
     lines.append("")
 
@@ -53,6 +57,7 @@ def format_text_stats(stats: OntologyStats, graph: Optional[Graph] = None) -> st
     lines.append(f"  Object Properties:        {stats.basic.object_properties:,}")
     lines.append(f"  Datatype Properties:      {stats.basic.datatype_properties:,}")
     lines.append(f"  Annotation Properties:    {stats.basic.annotation_properties:,}")
+    lines.append(f"  Other Properties:         {stats.basic.other_properties:,}")
     lines.append(f"  Individuals:              {stats.basic.individuals:,}")
     lines.append("")
 

@@ -55,6 +55,7 @@ def _format_entity_group_json(
         "object_properties": [],
         "datatype_properties": [],
         "annotation_properties": [],
+        "other_properties": [],
         "individuals": [],
         "other": [],
     }
@@ -64,6 +65,7 @@ def _format_entity_group_json(
         EntityType.OBJECT_PROPERTY: "object_properties",
         EntityType.DATATYPE_PROPERTY: "datatype_properties",
         EntityType.ANNOTATION_PROPERTY: "annotation_properties",
+        EntityType.OTHER_PROPERTY: "other_properties",
         EntityType.INDIVIDUAL: "individuals",
         EntityType.ONTOLOGY: "other",
         EntityType.OTHER: "other",

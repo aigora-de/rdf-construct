@@ -17,6 +17,7 @@ ENTITY_TYPE_HEADINGS = {
     EntityType.OBJECT_PROPERTY: "Object Properties",
     EntityType.DATATYPE_PROPERTY: "Datatype Properties",
     EntityType.ANNOTATION_PROPERTY: "Annotation Properties",
+    EntityType.OTHER_PROPERTY: "Other Properties",
     EntityType.INDIVIDUAL: "Instances",
     EntityType.ONTOLOGY: "Ontology Metadata",
     EntityType.OTHER: "Other",

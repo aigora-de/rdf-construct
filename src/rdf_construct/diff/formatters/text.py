@@ -36,6 +36,7 @@ ENTITY_TYPE_NAMES = {
     EntityType.OBJECT_PROPERTY: "ObjectProperty",
     EntityType.DATATYPE_PROPERTY: "DataProperty",
     EntityType.ANNOTATION_PROPERTY: "AnnotationProperty",
+    EntityType.OTHER_PROPERTY: "Property",
     EntityType.INDIVIDUAL: "Instance",
     EntityType.ONTOLOGY: "Ontology",
     EntityType.OTHER: "Entity",

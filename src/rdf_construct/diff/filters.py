@@ -27,6 +27,9 @@ ENTITY_TYPE_MAP = {
     "annotation_properties": EntityType.ANNOTATION_PROPERTY,
     "annotation-properties": EntityType.ANNOTATION_PROPERTY,
     "annprops": EntityType.ANNOTATION_PROPERTY,
+    "other_properties": EntityType.OTHER_PROPERTY,
+    "other-properties": EntityType.OTHER_PROPERTY,
+    "otherprops": EntityType.OTHER_PROPERTY,
     "properties": None,  # Special: matches all property types
     "individuals": EntityType.INDIVIDUAL,
     "instances": EntityType.INDIVIDUAL,
@@ -37,6 +40,7 @@ PROPERTY_TYPES = {
     EntityType.OBJECT_PROPERTY,
     EntityType.DATATYPE_PROPERTY,
     EntityType.ANNOTATION_PROPERTY,
+    EntityType.OTHER_PROPERTY,
 }
 
 

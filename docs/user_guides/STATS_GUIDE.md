@@ -25,7 +25,38 @@ rdf-construct stats ontology.ttl -o stats.json --format json
 
 # Generate markdown for documentation
 rdf-construct stats ontology.ttl --format markdown >> README.md
+
+# Figures for a modular ontology, over all of its files
+rdf-construct stats src/ontology/*.ttl
 ```
+
+## Several Files
+
+Given several files without `--compare`, `stats` reports **one set of figures
+over their union**: every file is parsed into one graph, and each figure is
+computed over that graph. A modular ontology's figures only add up this way,
+because a module's classes hang from classes in another file. On its own,
+`examples/stats/zoo_care.ttl` reports `care:Patient` as a root; over both files
+it sits under `zoo:Mammal`, two levels down.
+
+- **It is a union, not an `owl:imports` closure.** `stats` reads the files you
+  name and follows no import. The header says `N files (union)` and lists them,
+  and the JSON names them in `sources`.
+- **A file named twice is read once.** Another spelling of the same path, or a
+  symbolic link to it, is left out with a `Note:` on stderr, and is listed in
+  `sources` once. Parsing a file twice would double every blank node in it, and
+  every restriction count with it.
+- **Distinct files that share triples count them once.** Blank nodes from
+  different files are always distinct.
+- **Prefixes:** the first file to bind a prefix keeps it. Another file binding
+  it to a different namespace has that namespace written with a numbered prefix
+  (`ex1:`). Only `Most Connected` is written with prefixes.
+- **A file that cannot be parsed is named** in the error, and the run exits 2
+  with nothing written.
+
+`stats` prints a `Loaded N triples` line for each file on stderr, then
+`Union of N files: M triples`. `M` is less than the sum when files share
+triples.
 
 ## Metric Categories
 
@@ -38,11 +69,27 @@ Fundamental counts of entities in the ontology.
 | Metric | Description |
 |--------|-------------|
 | Triples | Total number of RDF triples |
-| Classes | owl:Class + rdfs:Class entities |
-| Object Properties | owl:ObjectProperty entities |
-| Datatype Properties | owl:DatatypeProperty entities |
-| Annotation Properties | owl:AnnotationProperty entities |
-| Individuals | Named individuals (non-class, non-property) |
+| Classes | Terms typed `owl:Class`, `rdfs:Class` or `owl:DeprecatedClass` |
+| Object Properties | Terms typed `owl:ObjectProperty`, or one of the OWL characteristics that imply it: `owl:TransitiveProperty`, `owl:SymmetricProperty`, `owl:AsymmetricProperty`, `owl:ReflexiveProperty`, `owl:IrreflexiveProperty`, `owl:InverseFunctionalProperty` |
+| Datatype Properties | Terms typed `owl:DatatypeProperty` |
+| Annotation Properties | Terms typed `owl:AnnotationProperty` |
+| Other Properties | Properties whose kind the file does not say: typed `rdf:Property`, `owl:FunctionalProperty` or `owl:DeprecatedProperty`, and none of the types above |
+| Individuals | Typed terms that are neither classes nor properties, and terms typed `owl:NamedIndividual` |
+
+These are the type sets every command shares (`rdf_construct.core.vocab`). A
+term declared only `owl:TransitiveProperty` is an object property, because OWL
+says so. A term declared only `owl:FunctionalProperty` could be an object or a
+datatype property, so it is counted under **Other Properties** rather than
+guessed. To move it, declare its kind: `ex:hasMother a owl:ObjectProperty ,
+owl:FunctionalProperty` is an object property, and not an other property.
+
+**A term declared with two kinds counts under each.** A property typed both
+`owl:ObjectProperty` and `owl:DatatypeProperty` adds one to each count. A class
+punned as a property adds one to Classes and one to its property count. A class
+the file also types `owl:NamedIndividual` adds one to Individuals. Each count
+answers "how many terms of this kind are there", and such a term is of both
+kinds. `diff`, which reports each change on one line, lists such a term once,
+under the first of its kinds (see the [Diff Guide](DIFF_GUIDE.md)).
 
 Every count, in every category, covers the ontology's own terms only. A
 class or property the file declares but does not own, such as
@@ -80,9 +127,12 @@ Property definition coverage.
 | With Range | Properties with rdfs:range defined |
 | Domain Coverage | Proportion of properties with domain |
 | Range Coverage | Proportion of properties with range |
-| Inverse Pairs | Number of owl:inverseOf relationships |
-| Functional | Number of owl:FunctionalProperty |
-| Symmetric | Number of owl:SymmetricProperty |
+| Inverse Pairs | Properties with an `owl:inverseOf` |
+| Functional | Properties typed `owl:FunctionalProperty`, whatever their kind |
+| Symmetric | Properties typed `owl:SymmetricProperty` |
+
+"Properties" here are the ontology's own properties of all four kinds, each
+counted once. The coverage figures divide by that number.
 
 ### Documentation
 
@@ -92,7 +142,7 @@ Documentation coverage statistics.
 |--------|-------------|
 | Classes Labelled | Classes with rdfs:label or skos:prefLabel |
 | Classes Documented | Classes with rdfs:comment or skos:definition |
-| Properties Labelled | Properties with labels |
+| Properties Labelled | Properties, of all four kinds, with labels |
 
 Percentages are also provided (e.g., `classes_labelled_pct`).
 
@@ -120,81 +170,181 @@ How classes are connected through properties.
 
 ## Output Formats
 
+Each sample below is the output of this command over the two modules in
+`examples/stats/`, exactly as printed. Only the JSON's timestamp differs from
+run to run:
+
+```bash
+rdf-construct stats examples/stats/zoo_core.ttl examples/stats/zoo_care.ttl
+```
+
+`zoo_core.ttl` declares the shapes a short type list gets wrong. They include
+a property declared only `owl:TransitiveProperty`, an `owl:DeprecatedClass`, an
+`owl:FunctionalProperty` alone, an `owl:DeprecatedProperty` alone, an
+`rdf:Property`, and a class punned as a named individual. `zoo_care.ttl` hangs
+its classes under `zoo_core.ttl`'s. The files' comments say what each term
+tests.
+
 ### Text (default)
 
 Human-readable aligned columns:
 
-```
-Ontology Statistics: examples/animal_ontology.ttl
+```text
+Ontology Statistics: 2 files (union)
+  examples/stats/zoo_core.ttl
+  examples/stats/zoo_care.ttl
 ==================================================
 
 BASIC COUNTS
-  Triples:                   89
-  Classes:                   12
-  Object Properties:          5
-  Datatype Properties:        3
-  Individuals:                0
+  Triples:                  67
+  Classes:                  9
+  Object Properties:        5
+  Datatype Properties:      1
+  Annotation Properties:    1
+  Other Properties:         4
+  Individuals:              3
 
 HIERARCHY
-  Root Classes:               1
-  Leaf Classes:               5
-  Max Depth:                  4
-  Avg Depth:                2.3
-  Avg Branching:            2.0
-  Orphan Classes:             0 (0.0%)
+  Root Classes:             5
+  Leaf Classes:             6
+  Max Depth:                2
+  Avg Depth:                0.6
+  Avg Branching:            1.3
+  Orphan Classes:           3 (33.3%)
 
 PROPERTIES
-  With Domain:                7 (87.5%)
-  With Range:                 6 (75.0%)
-  Functional:                 1
+  With Domain:              7 (63.6%)
+  With Range:               6 (54.5%)
+  Inverse Pairs:            0
+  Functional:               2
+  Symmetric:                1
 
 DOCUMENTATION
-  Classes Labelled:          12 (100.0%)
-  Classes Documented:         8 (66.7%)
-  Properties Labelled:        8 (100.0%)
+  Classes Labelled:         9 (100.0%)
+  Classes Documented:       3 (33.3%)
+  Properties Labelled:      7 (63.6%)
+
+COMPLEXITY
+  Avg Props/Class:          1.3
+  Avg Superclasses:         0.4
+  Multiple Inheritance:     0
+  OWL Restrictions:         0
+  Equivalent Classes:       0
+
+CONNECTIVITY
+  Most Connected:           zoo:Animal (6 refs)
+  Isolated Classes:         1
 ```
 
 ### JSON
 
-Machine-readable format for scripting and CI pipelines:
+Machine-readable format for scripting and CI pipelines (`--format json`).
+`sources` is always a list, for one file too:
 
 ```json
 {
-  "source": "ontology.ttl",
-  "timestamp": "2024-11-15T10:30:00Z",
+  "sources": [
+    "examples/stats/zoo_core.ttl",
+    "examples/stats/zoo_care.ttl"
+  ],
+  "timestamp": "2026-11-08T12:00:00.000000",
   "basic": {
-    "triples": 1247,
-    "classes": 47,
-    "object_properties": 23,
-    "datatype_properties": 15,
-    "annotation_properties": 8,
-    "individuals": 156
+    "triples": 67,
+    "classes": 9,
+    "object_properties": 5,
+    "datatype_properties": 1,
+    "annotation_properties": 1,
+    "other_properties": 4,
+    "individuals": 3
   },
   "hierarchy": {
     "root_classes": 5,
-    "leaf_classes": 18,
-    "max_depth": 6,
-    "avg_depth": 3.2,
-    "avg_branching": 2.1,
-    "orphan_classes": 2,
-    "orphan_rate": 0.043
+    "leaf_classes": 6,
+    "max_depth": 2,
+    "avg_depth": 0.56,
+    "avg_branching": 1.33,
+    "orphan_classes": 3,
+    "orphan_rate": 0.333
+  },
+  "properties": {
+    "with_domain": 7,
+    "with_range": 6,
+    "domain_coverage": 0.636,
+    "range_coverage": 0.545,
+    "inverse_pairs": 0,
+    "functional": 2,
+    "symmetric": 1
+  },
+  "documentation": {
+    "classes_labelled": 9,
+    "classes_labelled_pct": 1.0,
+    "classes_documented": 3,
+    "classes_documented_pct": 0.333,
+    "properties_labelled": 7,
+    "properties_labelled_pct": 0.636
+  },
+  "complexity": {
+    "avg_properties_per_class": 1.33,
+    "avg_superclasses_per_class": 0.44,
+    "multiple_inheritance_count": 0,
+    "owl_restriction_count": 0,
+    "owl_equivalent_count": 0
+  },
+  "connectivity": {
+    "most_connected_class": "http://example.org/zoo/core#Animal",
+    "most_connected_count": 6,
+    "isolated_classes": 1
   }
 }
 ```
 
 ### Markdown
 
-For embedding in documentation:
+For embedding in documentation (`--format markdown`):
 
 ```markdown
 ## Ontology Statistics
 
+**Sources (union of 2 files):**
+
+- `examples/stats/zoo_core.ttl`
+- `examples/stats/zoo_care.ttl`
+
 | Metric | Value |
 |--------|-------|
-| Classes | 47 |
-| Properties | 38 |
-| Max Depth | 6 |
-| Documentation Coverage | 81% |
+| Classes | 9 |
+| Object Properties | 5 |
+| Datatype Properties | 1 |
+| Other Properties | 4 |
+| Max Hierarchy Depth | 2 |
+| Documentation Coverage | 33.3% |
+
+### Structure
+
+| Metric | Value |
+|--------|-------|
+| Total Triples | 67 |
+| Root Classes | 5 |
+| Leaf Classes | 6 |
+| Avg Branching Factor | 1.3 |
+| Orphan Classes | 3 (33.3%) |
+
+### Properties
+
+| Metric | Value |
+|--------|-------|
+| With Domain | 7 (63.6%) |
+| With Range | 6 (54.5%) |
+| Functional | 2 |
+| Symmetric | 1 |
+
+### Documentation
+
+| Metric | Value |
+|--------|-------|
+| Classes Labelled | 9 (100.0%) |
+| Classes Documented | 3 (33.3%) |
+| Properties Labelled | 7 (63.6%) |
 
 *Generated by rdf-construct stats*
 ```
@@ -287,6 +437,18 @@ echo "$(date -I),$(rdf-construct stats ontology.ttl --format json | jq -c .)" >>
 3. **Document thresholds** - Define acceptable ranges for orphan rate, documentation coverage, etc.
 4. **Export JSON** - Easier to process programmatically than text
 5. **Complement with lint** - Stats shows summary; `rdf-construct lint` shows specific issues
+
+## Known Limitations
+
+| Limitation | Issue |
+|---|---|
+| Every file is parsed as Turtle, whatever its extension: an RDF/XML or JSON-LD file is refused at exit 2 with a parse error | [#146](https://github.com/aigora-de/rdf-construct/issues/146) |
+| An `rdfs:subClassOf` cycle is not reported, and the depth figures over it are arbitrary | [#142](https://github.com/aigora-de/rdf-construct/issues/142) |
+| A property with an `rdfs:domain`, `rdfs:range` or `rdfs:subPropertyOf` but no property type is counted as an individual, or not at all | [#297](https://github.com/aigora-de/rdf-construct/issues/297) |
+| Blank nodes are counted: an `owl:unionOf` class expression as a class, and an `owl:Restriction` or `owl:Axiom` as an individual (an anonymous individual, such as `[ a ex:Identifier ]`, rightly counts as one) | [#529](https://github.com/aigora-de/rdf-construct/issues/529) |
+| A term typed `rdfs:Datatype` is counted as an individual | [#530](https://github.com/aigora-de/rdf-construct/issues/530) |
+| `--include` and `--exclude` report an excluded category as zeros rather than leaving it out | [#139](https://github.com/aigora-de/rdf-construct/issues/139) |
+| Several files are a union of the files named, not an `owl:imports` closure | by design |
 
 ## Related Commands
 

@@ -108,6 +108,16 @@ REFUSED: dict[str, tuple[dict[str, str | Path], list[str], str]] = {
         ["stats", "la.ttl", "lb.ttl", "-o", "lb.ttl"],
         "-o lb.ttl would replace the input lb.ttl.",
     ),
+    "stats -o the third of three inputs, a union (#140)": (
+        {**ONTOLOGIES, "lc.ttl": LA},
+        ["stats", "la.ttl", "lb.ttl", "lc.ttl", "-o", "lc.ttl"],
+        "-o lc.ttl would replace the input lc.ttl.",
+    ),
+    "stats -o an input named twice (#140)": (
+        ONTOLOGIES,
+        ["stats", "la.ttl", "lb.ttl", "la.ttl", "-o", "la.ttl"],
+        "-o la.ttl would replace the input la.ttl.",
+    ),
     "stats --compare -o the new file": (
         ONTOLOGIES,
         ["stats", "--compare", "la.ttl", "lb.ttl", "-o", "lb.ttl"],
