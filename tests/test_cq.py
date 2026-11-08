@@ -1,5 +1,7 @@
 """Unit tests for the competency question testing module."""
 
+import re
+
 import pytest
 from pathlib import Path
 from io import StringIO
@@ -585,7 +587,6 @@ class TestQueryFormRefusal:
             ({"min_results": 1, "max_results": 2}, "min_results and max_results"),
             ({"results": []}, "results"),
             ({"results": [{"x": "y"}]}, "results"),
-            ({"contains": []}, "contains"),
             ({"contains": [{"x": "y"}]}, "contains"),
         ],
     )
@@ -1131,8 +1132,18 @@ class TestEverySolutionIsARow:
             "ORDER BY DESC(?n) OFFSET 0 LIMIT 3",
             "SELECT DISTINCT ?c WHERE { ?c a ex:Nothing } GROUP BY ?c",
             "SELECT ?c WHERE { ?c a ex:Nothing } GROUP BY ?c HAVING (COUNT(*) = 0)",
+            "SELECT * WHERE { { SELECT ?c WHERE { ?c a ex:Nothing } GROUP BY ?c } }",
+            "SELECT ?c ?n WHERE { { SELECT ?c (COUNT(*) AS ?n) WHERE { ?c a ex:Nothing } "
+            "GROUP BY ?c } }",
         ],
-        ids=["group by", "with order and slice", "distinct", "having"],
+        ids=[
+            "group by",
+            "with order and slice",
+            "distinct",
+            "having",
+            "the only sub-select",
+            "a sub-select, its variables projected",
+        ],
     )
     def test_a_group_by_that_forms_no_groups_has_no_rows(
         self, unbound_graph: Graph, query: str
@@ -1184,12 +1195,20 @@ class TestEverySolutionIsARow:
 
         assert [dict(b) for b in result.bindings] == [{}]
 
-    def test_a_grouped_sub_select_that_matches_nothing_still_counts_one(
-        self, unbound_graph: Graph
-    ) -> None:
-        """The guide's known limitation: the guard stops at a sub-select (RDFLib/rdflib#3382)."""
-        query = "SELECT * WHERE { { SELECT ?c WHERE { ?c a ex:Nothing } GROUP BY ?c } }"
-
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "SELECT ?x WHERE { { SELECT ?c WHERE { ?c a ex:Nothing } GROUP BY ?c } }",
+            "SELECT ?c WHERE { ?c a ex:Nothing } GROUP BY ?c VALUES ?x { 1 }",
+            "SELECT * WHERE { { SELECT ?c WHERE { ?c a ex:Nothing } GROUP BY ?c } "
+            "ex:Animal a owl:Class }",
+            "SELECT * WHERE { { SELECT ?c WHERE { ?c a ex:Nothing } GROUP BY ?c } "
+            "UNION { ex:Nope a owl:Class } }",
+        ],
+        ids=["projection sharing no variable", "trailing values", "joined", "union"],
+    )
+    def test_the_known_limitation_still_counts_one(self, unbound_graph: Graph, query: str) -> None:
+        """The guide's known limitation (RDFLib/rdflib#3382): the guard cannot tell these."""
         assert _one(unbound_graph, query, {"count": 1}).status == CQStatus.PASS
 
     def test_rdflib_iteration_still_drops_an_empty_binding(self, unbound_graph: Graph) -> None:
@@ -1209,6 +1228,8 @@ class TestEverySolutionIsARow:
             ("SELECT ?c WHERE { ?c a ex:C }", False),
             ("SELECT * WHERE { { SELECT ?c WHERE { ?c a ex:C } GROUP BY ?c } ?c a ex:D }", False),
             ("SELECT ?x WHERE { { SELECT ?c WHERE { ?c a ex:C } GROUP BY ?c } }", False),
+            ("SELECT * WHERE { { SELECT ?c WHERE { ?c a ex:C } GROUP BY ?c } }", True),
+            ("SELECT ?c WHERE { ?c a ex:C } GROUP BY ?c VALUES ?x { 1 }", False),
             ("ASK { ?c a ex:C }", False),
         ],
     )
@@ -1262,6 +1283,28 @@ class TestEverySolutionIsARow:
 
         assert result.status == CQStatus.PASS, result.message
         assert result.result_count == triples
+
+    def test_a_prefix_only_the_rdf_declares_still_resolves(self, tmp_path: Path) -> None:
+        """A prefix from the ontology or a -d file works in a query, as before #386's fix."""
+        from click.testing import CliRunner
+
+        from rdf_construct.cli import cli
+
+        (tmp_path / "o.ttl").write_text("@prefix my: <http://my.org/> .\nmy:a a my:Thing .\n")
+        (tmp_path / "d.ttl").write_text("@prefix zz: <http://zz.org/> .\nzz:b a zz:Other .\n")
+        (tmp_path / "q.yml").write_text(
+            "questions:\n"
+            '  - {id: onto, query: "SELECT ?s WHERE { ?s a my:Thing }", expect: {count: 1}}\n'
+            '  - {id: data, query: "SELECT ?s WHERE { ?s a zz:Other }", expect: {count: 1}}\n'
+        )
+
+        result = CliRunner().invoke(
+            cli,
+            ["cq-test", str(tmp_path / "o.ttl"), str(tmp_path / "q.yml")]
+            + ["-d", str(tmp_path / "d.ttl")],
+        )
+
+        assert result.exit_code == 0, result.output
 
     def test_an_ask_with_a_count_is_still_refused(self, unbound_graph: Graph) -> None:
         result = _one(unbound_graph, "ASK { ex:Animal a owl:Class }", {"count": 1})
@@ -1321,6 +1364,30 @@ class TestEveryExpectationSeesTheEmptySolution:
     def test_contains_refuses_an_empty_binding(self) -> None:
         with pytest.raises(ValueError, match=r"empty binding \{\}.*use expect: has_results"):
             parse_expectation({"contains": [{"label": "Plant"}, {}]})
+
+    @pytest.mark.parametrize(
+        ("expect", "message"),
+        [
+            ({"contains": {}}, "'contains:' must be a list of bindings"),
+            ({"contains": {"label": "x"}}, "'contains:' must be a list of bindings"),
+            ({"contains": "foo"}, "'contains:' must be a list of bindings"),
+            ({"contains": [None]}, "'contains:' must be a list of bindings"),
+            ({"contains": []}, "'contains:' is an empty list, which checks nothing"),
+            ({"results": [None]}, "'results:' must be a list of rows"),
+            ({"results": {"label": "x"}}, "'results:' must be a list of rows"),
+            ({"results": "foo"}, "'results:' must be a list of rows"),
+        ],
+    )
+    def test_a_misshapen_binding_list_is_refused(self, expect, message: str) -> None:
+        with pytest.raises(ValueError, match=re.escape(message)):
+            parse_expectation(expect)
+
+    def test_results_may_be_an_empty_list(self, unbound_graph: Graph) -> None:
+        """``results: []`` checks that there are no rows."""
+        query = "SELECT * WHERE { ex:Nope a owl:Class }"
+
+        assert _one(unbound_graph, query, {"results": []}).status == CQStatus.PASS
+        assert _one(unbound_graph, VARLESS, {"results": []}).status == CQStatus.FAIL
 
     def test_results_failure_shows_the_empty_solution(self, unbound_graph: Graph) -> None:
         result = _one(unbound_graph, OPTIONAL_ONLY, {"results": [{"label": "Plant"}]})

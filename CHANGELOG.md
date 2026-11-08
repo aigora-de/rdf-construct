@@ -704,7 +704,9 @@ change, and what to do about it, is listed command by command in the
   every expectation; a `GROUP BY` that forms no groups still has none, where
   rdflib returns one empty row (RDFLib/rdflib#3382). In `results:` and
   `contains:`, `null` means unbound (it was compared as the text `None`), and
-  `contains:` refuses an empty binding `{}`, which matched any solution.
+  `contains:` refuses an empty binding `{}` or an empty list, which matched any
+  result. `results:` and `contains:` that are not a list of mappings are refused
+  when the test file loads; they errored at run time or passed vacuously.
 - **`cq-test -o` cannot replace a `data:` file** (#439). `-o` naming a file the
   test file loads through `data:` replaced it with the results at exit 0, since
   those files were known only once the suite loaded. It is now refused at exit 2

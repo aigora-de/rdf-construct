@@ -264,8 +264,9 @@ class CQTestRunner:
             # Inject prefixes into query
             full_query = build_query_with_prefixes(test.query, prefixes)
 
-            # Execute query; the prepared form's algebra is kept for _solutions
-            prepared = prepareQuery(full_query)
+            # Execute query; the prepared form's algebra is kept for _solutions. The graph's
+            # prefixes resolve in the query, as graph.query gives them to a query string
+            prepared = prepareQuery(full_query, initNs=dict(graph.namespaces()))
             result = graph.query(prepared)
 
             # Refuse an expectation that cannot be checked against this query form,
@@ -364,28 +365,37 @@ def _solutions(result: Result, prepared: Query) -> list[Mapping[Any, Any]]:
 
 
 def _explicitly_grouped(algebra: Any) -> bool:
-    """Whether a query's top-level pattern is aggregated under an explicit ``GROUP BY``.
+    """Whether a query's solutions come straight from an explicit ``GROUP BY``, keys intact.
 
     Walks from the query down the chain of single-pattern operators (projection, DISTINCT,
-    slicing, ordering, HAVING, extensions) to an ``AggregateJoin``. An implicit group (an
-    aggregate with no ``GROUP BY``) has one group even over no solutions, which is correct,
-    so it is not matched. The walk stops at a sub-select: an outer projection can drop a
-    real group's keys, so a binding with none is no longer the artefact's mark. A ``GROUP BY``
-    inside a sub-select, a join or a union is not reached.
+    slicing, ordering, HAVING, extensions, a sub-select) to an ``AggregateJoin``. An implicit
+    group (an aggregate with no ``GROUP BY``) has one group even over no solutions, which is
+    correct, so it is not matched. Each projection on the way must keep at least one variable
+    every other keeps: a real group then still carries a key in the final row, so a binding with
+    none can only be rdflib's no-groups artefact. An outer projection sharing no variable with
+    a grouped sub-select makes a real group an empty row too, so it is not matched. A ``GROUP
+    BY`` inside a join or a union, or followed by ``VALUES``, is not reached.
 
     Args:
         algebra: A prepared query's algebra
 
     Returns:
-        True if the top-level pattern groups by an expression
+        True if the solutions are an explicit ``GROUP BY``'s groups, each keeping a variable
     """
     node = algebra.get("p") if algebra.name == "SelectQuery" else None
+    kept: set[Any] | None = None
     while node is not None and hasattr(node, "name"):
-        if node.name == "ToMultiSet":
-            return False
+        if node.name == "Project":
+            projected = set(node.PV)
+            kept = projected if kept is None else kept & projected
         if node.name == "AggregateJoin":
             group = node.get("p")
-            return group is not None and group.name == "Group" and group.expr is not None
+            return (
+                bool(kept)
+                and group is not None
+                and group.name == "Group"
+                and group.expr is not None
+            )
         node = node.get("p")
     return False
 

@@ -253,8 +253,10 @@ expect:
     - label: null
 ```
 
-An empty binding in `contains` (`- {}`) matches any solution, so it is refused at exit 2: use
-`expect: has_results`.
+`results` is a list of rows and `contains` a list of bindings, each a mapping; anything else is
+refused at exit 2. An empty binding in `contains` (`- {}`), or an empty `contains` list, matches
+any result, so it is refused too: use `expect: has_results`. `results: []` is allowed, and checks
+that there are no rows.
 
 A value check compares a literal by its value, so `floors: 3` matches `"3"^^xsd:integer` and
 `"03"^^xsd:integer` alike. A literal constant **inside the query's graph pattern** matches by term:
@@ -681,7 +683,7 @@ behaviour is worse than no guide. **A fix that lands should delete its row in th
 
 | Issue | Behaviour today |
 |---|---|
-| [RDFLib/rdflib#3382](https://github.com/RDFLib/rdflib/issues/3382) | A `GROUP BY` that forms no groups has no rows, but rdflib returns one empty row for it. `cq-test` drops that row when the `GROUP BY` is the query's own; a `GROUP BY` inside a sub-select that matches nothing can still count 1 row. |
+| [RDFLib/rdflib#3382](https://github.com/RDFLib/rdflib/issues/3382) | A `GROUP BY` that forms no groups has no rows, but rdflib returns one empty row for it. `cq-test` drops that row when the query's solutions come straight from the `GROUP BY`. A grouped sub-select that matches nothing can still count 1 when it is joined or `UNION`ed with another pattern, or when the outer query selects none of its variables; so can a `GROUP BY` followed by `VALUES`. |
 | [RDFLib/rdflib#3457](https://github.com/RDFLib/rdflib/pull/3457) | A constant `FILTER(false)` is ignored, so the pattern matches as if it were absent, in every query form. |
 | [#136](https://github.com/aigora-de/rdf-construct/issues/136) | `-o` writes the text format's colour escapes into the file, and `--verbose` does not show the query text. |
 | [#523](https://github.com/aigora-de/rdf-construct/issues/523) | A `-d/--data` file that loads no triples is accepted; a `data:` source that loads none is refused. |
