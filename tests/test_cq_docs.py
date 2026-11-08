@@ -2,7 +2,8 @@
 
 Every YAML block in ``CQ_TEST_GUIDE.md`` and in ``CLI_REFERENCE.md``'s ``cq-test`` section
 that is a test file, or a piece of one, must load under the test file's schema. Every
-``rdf-construct cq-test`` command in either runs verbatim, and exits as a clean suite does.
+``rdf-construct cq-test`` command in either runs verbatim, and exits as a clean suite does,
+unless the line ends ``# exits N``, the code a refusal it shows exits with (#439).
 
 A block that is neither is named here by the heading it sits under, so a new kind of block
 fails until someone decides what it is.
@@ -123,7 +124,10 @@ def _commands() -> list[Any]:
                     continue
                 if "[OPTIONS]" in command:
                     continue  # a usage line, not a command
-                params.append(pytest.param(command, id=f"{name}:{command[22:]}"))
+                exits = re.search(r"\s+# exits (\d+)$", command)
+                code = int(exits.group(1)) if exits else 0
+                command = command[: exits.start()] if exits else command
+                params.append(pytest.param(command, code, id=f"{name}:{command[22:]}"))
     return params
 
 
@@ -139,19 +143,28 @@ def workdir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / "test-data.ttl").write_text(
         "@prefix ex: <http://example.org/animals#> .\nex:Spot a ex:Dog .\n"
     )
+    (tmp_path / "with-data.yml").write_text(
+        "data: test-data.ttl\nquestions:\n"
+        '  - {id: spot, query: "ASK { <http://example.org/animals#Spot> ?p ?o }", expect: true}\n'
+    )
     monkeypatch.chdir(tmp_path)
     return tmp_path
 
 
-@pytest.mark.parametrize("command", _commands())
-def test_every_command_runs_as_written(workdir: Path, command: str) -> None:
+@pytest.mark.parametrize(("command", "code"), _commands())
+def test_every_command_runs_as_written(workdir: Path, command: str, code: int) -> None:
     argv = shlex.split(command)[1:]
     result = CliRunner().invoke(cli, argv)
-    assert result.exit_code == 0, f"{command}\n{result.output}"
+    assert result.exit_code == code, f"{command}\n{result.output}"
+    if code:
+        assert "Nothing was written:" in result.output, result.output
 
 
 def test_the_commands_are_found() -> None:
     commands = [p.values[0] for p in _commands()]
+    assert [p.values for p in _commands() if p.values[1] != 0] == [
+        ("rdf-construct cq-test ontology.ttl with-data.yml -o test-data.ttl", 2)
+    ], "the -o refusal example"
     assert len(commands) >= 15
     assert any("--fail-fast" in c for c in commands)
     assert any("tests/cq-tests.yml" in c for c in commands), "the CI blocks' commands"

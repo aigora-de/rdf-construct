@@ -41,6 +41,21 @@ LB = PREFIXES + 'ex:Thing a owl:Class ; rdfs:label "Thing B"@en .\n'
 DATA = "@prefix ex: <http://example.org/x#> .\nex:i1 a ex:Thing .\n"
 
 ONTOLOGIES = {"la.ttl": LA, "lb.ttl": LB}
+
+
+def cq_data(data: str, *, inline: bool = False) -> str:
+    """A one-question test file whose ``data:`` is ``data``: a mapping's body, or ``inline``."""
+    block = f"data: {data}\n" if inline else f"data:\n  {data}\n"
+    return block + dedent(
+        """\
+        questions:
+          - id: cq1
+            query: "ASK { <http://example.org/x#i1> a <http://example.org/x#Thing> }"
+            expect: true
+        """
+    )
+
+
 WITH_DATA = {"la.ttl": LA, "lb.ttl": LB, "dat.ttl": DATA}
 
 
@@ -273,6 +288,50 @@ REFUSED: dict[str, tuple[dict[str, str | Path], list[str], str]] = {
         ["merge", "la.ttl", "lb.ttl", "-o", "sub/../la.ttl"],
         "-o sub/../la.ttl would replace the input la.ttl.",
     ),
+    # #439: the files a test file's data: names are inputs too, known once the suite loads
+    "cq-test -o a data: files: entry": (
+        {"animal.ttl": ANIMAL, "cq.yml": cq_data("files: [dat.ttl]"), "dat.ttl": DATA},
+        ["cq-test", "animal.ttl", "cq.yml", "-o", "dat.ttl"],
+        "-o dat.ttl would replace the input dat.ttl, which cq.yml loads through 'data:'.",
+    ),
+    "cq-test -o the data: shorthand": (
+        {"animal.ttl": ANIMAL, "cq.yml": cq_data("dat.ttl", inline=True), "dat.ttl": DATA},
+        ["cq-test", "animal.ttl", "cq.yml", "-o", "dat.ttl"],
+        "-o dat.ttl would replace the input dat.ttl, which cq.yml loads through 'data:'.",
+    ),
+    "cq-test -o a data: list entry": (
+        {
+            "animal.ttl": ANIMAL,
+            "cq.yml": cq_data("[a.ttl, dat.ttl]", inline=True),
+            "a.ttl": DATA,
+            "dat.ttl": DATA,
+        },
+        ["cq-test", "animal.ttl", "cq.yml", "-o", "dat.ttl"],
+        "-o dat.ttl would replace the input dat.ttl, which cq.yml loads through 'data:'.",
+    ),
+    "cq-test -o a data: file beside a test file in another directory": (
+        {"animal.ttl": ANIMAL, "sub/cq.yml": cq_data("files: [dat.ttl]"), "sub/dat.ttl": DATA},
+        ["cq-test", "animal.ttl", "sub/cq.yml", "-o", "sub/dat.ttl"],
+        "-o sub/dat.ttl would replace the input sub/dat.ttl, "
+        "which sub/cq.yml loads through 'data:'.",
+    ),
+    "cq-test -o a data: file through ..": (
+        {"animal.ttl": ANIMAL, "sub/cq.yml": cq_data("files: [dat.ttl]"), "sub/dat.ttl": DATA},
+        ["cq-test", "animal.ttl", "sub/cq.yml", "-o", "sub/../sub/dat.ttl"],
+        "-o sub/../sub/dat.ttl would replace the input sub/dat.ttl, "
+        "which sub/cq.yml loads through 'data:'.",
+    ),
+    "cq-test -o a data: entry that reaches up a directory": (
+        {"animal.ttl": ANIMAL, "sub/cq.yml": cq_data("files: [../dat.ttl]"), "dat.ttl": DATA},
+        ["cq-test", "animal.ttl", "sub/cq.yml", "-o", "dat.ttl"],
+        "-o dat.ttl would replace the input sub/../dat.ttl, "
+        "which sub/cq.yml loads through 'data:'.",
+    ),
+    "cq-test -o a data: file also given with --data": (
+        {"animal.ttl": ANIMAL, "cq.yml": cq_data("files: [dat.ttl]"), "dat.ttl": DATA},
+        ["cq-test", "animal.ttl", "cq.yml", "--data", "dat.ttl", "-o", "dat.ttl"],
+        "-o dat.ttl would replace the input dat.ttl. Choose another path.",
+    ),
 }
 
 
@@ -341,6 +400,66 @@ def test_refused_in_another_case(argv: list[str], tmp_path: Path) -> None:
     assert_wrote_nothing(before, after)
 
 
+@pytest.mark.parametrize("link", ["symbolic", "hard"])
+def test_cq_test_refuses_a_data_file_through_a_link(link: str, tmp_path: Path) -> None:
+    """#439: ``-o link.ttl`` names the ``data:`` file it links to."""
+    from tests.test_cli_smoke import assert_wrote_nothing
+
+    _write(tmp_path, {"animal.ttl": ANIMAL, "cq.yml": cq_data("files: [dat.ttl]"), "dat.ttl": DATA})
+    (os.symlink if link == "symbolic" else os.link)(tmp_path / "dat.ttl", tmp_path / "link.ttl")
+
+    result, before, after = _run(["cq-test", "animal.ttl", "cq.yml", "-o", "link.ttl"], tmp_path)
+
+    assert result.exit_code == 2, result.output
+    assert (
+        "-o link.ttl would replace the input dat.ttl, which cq.yml loads through 'data:'."
+        in result.output
+    )
+    assert_wrote_nothing(before, after)
+
+
+def test_cq_test_refuses_a_data_file_in_another_case(tmp_path: Path) -> None:
+    """#439: on a case-blind filesystem ``./DAT.ttl`` is the shorthand's ``dat.ttl``."""
+    from tests.test_cli_smoke import assert_wrote_nothing
+
+    if not _case_blind(tmp_path):
+        pytest.skip("DAT.ttl and dat.ttl are two files on a case-sensitive filesystem")
+    _write(
+        tmp_path, {"animal.ttl": ANIMAL, "cq.yml": cq_data("dat.ttl", inline=True), "dat.ttl": DATA}
+    )
+
+    result, before, after = _run(["cq-test", "animal.ttl", "cq.yml", "-o", "./DAT.ttl"], tmp_path)
+
+    assert result.exit_code == 2, result.output
+    assert "would replace the input dat.ttl, which cq.yml loads through 'data:'." in result.output
+    assert_wrote_nothing(before, after)
+
+
+def test_cq_test_refuses_before_running(tmp_path: Path) -> None:
+    """#439: the refusal comes after the suite loads, and before any question runs."""
+    _write(tmp_path, {"animal.ttl": ANIMAL, "cq.yml": cq_data("files: [dat.ttl]"), "dat.ttl": DATA})
+
+    result, _, _ = _run(["cq-test", "animal.ttl", "cq.yml", "-o", "dat.ttl"], tmp_path)
+
+    assert result.exit_code == 2, result.output
+    assert "Loading tests: cq.yml..." in result.output
+    assert "Running" not in result.output
+
+
+def test_cq_test_a_missing_data_file_is_not_created(tmp_path: Path) -> None:
+    """#439: ``-o`` naming a ``data:`` file that does not exist stops at the missing file."""
+    from tests.test_cli_smoke import assert_wrote_nothing
+
+    _write(tmp_path, {"animal.ttl": ANIMAL, "cq.yml": cq_data("files: [missing.ttl]")})
+
+    result, before, after = _run(["cq-test", "animal.ttl", "cq.yml", "-o", "missing.ttl"], tmp_path)
+
+    assert result.exit_code == 2, result.output
+    assert "Data file not found: missing.ttl" in result.output
+    assert not (tmp_path / "missing.ttl").exists()
+    assert_wrote_nothing(before, after)
+
+
 def test_every_problem_is_listed(tmp_path: Path) -> None:
     _write(tmp_path, ONTOLOGIES)
 
@@ -371,11 +490,16 @@ class TestUnchanged:
             (["describe", "la.ttl", "--no-resolve", "-o", "d.txt"], 0),
             (["diff", "la.ttl", "lb.ttl", "-o", "diff.txt"], 1),
             (["merge", "la.ttl", "lb.ttl", "-o", "m.ttl", "--report", "r.md"], 0),
+            (["cq-test", "animal.ttl", "cq.yml", "-o", "r.txt"], 0),
         ],
-        ids=["stats", "describe", "diff", "merge"],
+        ids=["stats", "describe", "diff", "merge", "cq-test with data:"],
     )
     def test_a_new_path_is_written(self, argv: list[str], code: int, tmp_path: Path) -> None:
         _write(tmp_path, ONTOLOGIES)
+        _write(
+            tmp_path,
+            {"animal.ttl": ANIMAL, "cq.yml": cq_data("files: [dat.ttl]"), "dat.ttl": DATA},
+        )
 
         result, _, _ = _run(argv, tmp_path)
 

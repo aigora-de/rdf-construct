@@ -268,8 +268,12 @@ class ValuesExpectation(Expectation):
         return {str(k): self._term_to_string(v) for k, v in row_dict.items()}
 
     def _normalize_dict(self, d: dict) -> dict[str, str]:
-        """Normalize an expected dict for comparison."""
-        return {str(k): str(v) for k, v in d.items()}
+        """Normalize an expected dict for comparison.
+
+        A ``null`` value means the variable is unbound, as a row leaves it out, so
+        ``{label: null}`` and ``{}`` are the same solution (#386).
+        """
+        return {str(k): str(v) for k, v in d.items() if v is not None}
 
     def _term_to_string(self, term: Any) -> str:
         """Convert an RDF term to a comparable string."""
@@ -329,10 +333,17 @@ class ContainsExpectation(Expectation):
             actual=f"Missing: {missing}" if missing else "All present",
         )
 
-    def _matches(self, actual: dict[str, str], expected: dict[str, str]) -> bool:
-        """Check if actual contains all expected key-value pairs."""
+    def _matches(self, actual: dict[str, str], expected: dict[str, str | None]) -> bool:
+        """Check if actual contains all expected key-value pairs.
+
+        An expected ``None`` (YAML ``null``) requires the variable to be unbound in that
+        solution (#386); a variable the binding does not name is unconstrained.
+        """
         for key, value in expected.items():
-            if key not in actual or actual[key] != value:
+            if value is None:
+                if key in actual:
+                    return False
+            elif key not in actual or actual[key] != value:
                 return False
         return True
 
@@ -345,9 +356,9 @@ class ContainsExpectation(Expectation):
             row_dict = dict(row)
         return {str(k): self._term_to_string(v) for k, v in row_dict.items()}
 
-    def _normalize_dict(self, d: dict) -> dict[str, str]:
-        """Normalize an expected dict for comparison."""
-        return {str(k): str(v) for k, v in d.items()}
+    def _normalize_dict(self, d: dict) -> dict[str, str | None]:
+        """Normalize an expected dict for comparison; a ``null`` stays ``None``: unbound."""
+        return {str(k): None if v is None else str(v) for k, v in d.items()}
 
     def _term_to_string(self, term: Any) -> str:
         """Convert an RDF term to a comparable string."""
@@ -482,13 +493,34 @@ def parse_expectation(expect: Any) -> Expectation:
                 max_count=expect.get("max_results"),
             )
 
-        # Exact values
+        # Exact values; [] is a check that there are no rows
         if "results" in expect:
-            return ValuesExpectation(expected_results=expect["results"])
+            rows = expect["results"]
+            if not isinstance(rows, list) or not all(isinstance(r, dict) for r in rows):
+                raise ValueError(
+                    "'results:' must be a list of rows, each a mapping such as "
+                    "{label: Plant} (or {} for a row with every variable unbound)"
+                )
+            return ValuesExpectation(expected_results=rows)
 
         # Subset contains
         if "contains" in expect:
-            return ContainsExpectation(expected_bindings=expect["contains"])
+            bindings = expect["contains"]
+            if not isinstance(bindings, list) or not all(isinstance(b, dict) for b in bindings):
+                raise ValueError(
+                    "'contains:' must be a list of bindings, each a mapping such as "
+                    "{label: Plant}"
+                )
+            # An empty list or an empty binding matches any result, so it checks nothing (#386)
+            if not bindings or any(b == {} for b in bindings):
+                raise ValueError(
+                    "'contains:' has an empty binding {}, which matches any solution; "
+                    "use expect: has_results"
+                    if bindings
+                    else "'contains:' is an empty list, which checks nothing; "
+                    "use expect: has_results or expect: no_results"
+                )
+            return ContainsExpectation(expected_bindings=bindings)
 
         raise ValueError(f"Unknown expectation dict keys: {expect.keys()}")
 

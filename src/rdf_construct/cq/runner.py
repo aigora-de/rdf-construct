@@ -4,11 +4,16 @@ Runs SPARQL queries against RDF graphs and checks results against expectations.
 """
 
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 from rdflib import Graph
+from rdflib.plugins.sparql import prepareQuery
+from rdflib.plugins.sparql.sparql import Query
+from rdflib.query import Result, ResultRow
 
 from rdf_construct.cq.loader import CQTest, CQTestSuite, build_query_with_prefixes
 from rdf_construct.cq.expectations import CheckResult, query_form_refusal
@@ -259,8 +264,10 @@ class CQTestRunner:
             # Inject prefixes into query
             full_query = build_query_with_prefixes(test.query, prefixes)
 
-            # Execute query
-            result = graph.query(full_query)
+            # Execute query; the prepared form's algebra is kept for _solutions. The graph's
+            # prefixes resolve in the query, as graph.query gives them to a query string
+            prepared = prepareQuery(full_query, initNs=dict(graph.namespaces()))
+            result = graph.query(prepared)
 
             # Refuse an expectation that cannot be checked against this query form,
             # e.g. a count against an ASK, which answers true or false
@@ -280,10 +287,16 @@ class CQTestRunner:
                 result_count = None
                 check_input = result
             else:
-                # SELECT query - need to materialise results for counting
-                # But we also need them for expectation checking
-                # So we convert to list first
-                results_list = list(result)
+                if query_form == "SELECT":
+                    # Every solution is a row, one with every projected variable unbound
+                    # included: iterating a Result drops it (#386)
+                    projected = result.vars or []
+                    results_list: list[Any] = [
+                        ResultRow(binding, projected) for binding in _solutions(result, prepared)
+                    ]
+                else:
+                    # A CONSTRUCT or DESCRIBE has no bindings; its rows are its triples
+                    results_list = list(result)
                 result_count = len(results_list)
 
                 # Create a fake result object that can be iterated
@@ -326,6 +339,65 @@ class CQTestRunner:
                 duration_ms=duration,
                 error=f"{type(e).__name__}: {e}",
             )
+
+
+def _solutions(result: Result, prepared: Query) -> list[Mapping[Any, Any]]:
+    """Return a SELECT's solutions, as SPARQL 1.1 counts them (#386).
+
+    ``result.bindings`` keeps a solution whose projected variables are all unbound as ``{}``,
+    which iterating the result drops. It also holds one artefact of rdflib's: under an explicit
+    ``GROUP BY`` that forms no groups, rdflib yields one empty binding where SPARQL has no
+    solution (RDFLib/rdflib#3382; fix proposed in #3498). A real group always carries its keys,
+    even unbound ones (``{?label: None}``), so under a top-level ``GROUP BY`` a binding with no
+    keys is that artefact, and is dropped.
+
+    Args:
+        result: The executed SELECT's result
+        prepared: The prepared query it was executed from
+
+    Returns:
+        One mapping per solution, in rdflib's order; an empty mapping is a solution
+    """
+    bindings = list(result.bindings)
+    if _explicitly_grouped(prepared.algebra):
+        return [binding for binding in bindings if binding]
+    return bindings
+
+
+def _explicitly_grouped(algebra: Any) -> bool:
+    """Whether a query's solutions come straight from an explicit ``GROUP BY``, keys intact.
+
+    Walks from the query down the chain of single-pattern operators (projection, DISTINCT,
+    slicing, ordering, HAVING, extensions, a sub-select) to an ``AggregateJoin``. An implicit
+    group (an aggregate with no ``GROUP BY``) has one group even over no solutions, which is
+    correct, so it is not matched. Each projection on the way must keep at least one variable
+    every other keeps: a real group then still carries a key in the final row, so a binding with
+    none can only be rdflib's no-groups artefact. An outer projection sharing no variable with
+    a grouped sub-select makes a real group an empty row too, so it is not matched. A ``GROUP
+    BY`` inside a join or a union, or followed by ``VALUES``, is not reached.
+
+    Args:
+        algebra: A prepared query's algebra
+
+    Returns:
+        True if the solutions are an explicit ``GROUP BY``'s groups, each keeping a variable
+    """
+    node = algebra.get("p") if algebra.name == "SelectQuery" else None
+    kept: set[Any] | None = None
+    while node is not None and hasattr(node, "name"):
+        if node.name == "Project":
+            projected = set(node.PV)
+            kept = projected if kept is None else kept & projected
+        if node.name == "AggregateJoin":
+            group = node.get("p")
+            return (
+                bool(kept)
+                and group is not None
+                and group.name == "Group"
+                and group.expr is not None
+            )
+        node = node.get("p")
+    return False
 
 
 def run_tests(

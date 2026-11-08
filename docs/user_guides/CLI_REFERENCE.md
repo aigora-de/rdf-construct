@@ -1321,7 +1321,7 @@ rdf-construct cq-test ONTOLOGY TEST_FILE [OPTIONS]
 - `TEST_FILE`: YAML file containing competency question tests
 
 **Options**:
-- `-o, --output PATH`: Write output to file instead of stdout; refused (exit 2) if it names the ontology, the test file or a `--data` file
+- `-o, --output PATH`: Write output to file instead of stdout; refused (exit 2) if it names the ontology, the test file, a `--data` file or a file the test file's `data:` loads
 - `-f, --format FORMAT`: Output format: `text`, `json`, `junit` (default: text)
 - `-d, --data PATH`: Additional RDF data files (can specify multiple)
 - `-t, --tag TAG`: Run only tests with this tag (can specify multiple)
