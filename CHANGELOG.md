@@ -666,8 +666,8 @@ change, and what to do about it, is listed command by command in the
   author's `skip: true`: JSON reports `"status": "not_run"` and a
   `summary.not_run` count, JUnit emits each as a `<testcase>` holding
   `<skipped message="not run: --fail-fast stopped after <id>"/>`, and the text
-  ends `2 of 4 run — stopped by --fail-fast after '<id>'`. The exit code is
-  unchanged. `--fail-fast`'s help said "Stop on first failure"; it also stops on
+  ends `2 of 4 run — stopped by --fail-fast after '<id>'`. A `skip: true`
+  question after the stop stays skipped. The exit code is unchanged. `--fail-fast`'s help said "Stop on first failure"; it also stops on
   an error, and now says so.
 - **`cq-test` refuses an ASK query checked with a count-based expectation**
   (#134). On an ASK, `has_results`, `no_results` and `count` counted the one

@@ -222,7 +222,7 @@ class TestData:
 
     @pytest.mark.parametrize(
         ("value", "kind"),
-        [("42", "the number 42"), ("true", "a boolean"), ("", "empty"), ("[1]", "a list")],
+        [("42", "the number 42"), ("true", "a boolean"), ("", "empty")],
     )
     def test_any_other_shape_is_refused_showing_the_long_form(
         self, files: Path, value: str, kind: str
@@ -366,3 +366,35 @@ class TestLibrary:
         path.write_text(PREFIXES + "data: data.ttl\n" + HAS)
         suite = load_test_suite(path)
         assert suite.data_graph is not None and len(suite.data_graph) == 1
+
+
+class TestReviewFindings:
+    """Shapes the independent review of #525 found with unclear messages."""
+
+    def test_an_empty_data_list_says_so(self, files: Path) -> None:
+        _refused(_run(files, PREFIXES + "data: []\n" + HAS), "'data:' is an empty list")
+
+    def test_a_non_path_in_a_data_list_is_named(self, files: Path) -> None:
+        _refused(
+            _run(files, PREFIXES + "data: [data.ttl, 3]\n" + HAS),
+            "'data:' must list file paths, not the number 3",
+        )
+
+    def test_an_empty_files_list_says_so(self, files: Path) -> None:
+        _refused(
+            _run(files, PREFIXES + "data:\n  files: []\n" + HAS), "'data: files:' is an empty list"
+        )
+
+    def test_an_empty_expect_mapping_names_the_forms(self, files: Path) -> None:
+        _refused(
+            _run(files, PREFIXES + ASK.replace("expect: true", "expect: {}")),
+            "'expect:' is an empty mapping; use one of count",
+        )
+
+    def test_an_unmatched_tag_beside_an_excluded_one_names_both_causes(self, files: Path) -> None:
+        yml = PREFIXES + ASK + "    tags: [core]\n"
+        _refused(
+            _run(files, yml, "--tag", "nope", "--tag", "core", "--exclude-tag", "core"),
+            "--tag nope matches no question in t.yml; "
+            "--exclude-tag core removes every question --tag core selected",
+        )

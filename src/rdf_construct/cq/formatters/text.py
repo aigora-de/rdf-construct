@@ -57,9 +57,8 @@ def format_text(results: CQTestResults, verbose: bool = False, use_color: bool =
 
     # What --fail-fast did not reach (#137)
     if results.not_run_count:
-        ran = results.total_count - results.not_run_count
         lines.append(
-            f"{ran} of {results.total_count} run — stopped by --fail-fast "
+            f"{results.ran_count} of {results.total_count} run — stopped by --fail-fast "
             f"after '{results.stopped_after}'"
         )
 

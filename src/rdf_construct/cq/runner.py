@@ -118,12 +118,31 @@ class CQTestResults:
         return sum(1 for r in self.results if r.status == CQStatus.NOT_RUN)
 
     @property
+    def ran_count(self) -> int:
+        """Number of tests ``fail_fast`` reached, up to and including the one it stopped after.
+
+        Equals ``total_count`` when nothing was not run. A ``skip: true`` question after the
+        stop is not counted: it keeps its ``SKIP``, but was not reached.
+        """
+        stop = self._stop_index()
+        return self.total_count if stop is None else stop + 1
+
+    @property
     def stopped_after(self) -> str | None:
-        """Id of the question ``fail_fast`` stopped after, or None if every question ran."""
-        if not self.not_run_count:
+        """Id of the question ``fail_fast`` stopped after, or None if nothing was not run."""
+        stop = self._stop_index()
+        return None if stop is None else self.results[stop].test.id
+
+    def _stop_index(self) -> int | None:
+        """Position of the failure or error ``fail_fast`` stopped after, if any was not run."""
+        statuses = [r.status for r in self.results]
+        if CQStatus.NOT_RUN not in statuses:
             return None
-        ran = [r for r in self.results if r.status != CQStatus.NOT_RUN]
-        return ran[-1].test.id if ran else None
+        # Author skips may sit between the stop and the first question not run
+        for index in range(statuses.index(CQStatus.NOT_RUN) - 1, -1, -1):
+            if statuses[index] in (CQStatus.FAIL, CQStatus.ERROR):
+                return index
+        return None
 
     @property
     def all_passed(self) -> bool:
@@ -194,9 +213,17 @@ class CQTestRunner:
             # A refused question is an ERROR, so it counts as run and stops here too
             if self.fail_fast and result.status in (CQStatus.FAIL, CQStatus.ERROR):
                 # The total stays the selected suite: record what was not reached (#137)
+                # A skip: true question keeps its SKIP: the author's choice, not the stop's
                 reason = f"not run: --fail-fast stopped after {test.id}"
                 for rest in suite.questions[position + 1 :]:
-                    results.append(CQTestResult(test=rest, status=CQStatus.NOT_RUN, reason=reason))
+                    status = CQStatus.SKIP if rest.skip else CQStatus.NOT_RUN
+                    results.append(
+                        CQTestResult(
+                            test=rest,
+                            status=status,
+                            reason=None if rest.skip else reason,
+                        )
+                    )
                 break
 
         total_duration = (time.perf_counter() - start_time) * 1000

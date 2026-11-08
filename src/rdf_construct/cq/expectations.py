@@ -418,7 +418,12 @@ def _check_expect_keys(expect: dict[Any, Any]) -> None:
                 f"Accepted keys: {', '.join(EXPECT_KEYS)}"
             )
     keys = {str(k) for k in expect}
-    if keys and not any(keys <= form for form in EXPECT_FORMS):
+    if not keys:
+        raise ValueError(
+            "'expect:' is an empty mapping; use one of count, min_results and/or "
+            "max_results, results, contains"
+        )
+    if not any(keys <= form for form in EXPECT_FORMS):
         named = ", ".join(k for k in EXPECT_KEYS if k in keys)
         raise ValueError(
             f"'expect:' combines {named}, which check different things; use one of them "

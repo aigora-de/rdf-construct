@@ -2822,17 +2822,21 @@ def _cq_selection(
     if not selected.questions:
         defined = sorted({t for q in suite.questions for t in q.tags})
         unmatched = [t for t in tag if not any(t in q.tags for q in suite.questions)]
+        matched = [t for t in tag if t not in unmatched]
+        reasons = []
         if unmatched:
             named = ", ".join(f"--tag {t}" for t in unmatched)
             verb = "matches" if len(unmatched) == 1 else "match"
-            why = f"{named} {verb} no question in {name}"
-        else:
+            reasons.append(f"{named} {verb} no question in {name}")
+        if matched or not tag:
+            # What a matching tag (or the whole file) selected, the exclusions removed
             excluded = " ".join(f"--exclude-tag {t}" for t in exclude_tag)
-            if tag:
-                requested = " ".join(f"--tag {t}" for t in tag)
-                why = f"{excluded} removes every question {requested} selected"
+            if matched:
+                requested = " ".join(f"--tag {t}" for t in matched)
+                reasons.append(f"{excluded} removes every question {requested} selected")
             else:
-                why = f"{excluded} removes every question in {name}"
+                reasons.append(f"{excluded} removes every question in {name}")
+        why = "; ".join(reasons)
         raise Refusal(f"no questions to run: {why}\nTags defined: {', '.join(defined) or '(none)'}")
 
     if all(q.skip for q in selected.questions):

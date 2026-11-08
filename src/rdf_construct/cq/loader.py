@@ -249,8 +249,10 @@ def _load_data(config: dict[str, Any], prefixes: dict[str, str], base_dir: Path)
         files = data_config["files"]
         if isinstance(files, str):
             files = [files]
-        if not isinstance(files, list) or not files:
+        if not isinstance(files, list):
             raise ValueError(f"'data: files:' must be a list of file paths, not {_kind(files)}")
+        if not files:
+            raise ValueError("'data: files:' is an empty list; name a file, or remove the key")
 
         for file_path_str in files:
             if not isinstance(file_path_str, str):
@@ -277,7 +279,12 @@ def _data_mapping(data: Any) -> dict[str, Any]:
     """
     if isinstance(data, str):
         return {"files": [data]}
-    if isinstance(data, list) and data and all(isinstance(entry, str) for entry in data):
+    if isinstance(data, list):
+        if not data:
+            raise ValueError(f"'data:' is an empty list. {_DATA_FORMS}")
+        for entry in data:
+            if not isinstance(entry, str):
+                raise ValueError(f"'data:' must list file paths, not {_kind(entry)}")
         return {"files": data}
     if isinstance(data, dict):
         _check_keys(data, DATA_KEYS, "'data:'")

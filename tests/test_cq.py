@@ -972,3 +972,63 @@ class TestFailFastReportsTheSelectedSuite:
 
         results = run_tests(ff / "base.ttl", ff / "ff.yml")
         assert results.stopped_after is None and results.not_run_count == 0
+
+
+class TestFailFastKeepsAuthorSkips:
+    """A ``skip: true`` question after the stop keeps its SKIP (ruled on #525's review)."""
+
+    YML = FF_YML.replace(
+        '  - id: t3\n    query: "ASK { ex:Dog a owl:Class }"\n    expect: true\n    tags: [later]\n',
+        '  - id: t3\n    query: "ASK { ex:Dog a owl:Class }"\n    expect: true\n    tags: [later]\n'
+        '    skip: true\n    skip_reason: "pending"\n',
+    )
+
+    @pytest.fixture
+    def d(self, tmp_path):
+        (tmp_path / "base.ttl").write_text(FF_BASE)
+        (tmp_path / "s.yml").write_text(self.YML)
+        return tmp_path
+
+    def _cli(self, d, *args):
+        from click.testing import CliRunner
+
+        from rdf_construct.cli import cli
+
+        return CliRunner().invoke(
+            cli, ["cq-test", str(d / "base.ttl"), str(d / "s.yml"), "--fail-fast", *args]
+        )
+
+    def test_json_keeps_the_skip_and_counts_only_t4_as_not_run(self, d):
+        import json
+
+        data = json.loads(self._cli(d, "-f", "json").stdout)
+        assert [q["status"] for q in data["questions"]] == ["pass", "fail", "skip", "not_run"]
+        assert data["questions"][2]["skip_reason"] == "pending"
+        assert (data["summary"]["skipped"], data["summary"]["not_run"]) == (1, 1)
+
+    def test_junit_keeps_the_skip_reason(self, d):
+        import xml.etree.ElementTree as ET
+
+        suite = ET.fromstring(self._cli(d, "-f", "junit").stdout)
+        skipped = [c.find("skipped").get("message") for c in suite.findall("testcase")[2:]]
+        assert skipped == ["pending", "not run: --fail-fast stopped after t2-fails"]
+        assert suite.get("skipped") == "2"
+
+    def test_text_counts_up_to_the_stop(self, d):
+        text = self._cli(d).stdout
+        assert "[SKIP] t3: t3 (pending)" in text
+        assert "2 of 4 run — stopped by --fail-fast after 't2-fails'" in text
+
+    def test_only_skips_after_the_stop_means_no_not_run_line(self, tmp_path):
+        from rdf_construct.cq import run_tests
+
+        yml = FF_YML.replace("    tags: [later]\n", "    tags: [later]\n    skip: true\n").replace(
+            '  - id: t4\n    query: "ASK { ex:Dog a owl:Class }"\n    expect: true\n',
+            '  - id: t4\n    query: "ASK { ex:Dog a owl:Class }"\n    expect: true\n    skip: true\n',
+        )
+        (tmp_path / "base.ttl").write_text(FF_BASE)
+        (tmp_path / "s.yml").write_text(yml)
+        results = run_tests(tmp_path / "base.ttl", tmp_path / "s.yml", fail_fast=True)
+        assert results.not_run_count == 0 and results.skipped_count == 2
+        assert results.stopped_after is None and results.ran_count == 4
+        assert "stopped by --fail-fast" not in self._cli(tmp_path).stdout

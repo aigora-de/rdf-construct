@@ -315,12 +315,15 @@ passing a CI build that tested nothing:
 |-------|---------|
 | no `questions:` key | `no questions to run: tests.yml has no 'questions:' list (top-level keys found: prefixes)` |
 | `questions: []` | `no questions to run: 'questions:' in tests.yml is an empty list` |
-| a `--tag` no question has | `no questions to run: --tag scheme matches no question in tests.yml`, then `Tags defined: …` |
+| a `--tag` no question has, and nothing else selected | `no questions to run: --tag scheme matches no question in tests.yml`, then `Tags defined: …` |
 | exclusions remove everything | `no questions to run: --exclude-tag core removes every question --tag core selected`, then `Tags defined: …` |
 | every selected question has `skip: true` | `no questions to run: every selected question has skip: true` |
 
 A file keyed `tests:` instead of `questions:` is refused first, as an unknown key, with
 `Did you mean 'questions'?`.
+
+A misspelt tag beside one that does select questions is not refused: the run goes ahead with
+what the other tag selected. Check the `Running N test(s)` line.
 
 ### `--fail-fast`
 
@@ -345,7 +348,8 @@ In JSON, a question not run has `"status": "not_run"` and is counted in `summary
 holding `<skipped message="not run: --fail-fast stopped after cq-ff-fail"/>`, and the `skipped`
 attribute counts every `<skipped>` element, so *tests − failures − errors − skipped* is the number
 that passed. A skip with a `skip_reason` carries the reason as its `message`, so the two can be
-told apart. A question that stops the run because its expectation does not fit its query form is
+told apart. A question after the stop that has `skip: true` is still reported as skipped, with its
+reason: it was never going to run. A question that stops the run because its expectation does not fit its query form is
 an error that ran: it is counted in `errors`, and the questions after it are the ones not run.
 
 ## Output Formats
@@ -626,6 +630,8 @@ behaviour is worse than no guide. **A fix that lands should delete its row in th
 | [#136](https://github.com/aigora-de/rdf-construct/issues/136) | `-o` writes the text format's colour escapes into the file, and `--verbose` does not show the query text. |
 | [#523](https://github.com/aigora-de/rdf-construct/issues/523) | A `-d/--data` file that loads no triples is accepted; a `data:` source that loads none is refused. |
 | [#524](https://github.com/aigora-de/rdf-construct/issues/524) | Two questions with the same `id` both run, and are reported under one name. |
+| [#527](https://github.com/aigora-de/rdf-construct/issues/527) | A `--tag` or `--exclude-tag` that matches no question is ignored when another tag still selects some. |
+| [#526](https://github.com/aigora-de/rdf-construct/issues/526) | `query`, `id` and the counts in `expect:` are not type-checked: `count: "2"` fails against 2 results. |
 | [#522](https://github.com/aigora-de/rdf-construct/issues/522) | A SPARQL syntax error's line number counts the `PREFIX` lines added from `prefixes:`, so a one-line query reports `line:3`. |
 | [#146](https://github.com/aigora-de/rdf-construct/issues/146) | The ontology's and data files' formats are read from their extensions by a map of `cq-test`'s own, not the shared one, and a parse error does not name the file. |
 | [#149](https://github.com/aigora-de/rdf-construct/issues/149) | `examples/cq-test/` has no ontology of its own: run it against `examples/animal_ontology.ttl`. |
