@@ -46,6 +46,12 @@ it sits under `zoo:Mammal`, two levels down.
   symbolic link to it, is left out with a `Note:` on stderr, and is listed in
   `sources` once. Parsing a file twice would double every blank node in it, and
   every restriction count with it.
+- **Whose terms they are is decided over the union.** Each ontology header
+  owns its own namespace, as for one file (see Basic Counts). A module with no
+  `owl:Ontology` header owns no namespace by its header. Its terms count only
+  where it describes them beyond their type, for example with a label, so a
+  file that only declares types loses its terms beside a file that names an
+  ontology.
 - **Distinct files that share triples count them once.** Blank nodes from
   different files are always distinct.
 - **Prefixes:** the first file to bind a prefix keeps it. Another file binding

@@ -2906,7 +2906,8 @@ def _union_inputs(files: Sequence[Path]) -> tuple[list[Path], list[str]]:
         if first is None:
             kept.append(path)
         else:
-            notes.append(f"Note: {path} is {first}, read once")
+            same = "is named twice" if str(path) == str(first) else f"is {first}"
+            notes.append(f"Note: {path} {same}, read once")
     return kept, notes
 
 

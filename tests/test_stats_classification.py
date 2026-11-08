@@ -264,7 +264,8 @@ class TestKinds:
         body = f"ex:S a {kind} , owl:NamedIndividual .\n"
         data = _stats_json(_write(tmp_path / "s.ttl", body))
         assert data["basic"]["individuals"] == 1
-        assert data["basic"]["classes"] + data["basic"]["object_properties"] == 1
+        bucket = "classes" if kind == "owl:Class" else "object_properties"
+        assert data["basic"][bucket] == 1
 
     def test_a_named_individual_alone_and_with_a_class(self, tmp_path: Path) -> None:
         body = "ex:A a owl:Class .\nex:i a owl:NamedIndividual .\nex:j a owl:NamedIndividual , ex:A .\n"
@@ -429,7 +430,8 @@ class TestUnion:
         result = _invoke("stats", bn, files["b"], again, "-f", "json")
         assert result.exit_code == 0, result.output
         data = json.loads(result.stdout)
-        assert f"Note: {again} is {bn}, read once" in result.stderr
+        expected = "is named twice" if again == bn else f"is {bn}"
+        assert f"Note: {again} {expected}, read once" in result.stderr
         assert data["sources"] == [str(bn), str(files["b"])]
         assert (
             data["complexity"]["owl_restriction_count"]
@@ -486,7 +488,7 @@ def test_union_inputs_keeps_the_first_spelling(tmp_path: Path) -> None:
     link.symlink_to(a)
     kept, notes = _union_inputs([a, b, link, a])
     assert kept == [a, b]
-    assert notes == [f"Note: {link} is {a}, read once", f"Note: {a} is {a}, read once"]
+    assert notes == [f"Note: {link} is {a}, read once", f"Note: {a} is named twice, read once"]
 
 
 # --- the library ------------------------------------------------------------------------------
