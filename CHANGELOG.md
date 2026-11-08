@@ -97,6 +97,18 @@ See
 [`cq-test`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#cq-test)
 in the migration note.
 
+**`stats` and `diff` now classify every term the way the other commands do,
+so their figures and labels move for any ontology that declares a property only
+by an OWL characteristic, deprecates a class, or uses a bare `rdf:Property`.**
+Those terms were counted as individuals, or guessed into object properties.
+Both commands gain a fourth kind of property, `other_properties`, for a property
+whose kind the file does not say. Given several files, `stats` now reports
+their union, where it silently reported the first, and its JSON names them in
+`sources`, a list, in place of `source`. See
+[`stats`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#stats)
+and [`diff`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#diff)
+in the migration note.
+
 **If you gate CI on `diff`, its verdict changes for any file with a blank
 node.** Blank nodes are now compared by structure. A file containing
 restrictions or other blank nodes is identical to a copy of itself (exit 0,

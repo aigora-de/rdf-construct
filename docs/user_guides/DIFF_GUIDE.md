@@ -192,12 +192,20 @@ rdf-construct diff old.ttl new.ttl --entities classes,instances
 
 Valid entity types:
 
-- `classes` — OWL/RDFS classes
-- `properties` — All property types
-- `object_properties` — OWL ObjectProperty
-- `datatype_properties` — OWL DatatypeProperty
-- `annotation_properties` — OWL AnnotationProperty
-- `individuals` / `instances` — Named instances
+- `classes` — terms typed `owl:Class`, `rdfs:Class` or `owl:DeprecatedClass`
+- `properties` — all property types, the four below
+- `object_properties` — terms typed `owl:ObjectProperty`, or an OWL characteristic that implies
+  it, such as `owl:TransitiveProperty` or `owl:SymmetricProperty`
+- `datatype_properties` — terms typed `owl:DatatypeProperty`
+- `annotation_properties` — terms typed `owl:AnnotationProperty`
+- `other_properties` — properties whose kind the file does not say: typed `rdf:Property`,
+  `owl:FunctionalProperty` or `owl:DeprecatedProperty` and none of the above. They are listed as
+  `Property`, under `Other Properties` in markdown and `other_properties` in the JSON
+- `individuals` / `instances` — other typed terms
+
+Each entity is listed once, under the first of these that its types allow: ontology, class,
+object, datatype, annotation, other property, individual. A class punned as a property is listed
+as a `Class`. `stats`, which counts rather than lists, counts such a term under each of its kinds.
 
 ### Ignoring Predicates
 
@@ -332,6 +340,11 @@ The usual cause is a reasoner's output: an OWL-RL closure states that every blan
 `owl:sameAs` itself, which turns every list into a structure that is not a tree. Compare the
 asserted files instead. Everything outside the set-aside structure is still compared and
 reported. [#388](https://github.com/aigora-de/rdf-construct/issues/388) records the cost and the options for removing the limit.
+
+### Datatypes
+
+A term typed `rdfs:Datatype` is listed as an `Instance`
+([#530](https://github.com/aigora-de/rdf-construct/issues/530)).
 
 ### Large Ontologies
 

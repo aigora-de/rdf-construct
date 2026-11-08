@@ -6,10 +6,9 @@ Analyses class hierarchy structure: depth, branching factor, orphan classes.
 from collections import defaultdict
 from dataclasses import dataclass
 
-from rdflib import Graph, RDF, RDFS
-from rdflib.namespace import OWL
+from rdflib import Graph, RDFS
 
-from rdf_construct.core.ownership import ownership
+from rdf_construct.stats.metrics.basic import get_all_classes
 
 
 @dataclass
@@ -36,12 +35,8 @@ class HierarchyStats:
 
 
 def _get_all_classes(graph: Graph) -> set:
-    """Get all classes from the graph."""
-    classes = set(graph.subjects(RDF.type, OWL.Class))
-    classes |= set(graph.subjects(RDF.type, RDFS.Class))
-    # Only the ontology's own: not a borrowed vocabulary's term it declares (#371)
-    owned = ownership(graph)
-    return {c for c in classes if not owned.is_foreign(c)}
+    """Get all classes from the graph: the ontology's own, of any `CLASS_TYPES` type (#138)."""
+    return get_all_classes(graph)
 
 
 def _build_hierarchy(graph: Graph, classes: set) -> tuple[dict, dict]:

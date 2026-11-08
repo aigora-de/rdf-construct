@@ -1,0 +1,86 @@
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix zoo: <http://example.org/zoo/core#> .
+
+# A small ontology for the STATS_GUIDE.md worked examples: the core module.
+#
+# It declares terms in the ways a type list that knows only owl:Class, rdfs:Class
+# and the four obvious property types gets wrong (#138):
+#
+# - zoo:ancestorOf is declared only as an owl:TransitiveProperty, which makes it an
+#   object property;
+# - zoo:hasKeeper is an object property and an owl:FunctionalProperty, so it is an
+#   object property and nothing else;
+# - zoo:hasMother (owl:FunctionalProperty only), zoo:cageNumber
+#   (owl:DeprecatedProperty only) and zoo:nickname (rdf:Property only) are
+#   properties of a kind the file does not say: "Other Properties";
+# - zoo:Menagerie is an owl:DeprecatedClass, still in the hierarchy under
+#   zoo:Enclosure;
+# - zoo:Species is a class and, punned, a named individual, so it counts as both.
+#
+# care.ttl's module hangs its classes under these, so the two read as one (#140).
+# Neither has a blank node or an rdfs:Datatype (#529, #530).
+
+<http://example.org/zoo/core> a owl:Ontology ;
+    rdfs:label "Zoo core"@en .
+
+zoo:Animal a owl:Class ;
+    rdfs:label "Animal"@en ;
+    rdfs:comment "A living creature the zoo keeps."@en .
+
+zoo:Mammal a owl:Class ;
+    rdfs:subClassOf zoo:Animal ;
+    rdfs:label "Mammal"@en .
+
+zoo:Bird a owl:Class ;
+    rdfs:subClassOf zoo:Animal ;
+    rdfs:label "Bird"@en .
+
+zoo:Enclosure a owl:Class ;
+    rdfs:label "Enclosure"@en ;
+    rdfs:comment "Where an animal lives."@en .
+
+zoo:Menagerie a owl:DeprecatedClass ;
+    rdfs:subClassOf zoo:Enclosure ;
+    rdfs:label "Menagerie"@en .
+
+zoo:Keeper a owl:Class ;
+    rdfs:label "Keeper"@en .
+
+zoo:Species a owl:Class , owl:NamedIndividual ;
+    rdfs:label "Species"@en .
+
+zoo:livesIn a owl:ObjectProperty ;
+    rdfs:domain zoo:Animal ;
+    rdfs:range zoo:Enclosure ;
+    rdfs:label "lives in"@en .
+
+zoo:ancestorOf a owl:TransitiveProperty ;
+    rdfs:domain zoo:Animal ;
+    rdfs:range zoo:Animal ;
+    rdfs:label "ancestor of"@en .
+
+zoo:hasKeeper a owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:domain zoo:Enclosure ;
+    rdfs:range zoo:Keeper .
+
+zoo:wingspan a owl:DatatypeProperty ;
+    rdfs:domain zoo:Bird ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "wingspan"@en .
+
+zoo:conservationNote a owl:AnnotationProperty ;
+    rdfs:label "conservation note"@en .
+
+zoo:hasMother a owl:FunctionalProperty ;
+    rdfs:label "has mother"@en .
+
+zoo:cageNumber a owl:DeprecatedProperty .
+
+zoo:nickname a rdf:Property ;
+    rdfs:label "nickname"@en .
+
+zoo:ada a zoo:Keeper ;
+    rdfs:label "Ada"@en .

@@ -29,6 +29,9 @@ class EntityType(Enum):
     OBJECT_PROPERTY = "object_property"
     DATATYPE_PROPERTY = "datatype_property"
     ANNOTATION_PROPERTY = "annotation_property"
+    #: A property whose kind the source does not declare: ``rdf:Property``,
+    #: ``owl:FunctionalProperty`` or ``owl:DeprecatedProperty`` and no kind-specific type (#138)
+    OTHER_PROPERTY = "other_property"
     INDIVIDUAL = "individual"
     ONTOLOGY = "ontology"
     OTHER = "other"

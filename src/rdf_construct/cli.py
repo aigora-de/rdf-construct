@@ -1698,7 +1698,8 @@ def _lint_exit_code(summary: LintSummary, fail_on: str) -> int:
 @click.option(
     "--entities",
     type=str,
-    help="Show only these entity types (comma-separated: classes,properties,instances)",
+    help="Show only these entity types (comma-separated: classes, properties, object_properties, "
+    "datatype_properties, annotation_properties, other_properties, individuals)",
 )
 @click.option(
     "--ignore-predicates",
@@ -2886,6 +2887,30 @@ def _infer_format(path: Path) -> str:
     return format_map.get(suffix, "turtle")
 
 
+def _union_inputs(files: Sequence[Path]) -> tuple[list[Path], list[str]]:
+    """The files a ``stats`` union reads: each file once, however it is named (#140).
+
+    Parsing one file twice into a graph doubles every blank-node structure in it, so a file
+    named again, by another spelling or through a symbolic link, is read only the first time.
+
+    Args:
+        files: The files as given, in order.
+
+    Returns:
+        The files to read, in order, and a note for each one left out.
+    """
+    kept: list[Path] = []
+    notes: list[str] = []
+    for path in files:
+        first = next((k for k in kept if is_same_file(path, k)), None)
+        if first is None:
+            kept.append(path)
+        else:
+            same = "is named twice" if str(path) == str(first) else f"is {first}"
+            notes.append(f"Note: {path} {same}, read once")
+    return kept, notes
+
+
 @cli.command()
 @click.argument("files", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
 @click.option(
@@ -2928,7 +2953,10 @@ def stats(
     """Compute and display ontology statistics.
 
     Analyses one or more RDF ontology files and displays comprehensive metrics
-    about structure, complexity, and documentation coverage.
+    about structure, complexity, and documentation coverage. Several files are
+    analysed as one: the figures are for their union (not an owl:imports
+    closure), and a file named twice is read once. With --compare, two files
+    are analysed separately and compared.
 
     \b
     Examples:
@@ -2987,14 +3015,38 @@ def stats(
         if exclude:
             exclude_set = {cat.strip().lower() for cat in exclude.split(",")}
 
-        # Load graphs
-        graphs: list[tuple[Graph, Path]] = []
-        for filepath in files:
+        def _load(filepath: Path) -> Graph:
             click.echo(f"Loading {filepath}...", err=True)
             graph = Graph()
-            graph.parse(str(filepath), format="turtle")
-            graphs.append((graph, filepath))
+            try:
+                graph.parse(str(filepath), format="turtle")
+            except Exception as e:
+                raise ValueError(f"Failed to parse {filepath}: {e}") from e
             click.echo(f"  Loaded {len(graph)} triples", err=True)
+            return graph
+
+        # Load graphs: one per file to compare, else one graph holding the union (#140)
+        graphs: list[tuple[Graph, Path]] = []
+        if compare:
+            for filepath in files:
+                graphs.append((_load(filepath), filepath))
+        else:
+            sources, notes = _union_inputs(files)
+            for note in notes:
+                click.echo(note, err=True)
+            # The first file's graph is the union, so one file is read exactly as before
+            union = _load(sources[0])
+            defaults = set(Graph().namespaces())
+            for filepath in sources[1:]:
+                part = _load(filepath)
+                union += part
+                # Each prefix the file declares; the first file's binding wins, a namespace
+                # keeps the prefix it was first given, and rdflib numbers a clash (ex1:)
+                for prefix, namespace in part.namespaces():
+                    if (prefix, namespace) not in defaults:
+                        union.bind(prefix, namespace, override=False)
+            if len(sources) > 1:
+                click.echo(f"Union of {len(sources)} files: {len(union)} triples", err=True)
 
         if compare:
             # Comparison mode
@@ -3004,13 +3056,13 @@ def stats(
             click.echo("Collecting statistics...", err=True)
             old_stats = collect_stats(
                 old_graph,
-                source=str(old_path),
+                sources=[old_path],
                 include=include_set,
                 exclude=exclude_set,
             )
             new_stats = collect_stats(
                 new_graph,
-                source=str(new_path),
+                sources=[new_path],
                 include=include_set,
                 exclude=exclude_set,
             )
@@ -3025,13 +3077,13 @@ def stats(
                 graph=new_graph,
             )
         else:
-            # Single file or multiple files (show stats for first)
-            graph, filepath = graphs[0]
+            # One file, or the union of several (#140)
+            graph = union
 
             click.echo("Collecting statistics...", err=True)
             ontology_stats = collect_stats(
                 graph,
-                source=str(filepath),
+                sources=sources,
                 include=include_set,
                 exclude=exclude_set,
             )

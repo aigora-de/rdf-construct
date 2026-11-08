@@ -149,6 +149,7 @@ def _extract_numeric_metrics(stats: OntologyStats) -> dict[tuple[str, str], floa
     metrics[("basic", "object_properties")] = stats.basic.object_properties
     metrics[("basic", "datatype_properties")] = stats.basic.datatype_properties
     metrics[("basic", "annotation_properties")] = stats.basic.annotation_properties
+    metrics[("basic", "other_properties")] = stats.basic.other_properties
     metrics[("basic", "individuals")] = stats.basic.individuals
 
     # Hierarchy
@@ -299,8 +300,8 @@ def compare_stats(
     summary = _generate_summary(changes)
 
     return ComparisonResult(
-        old_source=old_stats.source,
-        new_source=new_stats.source,
+        old_source=old_stats.sources[0],
+        new_source=new_stats.sources[0],
         changes=changes,
         summary=summary,
     )

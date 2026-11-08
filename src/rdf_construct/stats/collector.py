@@ -6,6 +6,7 @@ aggregates results into a single OntologyStats object.
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +30,8 @@ class OntologyStats:
     Aggregates metrics from all categories into a single structure.
 
     Attributes:
-        source: Path to the source ontology file
+        sources: Paths of the files analysed. Several files are analysed as their union
+            (#140); one file is a list of one.
         timestamp: When the stats were collected
         basic: Basic count metrics (triples, classes, properties)
         hierarchy: Hierarchy metrics (depth, branching, orphans)
@@ -39,7 +41,7 @@ class OntologyStats:
         connectivity: Connectivity metrics (most connected, isolated)
     """
 
-    source: str
+    sources: list[str]
     timestamp: datetime
     basic: BasicStats
     hierarchy: HierarchyStats
@@ -55,7 +57,7 @@ class OntologyStats:
             Dictionary representation of all statistics.
         """
         return {
-            "source": self.source,
+            "sources": list(self.sources),
             "timestamp": self.timestamp.isoformat(),
             "basic": {
                 "triples": self.basic.triples,
@@ -63,6 +65,7 @@ class OntologyStats:
                 "object_properties": self.basic.object_properties,
                 "datatype_properties": self.basic.datatype_properties,
                 "annotation_properties": self.basic.annotation_properties,
+                "other_properties": self.basic.other_properties,
                 "individuals": self.basic.individuals,
             },
             "hierarchy": {
@@ -121,7 +124,7 @@ METRIC_CATEGORIES = frozenset(
 
 def collect_stats(
     graph: Graph,
-    source: str | Path = "<graph>",
+    sources: Sequence[str | Path] = ("<graph>",),
     include: set[str] | None = None,
     exclude: set[str] | None = None,
 ) -> OntologyStats:
@@ -129,7 +132,8 @@ def collect_stats(
 
     Args:
         graph: The RDF graph to analyse.
-        source: Source file path or identifier for reporting.
+        sources: The file paths or identifiers ``graph`` was read from, for reporting. Pass
+            every file a union was parsed from.
         include: Set of category names to include (default: all).
         exclude: Set of category names to exclude (default: none).
 
@@ -174,7 +178,7 @@ def collect_stats(
     )
 
     return OntologyStats(
-        source=str(source),
+        sources=[str(s) for s in sources],
         timestamp=datetime.now(),
         basic=basic,
         hierarchy=hierarchy,

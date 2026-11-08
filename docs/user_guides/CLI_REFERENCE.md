@@ -504,7 +504,7 @@ rdf-construct diff OLD_FILE NEW_FILE [OPTIONS]
 - `-f, --format FORMAT`: Output format: `text`, `markdown`, `md`, `json` (default: text)
 - `--show TYPES`: Show only these change types (comma-separated: added,removed,modified)
 - `--hide TYPES`: Hide these change types
-- `--entities TYPES`: Show only these entity types (comma-separated: classes,properties,instances)
+- `--entities TYPES`: Show only these entity types (comma-separated: `classes`, `properties`, `object_properties`, `datatype_properties`, `annotation_properties`, `other_properties`, `individuals`)
 - `--ignore-predicates LIST`: Ignore these predicates in comparison (comma-separated CURIEs)
 
 **Examples**:
@@ -1397,7 +1397,7 @@ rdf-construct stats FILE [FILE...] [OPTIONS]
 ```
 
 **Arguments**:
-- `FILE`: One or more RDF ontology files
+- `FILE`: One or more RDF ontology files. Several files are reported as one: the figures are for their union (not an `owl:imports` closure), and a file named twice is read once. With `--compare`, exactly two files, each reported separately
 
 **Options**:
 - `-o, --output PATH`: Write output to file instead of stdout; refused (exit 2) if it names one of the input files
@@ -1407,7 +1407,7 @@ rdf-construct stats FILE [FILE...] [OPTIONS]
 - `--exclude CATEGORIES`: Exclude these metric categories (comma-separated)
 
 **Metric Categories**:
-- `basic`: Counts (triples, classes, properties, individuals)
+- `basic`: Counts (triples, classes, object, datatype, annotation and other properties, individuals)
 - `hierarchy`: Structure (depth, branching, orphans)
 - `properties`: Coverage (domain, range, functional, symmetric)
 - `documentation`: Labels and comments coverage
