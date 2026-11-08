@@ -115,6 +115,18 @@ data:                                   # the long form
   refused at exit 2, naming it: a `no_results` or `max_results` question would otherwise pass on
   data that never loaded.
 - Files given with `-d/--data` are loaded as well, not instead.
+- **`-o` may not name a data file.** A `data:` file is an input like the ontology, so `-o`
+  naming one, however it is spelled (a link, `..`, another case on a case-blind filesystem), is
+  refused at exit 2 before any question runs, and nothing is written:
+
+```bash
+rdf-construct cq-test ontology.ttl with-data.yml -o test-data.ttl  # exits 2
+```
+
+```text
+Error: Nothing was written:
+  -o test-data.ttl would replace the input test-data.ttl, which with-data.yml loads through 'data:'. Choose another path.
+```
 
 ## Expectation Types
 
@@ -129,6 +141,13 @@ match variable bindings, so they take only a SELECT.
 | `has_results` / `no_results` | `ERROR` | rows | triples |
 | `count`, `min_results`, `max_results` | `ERROR` | rows | triples |
 | `results`, `contains` | `ERROR` | row bindings | `ERROR`: triples have no variable bindings |
+
+**A SELECT's rows are its solutions, as SPARQL counts them.** A solution that leaves every
+projected variable unbound is still a row: `SELECT * WHERE { ex:Animal a owl:Class }` has one row
+when the pattern matches, and a column that only an `OPTIONAL` binds has a row for every solution,
+bound or not. Solutions are a bag, so two identical solutions are two rows unless the query says
+`DISTINCT`. Every expectation sees the same rows: the count, `true`/`false`, `results` and
+`contains`.
 
 A CONSTRUCT result is a graph, so its count is of distinct triples, not of solutions: a template
 that writes the same triple for three solutions counts 1, and a solution that leaves a template
@@ -183,6 +202,19 @@ expect:
   max_results: 10
 ```
 
+A column that only an `OPTIONAL` binds counts every solution, so this counts every class, labelled
+or not:
+
+```yaml
+query: |
+  SELECT ?label WHERE {
+    ?c a owl:Class .
+    OPTIONAL { ?c rdfs:label ?label }
+  }
+expect:
+  count: 2  # two classes, one of them unlabelled
+```
+
 ### Value Checks
 
 Check for specific result values:
@@ -199,6 +231,30 @@ expect:
   contains:
     - building: "http://example.org/Building1"
 ```
+
+**An unbound variable** is left out of a row, or written `null`. In `results`, `{}` is a solution
+with every variable unbound, so two classes, one labelled, are:
+
+```yaml
+expect:
+  results:
+    - {}                # the unlabelled class: ?label is unbound
+    - label: "Plant"
+```
+
+`- label: null` is the same row as `- {}`. In `contains`, a variable a binding leaves out is not
+checked, and `null` means it must be unbound in the matching solution, so this asks "is some class
+unlabelled?":
+
+```yaml
+query: "SELECT ?c ?label WHERE { ?c a owl:Class OPTIONAL { ?c rdfs:label ?label } }"
+expect:
+  contains:
+    - label: null
+```
+
+An empty binding in `contains` (`- {}`) matches any solution, so it is refused at exit 2: use
+`expect: has_results`.
 
 A value check compares a literal by its value, so `floors: 3` matches `"3"^^xsd:integer` and
 `"03"^^xsd:integer` alike. A literal constant **inside the query's graph pattern** matches by term:
@@ -625,8 +681,8 @@ behaviour is worse than no guide. **A fix that lands should delete its row in th
 
 | Issue | Behaviour today |
 |---|---|
-| [#386](https://github.com/aigora-de/rdf-construct/issues/386) | A SELECT solution whose projected variables are all unbound is not counted, so a variable-less `SELECT *` that matches counts 0 rows, and `OPTIONAL` columns undercount. |
-| [#439](https://github.com/aigora-de/rdf-construct/issues/439) | `-o` naming a file listed under the test file's `data:` replaces it with the results, at exit 0. (`-o` naming the ontology, the test file or a `-d` file is refused.) |
+| [RDFLib/rdflib#3382](https://github.com/RDFLib/rdflib/issues/3382) | A `GROUP BY` that forms no groups has no rows, but rdflib returns one empty row for it. `cq-test` drops that row when the `GROUP BY` is the query's own; a `GROUP BY` inside a sub-select that matches nothing can still count 1 row. |
+| [RDFLib/rdflib#3457](https://github.com/RDFLib/rdflib/pull/3457) | A constant `FILTER(false)` is ignored, so the pattern matches as if it were absent, in every query form. |
 | [#136](https://github.com/aigora-de/rdf-construct/issues/136) | `-o` writes the text format's colour escapes into the file, and `--verbose` does not show the query text. |
 | [#523](https://github.com/aigora-de/rdf-construct/issues/523) | A `-d/--data` file that loads no triples is accepted; a `data:` source that loads none is refused. |
 | [#524](https://github.com/aigora-de/rdf-construct/issues/524) | Two questions with the same `id` both run, and are reported under one name. |

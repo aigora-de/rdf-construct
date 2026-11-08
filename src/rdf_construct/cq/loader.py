@@ -70,6 +70,8 @@ class CQTestSuite:
         version: Optional format version string
         name: Optional suite name
         description: Optional suite description
+        data_files: The files the test file's ``data:`` loaded, each resolved against the
+            test file's directory, in the order they were read (#439)
     """
 
     prefixes: dict[str, str]
@@ -78,6 +80,7 @@ class CQTestSuite:
     version: str | None = None
     name: str | None = None
     description: str | None = None
+    data_files: list[Path] = field(default_factory=list)
 
     def filter_by_tags(
         self, include_tags: set[str] | None = None, exclude_tags: set[str] | None = None
@@ -112,6 +115,7 @@ class CQTestSuite:
             version=self.version,
             name=self.name,
             description=self.description,
+            data_files=self.data_files,
         )
 
 
@@ -169,8 +173,11 @@ def load_test_suite(path: Path, base_dir: Path | None = None) -> CQTestSuite:
     if not isinstance(prefixes, dict):
         raise ValueError("'prefixes' must be a dictionary")
 
-    # Parse sample data
-    data_graph = _load_data(config, prefixes, base_dir) if "data" in config else None
+    # Parse sample data, recording the files read so no output can replace them (#439)
+    data_graph = None
+    data_files: list[Path] = []
+    if "data" in config:
+        data_graph, data_files = _load_data(config, prefixes, base_dir)
 
     # Parse questions; an empty 'questions:' is an empty list, refused by the CLI
     questions_raw = config["questions"]
@@ -195,10 +202,13 @@ def load_test_suite(path: Path, base_dir: Path | None = None) -> CQTestSuite:
         version=version,
         name=name,
         description=description,
+        data_files=data_files,
     )
 
 
-def _load_data(config: dict[str, Any], prefixes: dict[str, str], base_dir: Path) -> Graph:
+def _load_data(
+    config: dict[str, Any], prefixes: dict[str, str], base_dir: Path
+) -> tuple[Graph, list[Path]]:
     """Load the sample data a test file's ``data:`` key names.
 
     Supports:
@@ -217,7 +227,7 @@ def _load_data(config: dict[str, Any], prefixes: dict[str, str], base_dir: Path)
         base_dir: Base directory for resolving file paths
 
     Returns:
-        Combined data graph
+        Combined data graph, and the files it was read from, in order
 
     Raises:
         ValueError: If ``data:`` has the wrong shape, or a source holds no triples
@@ -226,6 +236,7 @@ def _load_data(config: dict[str, Any], prefixes: dict[str, str], base_dir: Path)
     data_config = _data_mapping(config["data"])
 
     graph = Graph()
+    read: list[Path] = []
 
     # Bind prefixes
     for prefix, uri in prefixes.items():
@@ -267,8 +278,9 @@ def _load_data(config: dict[str, Any], prefixes: dict[str, str], base_dir: Path)
             source.parse(str(file_path), format=fmt)
             _refuse_empty(source, f"data: {file_path_str}")
             graph += source
+            read.append(file_path)
 
-    return graph
+    return graph, read
 
 
 def _data_mapping(data: Any) -> dict[str, Any]:

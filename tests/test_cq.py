@@ -23,6 +23,7 @@ from rdf_construct.cq.loader import (
     build_query_with_prefixes,
 )
 from rdf_construct.cq.runner import (
+    CQTestResult,
     CQTestRunner,
     CQStatus,
 )
@@ -1032,3 +1033,452 @@ class TestFailFastKeepsAuthorSkips:
         assert results.not_run_count == 0 and results.skipped_count == 2
         assert results.stopped_after is None and results.ran_count == 4
         assert "stopped by --fail-fast" not in self._cli(tmp_path).stdout
+
+
+# ---------------------------------------------------------------------------
+# #386: every SELECT solution is a row, one with every projected variable unbound included
+# ---------------------------------------------------------------------------
+
+UNBOUND_BASE = """\
+@prefix ex: <http://example.org/ont#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+ex:Animal a owl:Class .
+ex:Plant a owl:Class ; rdfs:label "Plant" .
+"""
+
+UNBOUND_PREFIXES = {
+    "ex": "http://example.org/ont#",
+    "owl": "http://www.w3.org/2002/07/owl#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+}
+
+#: Matches, with no variables: one solution, the empty mapping
+VARLESS = "SELECT * WHERE { ex:Animal a owl:Class }"
+#: Two classes, one labelled: two solutions, one of them with ?label unbound
+OPTIONAL_ONLY = "SELECT ?label WHERE { ?c a owl:Class OPTIONAL { ?c rdfs:label ?label } }"
+#: The same with ?c projected: no solution is empty, the unlabelled one omits ?label
+MIXED = "SELECT ?c ?label WHERE { ?c a owl:Class OPTIONAL { ?c rdfs:label ?label } }"
+ANIMAL_IRI = "http://example.org/ont#Animal"
+PLANT_IRI = "http://example.org/ont#Plant"
+
+
+@pytest.fixture
+def unbound_graph() -> Graph:
+    return Graph().parse(data=UNBOUND_BASE, format="turtle")
+
+
+def _one(graph: Graph, query: str, expect) -> CQTestResult:
+    """Run one question against ``graph`` and return its result."""
+    suite = CQTestSuite(
+        prefixes=UNBOUND_PREFIXES,
+        questions=[CQTest(id="q", name="q", query=query, expectation=parse_expectation(expect))],
+    )
+    return CQTestRunner().run(graph, suite).results[0]
+
+
+class TestEverySolutionIsARow:
+    """The rows a SELECT has are SPARQL 1.1's solutions, as a bag (#386)."""
+
+    @pytest.mark.parametrize(
+        ("query", "rows"),
+        [
+            (VARLESS, 1),
+            (OPTIONAL_ONLY, 2),
+            ("SELECT ?x WHERE { ?c a owl:Class }", 2),  # two empty solutions: a bag
+            ("SELECT DISTINCT ?x WHERE { ?c a owl:Class }", 1),
+            ("SELECT ?x WHERE { ?c a owl:Class } OFFSET 1", 1),
+            ("SELECT ?x WHERE { ?c a owl:Class } LIMIT 1", 1),
+            ("SELECT ?x WHERE { ?c a owl:Class } LIMIT 0", 0),
+            ("SELECT * WHERE {}", 1),
+            ("SELECT * WHERE { ex:Nope a owl:Class }", 0),
+            ("SELECT ?x WHERE { VALUES ?x { UNDEF ex:a UNDEF } }", 3),
+            ("SELECT * WHERE { ex:Animal a owl:Class MINUS { ex:Animal a owl:Class } }", 1),
+            ("SELECT * WHERE { OPTIONAL { ex:Nope a owl:Class } }", 1),
+            ("SELECT ?x WHERE { { SELECT ?c WHERE { ?c a owl:Class } } }", 2),
+            (MIXED, 2),
+            ("SELECT (COUNT(*) AS ?n) WHERE { ?c a ex:Nothing }", 1),
+        ],
+        ids=[
+            "variable-less",
+            "optional-only",
+            "bag of empties",
+            "distinct empties",
+            "offset",
+            "limit 1",
+            "limit 0",
+            "empty pattern",
+            "no match",
+            "values undef",
+            "minus with no shared variable",
+            "lone optional",
+            "sub-select",
+            "mixed bound and unbound",
+            "aggregate with no group",
+        ],
+    )
+    def test_count(self, unbound_graph: Graph, query: str, rows: int) -> None:
+        result = _one(unbound_graph, query, {"count": rows})
+
+        assert result.status == CQStatus.PASS, result.message
+        assert result.result_count == rows
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "SELECT ?c (COUNT(*) AS ?n) WHERE { ?c a ex:Nothing } GROUP BY ?c",
+            "SELECT (COUNT(*) AS ?n) WHERE { ?c a ex:Nothing } GROUP BY ?c "
+            "ORDER BY DESC(?n) OFFSET 0 LIMIT 3",
+            "SELECT DISTINCT ?c WHERE { ?c a ex:Nothing } GROUP BY ?c",
+            "SELECT ?c WHERE { ?c a ex:Nothing } GROUP BY ?c HAVING (COUNT(*) = 0)",
+        ],
+        ids=["group by", "with order and slice", "distinct", "having"],
+    )
+    def test_a_group_by_that_forms_no_groups_has_no_rows(
+        self, unbound_graph: Graph, query: str
+    ) -> None:
+        """SPARQL has no solution here; rdflib yields one empty binding (RDFLib/rdflib#3382)."""
+        result = _one(unbound_graph, query, "no_results")
+
+        assert result.status == CQStatus.PASS, result.message
+        assert result.result_count == 0
+
+    @pytest.mark.parametrize(
+        ("query", "rows"),
+        [
+            (
+                "SELECT ?label WHERE { ?c a owl:Class OPTIONAL { ?c rdfs:label ?label } "
+                "FILTER(?c = ex:Animal) } GROUP BY ?label",
+                1,
+            ),
+            (OPTIONAL_ONLY + " GROUP BY ?label", 2),
+            ("SELECT ?c WHERE { ?c a owl:Class } GROUP BY ?c", 2),
+            # The outer projection drops the groups' keys: two solutions, both empty
+            ("SELECT ?x WHERE { { SELECT ?c WHERE { ?c a owl:Class } GROUP BY ?c } }", 2),
+        ],
+        ids=[
+            "one group, its key unbound",
+            "two groups, one key unbound",
+            "two groups",
+            "two groups seen through a sub-select",
+        ],
+    )
+    def test_a_group_with_an_unbound_key_is_a_row(
+        self, unbound_graph: Graph, query: str, rows: int
+    ) -> None:
+        result = _one(unbound_graph, query, {"count": rows})
+
+        assert result.status == CQStatus.PASS, result.message
+
+    def test_rdflib_still_yields_an_empty_binding_for_no_groups(self, unbound_graph: Graph) -> None:
+        """The artefact runner._solutions drops (RDFLib/rdflib#3382).
+
+        When this fails, rdflib has fixed it (#3498): the GROUP BY guard in
+        ``runner._solutions`` is then dead and can go.
+        """
+        result = unbound_graph.query(
+            build_query_with_prefixes(
+                "SELECT ?c WHERE { ?c a ex:Nothing } GROUP BY ?c", UNBOUND_PREFIXES
+            )
+        )
+
+        assert [dict(b) for b in result.bindings] == [{}]
+
+    def test_a_grouped_sub_select_that_matches_nothing_still_counts_one(
+        self, unbound_graph: Graph
+    ) -> None:
+        """The guide's known limitation: the guard stops at a sub-select (RDFLib/rdflib#3382)."""
+        query = "SELECT * WHERE { { SELECT ?c WHERE { ?c a ex:Nothing } GROUP BY ?c } }"
+
+        assert _one(unbound_graph, query, {"count": 1}).status == CQStatus.PASS
+
+    def test_rdflib_iteration_still_drops_an_empty_binding(self, unbound_graph: Graph) -> None:
+        """Why runner._solutions reads ``bindings``: iterating drops the empty solution."""
+        query = build_query_with_prefixes(VARLESS, UNBOUND_PREFIXES)
+
+        assert list(unbound_graph.query(query)) == []
+        assert len(unbound_graph.query(query).bindings) == 1
+
+    @pytest.mark.parametrize(
+        ("query", "grouped"),
+        [
+            ("SELECT ?c WHERE { ?c a ex:C } GROUP BY ?c", True),
+            ("SELECT DISTINCT ?c WHERE { ?c a ex:C } GROUP BY ?c ORDER BY ?c LIMIT 2", True),
+            ("SELECT ?c WHERE { ?c a ex:C } GROUP BY ?c HAVING (COUNT(*) > 1)", True),
+            ("SELECT (COUNT(*) AS ?n) WHERE { ?c a ex:C }", False),
+            ("SELECT ?c WHERE { ?c a ex:C }", False),
+            ("SELECT * WHERE { { SELECT ?c WHERE { ?c a ex:C } GROUP BY ?c } ?c a ex:D }", False),
+            ("SELECT ?x WHERE { { SELECT ?c WHERE { ?c a ex:C } GROUP BY ?c } }", False),
+            ("ASK { ?c a ex:C }", False),
+        ],
+    )
+    def test_explicitly_grouped(self, query: str, grouped: bool) -> None:
+        from rdflib.plugins.sparql import prepareQuery
+
+        from rdf_construct.cq.runner import _explicitly_grouped
+
+        prepared = prepareQuery(build_query_with_prefixes(query, {"ex": "http://example.org/x#"}))
+
+        assert _explicitly_grouped(prepared.algebra) is grouped
+
+    @pytest.mark.parametrize(
+        "pattern",
+        [
+            "ex:Animal a owl:Class",
+            "ex:Nope a owl:Class",
+            "",
+            "OPTIONAL { ex:Nope a owl:Class }",
+            "ex:Animal a owl:Class MINUS { ex:Animal a owl:Class }",
+            "ex:Animal a owl:Class FILTER NOT EXISTS { ex:Animal a owl:Class }",
+            "ex:Animal a owl:Class . ex:Nope a owl:Class",
+        ],
+    )
+    def test_a_variable_less_select_has_a_row_exactly_when_its_ask_is_true(
+        self, unbound_graph: Graph, pattern: str
+    ) -> None:
+        ask = _one(unbound_graph, f"ASK {{ {pattern} }}", True)
+        select = _one(unbound_graph, f"SELECT * WHERE {{ {pattern} }}", "has_results")
+
+        assert (ask.status == CQStatus.PASS) is (select.status == CQStatus.PASS)
+
+    @pytest.mark.parametrize(
+        ("query", "triples"),
+        [
+            ("CONSTRUCT { ?c a owl:Class } WHERE { ?c a owl:Class }", 2),
+            # No triple for the unlabelled class's solution: a template with an unbound term
+            (
+                "CONSTRUCT { ?c rdfs:label ?label } "
+                "WHERE { ?c a owl:Class OPTIONAL { ?c rdfs:label ?label } }",
+                1,
+            ),
+            ("DESCRIBE ex:Plant", 2),
+        ],
+        ids=["construct", "construct with an optional template", "describe"],
+    )
+    def test_construct_and_describe_count_triples(
+        self, unbound_graph: Graph, query: str, triples: int
+    ) -> None:
+        result = _one(unbound_graph, query, {"count": triples})
+
+        assert result.status == CQStatus.PASS, result.message
+        assert result.result_count == triples
+
+    def test_an_ask_with_a_count_is_still_refused(self, unbound_graph: Graph) -> None:
+        result = _one(unbound_graph, "ASK { ex:Animal a owl:Class }", {"count": 1})
+
+        assert result.status == CQStatus.ERROR
+        assert result.error_type == "InvalidExpectation"
+
+
+class TestEveryExpectationSeesTheEmptySolution:
+    """Each expectation checks the same solutions the count does (#386)."""
+
+    @pytest.mark.parametrize(
+        ("query", "expect", "status"),
+        [
+            (VARLESS, "has_results", CQStatus.PASS),
+            (VARLESS, {"count": 1}, CQStatus.PASS),
+            (VARLESS, "no_results", CQStatus.FAIL),
+            (VARLESS, True, CQStatus.PASS),
+            (VARLESS, False, CQStatus.FAIL),
+            (VARLESS, {"min_results": 1}, CQStatus.PASS),
+            (VARLESS, {"results": [{}]}, CQStatus.PASS),
+            (OPTIONAL_ONLY, {"count": 2}, CQStatus.PASS),
+            (OPTIONAL_ONLY, {"max_results": 1}, CQStatus.FAIL),
+            (OPTIONAL_ONLY, {"results": [{"label": "Plant"}]}, CQStatus.FAIL),
+            (OPTIONAL_ONLY, {"results": [{}, {"label": "Plant"}]}, CQStatus.PASS),
+            (OPTIONAL_ONLY, {"results": [{"label": None}, {"label": "Plant"}]}, CQStatus.PASS),
+            (OPTIONAL_ONLY, {"contains": [{"label": "Plant"}]}, CQStatus.PASS),
+            (OPTIONAL_ONLY, {"contains": [{"label": None}]}, CQStatus.PASS),
+            ("SELECT ?x WHERE { ?c a owl:Class }", {"results": [{}]}, CQStatus.FAIL),
+            ("SELECT ?x WHERE { ?c a owl:Class }", {"results": [{}, {}]}, CQStatus.PASS),
+        ],
+    )
+    def test_verdict(self, unbound_graph: Graph, query: str, expect, status: CQStatus) -> None:
+        assert _one(unbound_graph, query, expect).status == status
+
+    def test_a_partly_unbound_row_leaves_out_the_unbound_variable(
+        self, unbound_graph: Graph
+    ) -> None:
+        both = [{"c": ANIMAL_IRI}, {"c": PLANT_IRI, "label": "Plant"}]
+        spelled = [{"c": ANIMAL_IRI, "label": None}, {"c": PLANT_IRI, "label": "Plant"}]
+
+        assert _one(unbound_graph, MIXED, {"results": both}).status == CQStatus.PASS
+        assert _one(unbound_graph, MIXED, {"results": spelled}).status == CQStatus.PASS
+
+    def test_contains_null_requires_the_variable_unbound(self, unbound_graph: Graph) -> None:
+        animal = {"contains": [{"c": ANIMAL_IRI, "label": None}]}
+        plant = {"contains": [{"c": PLANT_IRI, "label": None}]}
+
+        assert _one(unbound_graph, MIXED, animal).status == CQStatus.PASS
+        assert _one(unbound_graph, MIXED, plant).status == CQStatus.FAIL
+
+    def test_contains_an_absent_variable_is_unconstrained(self, unbound_graph: Graph) -> None:
+        result = _one(unbound_graph, MIXED, {"contains": [{"c": PLANT_IRI}]})
+
+        assert result.status == CQStatus.PASS
+
+    def test_contains_refuses_an_empty_binding(self) -> None:
+        with pytest.raises(ValueError, match=r"empty binding \{\}.*use expect: has_results"):
+            parse_expectation({"contains": [{"label": "Plant"}, {}]})
+
+    def test_results_failure_shows_the_empty_solution(self, unbound_graph: Graph) -> None:
+        result = _one(unbound_graph, OPTIONAL_ONLY, {"results": [{"label": "Plant"}]})
+
+        assert result.check_result is not None
+        assert result.check_result.expected == "[{'label': 'Plant'}]"
+        assert result.check_result.actual == "[{}, {'label': 'Plant'}]"
+
+    @pytest.mark.parametrize(
+        "expectation",
+        [
+            HasResultsExpectation(),
+            CountExpectation(exact=1),
+            BooleanExpectation(True),
+            ValuesExpectation(expected_results=[{}]),
+            ContainsExpectation(expected_bindings=[{"label": None}]),
+        ],
+        ids=lambda e: type(e).__name__,
+    )
+    def test_check_on_rows_built_from_bindings(self, expectation) -> None:
+        """A row from an empty binding with no projected variables is an empty, falsy tuple."""
+        from rdflib.query import ResultRow
+
+        row = ResultRow({}, [])
+        assert not row
+
+        assert expectation.check([row]).passed
+
+
+UNBOUND_YML = """\
+prefixes:
+  ex: "http://example.org/ont#"
+  owl: "http://www.w3.org/2002/07/owl#"
+  rdfs: "http://www.w3.org/2000/01/rdf-schema#"
+questions:
+  - {id: S1, query: "SELECT * WHERE { ex:Animal a owl:Class }", expect: has_results}
+  - {id: S2, query: "SELECT * WHERE { ex:Animal a owl:Class }", expect: {count: 1}}
+  - id: S3
+    query: "SELECT ?label WHERE { ?c a owl:Class OPTIONAL { ?c rdfs:label ?label } }"
+    expect: {count: 2}
+  - {id: S4, query: "ASK { ex:Animal a owl:Class }", expect: true}
+  - {id: S5, query: "SELECT * WHERE { ex:Animal a owl:Class }", expect: no_results}
+  - {id: S6, query: "SELECT * WHERE { ex:Animal a owl:Class }", expect: true}
+  - id: S7
+    query: "SELECT ?label WHERE { ?c a owl:Class OPTIONAL { ?c rdfs:label ?label } }"
+    expect: {max_results: 1}
+  - id: S8
+    query: "SELECT ?label WHERE { ?c a owl:Class OPTIONAL { ?c rdfs:label ?label } }"
+    expect: {results: [{label: "Plant"}]}
+  - id: S9
+    query: "SELECT ?label WHERE { ?c a owl:Class OPTIONAL { ?c rdfs:label ?label } }"
+    expect: {contains: [{label: "Plant"}]}
+"""
+
+#: #386's rows S1-S9 as ruled: (status, result_count)
+UNBOUND_VERDICTS = {
+    "S1": ("pass", 1),
+    "S2": ("pass", 1),
+    "S3": ("pass", 2),
+    "S4": ("pass", None),
+    "S5": ("fail", 1),
+    "S6": ("pass", 1),
+    "S7": ("fail", 2),
+    "S8": ("fail", 2),
+    "S9": ("pass", 2),
+}
+
+
+class TestUnboundSolutionsAtTheCli:
+    """#386's rows through the command, in each format."""
+
+    @pytest.fixture
+    def files(self, tmp_path: Path) -> tuple[Path, Path]:
+        (tmp_path / "base.ttl").write_text(UNBOUND_BASE)
+        (tmp_path / "select.yml").write_text(UNBOUND_YML)
+        return tmp_path / "base.ttl", tmp_path / "select.yml"
+
+    def _invoke(self, *argv: str):
+        from click.testing import CliRunner
+
+        from rdf_construct.cli import cli
+
+        return CliRunner().invoke(cli, ["cq-test", *argv])
+
+    def test_json(self, files: tuple[Path, Path]) -> None:
+        import json
+
+        result = self._invoke(str(files[0]), str(files[1]), "-f", "json")
+
+        assert result.exit_code == 1, result.output
+        report = json.loads(result.stdout)
+        got = {q["id"]: (q["status"], q.get("result_count")) for q in report["questions"]}
+        assert got == UNBOUND_VERDICTS
+
+    def test_text(self, files: tuple[Path, Path]) -> None:
+        result = self._invoke(str(files[0]), str(files[1]))
+
+        assert result.exit_code == 1, result.output
+        assert "[PASS] S1: S1 (1 result(s))" in result.stdout
+        assert "[PASS] S3: S3 (2 result(s))" in result.stdout
+        assert "Actual:   [{}, {'label': 'Plant'}]" in result.stdout
+
+    def test_junit(self, files: tuple[Path, Path]) -> None:
+        import xml.etree.ElementTree as ET
+
+        result = self._invoke(str(files[0]), str(files[1]), "-f", "junit", "--verbose")
+
+        assert result.exit_code == 1, result.output
+        root = ET.fromstring(result.stdout[result.stdout.index("<") :])
+        cases = {case.get("name").split(":")[0]: case for case in root.iter("testcase")}
+        failed = {n for n, case in cases.items() if case.find("failure") is not None}
+        assert failed == {"S5", "S7", "S8"}
+        out = cases["S3"].find("system-out")
+        assert out is not None and "Result count: 2" in out.text
+
+    def test_contains_an_empty_binding_is_refused(self, tmp_path: Path) -> None:
+        (tmp_path / "base.ttl").write_text(UNBOUND_BASE)
+        (tmp_path / "c.yml").write_text(
+            'questions:\n  - {id: q, query: "SELECT * {}", expect: {contains: [{}]}}\n'
+        )
+
+        result = self._invoke(str(tmp_path / "base.ttl"), str(tmp_path / "c.yml"))
+
+        assert result.exit_code == 2
+        assert "'contains:' has an empty binding {}" in result.output
+
+    def test_run_tests(self, files: tuple[Path, Path]) -> None:
+        from rdf_construct.cq import run_tests
+
+        results = run_tests(files[0], files[1])
+
+        got = {r.test.id: (r.status.value, r.result_count) for r in results.results}
+        assert got == UNBOUND_VERDICTS
+
+
+class TestSuiteRecordsItsDataFiles:
+    """``CQTestSuite.data_files`` is what ``data:`` loaded, resolved (#439)."""
+
+    @pytest.mark.parametrize(
+        "data",
+        ["data: d1.ttl", "data: [d1.ttl, sub/d2.ttl]", "data:\n  files: [d1.ttl, sub/d2.ttl]"],
+        ids=["shorthand", "list", "files"],
+    )
+    def test_data_files(self, tmp_path: Path, data: str) -> None:
+        (tmp_path / "sub").mkdir()
+        for name in ("d1.ttl", "sub/d2.ttl"):
+            (tmp_path / name).write_text("<http://x/a> a <http://x/C> .\n")
+        (tmp_path / "t.yml").write_text(f"{data}\nquestions: []\n")
+
+        suite = load_test_suite(tmp_path / "t.yml")
+
+        expected = [tmp_path / "d1.ttl", tmp_path / "sub" / "d2.ttl"][: data.count(".ttl")]
+        assert suite.data_files == expected
+        assert suite.filter_by_tags({"none"}).data_files == expected
+
+    def test_inline_data_names_no_file(self, tmp_path: Path) -> None:
+        (tmp_path / "t.yml").write_text(
+            'data:\n  inline: "<http://x/a> a <http://x/C> ."\nquestions: []\n'
+        )
+
+        assert load_test_suite(tmp_path / "t.yml").data_files == []

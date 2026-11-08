@@ -87,6 +87,16 @@ the ones not reached are reported as not run. See
 [`cq-test`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#cq-test)
 in the migration note.
 
+**A `cq-test` SELECT now counts every solution, so verdicts can move either
+way.** A solution whose projected variables are all unbound was not counted: a
+variable-less `SELECT *` that matched had no rows, and an `OPTIONAL` column
+counted only its bound rows. `has_results` and `count` can now pass, and
+`no_results`, `max_results` and an exact `results:` can now fail. `-o` naming a
+file the test file loads through `data:` is refused at exit 2; it was replaced.
+See
+[`cq-test`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#cq-test)
+in the migration note.
+
 **If you gate CI on `diff`, its verdict changes for any file with a blank
 node.** Blank nodes are now compared by structure. A file containing
 restrictions or other blank nodes is identical to a copy of itself (exit 0,
@@ -289,6 +299,8 @@ change, and what to do about it, is listed command by command in the
   `owl:deprecated` true (`true` or `1`, as an `xsd:boolean` or a plain string).
 - **`core.utils.parse_failure_message`** (#322): the one wording for a source
   that could not be parsed, shared by `parse_into` and `lint`.
+- **`CQTestSuite.data_files`** (#439): the files a test file's `data:` loaded,
+  each resolved against the test file's directory.
 
 ### Changed
 - **Typed literals keep the lexical form the source wrote** (#377). rdflib
@@ -684,6 +696,19 @@ change, and what to do about it, is listed command by command in the
   `QueryError`. `expect: true|false` on a SELECT, CONSTRUCT or DESCRIBE still
   means "at least one row or triple", and its message no longer says "ASK
   query matched".
+- **`cq-test` counts every SELECT solution** (#386). rdflib's result iteration
+  drops a solution whose projected variables are all unbound, and `cq-test`
+  counted what it iterated: a variable-less `SELECT *` that matched had 0 rows
+  (`no_results` passed), and a column only an `OPTIONAL` binds counted only its
+  bound rows. A SELECT's rows are now its solutions, as SPARQL counts them, for
+  every expectation; a `GROUP BY` that forms no groups still has none, where
+  rdflib returns one empty row (RDFLib/rdflib#3382). In `results:` and
+  `contains:`, `null` means unbound (it was compared as the text `None`), and
+  `contains:` refuses an empty binding `{}`, which matched any solution.
+- **`cq-test -o` cannot replace a `data:` file** (#439). `-o` naming a file the
+  test file loads through `data:` replaced it with the results at exit 0, since
+  those files were known only once the suite loaded. It is now refused at exit 2
+  before any question runs, naming the test file, and nothing is written.
 - **`split` places every subject of the source** (#176). It placed only
   classes and properties, so individuals, SKOS concepts, terms declared only by
   an OWL characteristic such as `owl:TransitiveProperty`, and the inside of

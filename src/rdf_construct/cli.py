@@ -3,7 +3,7 @@
 import shlex
 import sys
 import traceback
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Any
@@ -272,7 +272,12 @@ def parse_into(graph: Graph, source: Path, rdf_format: str) -> None:
         raise Refusal(parse_failure_message(source, rdf_format, exc)) from exc
 
 
-def check_outputs(outputs: Sequence[tuple[str, Path]], inputs: Sequence[Path]) -> None:
+def check_outputs(
+    outputs: Sequence[tuple[str, Path]],
+    inputs: Sequence[Path],
+    *,
+    named_in: Mapping[Path, str] | None = None,
+) -> None:
     """Refuse a run whose outputs are one file, or would replace one of its inputs (#412).
 
     Call it once every output path and input is known, before the first byte is written. Two
@@ -286,6 +291,9 @@ def check_outputs(outputs: Sequence[tuple[str, Path]], inputs: Sequence[Path]) -
         outputs: Each file the run would write, with the option that names it (``-o``,
             ``--report``), in the order it would write them.
         inputs: Every file the run reads that no output may replace.
+        named_in: For an input the user did not name on the command line, where it came from,
+            keyed by the path in ``inputs``. It is added to that input's line, after
+            ``, which`` (``cq-test``'s ``data:`` files, #439).
 
     Raises:
         Refusal: When any output collides with another or would replace an input. The message
@@ -300,8 +308,10 @@ def check_outputs(outputs: Sequence[tuple[str, Path]], inputs: Sequence[Path]) -
         named = " and ".join(flags[id(output)] for output in group)
         problems.append(f"{named} name one file, {group[0].path}. Choose different paths.")
     for output, existing in outputs_over_inputs(planned, inputs):
+        source = (named_in or {}).get(existing)
+        where = f", which {source}" if source else ""
         problems.append(
-            f"{flags[id(output)]} {output.path} would replace the input {existing}. "
+            f"{flags[id(output)]} {output.path} would replace the input {existing}{where}. "
             "Choose another path."
         )
 
@@ -2746,6 +2756,14 @@ def cq_test(
         # Load test suite
         click.echo(f"Loading tests: {test_file.name}...", err=True)
         suite = load_test_suite(test_file)
+
+        # The files the test file's data: names are known only now; nothing is written yet (#439)
+        if output:
+            check_outputs(
+                [("-o", output)],
+                suite.data_files,
+                named_in={p: f"{test_file} loads through 'data:'" for p in suite.data_files},
+            )
 
         # An empty selection is refused: a run that checked nothing didn't do it (#135)
         suite = _cq_selection(suite, test_file, tag, exclude_tag)
