@@ -620,6 +620,18 @@ change, and what to do about it, is listed command by command in the
   and the summary line counts the file separately. A directory given as a
   source is refused before any file is read.
 
+### Deprecated
+- **`describe --reasoning`** (#220). The flag never ran a reasoner: its
+  "Reasoning Analysis" section printed an "entailment regime" looked up from
+  the profile already detected above it, and three lists that were always
+  empty. It is still accepted and prints one warning on stderr, and text and
+  Markdown no longer print the section; the exit code is unchanged. The JSON
+  `reasoning` key is kept unchanged until v0.8.0 removes it, with the flag,
+  `ReasoningAnalysis` and `include_reasoning` (#299). Its `entailment_regime`
+  is a coarser name for the detected profile (`owl-dl` for both DL profiles),
+  not an entailment regime. `describe_file()` and `describe_ontology()` emit a
+  `DeprecationWarning` when given `include_reasoning=True`.
+
 ### Fixed
 - **`lint`'s `dangling-reference` no longer claims a namespace from one node**
   (#69). A namespace is checked only when the file defines two or more entities

@@ -452,10 +452,13 @@ class DocumentationCoverage:
 
 @dataclass
 class ReasoningAnalysis:
-    """Analysis of reasoning implications (optional, off by default).
+    """Deprecated; removed in rdf-construct 0.8.0 (#299). Never ran a reasoner.
+
+    Kept only so the JSON ``reasoning`` key is unchanged until then (#220); no formatter
+    prints it, and ``entailment_regime`` is a coarser name for the detected profile.
 
     Attributes:
-        entailment_regime: Applicable entailment regime.
+        entailment_regime: The detected profile, coarsened; not an entailment regime.
         inferred_superclasses: Sample of superclass inferences.
         inferred_types: Sample of type inferences.
         consistency_notes: Notes on potential consistency issues.

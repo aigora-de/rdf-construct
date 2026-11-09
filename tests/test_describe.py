@@ -1,6 +1,8 @@
 """Unit tests for the ontology describe module."""
 
 import json
+import re
+import warnings
 from pathlib import Path
 from textwrap import dedent
 
@@ -886,3 +888,242 @@ class TestModels:
         assert NamespaceCategory.LOCAL.value == "local"
         assert NamespaceCategory.IMPORTED.value == "imported"
         assert NamespaceCategory.EXTERNAL.value == "external"
+
+
+# --- Deprecated --reasoning (#220; removed in 0.8.0 by #299) ---
+
+
+class TestReasoningDeprecation:
+    """``--reasoning`` and ``include_reasoning`` are deprecated: warned, never analysed (#220)."""
+
+    WELL = Path(__file__).parent.parent / "examples" / "describe" / "well_documented.ttl"
+    PREFIX = "⚠ --reasoning is deprecated and will be removed in rdf-construct 0.8.0: "
+    WARN_NOTHING = PREFIX + "it never ran a reasoner, and it does nothing"
+    WARN_JSON = PREFIX + "it never ran a reasoner, and its JSON 'reasoning' key is kept until then"
+    REASONING_JSON = {
+        "entailment_regime": "owl-dl",
+        "inferred_superclasses": [],
+        "inferred_types": [],
+        "consistency_notes": [],
+    }
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        """Create a Click test runner."""
+        return CliRunner()
+
+    def _run(self, runner: CliRunner, *args: str):
+        from rdf_construct.cli import cli
+
+        return runner.invoke(cli, ["describe", *args])
+
+    @staticmethod
+    def _mask(text: str) -> str:
+        return re.sub(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?", "<TS>", text)
+
+    def _assert_warned_once(self, stderr: str, line: str) -> None:
+        assert stderr.splitlines().count(line) == 1
+        assert stderr.count("is deprecated") == 1  # the library's warning never leaks
+        assert stderr.index(line) < stderr.index("Analysing")
+
+    @pytest.mark.parametrize("fmt", ["text", "markdown", "md"])
+    def test_text_and_markdown_warn_and_print_no_section(self, runner: CliRunner, fmt: str) -> None:
+        """The section is gone; the output equals the run without the flag."""
+        base = [str(self.WELL), "--no-resolve", "-f", fmt, "--no-colour"]
+        flagged = self._run(runner, *base, "--reasoning")
+        plain = self._run(runner, *base)
+        assert flagged.exit_code == 0
+        self._assert_warned_once(flagged.stderr, self.WARN_NOTHING)
+        assert "Reasoning Analysis" not in flagged.stdout
+        assert "Entailment regime" not in flagged.stdout
+        assert self._mask(flagged.stdout) == self._mask(plain.stdout)
+
+    def test_json_keeps_the_reasoning_key_unchanged(self, runner: CliRunner) -> None:
+        """JSON still carries ``reasoning`` exactly as before; nothing else moves."""
+        base = [str(self.WELL), "--no-resolve", "-f", "json"]
+        flagged = self._run(runner, *base, "--reasoning")
+        plain = self._run(runner, *base)
+        assert flagged.exit_code == 0
+        self._assert_warned_once(flagged.stderr, self.WARN_JSON)
+        data = json.loads(flagged.stdout)
+        assert data.pop("reasoning") == self.REASONING_JSON
+        data.pop("timestamp")
+        other = json.loads(plain.stdout)
+        other.pop("timestamp")
+        assert "reasoning" not in other
+        assert data == other
+
+    @pytest.mark.parametrize("fmt", ["JSON", "Json"])
+    def test_format_case_does_not_change_the_tail(self, runner: CliRunner, fmt: str) -> None:
+        """``-f JSON`` is json: the JSON tail, and the key kept."""
+        result = self._run(runner, str(self.WELL), "--no-resolve", "-f", fmt, "--reasoning")
+        assert result.exit_code == 0
+        self._assert_warned_once(result.stderr, self.WARN_JSON)
+        assert json.loads(result.stdout)["reasoning"] == self.REASONING_JSON
+
+    def test_brief_json_has_no_key_and_says_it_does_nothing(self, runner: CliRunner) -> None:
+        """Under ``--brief`` the flag already did nothing, in every format."""
+        result = self._run(runner, str(self.WELL), "--brief", "-f", "json", "--reasoning")
+        assert result.exit_code == 0
+        self._assert_warned_once(result.stderr, self.WARN_NOTHING)
+        assert "reasoning" not in json.loads(result.stdout)
+
+    def test_brief_text_warns(self, runner: CliRunner) -> None:
+        """``--brief`` text warns too."""
+        result = self._run(runner, str(self.WELL), "--brief", "--reasoning")
+        assert result.exit_code == 0
+        self._assert_warned_once(result.stderr, self.WARN_NOTHING)
+
+    def test_with_resolution_warns(self, runner: CliRunner) -> None:
+        """Without ``--no-resolve`` the warning is the same (no imports, so offline)."""
+        result = self._run(runner, str(self.WELL), "--reasoning")
+        assert result.exit_code == 0
+        self._assert_warned_once(result.stderr, self.WARN_NOTHING)
+
+    @pytest.mark.parametrize("fmt", ["text", "markdown", "json"])
+    def test_output_file_has_no_section_and_stderr_warns(
+        self, runner: CliRunner, tmp_path: Path, fmt: str
+    ) -> None:
+        """With ``-o`` the warning is still about the invocation."""
+        out = tmp_path / f"description.{fmt}"
+        result = self._run(
+            runner, str(self.WELL), "--no-resolve", "-f", fmt, "-o", str(out), "--reasoning"
+        )
+        assert result.exit_code == 0
+        self._assert_warned_once(
+            result.stderr, self.WARN_JSON if fmt == "json" else self.WARN_NOTHING
+        )
+        written = out.read_text()
+        assert "Reasoning Analysis" not in written
+        if fmt == "json":
+            assert json.loads(written)["reasoning"] == self.REASONING_JSON
+
+    def test_unresolvable_import_still_exits_one(self, runner: CliRunner, tmp_path: Path) -> None:
+        """The flag never moves the exit code (#286)."""
+        src = tmp_path / "unresolvable.ttl"
+        src.write_text(
+            "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n"
+            "<http://example.org/o> a owl:Ontology ;\n"
+            "    owl:imports <file:///nonexistent/x.ttl> .\n"
+        )
+        assert self._run(runner, str(src)).exit_code == 1
+        flagged = self._run(runner, str(src), "--reasoning")
+        assert flagged.exit_code == 1
+        self._assert_warned_once(flagged.stderr, self.WARN_NOTHING)
+        as_json = self._run(runner, str(src), "-f", "json", "--reasoning")
+        assert as_json.exit_code == 1
+        self._assert_warned_once(as_json.stderr, self.WARN_JSON)
+        assert json.loads(as_json.stdout)["reasoning"]["entailment_regime"] == "owl-dl"
+
+    def test_refused_output_warns_before_the_refusal(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """An ``-o`` naming the input is refused at 2, after the warning."""
+        src = tmp_path / "onto.ttl"
+        src.write_bytes(self.WELL.read_bytes())
+        result = self._run(runner, str(src), "-o", str(src), "--reasoning")
+        assert result.exit_code == 2
+        assert result.stderr.splitlines().count(self.WARN_NOTHING) == 1
+        assert result.stderr.index(self.WARN_NOTHING) < result.stderr.index("Nothing was written")
+        assert src.read_bytes() == self.WELL.read_bytes()
+
+    def test_parse_failure_warns_before_the_error(self, runner: CliRunner, tmp_path: Path) -> None:
+        """A file that does not parse exits 2, after the warning."""
+        src = tmp_path / "broken.ttl"
+        src.write_text("@prefix : <http://example.org/> .\n:a :b\n")
+        result = self._run(runner, str(src), "--reasoning")
+        assert result.exit_code == 2
+        self._assert_warned_once(result.stderr, self.WARN_NOTHING)
+        assert result.stderr.index(self.WARN_NOTHING) < result.stderr.index("Error parsing RDF")
+
+    def test_without_the_flag_no_warning(self, runner: CliRunner) -> None:
+        """No flag, no warning."""
+        result = self._run(runner, str(self.WELL), "--no-resolve")
+        assert result.exit_code == 0
+        assert "deprecated" not in result.stderr
+
+    def test_colour_follows_no_colour(self, runner: CliRunner) -> None:
+        """The warning is yellow unless ``--no-colour`` says otherwise."""
+        from rdf_construct.cli import cli
+
+        args = ["describe", str(self.WELL), "--no-resolve", "--reasoning"]
+        coloured = runner.invoke(cli, args, color=True)
+        plain = runner.invoke(cli, [*args, "--no-colour"], color=True)
+        assert "\x1b[33m" + self.WARN_NOTHING in coloured.stderr
+        assert self.WARN_NOTHING + "\n" in plain.stderr
+        assert "\x1b[" not in plain.stderr.split("Analysing")[0]
+
+    def test_help_marks_the_flag_deprecated(self, runner: CliRunner) -> None:
+        """``--help`` says the flag is deprecated and when it goes."""
+        result = self._run(runner, "--help")
+        assert result.exit_code == 0
+        assert (
+            "--reasoning Deprecated: never ran a reasoner; removed in rdf-construct 0.8.0"
+            in " ".join(result.stdout.split())
+        )
+
+    def test_cli_survives_the_library_warning_as_an_error(self, runner: CliRunner) -> None:
+        """The CLI suppresses the library's own warning, so ``-W error`` cannot exit 2."""
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "error", message="include_reasoning is deprecated", category=DeprecationWarning
+            )
+            result = self._run(runner, str(self.WELL), "--no-resolve", "-f", "json", "--reasoning")
+        assert result.exit_code == 0
+        assert json.loads(result.stdout)["reasoning"] == self.REASONING_JSON
+
+    @staticmethod
+    def _ours(record) -> list:
+        return [
+            w
+            for w in record
+            if issubclass(w.category, DeprecationWarning)
+            and str(w.message).startswith("include_reasoning is deprecated")
+        ]
+
+    def test_describe_file_warns_once_at_the_caller(self) -> None:
+        """``describe_file(include_reasoning=True)`` warns once, pointing at this line."""
+        with pytest.deprecated_call() as record:
+            describe_file(self.WELL, brief=True, resolve_imports=False, include_reasoning=True)
+        ours = self._ours(record)
+        assert len(ours) == 1
+        assert ours[0].filename == __file__
+        with pytest.deprecated_call() as record:
+            description = describe_file(self.WELL, resolve_imports=False, include_reasoning=True)
+        ours = self._ours(record)
+        assert len(ours) == 1
+        assert ours[0].filename == __file__
+        assert "rdf-construct 0.8.0" in str(ours[0].message)
+        assert description.reasoning is not None
+        assert description.reasoning.to_dict() == self.REASONING_JSON
+
+    def test_describe_ontology_warns_once_at_the_caller(self) -> None:
+        """``describe_ontology(include_reasoning=True)`` warns once, ``brief`` included."""
+        graph = Graph().parse(self.WELL)
+        for brief in (False, True):
+            with pytest.deprecated_call() as record:
+                describe_ontology(
+                    graph, self.WELL, brief=brief, resolve_imports=False, include_reasoning=True
+                )
+            ours = self._ours(record)
+            assert len(ours) == 1
+            assert ours[0].filename == __file__
+
+    def test_no_library_warning_without_the_flag(self) -> None:
+        """The default never warns."""
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            describe_file(self.WELL, resolve_imports=False)
+            describe_ontology(Graph().parse(self.WELL), self.WELL, resolve_imports=False)
+        assert self._ours(record) == []
+
+    def test_formatters_drop_the_section_for_every_caller(self) -> None:
+        """A description that carries ``reasoning`` prints no section; its JSON keeps the key."""
+        with pytest.deprecated_call():
+            description = describe_file(self.WELL, resolve_imports=False, include_reasoning=True)
+        for fmt in ("text", "markdown", "md"):
+            out = format_description(description, format_name=fmt, use_colour=False)
+            assert "Reasoning Analysis" not in out
+            assert "Entailment regime" not in out
+        data = json.loads(format_description(description, format_name="json"))
+        assert data["reasoning"] == self.REASONING_JSON

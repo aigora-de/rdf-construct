@@ -20,7 +20,9 @@ A few follow in v0.8.0, with a note of their own:
 - `diff`'s text and markdown rendering ([#147](https://github.com/aigora-de/rdf-construct/issues/147));
 - the `docs` JSON ([#236](https://github.com/aigora-de/rdf-construct/issues/236), [#253](https://github.com/aigora-de/rdf-construct/issues/253), [#258](https://github.com/aigora-de/rdf-construct/issues/258));
 - how `lint`, `describe`, `order` and `stats` classify a term that has an `rdfs:domain`,
-  `rdfs:range` or `rdfs:subPropertyOf` but no property type ([#297](https://github.com/aigora-de/rdf-construct/issues/297)).
+  `rdfs:range` or `rdfs:subPropertyOf` but no property type ([#297](https://github.com/aigora-de/rdf-construct/issues/297));
+- the removal of `describe --reasoning`, its JSON `reasoning` key, `ReasoningAnalysis` and the
+  `include_reasoning` parameter, all deprecated here ([#299](https://github.com/aigora-de/rdf-construct/issues/299)).
 
 A 0.7.x patch never changes what a correct run does.
 
@@ -332,6 +334,7 @@ Nothing has landed yet.
 | Issue | What changed | What to do |
 |---|---|---|
 | [#412](https://github.com/aigora-de/rdf-construct/issues/412) | `-o` naming the input is refused at exit **2** with nothing written. It used to replace the ontology with its description at exit 0. See [Outputs that name an input](#outputs-that-name-an-input). | Choose another path. |
+| [#220](https://github.com/aigora-de/rdf-construct/issues/220) | **Deprecated, not breaking.** `--reasoning` is still accepted and prints one warning on stderr; the exit code is unchanged. Text and Markdown no longer print its "Reasoning Analysis" section, which never ran a reasoner. The JSON `reasoning` key is unchanged until v0.8.0 removes it ([#299](https://github.com/aigora-de/rdf-construct/issues/299)); its `entailment_regime` is a coarser name for the detected profile (`owl-dl` for both DL profiles), not an entailment regime. In Python, `describe_file()` and `describe_ontology()` emit a `DeprecationWarning` when given `include_reasoning=True`. | Drop `--reasoning` and `include_reasoning`. Read the profile from the Profile section, or `profile.profile` in the JSON. |
 
 ## `merge`
 
