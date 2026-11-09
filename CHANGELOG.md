@@ -109,6 +109,16 @@ their union, where it silently reported the first, and its JSON names them in
 and [`diff`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#diff)
 in the migration note.
 
+**`diff` filters no longer hide their mistakes.** An unrecognised or empty
+`--show`, `--hide` or `--entities` value is refused at exit 2, naming the value
+and the accepted names, where a typo used to filter everything out and report
+the graphs identical at exit 0. `--show` with `--hide` is refused too. Under any
+filter the exit code and the "identical" verdict describe the whole comparison:
+a filtered view that hides changes says how many and of what kind, and the JSON
+reports them. `--entities` gains `ontology`, `untyped` and `structures`. See
+[`diff`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#diff)
+in the migration note.
+
 **If you gate CI on `diff`, its verdict changes for any file with a blank
 node.** Blank nodes are now compared by structure. A file containing
 restrictions or other blank nodes is identical to a copy of itself (exit 0,
@@ -645,6 +655,22 @@ change, and what to do about it, is listed command by command in the
   an unreachable cycle is written as a top-level `_:label` block, breaking the
   cycle once while everything it references stays inline. Graphs without such
   a cycle serialise byte-identically.
+- **`diff` refuses a filter it does not recognise, and a filter never decides
+  the verdict** (#144). `--show`, `--hide` and `--entities` dropped any value
+  they did not recognise, so `--show addedd` filtered everything out and printed
+  "Graphs are semantically identical." at exit 0, and a valid filter that
+  matched nothing said the same about graphs that differed. An unknown or empty
+  value is now refused at exit 2 before anything is read or written, naming each
+  bad value with a near match where there is one; so are `--show` with
+  `--hide`, and a `--hide` naming all three change types. A filtered `GraphDiff` counts what it
+  left out (`not_shown`), so its `is_identical`, the exit code, the sentence and
+  the JSON's `identical` all describe the graphs, and the text and markdown say
+  what was hidden: `No added changes. 1 change not shown (1 removed) — run
+  without --show to see it.`, or `Not shown: …` beneath a partial view.
+  Blank-node structures that belong to no entity follow `--show`/`--hide` by
+  action, and `--entities` keeps them only when it names `structures`.
+  `--entities ontology` and `untyped` select what no filter could before. Under
+  `--ignore-predicates` the sentence names what was ignored.
 - **`diff` compares blank nodes by structure, in both directions** (#143). It
   compared triples by the labels rdflib gives blank nodes at parse time, and
   then skipped every blank-node subject. So any file with an `owl:Restriction`

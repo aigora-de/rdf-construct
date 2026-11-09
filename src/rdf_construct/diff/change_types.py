@@ -148,6 +148,21 @@ class UncomparedStructure:
         return text
 
 
+@dataclass(frozen=True)
+class DiffFilter:
+    """The filter a :class:`GraphDiff` was narrowed by, in canonical names (#144).
+
+    Attributes:
+        show: The change types shown, if ``--show`` was given; empty otherwise.
+        hide: The change types hidden, if ``--hide`` was given; empty otherwise.
+        entities: The entity types shown, if ``--entities`` was given; empty otherwise.
+    """
+
+    show: tuple[str, ...] = ()
+    hide: tuple[str, ...] = ()
+    entities: tuple[str, ...] = ()
+
+
 @dataclass
 class GraphDiff:
     """Complete result of comparing two RDF graphs.
@@ -162,6 +177,10 @@ class GraphDiff:
             as Turtle.
         removed_structures: The same, removed.
         uncompared: Blank-node structures too large to compare.
+        filter: The filter this diff was narrowed by, or None if it is the whole comparison.
+        not_shown: How many changes the filter left out, keyed like :attr:`summary`. They
+            still count against :attr:`is_identical`, which describes the graphs, never the
+            view (#144).
     """
 
     old_path: str
@@ -172,6 +191,8 @@ class GraphDiff:
     added_structures: list[str] = field(default_factory=list)
     removed_structures: list[str] = field(default_factory=list)
     uncompared: list[UncomparedStructure] = field(default_factory=list)
+    filter: DiffFilter | None = None
+    not_shown: dict[str, int] = field(default_factory=dict)
 
     @property
     def blank_node_warning(self) -> bool:
@@ -186,7 +207,16 @@ class GraphDiff:
     def is_identical(self) -> bool:
         """Check if graphs are semantically identical.
 
-        Never while a blank-node structure changed or could not be compared (#143).
+        Never while a blank-node structure changed or could not be compared (#143), and never
+        while a filter left a change out (#144): the answer is about the graphs, not the view.
+        """
+        return self.shows_nothing and not self.uncompared and not any(self.not_shown.values())
+
+    @property
+    def shows_nothing(self) -> bool:
+        """True if this diff lists no change: no entity and no blank-node structure.
+
+        Unlike :attr:`is_identical`, a view: a filter can empty it while the graphs differ.
         """
         return (
             not self.added
@@ -194,7 +224,6 @@ class GraphDiff:
             and not self.modified
             and not self.added_structures
             and not self.removed_structures
-            and not self.uncompared
         )
 
     @property
