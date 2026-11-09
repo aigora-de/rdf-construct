@@ -2,7 +2,8 @@
 
 Supports filtering by:
 - Change type (added, removed, modified)
-- Entity type (classes, properties, instances)
+- Entity type (classes, properties, individuals, the ontology, untyped terms, and
+  blank-node structures that belong to no entity)
 
 A filter changes only what is shown. What it leaves out is counted on the filtered
 ``GraphDiff`` (``not_shown``), so ``is_identical`` still describes the graphs, and the
@@ -94,7 +95,7 @@ _ENTITY_SPELLINGS: dict[str, str] = {
     for spelling, value in ENTITY_TYPE_MAP.items()
 } | {STRUCTURES: STRUCTURES}
 
-_DISPLAY_NAMES = {
+_DISPLAY_NAMES: dict[str, str] = {
     "ontology": "the ontology",
     "untyped": "untyped terms",
     STRUCTURES: "blank-node structures",
@@ -133,12 +134,24 @@ def _normalise(
         UnknownFilterError: If no name is given, or any name is not accepted
     """
     prefix = f"{label}: " if label else ""
-    given = [name.strip() for name in names]
+    if isinstance(names, str):
+        raise UnknownFilterError(
+            f"{prefix}expected a collection of {kind}s, not the string {names!r}; "
+            f"pass {{{names!r}}}"
+        )
+    # A set has no order of its own: sort it, so the message is the same on every run
+    ordered = sorted(names) if isinstance(names, set | frozenset) else list(names)
+    given = [name.strip() for name in ordered]
     given = [name for name in given if name]
     accepted = ", ".join(canonical)
     if not given:
         raise UnknownFilterError(f"{prefix}no {kind}s named. Accepted: {accepted}")
-    unknown = [name for name in dict.fromkeys(given) if name.lower() not in spellings]
+    # Each unknown name once, as first written, in the order given; case does not make it new
+    first: dict[str, str] = {}
+    for name in given:
+        if name.lower() not in spellings:
+            first.setdefault(name.lower(), name)
+    unknown = list(first.values())
     if unknown:
         parts = []
         for name in unknown:
@@ -235,8 +248,8 @@ def filter_diff(
     The result lists what the filter selects and counts the rest in ``not_shown``, so its
     ``is_identical`` still describes the graphs (#144). Ownerless blank-node structures follow
     the change types by action, and ``entity_types`` keeps them only if it names
-    ``structures``. Filtering a filtered diff adds to its ``not_shown``; its ``filter``
-    records only the latest filter.
+    ``structures``. A diff that is already filtered is refused: what it left out was left
+    out by another filter, which a second could not report truthfully.
 
     Args:
         diff: The diff to filter.
@@ -250,10 +263,25 @@ def filter_diff(
     Raises:
         UnknownFilterError: As :func:`build_filter` does: a part that names nothing or
             something unknown, ``show_types`` with ``hide_types``, or hiding every change type.
+            Also if ``diff`` is already filtered.
     """
     spec = build_filter(show_types, hide_types, entity_types)
+    if spec != DiffFilter() and diff.filter is not None:
+        raise UnknownFilterError(
+            "this diff is already filtered; filter the diff compare_files or compare_graphs "
+            "returned instead"
+        )
     if spec == DiffFilter():
-        return replace(diff)
+        return replace(
+            diff,
+            added=list(diff.added),
+            removed=list(diff.removed),
+            modified=list(diff.modified),
+            added_structures=list(diff.added_structures),
+            removed_structures=list(diff.removed_structures),
+            uncompared=list(diff.uncompared),
+            not_shown=dict(diff.not_shown),
+        )
 
     shown = set(spec.show) if spec.show else set(CHANGE_TYPE_NAMES) - set(spec.hide)
 
@@ -272,7 +300,7 @@ def filter_diff(
                 include_entity_types.add(mapped)
         include_structures = STRUCTURES in spec.entities
 
-    not_shown = {key: diff.not_shown.get(key, 0) for key in NOT_SHOWN_KEYS}
+    not_shown = dict.fromkeys(NOT_SHOWN_KEYS, 0)
 
     def keep(entities: list[EntityChange], change: str) -> list[EntityChange]:
         kept = [
@@ -317,6 +345,13 @@ def parse_filter_string(filter_str: str) -> set[str]:
     return {f.strip() for f in filter_str.split(",") if f.strip()}
 
 
+def _either(items: list[str] | tuple[str, ...]) -> str:
+    """Join alternatives: ``a``, ``a or b``, ``a, b or c``."""
+    if len(items) <= 2:
+        return " or ".join(items)
+    return f"{', '.join(items[:-1])} or {items[-1]}"
+
+
 def _breakdown(not_shown: dict[str, int]) -> tuple[int, str]:
     """Total what a filter left out, and break it down: ``2 modified, 1 blank-node structure``."""
     parts = []
@@ -353,9 +388,9 @@ def not_shown_sentence(diff: GraphDiff) -> str:
     """
     spec = diff.filter or DiffFilter()
     shown = spec.show or tuple(n for n in CHANGE_TYPE_NAMES if n not in spec.hide)
-    kinds = f"{' or '.join(shown)} " if len(shown) < len(CHANGE_TYPE_NAMES) else ""
+    kinds = f"{_either(shown)} " if len(shown) < len(CHANGE_TYPE_NAMES) else ""
     targets = [_DISPLAY_NAMES.get(n, n.replace("_", " ")) for n in spec.entities]
-    to = f" to {' or '.join(targets)}" if targets else ""
+    to = f" to {_either(targets)}" if targets else ""
     total, breakdown = _breakdown(diff.not_shown)
     options = " and ".join(option for option, _ in _options(diff.filter)) or "the filter"
     return (

@@ -8,6 +8,9 @@ A filter changes only what is shown. The exit code, the "identical" sentence and
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -149,12 +152,12 @@ def test_an_empty_value_is_refused(tmp_path: Path, option: str, value: str) -> N
 )
 def test_show_with_hide_is_refused(tmp_path: Path, show: str, hide: str) -> None:
     result = _run(tmp_path, OLD, NEW, "--show", show, "--hide", hide)
-    _refused(result, "--show and --hide cannot be used together")
+    _refused(result, "Error: --show and --hide cannot be used together")
 
 
 def test_hiding_every_change_type_is_refused(tmp_path: Path) -> None:
     result = _run(tmp_path, OLD, NEW, "--hide", "Modified,added,removed")
-    _refused(result, "--hide hides every change type", "nothing would be shown")
+    _refused(result, "Error: --hide hides every change type", "nothing would be shown")
 
 
 def test_overlapping_entity_types_are_a_union(tmp_path: Path) -> None:
@@ -409,16 +412,20 @@ def test_filter_diff_refuses(tmp_path: Path, kwargs: dict[str, set[str]], fragme
         filter_diff(diff, **kwargs)
 
 
-def test_filter_diff_keeps_the_verdict_and_accumulates() -> None:
+def test_filter_diff_keeps_the_verdict() -> None:
     whole = compare_files(V1, V2)
     once = filter_diff(whole, show_types={"added"})
-    twice = filter_diff(once, entity_types={"classes"})
 
     assert once.added_structures and not once.removed_structures
-    assert not once.is_identical
     assert once.not_shown == {"added": 0, "removed": 0, "modified": 2, "structures": 1}
-    assert twice.not_shown == {"added": 0, "removed": 0, "modified": 2, "structures": 2}
-    assert not twice.is_identical
+    assert not once.is_identical
+
+
+def test_filter_diff_refuses_a_filtered_diff() -> None:
+    """A second filter could not say truthfully what the first left out."""
+    once = filter_diff(compare_files(V1, V2), show_types={"added"})
+    with pytest.raises(UnknownFilterError, match="already filtered"):
+        filter_diff(once, entity_types={"classes"})
 
 
 def test_filter_diff_without_a_filter_is_the_whole_diff() -> None:
@@ -437,3 +444,57 @@ def test_the_guides_refusal_is_what_the_command_prints(tmp_path: Path) -> None:
 
     guide = (ROOT / "docs" / "user_guides" / "DIFF_GUIDE.md").read_text(encoding="utf-8")
     assert f"```text\n{line}\n```" in guide
+
+
+# -- Found by the independent review --
+
+
+def test_bad_names_are_listed_in_the_order_given(tmp_path: Path) -> None:
+    """Not in a set's order, which moves with the hash seed."""
+    result = _run(tmp_path, OLD, NEW, "--entities", "xx,clases,bogus,objprop")
+    _refused(
+        result,
+        "unknown entity types 'xx', 'clases' (did you mean 'classes'?), 'bogus', "
+        "'objprop' (did you mean 'object_properties'?).",
+    )
+
+
+def test_a_bad_name_in_two_cases_is_named_once(tmp_path: Path) -> None:
+    result = _run(tmp_path, OLD, NEW, "--show", "addedd,ADDEDD")
+    _refused(result, "unknown change type 'addedd' (did you mean 'added'?).")
+
+
+def test_three_targets_read_as_a_list(tmp_path: Path) -> None:
+    result = _run(tmp_path, OLD, NEW, "--entities", "untyped,individuals,ontology")
+    assert result.exit_code == 1, result.output
+    assert "No changes to individuals, the ontology or untyped terms." in result.stdout
+
+
+@pytest.mark.parametrize("seed", ["0", "1", "2", "3", "4"])
+def test_library_names_are_listed_in_a_stable_order(seed: str) -> None:
+    """A set's own order moves with the hash seed; the message must not."""
+    code = (
+        "from rdf_construct.diff import GraphDiff, filter_diff\n"
+        "try:\n"
+        "    filter_diff(GraphDiff('a', 'b'), entity_types={'zz', 'clases', 'bogus', 'mm'})\n"
+        "except ValueError as e:\n"
+        "    print(e)\n"
+    )
+    env = dict(os.environ, PYTHONHASHSEED=seed)
+    result = subprocess.run(
+        [sys.executable, "-c", code], env=env, capture_output=True, text=True, check=True
+    )
+    assert "'bogus', 'clases' (did you mean 'classes'?), 'mm', 'zz'." in result.stdout
+
+
+def test_a_bare_string_is_refused_plainly() -> None:
+    whole = compare_files(V1, V2)
+    with pytest.raises(UnknownFilterError, match="not the string 'added'; pass {'added'}"):
+        filter_diff(whole, show_types="added")  # type: ignore[arg-type]
+
+
+def test_filter_diff_without_a_filter_shares_no_list() -> None:
+    whole = compare_files(V1, V2)
+    same = filter_diff(whole)
+    assert same.modified is not whole.modified
+    assert same.added_structures is not whole.added_structures

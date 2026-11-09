@@ -170,13 +170,15 @@ leaves changes out says how many and of what kind, so a filter can never make tw
 files look identical.
 
 A value the filter does not recognise is refused at exit 2, before anything is read or written,
-naming each unknown value, the nearest accepted name, and every accepted name:
+naming each unknown value in the order given, a near match where there is one, and every
+accepted name:
 
 ```text
 Error: Invalid value for '--show': unknown change type 'addedd' (did you mean 'added'?). Accepted: added, removed, modified
 ```
 
-An empty value (`--show ""`, `--show ,`) is refused too. Names are matched ignoring case, and
+Each option is checked on its own, so with mistakes in two options the second is reported once
+the first is fixed. An empty value (`--show ""`, `--show ,`) is refused too. Names are matched ignoring case, and
 whitespace around them is ignored.
 
 ### By Change Type
@@ -449,7 +451,8 @@ print(format_diff(filtered, format_name="text"))
 A filtered diff's `is_identical` still describes the graphs, and `not_shown` counts what the
 filter left out, so `format_diff` says what was hidden. `filter_diff` raises `UnknownFilterError`,
 a `ValueError`, for a name it does not recognise, an empty set, `show_types` with `hide_types`,
-or `hide_types` naming every change type.
+or `hide_types` naming every change type, and for a diff that is already filtered: filter the
+diff `compare_files` returned.
 
 ## Examples
 

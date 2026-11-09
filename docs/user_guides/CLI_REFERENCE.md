@@ -505,9 +505,9 @@ rdf-construct diff OLD_FILE NEW_FILE [OPTIONS]
 - `--show TYPES`: Show only these change types (comma-separated: `added`, `removed`, `modified`)
 - `--hide TYPES`: Hide these change types; not with `--show`, and not all three
 - `--entities TYPES`: Show only these entity types (comma-separated: `classes`, `properties`, `object_properties`, `datatype_properties`, `annotation_properties`, `other_properties`, `individuals`, `ontology`, `untyped`, `structures`)
+- `--ignore-predicates LIST`: Ignore these predicates in comparison (comma-separated CURIEs)
 
 A filter changes only what is shown, never the exit code, and the output says what it left out. A value it does not recognise, or an empty one, is refused (exit 2) before anything is written. See [Filtering](DIFF_GUIDE.md#filtering).
-- `--ignore-predicates LIST`: Ignore these predicates in comparison (comma-separated CURIEs)
 
 **Examples**:
 

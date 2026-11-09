@@ -661,8 +661,8 @@ change, and what to do about it, is listed command by command in the
   "Graphs are semantically identical." at exit 0, and a valid filter that
   matched nothing said the same about graphs that differed. An unknown or empty
   value is now refused at exit 2 before anything is read or written, naming each
-  bad value with its nearest accepted name; so are `--show` with `--hide`, and a
-  `--hide` naming all three change types. A filtered `GraphDiff` counts what it
+  bad value with a near match where there is one; so are `--show` with
+  `--hide`, and a `--hide` naming all three change types. A filtered `GraphDiff` counts what it
   left out (`not_shown`), so its `is_identical`, the exit code, the sentence and
   the JSON's `identical` all describe the graphs, and the text and markdown say
   what was hidden: `No added changes. 1 change not shown (1 removed) — run

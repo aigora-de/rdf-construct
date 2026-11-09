@@ -99,7 +99,6 @@ from rdf_construct.diff import (
     format_diff,
     normalise_change_types,
     normalise_entity_types,
-    parse_filter_string,
 )
 
 from rdf_construct.puml2rdf import (
@@ -1689,7 +1688,8 @@ def _change_type_filter(
     if value is None:
         return None
     try:
-        return normalise_change_types(parse_filter_string(value))
+        # Split in order, not into a set, so the message names bad values in the order given
+        return normalise_change_types(value.split(","))
     except UnknownFilterError as e:
         raise click.BadParameter(str(e), ctx=ctx, param=param) from e
 
@@ -1701,7 +1701,7 @@ def _entity_type_filter(
     if value is None:
         return None
     try:
-        return normalise_entity_types(parse_filter_string(value))
+        return normalise_entity_types(value.split(","))
     except UnknownFilterError as e:
         raise click.BadParameter(str(e), ctx=ctx, param=param) from e
 
@@ -1779,7 +1779,7 @@ def diff(
     try:
         build_filter(show, hide, entities, labels=("--show", "--hide", "--entities"))
     except UnknownFilterError as e:
-        raise click.BadParameter(str(e), ctx=click.get_current_context()) from e
+        raise click.UsageError(str(e), ctx=click.get_current_context()) from e
 
     if output:
         check_outputs([("-o", output)], [old_file, new_file])
