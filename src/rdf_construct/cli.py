@@ -103,6 +103,7 @@ from rdf_construct.diff import (
 )
 from rdf_construct.docs.config import (
     ENTITY_TYPE_NAMES as DOCS_ENTITY_TYPE_NAMES,
+    ENTITY_TYPE_TOGGLES as DOCS_ENTITY_TYPE_TOGGLES,
     EntityFilterError,
     apply_entity_filter,
     normalise_entity_types as normalise_docs_entity_types,
@@ -2024,6 +2025,13 @@ def docs(
     else:
         doc_config = DocsConfig()
 
+    # Whether the config itself switched an entity type off, for the refusal below (#252)
+    config_switched_off = config is not None and not all(
+        getattr(doc_config, toggle)
+        for toggles in DOCS_ENTITY_TYPE_TOGGLES.values()
+        for toggle in toggles
+    )
+
     # Apply CLI overrides
     if flag_given("output"):
         doc_config.output_dir = output
@@ -2075,7 +2083,7 @@ def docs(
             ):
                 if flag_given(flag_name):
                     switched_off.append(option)
-            if config:
+            if config_switched_off:
                 switched_off.append(f"the include_* keys in {config}")
         if exclude is not None:
             switched_off.append(f"--exclude {','.join(exclude)}")

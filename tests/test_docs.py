@@ -3601,6 +3601,26 @@ class TestEntityFilterNames:
             f"include_* keys in {config} leave no entity type switched on." in output
         )
 
+    def test_a_config_that_switched_nothing_off_is_not_blamed(self, tmp_path):
+        config = tmp_path / "plain.yml"
+        config.write_text("title: Plain\n")
+        output = self._refused(
+            [
+                str(ANIMAL),
+                "-C",
+                str(config),
+                "--exclude",
+                "classes,properties,instances,shapes,concepts",
+                "-o",
+                str(tmp_path / "s"),
+            ],
+            tmp_path,
+        )
+        assert (
+            "Error: Nothing to document: --exclude classes,properties,instances,shapes,concepts "
+            "leaves no entity type switched on." in output
+        )
+
     def test_partial_overlap_is_accepted(self, tmp_path):
         out = tmp_path / "site"
         result = self._run(
@@ -3699,19 +3719,31 @@ class TestEntityFilterNames:
             assert "".join(f"{option} ({listed}".split()) in flat
 
     @pytest.mark.parametrize(
-        ("doc", "marker"),
+        ("doc", "marker", "with_aliases"),
         [
-            ("docs/user_guides/DOCS_GUIDE.md", "Valid type names, for both options:"),
-            ("docs/user_guides/CLI_REFERENCE.md", "- `--include TYPES`:"),
+            ("docs/user_guides/DOCS_GUIDE.md", "Valid type names, for both options:", False),
+            ("docs/user_guides/CLI_REFERENCE.md", "- `--include TYPES`:", True),
         ],
     )
-    def test_documented_names_are_the_constant(self, doc, marker):
-        from rdf_construct.docs import ENTITY_TYPE_NAMES
+    def test_documented_names_are_the_constant(self, doc, marker, with_aliases):
+        """Every name the line lists, exactly: the canonical names, then any aliases."""
+        from rdf_construct.docs import ENTITY_TYPE_ALIASES, ENTITY_TYPE_NAMES
 
         root = Path(__file__).resolve().parent.parent
         line = next(ln for ln in (root / doc).read_text().splitlines() if ln.startswith(marker))
         listed = re.findall(r"`([a-z_]+)`", line.split(":", 1)[1])
-        assert tuple(listed[: len(ENTITY_TYPE_NAMES)]) == ENTITY_TYPE_NAMES
+        expected = list(ENTITY_TYPE_NAMES)
+        if with_aliases:
+            expected += [*ENTITY_TYPE_ALIASES, "concepts"]
+        assert listed == expected
+
+    def test_guide_names_the_aliases(self):
+        from rdf_construct.docs import ENTITY_TYPE_ALIASES
+
+        root = Path(__file__).resolve().parent.parent
+        guide = (root / "docs/user_guides/DOCS_GUIDE.md").read_text()
+        aliases = " and ".join(f"`{a}`" for a in ENTITY_TYPE_ALIASES)
+        assert f"{aliases} are accepted as spellings of it" in guide
 
 
 class TestEntityFilterLibrary:
@@ -3790,6 +3822,29 @@ class TestEntityFilterLibrary:
         assert apply_entity_filter(config) is config
         assert config.include_shapes is False
         assert config.include_classes is True
+
+    def test_nothing_left_leaves_the_config_unchanged(self):
+        from rdf_construct.docs import EntityFilterError, apply_entity_filter
+
+        config = DocsConfig()
+        with pytest.raises(EntityFilterError):
+            apply_entity_filter(config, include=["classes"], exclude=["classes"])
+        assert all(getattr(config, flag) for flag in EXCLUSION_FLAGS)
+
+    @pytest.mark.parametrize("names", [["classes", None], [3]])
+    def test_a_name_that_is_not_a_string_is_refused(self, names):
+        from rdf_construct.docs import EntityFilterError, normalise_entity_types
+
+        with pytest.raises(EntityFilterError, match="entity types are strings"):
+            normalise_entity_types(names)
+
+    def test_the_mappings_are_read_only(self):
+        from rdf_construct.docs import ENTITY_TYPE_ALIASES, ENTITY_TYPE_TOGGLES
+
+        with pytest.raises(TypeError):
+            ENTITY_TYPE_ALIASES["foo"] = "classes"  # type: ignore[index]
+        with pytest.raises(TypeError):
+            ENTITY_TYPE_TOGGLES["foo"] = ()  # type: ignore[index]
 
     def test_unknown_name_leaves_the_config_unchanged(self):
         from rdf_construct.docs import EntityFilterError, apply_entity_filter

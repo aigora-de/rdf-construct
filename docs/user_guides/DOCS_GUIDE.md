@@ -606,7 +606,7 @@ Error: Invalid value for '--include': unknown entity type 'clases' (did you mean
 
 An empty value (`--include ""`) is refused the same way. So is a selection
 that leaves no entity type at all, such as `--include classes --exclude
-classes` or a configuration file that sets every `include_*` key to `false`.
+classes` or a configuration file that sets every entity `include_*` key to `false`.
 A partial overlap is fine: `--include properties --exclude other_properties`
 documents every property but those whose kind is not declared (`rdf:Property`,
 `owl:FunctionalProperty` or `owl:DeprecatedProperty` alone). A `--no-` flag and an

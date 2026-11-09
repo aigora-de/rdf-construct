@@ -694,7 +694,7 @@ change, and what to do about it, is listed command by command in the
   match where there is one, and the accepted names, which `--help` now lists in
   full. Also refused: a selection that leaves no entity type switched on, from
   the flags (`--include classes --exclude classes`) or from a config with every
-  `include_*` key false, and a `--no-` flag with an `--include` that names its
+  entity `include_*` key false, and a `--no-` flag with an `--include` that names its
   type, where `--include` silently won. `--exclude` accepts every name
   `--include` does. The names are defined once, in `rdf_construct.docs`
   (`ENTITY_TYPE_NAMES`, `ENTITY_TYPE_ALIASES`), with `normalise_entity_types`
