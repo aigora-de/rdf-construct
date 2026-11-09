@@ -17,6 +17,7 @@ CLI:
 
 from rdf_construct.diff.change_types import (
     ChangeType,
+    DiffFilter,
     EntityChange,
     EntityType,
     GraphDiff,
@@ -24,7 +25,16 @@ from rdf_construct.diff.change_types import (
     TripleChange,
 )
 from rdf_construct.diff.comparator import compare_graphs, compare_files
-from rdf_construct.diff.filters import filter_diff, parse_filter_string
+from rdf_construct.diff.filters import (
+    CHANGE_TYPE_NAMES,
+    ENTITY_TYPE_NAMES,
+    UnknownFilterError,
+    build_filter,
+    filter_diff,
+    normalise_change_types,
+    normalise_entity_types,
+    parse_filter_string,
+)
 from rdf_construct.diff.formatters import (
     format_diff,
     format_text,
@@ -38,6 +48,7 @@ from rdf_construct.diff.formatters import (
 __all__ = [
     # Change types
     "ChangeType",
+    "DiffFilter",
     "EntityChange",
     "EntityType",
     "GraphDiff",
@@ -49,6 +60,12 @@ __all__ = [
     # Filtering
     "filter_diff",
     "parse_filter_string",
+    "build_filter",
+    "normalise_change_types",
+    "normalise_entity_types",
+    "UnknownFilterError",
+    "CHANGE_TYPE_NAMES",
+    "ENTITY_TYPE_NAMES",
     # Formatting
     "format_diff",
     "format_text",

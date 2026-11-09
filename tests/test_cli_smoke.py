@@ -300,6 +300,13 @@ THREE_STATES = [
         ),
         label="output-is-input",
     ),
+    # A filter is display: a valid one keeps the verdict, and a bad one is refused before
+    # anything is written (#144)
+    _row(Row("diff", "findings", ("diff", ANIMAL, SIMPLE, "--show", "added")), label="filtered"),
+    _row(
+        Row("diff", "refused", ("diff", ANIMAL, SIMPLE, "--show", "addedd", "-o", "@tmp/d.txt")),
+        label="bad-filter",
+    ),
     _row(Row("docs", "clean", ("docs", ANIMAL, "-o", "@tmp/docs"))),
     _row(Row("docs", "refused", ("docs", ANIMAL, "--format", "nope", "-o", "@tmp/docs"))),
     _row(Row("shacl-gen", "clean", ("shacl-gen", ANIMAL, "-o", "@tmp/shapes.ttl"))),

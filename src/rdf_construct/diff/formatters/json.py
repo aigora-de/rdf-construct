@@ -31,7 +31,7 @@ def format_json(diff: GraphDiff, graph: Graph | None = None, indent: int = 2) ->
 
 def _build_json_structure(diff: GraphDiff, graph: Graph | None = None) -> dict[str, Any]:
     """Build the JSON structure for a diff."""
-    return {
+    result: dict[str, Any] = {
         "comparison": {
             "old": diff.old_path,
             "new": diff.new_path,
@@ -44,6 +44,15 @@ def _build_json_structure(diff: GraphDiff, graph: Graph | None = None) -> dict[s
         "summary": diff.summary,
         "warnings": _build_warnings(diff),
     }
+    # Written only under a filter, so an unfiltered diff's JSON is unchanged (#144)
+    if diff.filter is not None:
+        result["filter"] = {
+            "show": list(diff.filter.show),
+            "hide": list(diff.filter.hide),
+            "entities": list(diff.filter.entities),
+            "not_shown": dict(diff.not_shown),
+        }
+    return result
 
 
 def _format_entity_group_json(

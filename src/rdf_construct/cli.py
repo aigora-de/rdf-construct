@@ -89,7 +89,18 @@ LINT_LEVELS = ["strict", "standard", "relaxed"]
 LINT_FORMATS = ["text", "json"]
 LINT_FAIL_ON = ["error", "warning", "info", "never"]
 
-from rdf_construct.diff import compare_files, format_diff, filter_diff, parse_filter_string
+from rdf_construct.diff import (
+    CHANGE_TYPE_NAMES,
+    ENTITY_TYPE_NAMES,
+    UnknownFilterError,
+    build_filter,
+    compare_files,
+    filter_diff,
+    format_diff,
+    normalise_change_types,
+    normalise_entity_types,
+    parse_filter_string,
+)
 
 from rdf_construct.puml2rdf import (
     ConversionConfig,
@@ -1668,6 +1679,33 @@ def _lint_exit_code(summary: LintSummary, fail_on: str) -> int:
     return 1 if counts[fail_on] > 0 else 0
 
 
+def _change_type_filter(
+    ctx: click.Context, param: click.Parameter, value: str | None
+) -> tuple[str, ...] | None:
+    """Read ``--show`` or ``--hide`` into canonical change types, or refuse it (#144).
+
+    Refused during argument processing, so before ``-o`` is checked or a file is parsed.
+    """
+    if value is None:
+        return None
+    try:
+        return normalise_change_types(parse_filter_string(value))
+    except UnknownFilterError as e:
+        raise click.BadParameter(str(e), ctx=ctx, param=param) from e
+
+
+def _entity_type_filter(
+    ctx: click.Context, param: click.Parameter, value: str | None
+) -> tuple[str, ...] | None:
+    """Read ``--entities`` into canonical entity types, or refuse it (#144)."""
+    if value is None:
+        return None
+    try:
+        return normalise_entity_types(parse_filter_string(value))
+    except UnknownFilterError as e:
+        raise click.BadParameter(str(e), ctx=ctx, param=param) from e
+
+
 @cli.command()
 @click.argument("old_file", type=click.Path(exists=True, path_type=Path))
 @click.argument("new_file", type=click.Path(exists=True, path_type=Path))
@@ -1688,18 +1726,21 @@ def _lint_exit_code(summary: LintSummary, fail_on: str) -> int:
 @click.option(
     "--show",
     type=str,
-    help="Show only these change types (comma-separated: added,removed,modified)",
+    callback=_change_type_filter,
+    help=f"Show only these change types (comma-separated: {','.join(CHANGE_TYPE_NAMES)}). "
+    "Changes only what is shown, never the exit code",
 )
 @click.option(
     "--hide",
     type=str,
-    help="Hide these change types (comma-separated: added,removed,modified)",
+    callback=_change_type_filter,
+    help="Hide these change types (comma-separated); not with --show",
 )
 @click.option(
     "--entities",
     type=str,
-    help="Show only these entity types (comma-separated: classes, properties, object_properties, "
-    "datatype_properties, annotation_properties, other_properties, individuals)",
+    callback=_entity_type_filter,
+    help=f"Show only these entity types (comma-separated: {', '.join(ENTITY_TYPE_NAMES)})",
 )
 @click.option(
     "--ignore-predicates",
@@ -1711,9 +1752,9 @@ def diff(
     new_file: Path,
     output: Path | None,
     output_format: str,
-    show: str | None,
-    hide: str | None,
-    entities: str | None,
+    show: tuple[str, ...] | None,
+    hide: tuple[str, ...] | None,
+    entities: tuple[str, ...] | None,
     ignore_predicates: str | None,
 ):
     """Compare two RDF files and show semantic differences.
@@ -1730,16 +1771,23 @@ def diff(
 
     \b
     Exit codes:
-        0 - Graphs are semantically identical
+        0 - Graphs are semantically identical (a filter never changes the exit code)
         1 - Differences were found
         2 - Error occurred
     """
+    # A filter that can show nothing is refused before anything is read or written (#144)
+    try:
+        build_filter(show, hide, entities, labels=("--show", "--hide", "--entities"))
+    except UnknownFilterError as e:
+        raise click.BadParameter(str(e), ctx=click.get_current_context()) from e
+
     if output:
         check_outputs([("-o", output)], [old_file, new_file])
 
     try:
         # Parse ignored predicates
         ignore_preds: set[URIRef] | None = None
+        ignored: list[str] = []
         if ignore_predicates:
             temp_graph = Graph()
             temp_graph.parse(str(old_file), format="turtle")
@@ -1750,6 +1798,7 @@ def diff(
                 uri = expand_curie(temp_graph, pred_str)
                 if uri:
                     ignore_preds.add(uri)
+                    ignored.append(pred_str)
                 else:
                     click.secho(
                         f"Warning: Could not expand predicate '{pred_str}'",
@@ -1761,17 +1810,14 @@ def diff(
         click.echo(f"Comparing {old_file.name} \u2192 {new_file.name}...", err=True)
         diff_result = compare_files(old_file, new_file, ignore_predicates=ignore_preds)
 
-        # Apply filters
+        # Apply filters. The filtered diff counts what it leaves out, so its is_identical,
+        # and with it the exit code, still describes the graphs (#144)
         if show or hide or entities:
-            show_types = parse_filter_string(show) if show else None
-            hide_types = parse_filter_string(hide) if hide else None
-            entity_types = parse_filter_string(entities) if entities else None
-
             diff_result = filter_diff(
                 diff_result,
-                show_types=show_types,
-                hide_types=hide_types,
-                entity_types=entity_types,
+                show_types=set(show) if show else None,
+                hide_types=set(hide) if hide else None,
+                entity_types=set(entities) if entities else None,
             )
 
         # Load graph for CURIE formatting
@@ -1792,7 +1838,9 @@ def diff(
 
         # Exit code: 0 if identical, 1 if different
         if diff_result.is_identical:
-            click.secho("Graphs are semantically identical.", fg="green", err=True)
+            # Identical under the comparison asked for: say which predicates it ignored (#144)
+            ignoring = f", ignoring {', '.join(dict.fromkeys(ignored))}" if ignored else ""
+            click.secho(f"Graphs are semantically identical{ignoring}.", fg="green", err=True)
             sys.exit(0)
         else:
             sys.exit(1)
