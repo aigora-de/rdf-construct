@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import difflib
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 import yaml
+
+from rdf_construct.core.names import normalise_names
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -259,41 +260,9 @@ def normalise_entity_types(names: Iterable[str], label: str = "") -> tuple[str, 
         EntityFilterError: If no name is given, or any name is not a string or not an
             entity type
     """
-    prefix = f"{label}: " if label else ""
-    if isinstance(names, str):
-        raise EntityFilterError(
-            f"{prefix}expected a collection of entity types, not the string {names!r}; "
-            f"pass [{names!r}]"
-        )
-    listed = list(names)
-    strange = [name for name in listed if not isinstance(name, str)]
-    if strange:
-        raise EntityFilterError(f"{prefix}entity types are strings, not {strange[0]!r}")
-    # A set has no order of its own: sort it, so the message is the same on every run
-    ordered = sorted(listed) if isinstance(names, set | frozenset) else listed
-    given = [name.strip() for name in ordered]
-    given = [name for name in given if name]
-    accepted = ", ".join(ENTITY_TYPE_NAMES)
-    if not given:
-        raise EntityFilterError(f"{prefix}no entity types named. Accepted: {accepted}")
-    # Each unknown name once, as first written, in the order given; case does not make it new
-    first: dict[str, str] = {}
-    for name in given:
-        if name.lower() not in _SPELLINGS:
-            first.setdefault(name.lower(), name)
-    unknown = list(first.values())
-    if unknown:
-        parts = []
-        for name in unknown:
-            nearest = difflib.get_close_matches(name.lower(), list(_SPELLINGS), n=1)
-            hint = f" (did you mean '{_SPELLINGS[nearest[0]]}'?)" if nearest else ""
-            parts.append(f"'{name}'{hint}")
-        plural = "s" if len(unknown) > 1 else ""
-        raise EntityFilterError(
-            f"{prefix}unknown entity type{plural} {', '.join(parts)}. Accepted: {accepted}"
-        )
-    chosen = {_SPELLINGS[name.lower()] for name in given}
-    return tuple(name for name in ENTITY_TYPE_NAMES if name in chosen)
+    return normalise_names(
+        names, _SPELLINGS, ENTITY_TYPE_NAMES, "entity type", label, error=EntityFilterError
+    )
 
 
 def apply_entity_filter(

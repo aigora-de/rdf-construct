@@ -699,6 +699,9 @@ change, and what to do about it, is listed command by command in the
   `--include` does. The names are defined once, in `rdf_construct.docs`
   (`ENTITY_TYPE_NAMES`, `ENTITY_TYPE_ALIASES`), with `normalise_entity_types`
   and `apply_entity_filter`, which raise `EntityFilterError`, a `ValueError`.
+  The check itself is shared with `diff`'s filters in `core.names`, so
+  `filter_diff` now refuses a name that is not a string with
+  `UnknownFilterError`, where it raised `AttributeError`.
 - **`diff` compares blank nodes by structure, in both directions** (#143). It
   compared triples by the labels rdflib gives blank nodes at parse time, and
   then skipped every blank-node subject. So any file with an `owl:Restriction`

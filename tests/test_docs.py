@@ -3793,7 +3793,7 @@ class TestEntityFilterLibrary:
     def test_a_bare_string_is_refused(self):
         from rdf_construct.docs import EntityFilterError, normalise_entity_types
 
-        with pytest.raises(EntityFilterError, match="not the string 'classes'"):
+        with pytest.raises(EntityFilterError, match="not the string 'classes'; pass {'classes'}"):
             normalise_entity_types("classes")
 
     def test_include_sets_and_exclude_clears(self):
