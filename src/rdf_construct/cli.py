@@ -3,6 +3,7 @@
 import shlex
 import sys
 import traceback
+import warnings
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -3192,7 +3193,7 @@ def stats(
 @click.option(
     "--reasoning",
     is_flag=True,
-    help="Include reasoning analysis",
+    help="Deprecated: never ran a reasoner; removed in rdf-construct 0.8.0",
 )
 @click.option(
     "--no-colour",
@@ -3246,19 +3247,37 @@ def describe(
     """
     from rdf_construct.describe import describe_file, format_description
 
+    # Deprecated (#220): the flag never ran a reasoner. Said once, before anything can refuse,
+    # because it is about the invocation; it never changes the exit code. Removed by #299.
+    if reasoning:
+        keeps_key = output_format.lower() == "json" and not brief
+        tail = "its JSON 'reasoning' key is kept until then" if keeps_key else "it does nothing"
+        message = (
+            "⚠ --reasoning is deprecated and will be removed in rdf-construct 0.8.0: "
+            f"it never ran a reasoner, and {tail}"
+        )
+        click.echo(message if no_colour else click.style(message, fg="yellow"), err=True)
+
     if output:
         check_outputs([("-o", output)], [file])
 
     try:
         click.echo(f"Analysing {file}...", err=True)
 
-        # Perform analysis
-        description = describe_file(
-            file,
-            brief=brief,
-            resolve_imports=not no_resolve,
-            include_reasoning=reasoning,
-        )
+        # Perform analysis. The line above already told the user; the library's own
+        # DeprecationWarning for include_reasoning is for library callers only.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="include_reasoning is deprecated",
+                category=DeprecationWarning,
+            )
+            description = describe_file(
+                file,
+                brief=brief,
+                resolve_imports=not no_resolve,
+                include_reasoning=reasoning,
+            )
 
         # Format output
         use_colour = not no_colour and output_format == "text" and output is None

@@ -485,6 +485,7 @@ THREE_STATES = [
         label="output-is-input",
     ),
     _row(Row("describe", "clean", ("describe", ANIMAL))),
+    _row(Row("describe", "clean", ("describe", ANIMAL, "--reasoning")), label="reasoning"),
     _row(Row("describe", "refused", ("describe", ANIMAL, "--format", "nope"))),
     _row(
         Row(

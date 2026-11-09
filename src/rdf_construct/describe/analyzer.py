@@ -4,6 +4,7 @@ Orchestrates all analysis components and aggregates results into
 a complete OntologyDescription.
 """
 
+import warnings
 from datetime import datetime
 from pathlib import Path
 
@@ -17,6 +18,12 @@ from rdf_construct.describe.namespaces import analyse_namespaces
 from rdf_construct.describe.imports import analyse_imports
 from rdf_construct.describe.hierarchy import analyse_hierarchy
 from rdf_construct.describe.documentation import analyse_documentation
+
+# Deprecated (#220); the parameter is removed by #299. The CLI suppresses this by its prefix.
+_INCLUDE_REASONING_DEPRECATED = (
+    "include_reasoning is deprecated and will be removed in rdf-construct 0.8.0: "
+    "it never ran a reasoner (#299)"
+)
 
 
 def describe_ontology(
@@ -35,7 +42,32 @@ def describe_ontology(
         source: Source file path or identifier.
         brief: If True, skip detailed analysis (imports, hierarchy, etc.).
         resolve_imports: Whether to check resolvability of imports.
-        include_reasoning: Whether to include reasoning analysis.
+        include_reasoning: Deprecated, removed in rdf-construct 0.8.0 (#299). It never ran
+            a reasoner; it keeps only the JSON ``reasoning`` key. Passing True warns.
+
+    Returns:
+        OntologyDescription with all analysis results.
+    """
+    if include_reasoning:
+        warnings.warn(_INCLUDE_REASONING_DEPRECATED, DeprecationWarning, stacklevel=2)
+    return _describe_graph(graph, source, brief, resolve_imports, include_reasoning)
+
+
+def _describe_graph(
+    graph: Graph,
+    source: str | Path,
+    brief: bool,
+    resolve_imports: bool,
+    include_reasoning: bool,
+) -> OntologyDescription:
+    """Describe a parsed graph: the body behind both public entry points, which never warns.
+
+    Args:
+        graph: Parsed RDF graph to analyse.
+        source: Source file path or identifier.
+        brief: If True, skip detailed analysis (imports, hierarchy, etc.).
+        resolve_imports: Whether to check resolvability of imports.
+        include_reasoning: Deprecated (#220); keeps the JSON ``reasoning`` key until #299.
 
     Returns:
         OntologyDescription with all analysis results.
@@ -87,7 +119,8 @@ def describe_file(
         file_path: Path to RDF file.
         brief: If True, skip detailed analysis.
         resolve_imports: Whether to check resolvability of imports.
-        include_reasoning: Whether to include reasoning analysis.
+        include_reasoning: Deprecated, removed in rdf-construct 0.8.0 (#299). It never ran
+            a reasoner; it keeps only the JSON ``reasoning`` key. Passing True warns.
 
     Returns:
         OntologyDescription with all analysis results.
@@ -109,7 +142,11 @@ def describe_file(
     except Exception as e:
         raise ValueError(f"Failed to parse {file_path}: {e}") from e
 
-    return describe_ontology(
+    if include_reasoning:
+        warnings.warn(_INCLUDE_REASONING_DEPRECATED, DeprecationWarning, stacklevel=2)
+
+    # Not via describe_ontology, which would warn a second time, pointing here.
+    return _describe_graph(
         graph=graph,
         source=file_path,
         brief=brief,
