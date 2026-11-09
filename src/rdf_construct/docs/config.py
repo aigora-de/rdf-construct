@@ -258,7 +258,9 @@ def normalise_entity_types(names: Iterable[str], label: str = "") -> tuple[str, 
             f"{prefix}expected a collection of entity types, not the string {names!r}; "
             f"pass [{names!r}]"
         )
-    given = [name.strip() for name in names]
+    # A set has no order of its own: sort it, so the message is the same on every run
+    ordered = sorted(names) if isinstance(names, set | frozenset) else list(names)
+    given = [name.strip() for name in ordered]
     given = [name for name in given if name]
     accepted = ", ".join(ENTITY_TYPE_NAMES)
     if not given:

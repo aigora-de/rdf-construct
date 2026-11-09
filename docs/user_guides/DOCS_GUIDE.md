@@ -608,7 +608,8 @@ An empty value (`--include ""`) is refused the same way. So is a selection
 that leaves no entity type at all, such as `--include classes --exclude
 classes` or a configuration file that sets every `include_*` key to `false`.
 A partial overlap is fine: `--include properties --exclude other_properties`
-documents every property but the untyped ones. A `--no-` flag and an
+documents every property but those whose kind is not declared (`rdf:Property`,
+`owl:FunctionalProperty` or `owl:DeprecatedProperty` alone). A `--no-` flag and an
 `--include` that names its type contradict each other and are refused
 (`--no-instances --include instances`). A selection the ontology has nothing
 for, such as `--include concepts` on an ontology with no SKOS, is not refused.

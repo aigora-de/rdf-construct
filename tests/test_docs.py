@@ -3741,6 +3741,16 @@ class TestEntityFilterLibrary:
             "'skoss' (did you mean 'concepts'?). " + ACCEPTED_LINE
         )
 
+    def test_a_set_is_named_in_sorted_order(self):
+        """A set has no order of its own; the message must not depend on hash order."""
+        from rdf_construct.docs import EntityFilterError, normalise_entity_types
+
+        bad = {f"zz{i}" for i in range(12)}
+        with pytest.raises(EntityFilterError) as err:
+            normalise_entity_types(bad)
+        named = re.findall(r"'(zz\d+)'", str(err.value))
+        assert named == sorted(bad)
+
     @pytest.mark.parametrize("names", [[], [""], [" ", ""]])
     def test_nothing_named_is_refused(self, names):
         from rdf_construct.docs import EntityFilterError, normalise_entity_types
