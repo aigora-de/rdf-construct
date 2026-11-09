@@ -4,9 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any
 
 import yaml
+
+from rdf_construct.core.names import normalise_names
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping
 
 
 @dataclass
@@ -169,6 +175,137 @@ def load_docs_config(path: Path | None = None) -> DocsConfig:
     if path is None:
         return DocsConfig()
     return DocsConfig.from_file(path)
+
+
+# Entity type filtering (#252)
+
+#: Every entity type ``--include`` and ``--exclude`` may name, in canonical spelling and order.
+ENTITY_TYPE_NAMES: tuple[str, ...] = (
+    "classes",
+    "properties",
+    "object_properties",
+    "datatype_properties",
+    "annotation_properties",
+    "other_properties",
+    "instances",
+    "shapes",
+    "concepts",
+)
+
+#: Other accepted spellings, each meaning its canonical name. Concepts and concept schemes
+#: are one toggle, so ``concept_schemes`` and ``skos`` select (or exclude) both. Read-only:
+#: the accepted spellings are fixed when this module loads.
+ENTITY_TYPE_ALIASES: Mapping[str, str] = MappingProxyType(
+    {
+        "concept_schemes": "concepts",
+        "skos": "concepts",
+    }
+)
+
+#: The :class:`DocsConfig` fields each canonical name sets. Read-only.
+ENTITY_TYPE_TOGGLES: Mapping[str, tuple[str, ...]] = MappingProxyType(
+    {
+        "classes": ("include_classes",),
+        "properties": (
+            "include_object_properties",
+            "include_datatype_properties",
+            "include_annotation_properties",
+            "include_other_properties",
+        ),
+        "object_properties": ("include_object_properties",),
+        "datatype_properties": ("include_datatype_properties",),
+        "annotation_properties": ("include_annotation_properties",),
+        "other_properties": ("include_other_properties",),
+        "instances": ("include_instances",),
+        "shapes": ("include_shapes",),
+        "concepts": ("include_skos",),
+    }
+)
+
+#: Every entity toggle, in the order of :data:`ENTITY_TYPE_NAMES`.
+_ENTITY_TOGGLE_FIELDS: tuple[str, ...] = (
+    "include_classes",
+    "include_object_properties",
+    "include_datatype_properties",
+    "include_annotation_properties",
+    "include_other_properties",
+    "include_instances",
+    "include_shapes",
+    "include_skos",
+)
+
+_SPELLINGS: dict[str, str] = {**{name: name for name in ENTITY_TYPE_NAMES}, **ENTITY_TYPE_ALIASES}
+
+
+class EntityFilterError(ValueError):
+    """An entity filter that names nothing, names something unknown, or selects nothing.
+
+    Raised rather than dropping the name, because a dropped name used to switch every entity
+    type off: a typo in ``--include`` wrote a site with no entities at exit 0. See #252.
+    """
+
+
+def normalise_entity_types(names: Iterable[str], label: str = "") -> tuple[str, ...]:
+    """Map entity type names to canonical ones, or refuse them all at once.
+
+    Args:
+        names: The names given, in any case, possibly padded with whitespace; empty
+            elements are skipped
+        label: What the names were given as, prefixed to the message; empty for none
+
+    Returns:
+        The canonical names, each once, in the order of :data:`ENTITY_TYPE_NAMES`
+
+    Raises:
+        EntityFilterError: If no name is given, or any name is not a string or not an
+            entity type
+    """
+    return normalise_names(
+        names, _SPELLINGS, ENTITY_TYPE_NAMES, "entity type", label, error=EntityFilterError
+    )
+
+
+def apply_entity_filter(
+    config: DocsConfig,
+    include: Iterable[str] | None = None,
+    exclude: Iterable[str] | None = None,
+) -> DocsConfig:
+    """Apply ``--include`` and ``--exclude`` to a configuration's entity toggles.
+
+    ``include`` sets every entity toggle to whether it names that type; ``exclude`` then
+    switches off each type it names. Whatever the toggles were set by, the configuration
+    included, a selection that leaves no entity type switched on is refused: it would
+    write a site with no entities (#252).
+
+    Args:
+        config: The configuration, changed in place, and only if nothing is refused
+        include: Entity types to document, or None for no ``--include``
+        exclude: Entity types to leave out, or None for no ``--exclude``
+
+    Returns:
+        The same configuration
+
+    Raises:
+        EntityFilterError: If either list names nothing or an unknown type, or if no
+            entity type is left switched on
+    """
+    included = None if include is None else normalise_entity_types(include, "include")
+    excluded = None if exclude is None else normalise_entity_types(exclude, "exclude")
+    # Work out the toggles first and set them only once nothing is refused
+    toggles = {toggle: bool(getattr(config, toggle)) for toggle in _ENTITY_TOGGLE_FIELDS}
+    if included is not None:
+        selected = {toggle for name in included for toggle in ENTITY_TYPE_TOGGLES[name]}
+        toggles = {toggle: toggle in selected for toggle in toggles}
+    for name in excluded or ():
+        for toggle in ENTITY_TYPE_TOGGLES[name]:
+            toggles[toggle] = False
+    if not any(toggles.values()):
+        raise EntityFilterError(
+            "no entity type is left switched on, so nothing would be documented"
+        )
+    for toggle, value in toggles.items():
+        setattr(config, toggle, value)
+    return config
 
 
 # Utility functions for path generation

@@ -323,6 +323,12 @@ tests/
 - Reports only; each command decides what to refuse (`refactor rename`, #411). Nine more commands
   refuse every case through `cli.py`'s `check_outputs()` (#412)
 
+**`core/names.py`**
+- `normalise_names()` - map names a user typed to a command's canonical names, or refuse every
+  bad one at once with a did-you-mean and the accepted names (`error=` picks the exception)
+- Shared by `diff`'s `--show`/`--hide`/`--entities` (#144) and `docs`' `--include`/`--exclude`
+  (#252)
+
 **`core/utils.py`**
 - `extract_prefix_map()` - get namespaces from graph
 - `expand_curie()` - expand CURIEs to full IRIs

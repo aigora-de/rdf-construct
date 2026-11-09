@@ -309,6 +309,32 @@ THREE_STATES = [
     ),
     _row(Row("docs", "clean", ("docs", ANIMAL, "-o", "@tmp/docs"))),
     _row(Row("docs", "refused", ("docs", ANIMAL, "--format", "nope", "-o", "@tmp/docs"))),
+    # An entity filter that names nothing known, or leaves nothing to document, is refused
+    # before anything is written (#252)
+    _row(
+        Row("docs", "refused", ("docs", ANIMAL, "--include", "clases", "-o", "@tmp/docs")),
+        label="bad-include",
+    ),
+    _row(
+        Row("docs", "refused", ("docs", ANIMAL, "--exclude", "clases", "-o", "@tmp/docs")),
+        label="bad-exclude",
+    ),
+    _row(
+        Row(
+            "docs",
+            "refused",
+            ("docs", ANIMAL, "--include", "classes", "--exclude", "classes", "-o", "@tmp/docs"),
+        ),
+        label="empty-selection",
+    ),
+    _row(
+        Row(
+            "docs",
+            "refused",
+            ("docs", ANIMAL, "--no-instances", "--include", "instances", "-o", "@tmp/docs"),
+        ),
+        label="contradiction",
+    ),
     _row(Row("shacl-gen", "clean", ("shacl-gen", ANIMAL, "-o", "@tmp/shapes.ttl"))),
     _row(
         Row("shacl-gen", "refused", ("shacl-gen", ANIMAL, "-C", MALFORMED_YAML, "-o", "@tmp/s.ttl"))

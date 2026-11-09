@@ -487,6 +487,13 @@ def test_library_names_are_listed_in_a_stable_order(seed: str) -> None:
     assert "'bogus', 'clases' (did you mean 'classes'?), 'mm', 'zz'." in result.stdout
 
 
+def test_a_name_that_is_not_a_string_is_refused() -> None:
+    """Shared with ``docs`` through ``core.names`` (#252): no ``AttributeError``."""
+    whole = compare_files(V1, V2)
+    with pytest.raises(UnknownFilterError, match="change types are strings, not None"):
+        filter_diff(whole, show_types=["added", None])  # type: ignore[list-item]
+
+
 def test_a_bare_string_is_refused_plainly() -> None:
     whole = compare_files(V1, V2)
     with pytest.raises(UnknownFilterError, match="not the string 'added'; pass {'added'}"):

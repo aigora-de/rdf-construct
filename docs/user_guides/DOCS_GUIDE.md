@@ -560,8 +560,8 @@ rdf-construct docs [OPTIONS] SOURCES...
 | `--no-instances` | Exclude instances from output |
 | `--no-shapes` | Exclude SHACL shapes from output |
 | `--no-skos` | Exclude SKOS concepts and concept schemes from output |
-| `--include TYPES` | Include only these types (comma-separated) |
-| `--exclude TYPES` | Exclude these types (comma-separated) |
+| `--include TYPES` | Include only these entity types (comma-separated; see below) |
+| `--exclude TYPES` | Exclude these entity types (comma-separated; same names) |
 
 ### Entity Type Filtering
 
@@ -581,7 +581,7 @@ poetry run rdf-construct docs ontology.ttl --include classes,shapes
 poetry run rdf-construct docs vocabulary.ttl --include concepts
 ```
 
-Valid type names: `classes`, `properties`, `object_properties`, `datatype_properties`, `annotation_properties`, `other_properties`, `instances`, `shapes`, `concepts`
+Valid type names, for both options: `classes`, `properties`, `object_properties`, `datatype_properties`, `annotation_properties`, `other_properties`, `instances`, `shapes`, `concepts`
 
 `properties` covers all four property groups, `other_properties` included.
 
@@ -592,7 +592,27 @@ is, in code formatting rather than as links to pages this run did not
 write.
 
 `concepts` covers both SKOS kinds — concepts and concept schemes are one
-toggle. `concept_schemes` and `skos` are accepted as spellings of it.
+toggle. `concept_schemes` and `skos` are accepted as spellings of it, so
+`--include concept_schemes` documents every concept as well as every scheme,
+and `--exclude concept_schemes` leaves both out.
+
+Names are matched without regard to case or surrounding spaces. A name the
+tool does not recognise is refused at exit 2 before anything is written,
+with a near match where there is one and the accepted names:
+
+```
+Error: Invalid value for '--include': unknown entity type 'clases' (did you mean 'classes'?). Accepted: classes, properties, object_properties, datatype_properties, annotation_properties, other_properties, instances, shapes, concepts
+```
+
+An empty value (`--include ""`) is refused the same way. So is a selection
+that leaves no entity type at all, such as `--include classes --exclude
+classes` or a configuration file that sets every entity `include_*` key to `false`.
+A partial overlap is fine: `--include properties --exclude other_properties`
+documents every property but those whose kind is not declared (`rdf:Property`,
+`owl:FunctionalProperty` or `owl:DeprecatedProperty` alone). A `--no-` flag and an
+`--include` that names its type contradict each other and are refused
+(`--no-instances --include instances`). A selection the ontology has nothing
+for, such as `--include concepts` on an ontology with no SKOS, is not refused.
 
 ## Configuration File
 
