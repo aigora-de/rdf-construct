@@ -683,6 +683,22 @@ change, and what to do about it, is listed command by command in the
   action, and `--entities` keeps them only when it names `structures`.
   `--entities ontology` and `untyped` select what no filter could before. Under
   `--ignore-predicates` the sentence names what was ignored.
+- **`docs` refuses an entity type it does not recognise** (#252). `--include`
+  reassigned every entity toggle from the names it recognised, so `--include
+  clases` switched them all off and wrote a site with no entities at exit 0, and
+  `--include classes,clases` dropped the typo without a word. `--exclude`
+  ignored unknown names too, and knew only seven of `--include`'s eleven:
+  `--exclude object_properties` did nothing, though the guide and the CLI
+  reference both listed it. An unknown or empty name in either option is now
+  refused at exit 2 before anything is written, naming each bad name with a near
+  match where there is one, and the accepted names, which `--help` now lists in
+  full. Also refused: a selection that leaves no entity type switched on, from
+  the flags (`--include classes --exclude classes`) or from a config with every
+  `include_*` key false, and a `--no-` flag with an `--include` that names its
+  type, where `--include` silently won. `--exclude` accepts every name
+  `--include` does. The names are defined once, in `rdf_construct.docs`
+  (`ENTITY_TYPE_NAMES`, `ENTITY_TYPE_ALIASES`), with `normalise_entity_types`
+  and `apply_entity_filter`, which raise `EntityFilterError`, a `ValueError`.
 - **`diff` compares blank nodes by structure, in both directions** (#143). It
   compared triples by the labels rdflib gives blank nodes at parse time, and
   then skipped every blank-node subject. So any file with an `owl:Restriction`

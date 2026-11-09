@@ -244,8 +244,10 @@ rdf-construct docs SOURCE [OPTIONS]
 - `--no-instances`: Exclude instances from documentation
 - `--no-shapes`: Exclude SHACL shapes from documentation
 - `--no-skos`: Exclude SKOS concepts and concept schemes from documentation
-- `--include TYPES`: Include only these entity types (comma-separated: `classes`, `properties`, `object_properties`, `datatype_properties`, `annotation_properties`, `other_properties`, `instances`, `shapes`, `concepts`)
+- `--include TYPES`: Include only these entity types (comma-separated: `classes`, `properties`, `object_properties`, `datatype_properties`, `annotation_properties`, `other_properties`, `instances`, `shapes`, `concepts`; `concept_schemes` and `skos` are spellings of `concepts`)
 - `--exclude TYPES`: Exclude these entity types (same names as `--include`)
+
+An unrecognised or empty name is refused at exit 2 before anything is written, with the accepted names. So is a selection that leaves no entity type (`--include classes --exclude classes`, or a config with every `include_*` key false), and a `--no-` flag with an `--include` that names its type (`--no-instances --include instances`).
 
 **Examples**:
 

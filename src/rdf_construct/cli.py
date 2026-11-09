@@ -101,6 +101,12 @@ from rdf_construct.diff import (
     normalise_change_types,
     normalise_entity_types,
 )
+from rdf_construct.docs.config import (
+    ENTITY_TYPE_NAMES as DOCS_ENTITY_TYPE_NAMES,
+    EntityFilterError,
+    apply_entity_filter,
+    normalise_entity_types as normalise_docs_entity_types,
+)
 
 from rdf_construct.puml2rdf import (
     ConversionConfig,
@@ -1178,6 +1184,28 @@ def profiles(config: Path):
         click.echo()
 
 
+def _docs_entity_filter(
+    ctx: click.Context, param: click.Parameter, value: str | None
+) -> tuple[str, ...] | None:
+    """Read ``--include`` or ``--exclude`` into canonical entity types, or refuse it (#252).
+
+    Refused during argument processing, so before the config is read or anything is written.
+    """
+    if value is None:
+        return None
+    try:
+        # Split in order, not into a set, so the message names bad values in the order given
+        return normalise_docs_entity_types(value.split(","))
+    except EntityFilterError as e:
+        raise click.BadParameter(str(e), ctx=ctx, param=param) from e
+
+
+_DOCS_ENTITY_HELP = (
+    f"comma-separated: {', '.join(DOCS_ENTITY_TYPE_NAMES)}; "
+    "concept_schemes and skos are spellings of concepts"
+)
+
+
 @cli.command()
 @click.argument("sources", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
 @click.option(
@@ -1928,18 +1956,14 @@ def diff(
 @click.option(
     "--include",
     type=str,
-    help=(
-        "Include only these entity types "
-        "(comma-separated: classes,properties,instances,shapes,concepts)"
-    ),
+    callback=_docs_entity_filter,
+    help=f"Include only these entity types ({_DOCS_ENTITY_HELP})",
 )
 @click.option(
     "--exclude",
     type=str,
-    help=(
-        "Exclude these entity types "
-        "(comma-separated: classes,properties,instances,shapes,concepts)"
-    ),
+    callback=_docs_entity_filter,
+    help=f"Exclude these entity types ({_DOCS_ENTITY_HELP})",
 )
 def docs(
     sources: tuple[Path, ...],
@@ -1954,8 +1978,8 @@ def docs(
     no_instances: bool,
     no_shapes: bool,
     no_skos: bool,
-    include: str | None,
-    exclude: str | None,
+    include: tuple[str, ...] | None,
+    exclude: tuple[str, ...] | None,
 ):
     """Generate documentation from RDF ontologies.
 
@@ -2021,39 +2045,47 @@ def docs(
     if title:
         doc_config.title = title
 
-    # Parse include/exclude filters
-    if include:
-        types = [t.strip().lower() for t in include.split(",")]
-        doc_config.include_classes = "classes" in types
-        doc_config.include_object_properties = "properties" in types or "object_properties" in types
-        doc_config.include_datatype_properties = (
-            "properties" in types or "datatype_properties" in types
+    # Entity filters (#252). The names were checked by the option callbacks; what is left is
+    # whether they contradict a --no- flag, and whether anything is left to document. Both
+    # are refused here, before anything is written.
+    if include is not None:
+        for flag_name, option, entity_type in (
+            ("no_instances", "--no-instances", "instances"),
+            ("no_shapes", "--no-shapes", "shapes"),
+            ("no_skos", "--no-skos", "concepts"),
+        ):
+            if flag_given(flag_name) and entity_type in include:
+                raise click.UsageError(
+                    f"{option} and --include {entity_type} contradict each other; drop one.",
+                    ctx=click.get_current_context(),
+                )
+    try:
+        apply_entity_filter(doc_config, include, exclude)
+    except EntityFilterError as e:
+        # Name what switched the types off. --include sets every toggle, so after it only
+        # --exclude counts; without it, the --no- flags and the config count too.
+        switched_off = []
+        if include is not None:
+            switched_off.append(f"--include {','.join(include)}")
+        else:
+            for flag_name, option in (
+                ("no_instances", "--no-instances"),
+                ("no_shapes", "--no-shapes"),
+                ("no_skos", "--no-skos"),
+            ):
+                if flag_given(flag_name):
+                    switched_off.append(option)
+            if config:
+                switched_off.append(f"the include_* keys in {config}")
+        if exclude is not None:
+            switched_off.append(f"--exclude {','.join(exclude)}")
+        named = " and ".join(
+            [", ".join(switched_off[:-1]), switched_off[-1]] if switched_off[1:] else switched_off
         )
-        doc_config.include_annotation_properties = (
-            "properties" in types or "annotation_properties" in types
-        )
-        doc_config.include_other_properties = "properties" in types or "other_properties" in types
-        doc_config.include_instances = "instances" in types
-        doc_config.include_shapes = "shapes" in types
-        # One toggle covers both SKOS kinds; "concepts", "concept_schemes"
-        # and "skos" are accepted spellings of it.
-        doc_config.include_skos = any(t in types for t in ("concepts", "concept_schemes", "skos"))
-
-    if exclude:
-        types = [t.strip().lower() for t in exclude.split(",")]
-        if "classes" in types:
-            doc_config.include_classes = False
-        if "properties" in types:
-            doc_config.include_object_properties = False
-            doc_config.include_datatype_properties = False
-            doc_config.include_annotation_properties = False
-            doc_config.include_other_properties = False
-        if "instances" in types:
-            doc_config.include_instances = False
-        if "shapes" in types:
-            doc_config.include_shapes = False
-        if any(t in types for t in ("concepts", "concept_schemes", "skos")):
-            doc_config.include_skos = False
+        # "the include_* keys" is plural on its own; a single option is not
+        plural = len(switched_off) > 1 or (include is None and exclude is None)
+        verb = "leave" if plural else "leaves"
+        raise Refusal(f"Nothing to document: {named} {verb} no entity type switched on.") from e
 
     # Refuse what would fail before anything is written (#301). The generator creates the
     # output directory, so every check, the parse included, comes before it runs: a refusal

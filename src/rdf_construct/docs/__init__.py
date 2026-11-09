@@ -26,7 +26,16 @@ For more control, use the DocsGenerator class directly:
     result = generator.generate_from_file(Path("ontology.ttl"))
 """
 
-from rdf_construct.docs.config import DocsConfig, load_docs_config
+from rdf_construct.docs.config import (
+    ENTITY_TYPE_ALIASES,
+    ENTITY_TYPE_NAMES,
+    ENTITY_TYPE_TOGGLES,
+    DocsConfig,
+    EntityFilterError,
+    apply_entity_filter,
+    load_docs_config,
+    normalise_entity_types,
+)
 from rdf_construct.docs.extractors import (
     ClassInfo,
     ConceptInfo,
@@ -55,6 +64,12 @@ __all__ = [
     # Configuration
     "DocsConfig",
     "load_docs_config",
+    "ENTITY_TYPE_NAMES",
+    "ENTITY_TYPE_ALIASES",
+    "ENTITY_TYPE_TOGGLES",
+    "EntityFilterError",
+    "normalise_entity_types",
+    "apply_entity_filter",
     # Data classes
     "ClassInfo",
     "PropertyInfo",

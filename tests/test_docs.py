@@ -3423,3 +3423,395 @@ class TestCLIRefusals:
         link.symlink_to(tmp_path / "nowhere")
         output = self._refused([str(ANIMAL), "-o", str(link)], tmp_path)
         assert f"{link} is a broken symbolic link" in output
+
+
+# ---------------------------------------------------------------------------
+# --include / --exclude names — issue #252
+# ---------------------------------------------------------------------------
+
+DOCS_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "docs"
+
+#: Sources that between them write every entity directory, in every format
+EVERY_KIND = [
+    str(ANIMAL),
+    str(DOCS_FIXTURES / "skos_vocabulary.ttl"),
+    str(DOCS_FIXTURES / "characteristic_properties.ttl"),
+    str(DOCS_FIXTURES / "deprecated_terms.ttl"),
+]
+
+ENTITY_DIRS = {
+    "classes",
+    "properties/object",
+    "properties/datatype",
+    "properties/annotation",
+    "properties/other",
+    "instances",
+    "shapes",
+    "concepts",
+}
+
+#: The directories each accepted name selects
+DIRS_BY_NAME = {
+    "classes": {"classes"},
+    "properties": {
+        "properties/object",
+        "properties/datatype",
+        "properties/annotation",
+        "properties/other",
+    },
+    "object_properties": {"properties/object"},
+    "datatype_properties": {"properties/datatype"},
+    "annotation_properties": {"properties/annotation"},
+    "other_properties": {"properties/other"},
+    "instances": {"instances"},
+    "shapes": {"shapes"},
+    "concepts": {"concepts"},
+    "concept_schemes": {"concepts"},
+    "skos": {"concepts"},
+}
+
+ACCEPTED_LINE = (
+    "Accepted: classes, properties, object_properties, datatype_properties, "
+    "annotation_properties, other_properties, instances, shapes, concepts"
+)
+
+
+def _entity_dirs(out: Path) -> set[str]:
+    return {d for d in ENTITY_DIRS if (out / d).is_dir()}
+
+
+class TestEntityFilterNames:
+    """``--include`` and ``--exclude`` refuse a name they do not recognise (#252).
+
+    A typo in ``--include`` switched every entity type off and wrote a site with no entities
+    at exit 0; in ``--exclude`` it was a silent no-op. Every refusal exits 2 and writes
+    nothing: no output directory and no marker.
+    """
+
+    _refused = staticmethod(TestCLIRefusals._refused)
+
+    @staticmethod
+    def _run(argv: list[str]):
+        from click.testing import CliRunner
+
+        from rdf_construct.cli import cli
+
+        return CliRunner().invoke(cli, ["docs", *argv])
+
+    # -- refused names ---------------------------------------------------------------------
+
+    @pytest.mark.parametrize("option", ["--include", "--exclude"])
+    @pytest.mark.parametrize(
+        ("value", "message"),
+        [
+            ("clases", "unknown entity type 'clases' (did you mean 'classes'?)"),
+            ("classes,clases", "unknown entity type 'clases' (did you mean 'classes'?)"),
+            ("Clases,clases", "unknown entity type 'Clases' (did you mean 'classes'?)"),
+            (
+                "clases,shpes",
+                "unknown entity types 'clases' (did you mean 'classes'?), "
+                "'shpes' (did you mean 'shapes'?)",
+            ),
+            ("bogus", "unknown entity type 'bogus'"),
+            ("", "no entity types named"),
+            (",", "no entity types named"),
+            (" ", "no entity types named"),
+        ],
+        ids=["typo", "mixed", "case-dup", "plural", "no-match", "empty", "comma", "blank"],
+    )
+    def test_bad_value_is_refused(self, tmp_path, option, value, message):
+        out = tmp_path / "site"
+        output = self._refused([str(ANIMAL), option, value, "-o", str(out)], tmp_path)
+        assert f"Error: Invalid value for '{option}': {message}. {ACCEPTED_LINE}" in output
+        assert not out.exists()
+
+    def test_no_hint_without_a_near_match(self, tmp_path):
+        output = self._refused(
+            [str(ANIMAL), "--include", "bogus", "-o", str(tmp_path / "s")], tmp_path
+        )
+        assert "did you mean" not in output
+
+    def test_refused_without_o_leaves_no_default_directory(self, tmp_path, monkeypatch):
+        """The default ``docs/`` is neither created nor marked by a refused run (#261)."""
+        from rdf_construct.core.outdir import OUTPUT_MARKER
+
+        monkeypatch.chdir(tmp_path)
+        self._refused([str(ANIMAL), "--include", "clases"], tmp_path)
+        assert not (tmp_path / "docs").exists()
+        assert not (tmp_path / OUTPUT_MARKER).exists()
+
+    # -- contradictions and empty selections -----------------------------------------------
+
+    def test_include_and_exclude_that_leave_nothing_are_refused(self, tmp_path):
+        out = tmp_path / "site"
+        output = self._refused(
+            [str(ANIMAL), "--include", "classes", "--exclude", "classes", "-o", str(out)],
+            tmp_path,
+        )
+        assert (
+            "Error: Nothing to document: --include classes and --exclude classes "
+            "leave no entity type switched on." in output
+        )
+
+    def test_exclude_everything_is_refused(self, tmp_path):
+        output = self._refused(
+            [
+                str(ANIMAL),
+                "--exclude",
+                "classes,properties,instances,shapes,skos",
+                "-o",
+                str(tmp_path / "s"),
+            ],
+            tmp_path,
+        )
+        assert (
+            "Error: Nothing to document: --exclude classes,properties,instances,shapes,concepts "
+            "leaves no entity type switched on." in output
+        )
+
+    def test_config_that_switches_everything_off_is_refused(self, tmp_path):
+        config = tmp_path / "off.yml"
+        config.write_text("".join(f"{flag}: false\n" for flag in EXCLUSION_FLAGS))
+        output = self._refused(
+            [str(ANIMAL), "-C", str(config), "-o", str(tmp_path / "s")], tmp_path
+        )
+        assert (
+            f"Error: Nothing to document: the include_* keys in {config} "
+            "leave no entity type switched on." in output
+        )
+
+    def test_no_flags_with_config_name_every_source(self, tmp_path):
+        config = tmp_path / "some.yml"
+        config.write_text("".join(f"{flag}: false\n" for flag in EXCLUSION_FLAGS[:5]))
+        output = self._refused(
+            [
+                str(ANIMAL),
+                "-C",
+                str(config),
+                "--no-instances",
+                "--no-shapes",
+                "--no-skos",
+                "-o",
+                str(tmp_path / "s"),
+            ],
+            tmp_path,
+        )
+        assert (
+            "Error: Nothing to document: --no-instances, --no-shapes, --no-skos and the "
+            f"include_* keys in {config} leave no entity type switched on." in output
+        )
+
+    def test_partial_overlap_is_accepted(self, tmp_path):
+        out = tmp_path / "site"
+        result = self._run(
+            [
+                *EVERY_KIND,
+                "--include",
+                "properties",
+                "--exclude",
+                "other_properties",
+                "-o",
+                str(out),
+            ]
+        )
+        assert result.exit_code == 0, result.output
+        assert _entity_dirs(out) == DIRS_BY_NAME["properties"] - {"properties/other"}
+
+    def test_include_overrides_a_config_that_switches_everything_off(self, tmp_path):
+        """Flag over config (#251): ``--include`` sets every toggle, whatever the config says."""
+        config = tmp_path / "off.yml"
+        config.write_text("".join(f"{flag}: false\n" for flag in EXCLUSION_FLAGS))
+        out = tmp_path / "site"
+        result = self._run([str(ANIMAL), "-C", str(config), "--include", "classes", "-o", str(out)])
+        assert result.exit_code == 0, result.output
+        assert _entity_dirs(out) == {"classes"}
+
+    @pytest.mark.parametrize(
+        ("flag", "value", "named"),
+        [
+            ("--no-instances", "instances,classes", "instances"),
+            ("--no-shapes", "shapes", "shapes"),
+            ("--no-skos", "skos", "concepts"),
+            ("--no-skos", "concept_schemes", "concepts"),
+        ],
+    )
+    def test_no_flag_against_include_is_refused(self, tmp_path, flag, value, named):
+        out = tmp_path / "site"
+        output = self._refused([str(ANIMAL), flag, "--include", value, "-o", str(out)], tmp_path)
+        assert f"Error: {flag} and --include {named} contradict each other; drop one." in output
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--no-instances", "--include", "classes,shapes"],
+            ["--no-instances", "--exclude", "instances"],
+        ],
+        ids=["include-omits-it", "exclude-repeats-it"],
+    )
+    def test_no_flag_with_a_redundant_filter_is_accepted(self, tmp_path, argv):
+        out = tmp_path / "site"
+        result = self._run([*EVERY_KIND, *argv, "-o", str(out)])
+        assert result.exit_code == 0, result.output
+        assert "instances" not in _entity_dirs(out)
+
+    def test_selection_the_source_has_nothing_for_is_accepted(self, tmp_path):
+        """Whether a selection matches anything depends on the data; that is not refused."""
+        out = tmp_path / "site"
+        result = self._run([str(ANIMAL), "--include", "concepts", "-o", str(out)])
+        assert result.exit_code == 0, result.output
+        assert _entity_dirs(out) == set()
+
+    # -- accepted names -----------------------------------------------------------------------
+
+    @pytest.mark.parametrize("fmt", ["html", "markdown", "json"])
+    @pytest.mark.parametrize("name", sorted(DIRS_BY_NAME))
+    def test_include_writes_what_it_names(self, tmp_path, name, fmt):
+        out = tmp_path / "site"
+        result = self._run([*EVERY_KIND, "--include", name, "-f", fmt, "-o", str(out)])
+        assert result.exit_code == 0, result.output
+        assert _entity_dirs(out) == DIRS_BY_NAME[name]
+
+    @pytest.mark.parametrize("fmt", ["html", "markdown", "json"])
+    @pytest.mark.parametrize("name", sorted(DIRS_BY_NAME))
+    def test_exclude_removes_what_it_names(self, tmp_path, name, fmt):
+        out = tmp_path / "site"
+        result = self._run([*EVERY_KIND, "--exclude", name, "-f", fmt, "-o", str(out)])
+        assert result.exit_code == 0, result.output
+        assert _entity_dirs(out) == ENTITY_DIRS - DIRS_BY_NAME[name]
+
+    @pytest.mark.parametrize("value", [" Classes ", "CLASSES,classes", "classes,"])
+    def test_case_padding_duplicates_and_trailing_comma_are_accepted(self, tmp_path, value):
+        out = tmp_path / "site"
+        result = self._run([*EVERY_KIND, "--include", value, "-o", str(out)])
+        assert result.exit_code == 0, result.output
+        assert _entity_dirs(out) == {"classes"}
+
+    # -- one list ---------------------------------------------------------------------------
+
+    def test_help_lists_every_name(self):
+        from rdf_construct.docs import ENTITY_TYPE_NAMES
+
+        result = self._run(["--help"])
+        # Click wraps help text anywhere, hyphens included: compare with no whitespace at all
+        flat = "".join(result.output.split())
+        listed = f"comma-separated: {', '.join(ENTITY_TYPE_NAMES)}; concept_schemes and skos"
+        for option in ("Include only these entity types", "Exclude these entity types"):
+            assert "".join(f"{option} ({listed}".split()) in flat
+
+    @pytest.mark.parametrize(
+        ("doc", "marker"),
+        [
+            ("docs/user_guides/DOCS_GUIDE.md", "Valid type names, for both options:"),
+            ("docs/user_guides/CLI_REFERENCE.md", "- `--include TYPES`:"),
+        ],
+    )
+    def test_documented_names_are_the_constant(self, doc, marker):
+        from rdf_construct.docs import ENTITY_TYPE_NAMES
+
+        root = Path(__file__).resolve().parent.parent
+        line = next(ln for ln in (root / doc).read_text().splitlines() if ln.startswith(marker))
+        listed = re.findall(r"`([a-z_]+)`", line.split(":", 1)[1])
+        assert tuple(listed[: len(ENTITY_TYPE_NAMES)]) == ENTITY_TYPE_NAMES
+
+
+class TestEntityFilterLibrary:
+    """The library half of #252: ``normalise_entity_types`` and ``apply_entity_filter``."""
+
+    def test_error_is_a_value_error(self):
+        from rdf_construct.docs import EntityFilterError
+
+        assert issubclass(EntityFilterError, ValueError)
+
+    def test_names_come_back_canonical_once_in_order(self):
+        from rdf_construct.docs import normalise_entity_types
+
+        assert normalise_entity_types(["skos", " Shapes", "classes", "concept_schemes", ""]) == (
+            "classes",
+            "shapes",
+            "concepts",
+        )
+
+    def test_every_unknown_name_is_named(self):
+        from rdf_construct.docs import EntityFilterError, normalise_entity_types
+
+        with pytest.raises(EntityFilterError) as err:
+            normalise_entity_types(["clases", "CLASES", "skoss"], "include")
+        assert str(err.value) == (
+            "include: unknown entity types 'clases' (did you mean 'classes'?), "
+            "'skoss' (did you mean 'concepts'?). " + ACCEPTED_LINE
+        )
+
+    @pytest.mark.parametrize("names", [[], [""], [" ", ""]])
+    def test_nothing_named_is_refused(self, names):
+        from rdf_construct.docs import EntityFilterError, normalise_entity_types
+
+        with pytest.raises(EntityFilterError, match="no entity types named"):
+            normalise_entity_types(names)
+
+    def test_a_bare_string_is_refused(self):
+        from rdf_construct.docs import EntityFilterError, normalise_entity_types
+
+        with pytest.raises(EntityFilterError, match="not the string 'classes'"):
+            normalise_entity_types("classes")
+
+    def test_include_sets_and_exclude_clears(self):
+        from rdf_construct.docs import apply_entity_filter
+
+        config = apply_entity_filter(
+            DocsConfig(include_classes=False),
+            include=["classes", "properties"],
+            exclude=["datatype_properties"],
+        )
+        assert [getattr(config, flag) for flag in EXCLUSION_FLAGS] == [
+            True,
+            True,
+            False,
+            True,
+            True,
+            False,
+            False,
+            False,
+        ]
+
+    def test_none_leaves_the_config_alone(self):
+        from rdf_construct.docs import apply_entity_filter
+
+        config = DocsConfig(include_shapes=False)
+        assert apply_entity_filter(config) is config
+        assert config.include_shapes is False
+        assert config.include_classes is True
+
+    def test_unknown_name_leaves_the_config_unchanged(self):
+        from rdf_construct.docs import EntityFilterError, apply_entity_filter
+
+        config = DocsConfig()
+        with pytest.raises(EntityFilterError, match="exclude: unknown entity type 'clases'"):
+            apply_entity_filter(config, include=["classes"], exclude=["clases"])
+        assert all(getattr(config, flag) for flag in EXCLUSION_FLAGS)
+
+    @pytest.mark.parametrize(
+        ("config", "include", "exclude"),
+        [
+            (DocsConfig(**{flag: False for flag in EXCLUSION_FLAGS}), None, None),
+            (DocsConfig(), ["classes"], ["classes"]),
+            (DocsConfig(), None, ["classes", "properties", "instances", "shapes", "skos"]),
+        ],
+        ids=["config", "include-exclude", "exclude-all"],
+    )
+    def test_nothing_left_is_refused(self, config, include, exclude):
+        from rdf_construct.docs import EntityFilterError, apply_entity_filter
+
+        with pytest.raises(EntityFilterError, match="no entity type is left switched on"):
+            apply_entity_filter(config, include, exclude)
+
+    def test_every_canonical_name_has_toggles(self):
+        from rdf_construct.docs import (
+            ENTITY_TYPE_ALIASES,
+            ENTITY_TYPE_NAMES,
+            ENTITY_TYPE_TOGGLES,
+        )
+
+        assert tuple(ENTITY_TYPE_TOGGLES) == ENTITY_TYPE_NAMES
+        assert set(ENTITY_TYPE_ALIASES.values()) <= set(ENTITY_TYPE_NAMES)
+        toggles = {t for fields in ENTITY_TYPE_TOGGLES.values() for t in fields}
+        assert toggles == set(EXCLUSION_FLAGS)

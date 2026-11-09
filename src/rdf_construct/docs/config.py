@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import difflib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 
 @dataclass
@@ -169,6 +173,155 @@ def load_docs_config(path: Path | None = None) -> DocsConfig:
     if path is None:
         return DocsConfig()
     return DocsConfig.from_file(path)
+
+
+# Entity type filtering (#252)
+
+#: Every entity type ``--include`` and ``--exclude`` may name, in canonical spelling and order.
+ENTITY_TYPE_NAMES: tuple[str, ...] = (
+    "classes",
+    "properties",
+    "object_properties",
+    "datatype_properties",
+    "annotation_properties",
+    "other_properties",
+    "instances",
+    "shapes",
+    "concepts",
+)
+
+#: Other accepted spellings, each meaning its canonical name. Concepts and concept schemes
+#: are one toggle, so ``concept_schemes`` and ``skos`` select (or exclude) both.
+ENTITY_TYPE_ALIASES: dict[str, str] = {
+    "concept_schemes": "concepts",
+    "skos": "concepts",
+}
+
+#: The :class:`DocsConfig` fields each canonical name sets.
+ENTITY_TYPE_TOGGLES: dict[str, tuple[str, ...]] = {
+    "classes": ("include_classes",),
+    "properties": (
+        "include_object_properties",
+        "include_datatype_properties",
+        "include_annotation_properties",
+        "include_other_properties",
+    ),
+    "object_properties": ("include_object_properties",),
+    "datatype_properties": ("include_datatype_properties",),
+    "annotation_properties": ("include_annotation_properties",),
+    "other_properties": ("include_other_properties",),
+    "instances": ("include_instances",),
+    "shapes": ("include_shapes",),
+    "concepts": ("include_skos",),
+}
+
+#: Every entity toggle, in the order of :data:`ENTITY_TYPE_NAMES`.
+_ENTITY_TOGGLE_FIELDS: tuple[str, ...] = (
+    "include_classes",
+    "include_object_properties",
+    "include_datatype_properties",
+    "include_annotation_properties",
+    "include_other_properties",
+    "include_instances",
+    "include_shapes",
+    "include_skos",
+)
+
+_SPELLINGS: dict[str, str] = {name: name for name in ENTITY_TYPE_NAMES} | ENTITY_TYPE_ALIASES
+
+
+class EntityFilterError(ValueError):
+    """An entity filter that names nothing, names something unknown, or selects nothing.
+
+    Raised rather than dropping the name, because a dropped name used to switch every entity
+    type off: a typo in ``--include`` wrote a site with no entities at exit 0. See #252.
+    """
+
+
+def normalise_entity_types(names: Iterable[str], label: str = "") -> tuple[str, ...]:
+    """Map entity type names to canonical ones, or refuse them all at once.
+
+    Args:
+        names: The names given, in any case, possibly padded with whitespace; empty
+            elements are skipped
+        label: What the names were given as, prefixed to the message; empty for none
+
+    Returns:
+        The canonical names, each once, in the order of :data:`ENTITY_TYPE_NAMES`
+
+    Raises:
+        EntityFilterError: If no name is given, or any name is not an entity type
+    """
+    prefix = f"{label}: " if label else ""
+    if isinstance(names, str):
+        raise EntityFilterError(
+            f"{prefix}expected a collection of entity types, not the string {names!r}; "
+            f"pass [{names!r}]"
+        )
+    given = [name.strip() for name in names]
+    given = [name for name in given if name]
+    accepted = ", ".join(ENTITY_TYPE_NAMES)
+    if not given:
+        raise EntityFilterError(f"{prefix}no entity types named. Accepted: {accepted}")
+    # Each unknown name once, as first written, in the order given; case does not make it new
+    first: dict[str, str] = {}
+    for name in given:
+        if name.lower() not in _SPELLINGS:
+            first.setdefault(name.lower(), name)
+    unknown = list(first.values())
+    if unknown:
+        parts = []
+        for name in unknown:
+            nearest = difflib.get_close_matches(name.lower(), list(_SPELLINGS), n=1)
+            hint = f" (did you mean '{_SPELLINGS[nearest[0]]}'?)" if nearest else ""
+            parts.append(f"'{name}'{hint}")
+        plural = "s" if len(unknown) > 1 else ""
+        raise EntityFilterError(
+            f"{prefix}unknown entity type{plural} {', '.join(parts)}. Accepted: {accepted}"
+        )
+    chosen = {_SPELLINGS[name.lower()] for name in given}
+    return tuple(name for name in ENTITY_TYPE_NAMES if name in chosen)
+
+
+def apply_entity_filter(
+    config: DocsConfig,
+    include: Iterable[str] | None = None,
+    exclude: Iterable[str] | None = None,
+) -> DocsConfig:
+    """Apply ``--include`` and ``--exclude`` to a configuration's entity toggles.
+
+    ``include`` sets every entity toggle to whether it names that type; ``exclude`` then
+    switches off each type it names. Whatever the toggles were set by, the configuration
+    included, a selection that leaves no entity type switched on is refused: it would
+    write a site with no entities (#252).
+
+    Args:
+        config: The configuration, changed in place
+        include: Entity types to document, or None for no ``--include``
+        exclude: Entity types to leave out, or None for no ``--exclude``
+
+    Returns:
+        The same configuration
+
+    Raises:
+        EntityFilterError: If either list names nothing or an unknown type, or if no
+            entity type is left switched on
+    """
+    included = None if include is None else normalise_entity_types(include, "include")
+    excluded = None if exclude is None else normalise_entity_types(exclude, "exclude")
+    if included is not None:
+        selected = {toggle for name in included for toggle in ENTITY_TYPE_TOGGLES[name]}
+        for toggle in _ENTITY_TOGGLE_FIELDS:
+            setattr(config, toggle, toggle in selected)
+    if excluded is not None:
+        for name in excluded:
+            for toggle in ENTITY_TYPE_TOGGLES[name]:
+                setattr(config, toggle, False)
+    if not any(getattr(config, toggle) for toggle in _ENTITY_TOGGLE_FIELDS):
+        raise EntityFilterError(
+            "no entity type is left switched on, so nothing would be documented"
+        )
+    return config
 
 
 # Utility functions for path generation
