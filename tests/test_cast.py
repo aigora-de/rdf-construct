@@ -344,6 +344,17 @@ class TestCastConverterEdgeCases:
         assert result.error.startswith("nothing to cast: bad.ttl is already turtle")
         assert result.warnings == []
 
+    def test_pipe_mode_with_several_formats_records_skips_before_the_first_written(
+        self, ttl_file: Path
+    ) -> None:
+        """Pipe mode attempts only the first format not skipped (documented on ``success``)."""
+        result = CastConverter().convert(
+            source=ttl_file, formats=["turtle", "nt"], output_dir=None, pipe_mode=True
+        )
+        assert result.success
+        assert result.skipped_formats == ["turtle"]
+        assert result.stdout_content is not None and result.written_files == []
+
     def test_source_format_among_others_is_skipped_and_reported(
         self, ttl_file: Path, tmp_path: Path
     ) -> None:
@@ -676,9 +687,59 @@ class TestCastSameFormat:
                 "data.nq is already nquads (from its extension)",
                 "nquads",
                 " Every format but trig is single-graph, and needs --allow-flatten "
-                "(which merges the named graphs) from a nquads source.",
+                "(which merges the named graphs) from an nquads source.",
             )
             + "Accepted: turtle, xml, json-ld, nt, n3, trig\n",
+        )
+
+    @pytest.mark.parametrize(
+        ("name", "rdf_format", "fmt", "canonical"),
+        [
+            ("data.ttl", "turtle", "ttl", "turtle"),
+            ("data.turtle", "turtle", "turtle", "turtle"),
+            ("DATA.TTL", "turtle", "TURTLE", "turtle"),
+            ("data.rdf", "xml", "rdf", "xml"),
+            ("data.owl", "xml", "owl", "xml"),
+            ("data.xml", "xml", "rdfxml", "xml"),
+            ("data.jsonld", "json-ld", "jsonld", "json-ld"),
+            ("data.json", "json-ld", "json-ld", "json-ld"),
+            ("data.nt", "nt", "n-triples", "nt"),
+            ("data.ntriples", "nt", "nt", "nt"),
+            ("data.n3", "n3", "N3", "n3"),
+        ],
+    )
+    @pytest.mark.parametrize("with_output_dir", [True, False], ids=["-o", "pipe"])
+    def test_every_single_graph_format_is_refused_as_its_own_target(
+        self,
+        tmp_path: Path,
+        name: str,
+        rdf_format: str,
+        fmt: str,
+        canonical: str,
+        with_output_dir: bool,
+    ) -> None:
+        source = tmp_path / name
+        Graph().parse(data=SIMPLE_TTL, format="turtle").serialize(source, format=rdf_format)
+        out_dir = tmp_path / "out"
+        extra = ["-o", str(out_dir)] if with_output_dir else []
+        result = self._invoke(str(source), "-f", fmt, *extra)
+        others = ["turtle", "xml", "json-ld", "nt", "n3", "trig", "nquads"]
+        others.remove(canonical)
+        self._assert_refused(
+            result,
+            _refusal(f"{name} is already {canonical} (from its extension)", canonical)
+            + f"Accepted: {', '.join(others)}\n",
+        )
+        assert not out_dir.exists()
+
+    def test_no_extension_names_the_guess(self, tmp_path: Path) -> None:
+        source = tmp_path / "ontology"
+        source.write_text(SIMPLE_TTL, encoding="utf-8")
+        result = self._invoke(str(source), "-f", "turtle")
+        self._assert_refused(
+            result,
+            _refusal("ontology is taken to be turtle (ontology has no extension)", "turtle")
+            + TURTLE_ACCEPTED,
         )
 
     def test_unknown_extension_names_the_guess(self, tmp_path: Path) -> None:
@@ -729,6 +790,51 @@ class TestCastSameFormat:
         assert sorted(p.name for p in out_dir.iterdir()) == ["ontology.nt"]
         written = Graph().parse(out_dir / "ontology.nt", format="nt")
         assert len(written) == len(Graph().parse(ttl_file, format="turtle"))
+
+    def test_a_repeated_skip_beside_a_written_format_names_it_once(
+        self, ttl_file: Path, tmp_path: Path
+    ) -> None:
+        out_dir = tmp_path / "out"
+        result = self._invoke(
+            str(ttl_file), "-f", "turtle", "-f", "nt", "-f", "ttl", "-o", str(out_dir)
+        )
+        assert result.exit_code == 1, result.output
+        assert result.stderr.endswith(
+            f"\nCast 1 file(s) to {out_dir}/; skipped turtle (the source's own format).\n"
+        )
+
+    def test_a_skipped_format_without_output_dir_writes_beside_the_source(
+        self, ttl_file: Path
+    ) -> None:
+        result = self._invoke(str(ttl_file), "-f", "turtle", "-f", "nt")
+        assert result.exit_code == 1, result.output
+        assert result.stdout == ""
+        assert sorted(p.name for p in ttl_file.parent.iterdir()) == ["ontology.nt", "ontology.ttl"]
+
+    def test_a_skip_beside_a_partial_failure_exits_one(
+        self, ttl_file: Path, tmp_path: Path
+    ) -> None:
+        """A skip, a failure (nquads, #189) and a written file: finished, with findings."""
+        out_dir = tmp_path / "out"
+        result = self._invoke(
+            str(ttl_file), "-f", "turtle", "-f", "nt", "-f", "nquads", "-o", str(out_dir)
+        )
+        assert result.exit_code == 1, result.output
+        assert "  \u26a0 Skipping 'turtle': source and target format are the same.\n" in (
+            result.stderr
+        )
+        assert "\u2717 Partial failure: nquads could not be converted.\n" in result.stderr
+        assert sorted(p.name for p in out_dir.iterdir()) == ["ontology.nt"]
+
+    def test_a_parse_error_beside_a_mixed_request_is_the_parse_error(self, tmp_path: Path) -> None:
+        source = tmp_path / "bad.ttl"
+        source.write_text(MALFORMED_TTL, encoding="utf-8")
+        out_dir = tmp_path / "out"
+        result = self._invoke(str(source), "-f", "turtle", "-f", "nt", "-o", str(out_dir))
+        assert result.exit_code == 2, result.output
+        assert "Failed to parse 'bad.ttl' as turtle" in result.stderr
+        assert "nothing to cast" not in result.stderr
+        assert not out_dir.exists()
 
     def test_a_clean_run_has_no_skip_suffix_and_exits_zero(
         self, ttl_file: Path, tmp_path: Path

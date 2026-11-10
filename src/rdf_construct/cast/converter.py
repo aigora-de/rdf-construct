@@ -54,7 +54,9 @@ class ConversionResult:
         success: ``True`` if every format that was attempted converted, and at
             least one was. ``False`` on a fatal error, on a partial failure, and
             when every requested format was the source's own, so that nothing
-            was attempted (#330).
+            was attempted (#330). In pipe mode only the first format that is not
+            skipped is attempted, so :attr:`skipped_formats` names only the skips
+            before it.
         partial_failure: ``True`` when some formats succeeded and some failed.
             Only relevant in multi-format mode.
         error: Set to a human-readable message on complete failure (parse
@@ -132,14 +134,19 @@ def nothing_to_cast_message(source: Path, source_format: str, *, allow_flatten: 
     if known:
         what = f"{source.name} is already {source_format} (from its extension)"
     else:
-        shown = f"'{source.suffix}'" if source.suffix else "a file with no extension"
-        what = f"{source.name} is taken to be {source_format} (cast does not recognise {shown})"
+        reason = (
+            f"cast does not recognise '{source.suffix}'"
+            if source.suffix
+            else f"{source.name} has no extension"
+        )
+        what = f"{source.name} is taken to be {source_format} ({reason})"
     message = f"nothing to cast: {what}, and {source_format} was the only format requested."
     if is_quad_format(source_format) and not allow_flatten:
         other_quads = [fmt for fmt in formats_other_than(source_format) if is_quad_format(fmt)]
         message += (
             f" Every format but {', '.join(other_quads)} is single-graph, and needs "
-            f"--allow-flatten (which merges the named graphs) from a {source_format} source."
+            f"--allow-flatten (which merges the named graphs) from "
+            f"{'an' if source_format[0] in 'aeinosx' else 'a'} {source_format} source."
         )
     return message
 

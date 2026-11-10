@@ -564,7 +564,7 @@ def cast(
     \b
     Multiple --format flags write files to the output directory:
 
-        rdf-construct cast ontology.ttl --format ttl --format xml
+        rdf-construct cast ontology.ttl --format xml --format nt
 
     \b
     Omitting --format converts to ttl, xml, and json-ld (excluding source format):

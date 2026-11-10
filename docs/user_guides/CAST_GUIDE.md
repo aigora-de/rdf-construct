@@ -12,7 +12,7 @@ rdf-construct cast ontology.ttl --format xml
 rdf-construct cast ontology.ttl --format n3 | grep rdf:type
 
 # Convert to several formats at once (writes files)
-rdf-construct cast ontology.ttl --format ttl --format xml --format json-ld
+rdf-construct cast ontology.ttl --format xml --format nt --format json-ld
 
 # Default: convert to all standard formats, excluding the source format
 rdf-construct cast ontology.rdf
