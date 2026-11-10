@@ -12,7 +12,7 @@ rdf-construct cast ontology.ttl --format xml
 rdf-construct cast ontology.ttl --format n3 | grep rdf:type
 
 # Convert to several formats at once (writes files)
-rdf-construct cast ontology.ttl --format ttl --format xml --format json-ld
+rdf-construct cast ontology.ttl --format xml --format nt --format json-ld
 
 # Default: convert to all standard formats, excluding the source format
 rdf-construct cast ontology.rdf
@@ -44,9 +44,9 @@ rdf-construct cast SOURCE [OPTIONS]
 
 | Code | Meaning |
 |------|---------|
-| `0` | All conversions succeeded |
-| `1` | Partial failure — some formats failed, at least one succeeded |
-| `2` | Complete failure — parse error, or all formats failed |
+| `0` | Every requested format was written |
+| `1` | Finished with something to report — a format was skipped (the source's own) or failed, and at least one was written |
+| `2` | Not done — refused (every requested format the source's own, or a quad source without `--allow-flatten`), a parse error, or every format failed |
 
 ## Supported Formats
 
@@ -177,15 +177,32 @@ rdf-construct cast dataset.trig --format nq
 
 ## Source Format Same as Target
 
-If a requested target format is the same as the inferred source format, `cast` emits a warning and skips that format without failing:
+The source's format comes from its file extension; `cast` never reads the content to decide it. A requested format that is the source's own is never written, so `cast` never overwrites the source with itself.
+
+**When every requested format is the source's own**, there is nothing to cast. `cast` refuses with exit code `2` before reading the source, in pipe mode as well as with `--output-dir`. Nothing is written, no directory is created, and stdout stays empty:
 
 ```bash
-# ontology.ttl with --format ttl: warns and skips, exits 0
 rdf-construct cast ontology.ttl --format ttl
-# ⚠ Skipping 'turtle': source and target format are the same.
+# Error: nothing to cast: ontology.ttl is already turtle (from its extension), and turtle was the only format requested.
+# Accepted: xml, json-ld, nt, n3, trig, nquads
 ```
 
-This means the default invocation (`rdf-construct cast ontology.ttl`) is always safe — it will never overwrite the source file with itself.
+The format is named canonically (`turtle` for `ttl`). For an extension `cast` does not recognise, the source is taken to be Turtle, and the message says so: `ontology.ont is taken to be turtle (cast does not recognise '.ont')`. From a quad source without `--allow-flatten`, the message adds that every format but the other quad format is single-graph and needs the flag, which merges the named graphs.
+
+To re-serialise Turtle as Turtle, use `order`: `cast` does not reorder.
+
+**When some requested formats are the source's own and others are not**, `cast` writes the others, warns about the skip, and exits with code `1`:
+
+```bash
+rdf-construct cast ontology.ttl --format ttl --format nt --output-dir out/
+#   ⚠ Skipping 'turtle': source and target format are the same.
+#
+#   ✓ ontology.nt
+#
+# Cast 1 file(s) to out/; skipped turtle (the source's own format).
+```
+
+The default invocation (`rdf-construct cast ontology.ttl`) never requests the source's own format, so it is unaffected.
 
 ## Partial Failure
 
@@ -196,7 +213,9 @@ In multi-format mode, if one format fails to serialise (e.g., due to a rdflib li
   ✓ ontology.rdf
 ```
 
-A complete failure (e.g., the source file cannot be parsed) always exits with code `2`.
+A format skipped because it is the source's own is reported the same way, at `1`, when at least one other format was written (see [Source Format Same as Target](#source-format-same-as-target)).
+
+A complete failure (e.g., the source file cannot be parsed) always exits with code `2`. So does a run that skips one format and fails the rest, since nothing asked for was written.
 
 ## Programmatic Use
 
@@ -255,13 +274,14 @@ thread-safe.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `success` | `bool` | `True` if at least one format succeeded |
+| `success` | `bool` | `True` if every format attempted succeeded and at least one was; `False` on a partial failure, a fatal error, or when every requested format was the source's own |
 | `partial_failure` | `bool` | `True` when some formats succeeded and some failed |
 | `error` | `str \| None` | Human-readable message on complete failure |
 | `written_files` | `list[Path]` | Paths of files that were written |
 | `stdout_content` | `str \| None` | Serialised RDF in pipe mode; `None` otherwise |
 | `warnings` | `list[str]` | Non-fatal messages (skips, flatten notices, etc.) |
 | `failed_formats` | `list[str]` | Canonical format names that failed |
+| `skipped_formats` | `list[str]` | Canonical format names skipped as the source's own, each once |
 
 ### Format utilities
 

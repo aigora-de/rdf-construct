@@ -255,6 +255,17 @@ def test_help_exits_cleanly(command: str):
 THREE_STATES = [
     _row(Row("cast", "clean", ("cast", ANIMAL, "-f", "nt", "-o", "@tmp/cast"))),
     _row(Row("cast", "refused", ("cast", ANIMAL, "-f", "nope"))),
+    # Every requested format the source's own casts nothing, in pipe mode and with -o, and a
+    # skip beside a written format is something to report (#330)
+    _row(
+        Row("cast", "refused", ("cast", ANIMAL, "-f", "turtle", "-o", "@tmp/cast")),
+        label="same-format",
+    ),
+    _row(Row("cast", "refused", ("cast", ANIMAL, "-f", "ttl")), label="same-format-pipe"),
+    _row(
+        Row("cast", "findings", ("cast", ANIMAL, "-f", "turtle", "-f", "nt", "-o", "@tmp/cast")),
+        label="skipped",
+    ),
     _row(Row("order", "clean", ("order", LIBRARY, ORDERING, "-o", "@tmp/order"))),
     _row(Row("order", "refused", ("order", LIBRARY, ORDERING, "-p", "nope", "-o", "@tmp/order"))),
     _row(

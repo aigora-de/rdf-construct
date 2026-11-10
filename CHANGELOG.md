@@ -702,6 +702,14 @@ change, and what to do about it, is listed command by command in the
   The check itself is shared with `diff`'s filters in `core.names`, so
   `filter_diff` now refuses a name that is not a string with
   `UnknownFilterError`, where it raised `AttributeError`.
+- **`cast` no longer exits 0 having done nothing** (#330). When every requested
+  format is the source's own, it refuses at exit 2 before reading the source,
+  naming the format, where it came from, and what it can be cast to. In pipe
+  mode stdout stays empty, and the `Cast 0 file(s)` line is gone. When some
+  formats are skipped and others written, it exits 1, and the summary names what
+  was skipped. `CastConverter.convert` reports the all-skipped case as
+  `success=False` with an `error`, and a new `skipped_formats` field. **Breaking**:
+  see the migration guide.
 - **`diff` compares blank nodes by structure, in both directions** (#143). It
   compared triples by the labels rdflib gives blank nodes at parse time, and
   then skipped every blank-node subject. So any file with an `owl:Restriction`

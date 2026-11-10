@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 from pathlib import Path
 from textwrap import dedent
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
@@ -21,6 +22,9 @@ from rdf_construct.core.formats import (
     normalise_format,
 )
 from rdf_construct.cast.converter import CastConverter, ConversionResult
+
+if TYPE_CHECKING:
+    from click.testing import Result
 
 
 # ---------------------------------------------------------------------------
@@ -306,9 +310,10 @@ class TestCastConverterPipeMode:
 class TestCastConverterEdgeCases:
     """Edge case handling in CastConverter."""
 
-    def test_source_equals_target_format_skips_with_warning(
+    def test_source_equals_target_format_is_nothing_to_cast(
         self, ttl_file: Path, tmp_path: Path
     ) -> None:
+        """Every format the source's own is reported as a failure, not a success (#330)."""
         out_dir = tmp_path / "out"
         converter = CastConverter()
         result = converter.convert(
@@ -317,10 +322,54 @@ class TestCastConverterEdgeCases:
             output_dir=out_dir,
             pipe_mode=False,
         )
-        # Should succeed overall but have a warning and no output file
-        assert result.success
+        assert not result.success
+        assert result.error == (
+            "nothing to cast: ontology.ttl is already turtle (from its extension), "
+            "and turtle was the only format requested."
+        )
+        assert result.skipped_formats == ["turtle"]
         assert result.written_files == []
-        assert any("source" in w.lower() or "skip" in w.lower() for w in result.warnings)
+        assert result.stdout_content is None
+        assert not out_dir.exists()
+
+    def test_nothing_to_cast_is_reported_before_the_parse(self, tmp_path: Path) -> None:
+        """A malformed source gets nothing-to-cast, not the parse error (#330)."""
+        source = tmp_path / "bad.ttl"
+        source.write_text("@prefix ex: <http://example.org/> .\nex:A a 'owl:Class\n")
+        result = CastConverter().convert(
+            source=source, formats=["turtle"], output_dir=None, pipe_mode=True
+        )
+        assert not result.success
+        assert result.error is not None
+        assert result.error.startswith("nothing to cast: bad.ttl is already turtle")
+        assert result.warnings == []
+
+    def test_pipe_mode_with_several_formats_records_skips_before_the_first_written(
+        self, ttl_file: Path
+    ) -> None:
+        """Pipe mode attempts only the first format not skipped (documented on ``success``)."""
+        result = CastConverter().convert(
+            source=ttl_file, formats=["turtle", "nt"], output_dir=None, pipe_mode=True
+        )
+        assert result.success
+        assert result.skipped_formats == ["turtle"]
+        assert result.stdout_content is not None and result.written_files == []
+
+    def test_source_format_among_others_is_skipped_and_reported(
+        self, ttl_file: Path, tmp_path: Path
+    ) -> None:
+        """A skip beside a written format succeeds and names the skip once (#330)."""
+        out_dir = tmp_path / "out"
+        result = CastConverter().convert(
+            source=ttl_file,
+            formats=["turtle", "nt", "turtle"],
+            output_dir=out_dir,
+            pipe_mode=False,
+        )
+        assert result.success
+        assert result.error is None
+        assert result.skipped_formats == ["turtle"]
+        assert result.written_files == [out_dir / "ontology.nt"]
 
     def test_quad_source_to_single_graph_raises(self, trig_file: Path, tmp_path: Path) -> None:
         out_dir = tmp_path / "out"
@@ -508,3 +557,305 @@ class TestCastCLI:
             ],
         )
         assert result.exit_code == 2
+
+
+# ---------------------------------------------------------------------------
+# Every requested format the source's own (#330)
+# ---------------------------------------------------------------------------
+
+SIMPLE_NT = "<http://example.org/a> <http://example.org/p> <http://example.org/b> .\n"
+MALFORMED_TTL = "@prefix ex: <http://example.org/> .\nex:A a 'owl:Class\n"
+
+TURTLE_ACCEPTED = "Accepted: xml, json-ld, nt, n3, trig, nquads\n"
+
+
+def _refusal(what: str, fmt: str, extra: str = "") -> str:
+    return f"Error: nothing to cast: {what}, and {fmt} was the only format requested.{extra}\n"
+
+
+class TestCastSameFormat:
+    """``cast`` refuses at 2 when every requested format is the source's own (#330).
+
+    Each refusal is checked for its exact message, an empty stdout, and that nothing was
+    written: the ``-o`` directory is never created.
+    """
+
+    @staticmethod
+    def _invoke(*args: str) -> Result:
+        from click.testing import CliRunner
+
+        from rdf_construct.cli import cli
+
+        return CliRunner().invoke(cli, ["cast", *args])
+
+    @staticmethod
+    def _assert_refused(result: Result, stderr: str) -> None:
+        assert result.exit_code == 2, result.output
+        exc = result.exception
+        assert isinstance(exc, SystemExit) and exc.__cause__ is None
+        assert result.stdout == ""
+        assert result.stderr == stderr
+
+    @pytest.mark.parametrize("fmt", ["turtle", "ttl", "TURTLE", "Ttl"])
+    @pytest.mark.parametrize("with_output_dir", [True, False], ids=["-o", "pipe"])
+    def test_turtle_source_is_refused(
+        self, ttl_file: Path, tmp_path: Path, fmt: str, with_output_dir: bool
+    ) -> None:
+        out_dir = tmp_path / "out"
+        extra = ["-o", str(out_dir)] if with_output_dir else []
+        before = sorted(ttl_file.parent.iterdir())
+        result = self._invoke(str(ttl_file), "-f", fmt, *extra)
+        self._assert_refused(
+            result,
+            _refusal("ontology.ttl is already turtle (from its extension)", "turtle")
+            + TURTLE_ACCEPTED,
+        )
+        assert not out_dir.exists()
+        assert sorted(ttl_file.parent.iterdir()) == before
+
+    @pytest.mark.parametrize("with_output_dir", [True, False], ids=["-o", "beside-source"])
+    def test_a_repeated_source_format_is_refused(
+        self, ttl_file: Path, tmp_path: Path, with_output_dir: bool
+    ) -> None:
+        out_dir = tmp_path / "out"
+        extra = ["-o", str(out_dir)] if with_output_dir else []
+        before = sorted(ttl_file.parent.iterdir())
+        result = self._invoke(str(ttl_file), "-f", "turtle", "-f", "ttl", *extra)
+        self._assert_refused(
+            result,
+            _refusal("ontology.ttl is already turtle (from its extension)", "turtle")
+            + TURTLE_ACCEPTED,
+        )
+        assert not out_dir.exists()
+        assert sorted(ttl_file.parent.iterdir()) == before
+
+    @pytest.mark.parametrize("with_output_dir", [True, False], ids=["-o", "pipe"])
+    def test_ntriples_source_is_refused(self, tmp_path: Path, with_output_dir: bool) -> None:
+        source = tmp_path / "data.nt"
+        source.write_text(SIMPLE_NT, encoding="utf-8")
+        out_dir = tmp_path / "out"
+        extra = ["-o", str(out_dir)] if with_output_dir else []
+        result = self._invoke(str(source), "-f", "ntriples", *extra)
+        self._assert_refused(
+            result,
+            _refusal("data.nt is already nt (from its extension)", "nt")
+            + "Accepted: turtle, xml, json-ld, n3, trig, nquads\n",
+        )
+        assert not out_dir.exists()
+
+    def test_trig_source_is_refused_naming_allow_flatten(
+        self, trig_file: Path, tmp_path: Path
+    ) -> None:
+        """Refused before the quad guard, with the formats that need the flag named."""
+        out_dir = tmp_path / "out"
+        result = self._invoke(str(trig_file), "-f", "trig", "-o", str(out_dir))
+        self._assert_refused(
+            result,
+            _refusal(
+                "multi.trig is already trig (from its extension)",
+                "trig",
+                " Every format but nquads is single-graph, and needs --allow-flatten "
+                "(which merges the named graphs) from a trig source.",
+            )
+            + "Accepted: turtle, xml, json-ld, nt, n3, nquads\n",
+        )
+        assert not out_dir.exists()
+
+    def test_trig_source_with_allow_flatten_is_refused_without_the_flag_sentence(
+        self, trig_file: Path, tmp_path: Path
+    ) -> None:
+        out_dir = tmp_path / "out"
+        result = self._invoke(str(trig_file), "-f", "trig", "--allow-flatten", "-o", str(out_dir))
+        self._assert_refused(
+            result,
+            _refusal("multi.trig is already trig (from its extension)", "trig")
+            + "Accepted: turtle, xml, json-ld, nt, n3, nquads\n",
+        )
+        assert not out_dir.exists()
+
+    def test_nquads_source_names_trig_as_the_other_quad_format(self, tmp_path: Path) -> None:
+        source = tmp_path / "data.nq"
+        source.write_text(
+            "<http://example.org/a> <http://example.org/p> <http://example.org/b> "
+            "<http://example.org/g> .\n",
+            encoding="utf-8",
+        )
+        result = self._invoke(str(source), "-f", "nq")
+        self._assert_refused(
+            result,
+            _refusal(
+                "data.nq is already nquads (from its extension)",
+                "nquads",
+                " Every format but trig is single-graph, and needs --allow-flatten "
+                "(which merges the named graphs) from an nquads source.",
+            )
+            + "Accepted: turtle, xml, json-ld, nt, n3, trig\n",
+        )
+
+    @pytest.mark.parametrize(
+        ("name", "rdf_format", "fmt", "canonical"),
+        [
+            ("data.ttl", "turtle", "ttl", "turtle"),
+            ("data.turtle", "turtle", "turtle", "turtle"),
+            ("DATA.TTL", "turtle", "TURTLE", "turtle"),
+            ("data.rdf", "xml", "rdf", "xml"),
+            ("data.owl", "xml", "owl", "xml"),
+            ("data.xml", "xml", "rdfxml", "xml"),
+            ("data.jsonld", "json-ld", "jsonld", "json-ld"),
+            ("data.json", "json-ld", "json-ld", "json-ld"),
+            ("data.nt", "nt", "n-triples", "nt"),
+            ("data.ntriples", "nt", "nt", "nt"),
+            ("data.n3", "n3", "N3", "n3"),
+        ],
+    )
+    @pytest.mark.parametrize("with_output_dir", [True, False], ids=["-o", "pipe"])
+    def test_every_single_graph_format_is_refused_as_its_own_target(
+        self,
+        tmp_path: Path,
+        name: str,
+        rdf_format: str,
+        fmt: str,
+        canonical: str,
+        with_output_dir: bool,
+    ) -> None:
+        source = tmp_path / name
+        Graph().parse(data=SIMPLE_TTL, format="turtle").serialize(source, format=rdf_format)
+        out_dir = tmp_path / "out"
+        extra = ["-o", str(out_dir)] if with_output_dir else []
+        result = self._invoke(str(source), "-f", fmt, *extra)
+        others = ["turtle", "xml", "json-ld", "nt", "n3", "trig", "nquads"]
+        others.remove(canonical)
+        self._assert_refused(
+            result,
+            _refusal(f"{name} is already {canonical} (from its extension)", canonical)
+            + f"Accepted: {', '.join(others)}\n",
+        )
+        assert not out_dir.exists()
+
+    def test_no_extension_names_the_guess(self, tmp_path: Path) -> None:
+        source = tmp_path / "ontology"
+        source.write_text(SIMPLE_TTL, encoding="utf-8")
+        result = self._invoke(str(source), "-f", "turtle")
+        self._assert_refused(
+            result,
+            _refusal("ontology is taken to be turtle (ontology has no extension)", "turtle")
+            + TURTLE_ACCEPTED,
+        )
+
+    def test_unknown_extension_names_the_guess(self, tmp_path: Path) -> None:
+        source = tmp_path / "ontology.ont"
+        source.write_text(SIMPLE_TTL, encoding="utf-8")
+        out_dir = tmp_path / "out"
+        result = self._invoke(str(source), "-f", "turtle", "-o", str(out_dir))
+        self._assert_refused(
+            result,
+            _refusal(
+                "ontology.ont is taken to be turtle (cast does not recognise '.ont')", "turtle"
+            )
+            + TURTLE_ACCEPTED,
+        )
+        assert not out_dir.exists()
+
+    def test_refused_before_the_source_is_parsed(self, tmp_path: Path) -> None:
+        """A malformed source gets the refusal, not the parse error: nothing is read."""
+        source = tmp_path / "bad.ttl"
+        source.write_text(MALFORMED_TTL, encoding="utf-8")
+        out_dir = tmp_path / "out"
+        result = self._invoke(str(source), "-f", "turtle", "-o", str(out_dir))
+        self._assert_refused(
+            result,
+            _refusal("bad.ttl is already turtle (from its extension)", "turtle") + TURTLE_ACCEPTED,
+        )
+        assert not out_dir.exists()
+
+    def test_refused_without_reading_the_source(self, ttl_file: Path) -> None:
+        with patch.object(CastConverter, "convert") as convert:
+            result = self._invoke(str(ttl_file), "-f", "turtle")
+        assert result.exit_code == 2
+        convert.assert_not_called()
+
+    def test_a_skipped_format_beside_a_written_one_exits_one(
+        self, ttl_file: Path, tmp_path: Path
+    ) -> None:
+        out_dir = tmp_path / "out"
+        result = self._invoke(str(ttl_file), "-f", "turtle", "-f", "nt", "-o", str(out_dir))
+        assert result.exit_code == 1, result.output
+        assert result.stdout == ""
+        assert "  \u26a0 Skipping 'turtle': source and target format are the same.\n" in (
+            result.stderr
+        )
+        assert result.stderr.endswith(
+            f"\nCast 1 file(s) to {out_dir}/; skipped turtle (the source's own format).\n"
+        )
+        assert sorted(p.name for p in out_dir.iterdir()) == ["ontology.nt"]
+        written = Graph().parse(out_dir / "ontology.nt", format="nt")
+        assert len(written) == len(Graph().parse(ttl_file, format="turtle"))
+
+    def test_a_repeated_skip_beside_a_written_format_names_it_once(
+        self, ttl_file: Path, tmp_path: Path
+    ) -> None:
+        out_dir = tmp_path / "out"
+        result = self._invoke(
+            str(ttl_file), "-f", "turtle", "-f", "nt", "-f", "ttl", "-o", str(out_dir)
+        )
+        assert result.exit_code == 1, result.output
+        assert result.stderr.endswith(
+            f"\nCast 1 file(s) to {out_dir}/; skipped turtle (the source's own format).\n"
+        )
+
+    def test_a_skipped_format_without_output_dir_writes_beside_the_source(
+        self, ttl_file: Path
+    ) -> None:
+        result = self._invoke(str(ttl_file), "-f", "turtle", "-f", "nt")
+        assert result.exit_code == 1, result.output
+        assert result.stdout == ""
+        assert sorted(p.name for p in ttl_file.parent.iterdir()) == ["ontology.nt", "ontology.ttl"]
+
+    def test_a_skip_beside_a_partial_failure_exits_one(
+        self, ttl_file: Path, tmp_path: Path
+    ) -> None:
+        """A skip, a failure (nquads, #189) and a written file: finished, with findings."""
+        out_dir = tmp_path / "out"
+        result = self._invoke(
+            str(ttl_file), "-f", "turtle", "-f", "nt", "-f", "nquads", "-o", str(out_dir)
+        )
+        assert result.exit_code == 1, result.output
+        assert "  \u26a0 Skipping 'turtle': source and target format are the same.\n" in (
+            result.stderr
+        )
+        assert "\u2717 Partial failure: nquads could not be converted.\n" in result.stderr
+        assert sorted(p.name for p in out_dir.iterdir()) == ["ontology.nt"]
+
+    def test_a_parse_error_beside_a_mixed_request_is_the_parse_error(self, tmp_path: Path) -> None:
+        source = tmp_path / "bad.ttl"
+        source.write_text(MALFORMED_TTL, encoding="utf-8")
+        out_dir = tmp_path / "out"
+        result = self._invoke(str(source), "-f", "turtle", "-f", "nt", "-o", str(out_dir))
+        assert result.exit_code == 2, result.output
+        assert "Failed to parse 'bad.ttl' as turtle" in result.stderr
+        assert "nothing to cast" not in result.stderr
+        assert not out_dir.exists()
+
+    def test_a_clean_run_has_no_skip_suffix_and_exits_zero(
+        self, ttl_file: Path, tmp_path: Path
+    ) -> None:
+        out_dir = tmp_path / "out"
+        result = self._invoke(str(ttl_file), "-f", "xml", "-f", "nt", "-o", str(out_dir))
+        assert result.exit_code == 0, result.output
+        assert result.stderr.endswith(f"\nCast 2 file(s) to {out_dir}/\n")
+
+    def test_a_skip_and_a_failure_with_nothing_written_exits_two(
+        self, trig_file: Path, tmp_path: Path
+    ) -> None:
+        """Nothing asked for was done, so 2 (#330, ruling 5); the nquads failure is #189."""
+        out_dir = tmp_path / "out"
+        result = self._invoke(str(trig_file), "-f", "trig", "-f", "nquads", "-o", str(out_dir))
+        assert result.exit_code == 2, result.output
+        assert "\u2717 All target format conversions failed: nquads\n" in result.stderr
+        assert "Cast " not in result.stderr
+
+    def test_help_defines_a_skip_as_exit_one(self) -> None:
+        result = self._invoke("--help")
+        assert result.exit_code == 0
+        assert "a format was skipped (the" in result.output
+        assert "source's own) or failed, and at least one was written" in result.output
