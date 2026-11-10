@@ -180,10 +180,10 @@ with `+00:00`, it kept **one triple** and dropped the other, at exit 0.
 
 ## `cast`
 
-Nothing has landed yet.
-
 | Issue | What changed | What to do |
 |---|---|---|
+| [#330](https://github.com/aigora-de/rdf-construct/issues/330) | `cast` now refuses (exit 2) when every requested format is the source's own format, and exits 1 when some were skipped and others written. It used to exit 0 having written nothing. The refusal comes before the source is read, in pipe mode as well, where stdout stays empty. | If a script relied on exit 0, drop the source's own format from `-f`, or treat 1 as success with a skipped format. To re-serialise Turtle as Turtle, use `order`. See the [Cast Guide](user_guides/CAST_GUIDE.md). |
+| [#330](https://github.com/aigora-de/rdf-construct/issues/330) | `CastConverter.convert` returns `success=False`, with `error` set, when every requested format is the source's own. It used to return `success=True`. The new `ConversionResult.skipped_formats` lists the formats skipped, in the mixed case too. | Check `skipped_formats` or `error` rather than relying on `success` for an all-skipped call. |
 
 ## `order`
 

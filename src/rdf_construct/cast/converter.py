@@ -31,10 +31,14 @@ from typing import TYPE_CHECKING
 from rdflib import ConjunctiveGraph, Graph
 
 from rdf_construct.core.formats import (
+    FORMAT_REGISTRY,
     extension_for_format,
     infer_format,
     is_quad_format,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 # ---------------------------------------------------------------------------
@@ -47,17 +51,22 @@ class ConversionResult:
     """The outcome of a :meth:`CastConverter.convert` call.
 
     Attributes:
-        success: ``True`` if at least one format was converted without fatal
-            error (even when :attr:`partial_failure` is ``True``).
+        success: ``True`` if every format that was attempted converted, and at
+            least one was. ``False`` on a fatal error, on a partial failure, and
+            when every requested format was the source's own, so that nothing
+            was attempted (#330).
         partial_failure: ``True`` when some formats succeeded and some failed.
             Only relevant in multi-format mode.
         error: Set to a human-readable message on complete failure (parse
-            error, all formats failed, quad-guard rejection, etc.).
+            error, all formats failed, quad-guard rejection, every format the
+            source's own, etc.).
         written_files: Paths of output files that were actually written.
         stdout_content: Serialised RDF string when in pipe mode; ``None``
             otherwise.
         warnings: Non-fatal messages (skipped source==target format, etc.).
         failed_formats: Canonical format names that failed to serialise.
+        skipped_formats: Canonical format names skipped because they are the
+            source's own format, each named once.
     """
 
     success: bool = False
@@ -67,6 +76,72 @@ class ConversionResult:
     stdout_content: str | None = None
     warnings: list[str] = field(default_factory=list)
     failed_formats: list[str] = field(default_factory=list)
+    skipped_formats: list[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Same-format requests (#330)
+# ---------------------------------------------------------------------------
+
+
+def nothing_to_cast(source_format: str, formats: Sequence[str]) -> bool:
+    """Whether every requested format is the source's own, so nothing can be cast.
+
+    Decided from the request alone, before the source is read: no content can make a
+    format that equals the source's worth writing.
+
+    Args:
+        source_format: The canonical format of the source, as ``infer_format`` gives it.
+        formats: The canonical formats requested.
+
+    Returns:
+        ``True`` when *formats* is non-empty and every entry is *source_format*.
+    """
+    return bool(formats) and all(fmt == source_format for fmt in formats)
+
+
+def formats_other_than(source_format: str) -> list[str]:
+    """Return every canonical format except *source_format*, in registry order.
+
+    Args:
+        source_format: The canonical format to leave out.
+
+    Returns:
+        The canonical format names ``cast`` could write instead.
+    """
+    return [fi.canonical for fi in FORMAT_REGISTRY if fi.canonical != source_format]
+
+
+def nothing_to_cast_message(source: Path, source_format: str, *, allow_flatten: bool) -> str:
+    """Explain why a request naming only the source's own format casts nothing.
+
+    The source's format comes from its extension and is never sniffed, so the message
+    says so, and says when the extension is unknown and the format a guess. From a quad
+    source without *allow_flatten*, it also names the formats that need the flag.
+
+    Args:
+        source: The source file.
+        source_format: Its canonical format, as ``infer_format`` gives it.
+        allow_flatten: Whether ``--allow-flatten`` was given.
+
+    Returns:
+        The message, without any ``Error:`` prefix.
+    """
+    suffix = source.suffix.lower()
+    known = any(suffix in fi.extensions for fi in FORMAT_REGISTRY)
+    if known:
+        what = f"{source.name} is already {source_format} (from its extension)"
+    else:
+        shown = f"'{source.suffix}'" if source.suffix else "a file with no extension"
+        what = f"{source.name} is taken to be {source_format} (cast does not recognise {shown})"
+    message = f"nothing to cast: {what}, and {source_format} was the only format requested."
+    if is_quad_format(source_format) and not allow_flatten:
+        other_quads = [fmt for fmt in formats_other_than(source_format) if is_quad_format(fmt)]
+        message += (
+            f" Every format but {', '.join(other_quads)} is single-graph, and needs "
+            f"--allow-flatten (which merges the named graphs) from a {source_format} source."
+        )
+    return message
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +191,15 @@ class CastConverter:
         source_format = infer_format(source)
         is_quad_source = is_quad_format(source_format)
 
+        # --- 1a. Nothing to cast: every format is the source's own (#330) ------
+        if nothing_to_cast(source_format, formats):
+            result.error = nothing_to_cast_message(
+                source, source_format, allow_flatten=allow_flatten
+            )
+            result.skipped_formats.append(source_format)
+            result.success = False
+            return result
+
         # --- 2. Guard: quad source → single-graph target ----------------------
         single_graph_targets = [f for f in formats if not is_quad_format(f)]
         if is_quad_source and single_graph_targets and not allow_flatten:
@@ -155,6 +239,8 @@ class CastConverter:
         for fmt in formats:
             if fmt == source_format:
                 result.warnings.append(f"Skipping '{fmt}': source and target format are the same.")
+                if fmt not in result.skipped_formats:
+                    result.skipped_formats.append(fmt)
                 continue
 
             if pipe_mode:
@@ -180,12 +266,6 @@ class CastConverter:
                 result.warnings.append(f"Failed to write {out_path.name} ({fmt}): {exc}")
 
         # --- 5. Determine overall success -------------------------------------
-        # If every format was skipped (same-as-source) and nothing was attempted:
-        if not result.written_files and not result.failed_formats and not result.stdout_content:
-            # All formats were same-as-source; warn-and-skip is not a failure
-            result.success = True
-            return result
-
         if result.failed_formats and result.written_files:
             result.partial_failure = True
             result.success = False

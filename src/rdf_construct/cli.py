@@ -63,6 +63,11 @@ from rdf_construct.core.output_paths import (
 )
 
 from rdf_construct.cast import CastConverter
+from rdf_construct.cast.converter import (
+    formats_other_than,
+    nothing_to_cast,
+    nothing_to_cast_message,
+)
 
 from rdf_construct.uml import (
     load_uml_config,
@@ -572,9 +577,12 @@ def cast(
 
     \b
     Exit codes:
-        0 - All conversions succeeded
-        1 - Partial failure (some formats failed, some succeeded)
-        2 - Complete failure (parse error, or all formats failed)
+        0 - Every requested format was written
+        1 - Finished with something to report: a format was skipped (the
+            source's own) or failed, and at least one was written
+        2 - Not done: refused (every format the source's own, or a quad
+            source without --allow-flatten), a parse error, or every
+            format failed
     """
     source_format = infer_rdf_format(source)
 
@@ -587,6 +595,13 @@ def cast(
             raise SystemExit(2)
     else:
         normalised = default_cast_formats(source_format)
+
+    # Every requested format is the source's own: refuse before reading anything (#330)
+    if nothing_to_cast(source_format, normalised):
+        raise Refusal(
+            nothing_to_cast_message(source, source_format, allow_flatten=allow_flatten),
+            accepted=formats_other_than(source_format),
+        )
 
     # Decide pipe mode: exactly one format AND no explicit output dir → stdout
     pipe_mode = len(normalised) == 1 and output_dir is None
@@ -620,12 +635,14 @@ def cast(
             click.echo("", err=True)
             for path in result.written_files:
                 click.secho(f"  \u2713 {path.name}", fg="green", err=True)
-            click.secho(
-                f"\nCast {len(result.written_files)} file(s) to {effective_dir}/",
-                fg="cyan",
-                err=True,
-            )
-        raise SystemExit(0)
+            summary = f"\nCast {len(result.written_files)} file(s) to {effective_dir}/"
+            if result.skipped_formats:
+                summary += (
+                    f"; skipped {', '.join(result.skipped_formats)} (the source's own format)."
+                )
+            click.secho(summary, fg="cyan", err=True)
+        # A skipped format is something to report (#330)
+        raise SystemExit(1 if result.skipped_formats else 0)
 
     elif result.partial_failure:
         click.secho(

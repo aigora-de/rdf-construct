@@ -351,9 +351,11 @@ rdf-construct cast ontology.rdf --format ttl | rdf-construct lint /dev/stdin
 ```
 
 **Exit Codes**:
-- `0`: All conversions succeeded
-- `1`: Partial failure — some formats failed, at least one succeeded
-- `2`: Complete failure (parse error, or all formats failed)
+- `0`: Every requested format was written
+- `1`: Finished with something to report — a format was skipped (the source's own) or failed, and at least one was written
+- `2`: Not done — refused (every requested format the source's own, or a quad source without `--allow-flatten`), a parse error, or every format failed
+
+When every requested format is the source's own, `cast` refuses before reading the source, in pipe mode too: `nothing to cast: ontology.ttl is already turtle (from its extension), and turtle was the only format requested.`
 
 ---
 
