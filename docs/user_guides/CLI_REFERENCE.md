@@ -289,7 +289,7 @@ rdf-construct cast SOURCE [OPTIONS]
 **Options**:
 - `-f, --format FORMAT`: Output format, repeatable. Omit for all standard formats except source. Single format writes to stdout (pipe mode).
 - `-o, --output-dir PATH`: Output directory for files (default: same directory as source)
-- `--allow-flatten`: Merge all named graphs into the default graph when converting from a quad format (TriG, N-Quads) to a single-graph format
+- `--allow-flatten`: Allow a source with named graphs to be written to a single-graph format by merging every graph into one. Lossy: graph names are discarded. TriG and N-Quads output always keeps the graphs
 
 **Supported format aliases** (case-insensitive):
 
@@ -319,11 +319,20 @@ Converts to `turtle`, `xml`, and `json-ld`, excluding the source format. Writes 
 
 **Quad format handling**:
 
-Converting a quad-format source (TriG, N-Quads) to a single-graph format is rejected by default with a clear error. Use `--allow-flatten` to merge all named graphs into the default graph:
+TriG and N-Quads output holds what the source holds: a single-graph source's triples in the default graph, and a quad source's named graphs under their own names.
+
+```bash
+rdf-construct cast ontology.ttl --format nq
+rdf-construct cast dataset.trig --format nq
+```
+
+Writing a source with named graphs to a single-graph format is refused by default. A TriG or N-Quads source is refused on its format; a JSON-LD source when it holds a named graph. Use `--allow-flatten` to merge every graph into one. The flag never merges for TriG or N-Quads output:
 
 ```bash
 rdf-construct cast dataset.trig --format ttl --allow-flatten
 ```
+
+An N3 source with formulae (`{ … }`) or variables is refused: no other format can hold them. See the [Cast Guide](CAST_GUIDE.md#n3-formulae-and-variables).
 
 **Examples**:
 
@@ -353,7 +362,7 @@ rdf-construct cast ontology.rdf --format ttl | rdf-construct lint /dev/stdin
 **Exit Codes**:
 - `0`: Every requested format was written
 - `1`: Finished with something to report — a format was skipped (the source's own) or failed, and at least one was written
-- `2`: Not done — refused (every requested format the source's own, or a quad source without `--allow-flatten`), a parse error, or every format failed
+- `2`: Not done — refused (every requested format the source's own, a source with named graphs without `--allow-flatten`, or an N3 source with formulae or variables), a parse error, or every format failed
 
 When every requested format is the source's own, `cast` refuses before reading the source, in pipe mode too: `nothing to cast: ontology.ttl is already turtle (from its extension), and turtle was the only format requested.`
 

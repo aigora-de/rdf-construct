@@ -541,8 +541,9 @@ def cli():
     "--allow-flatten",
     is_flag=True,
     help=(
-        "Merge all named graphs into the default graph when converting from "
-        "a quad format (TriG, N-Quads) to a single-graph format."
+        "Allow a source with named graphs to be written to a single-graph "
+        "format by merging every graph into one. Lossy: graph names are "
+        "discarded. TriG and N-Quads output always keeps the graphs."
     ),
 )
 def cast(
@@ -580,9 +581,10 @@ def cast(
         0 - Every requested format was written
         1 - Finished with something to report: a format was skipped (the
             source's own) or failed, and at least one was written
-        2 - Not done: refused (every format the source's own, or a quad
-            source without --allow-flatten), a parse error, or every
-            format failed
+        2 - Not done: refused (every format the source's own, a source
+            with named graphs without --allow-flatten, or an N3 source
+            with formulae or variables), a parse error, or every format
+            failed
     """
     source_format = infer_rdf_format(source)
 

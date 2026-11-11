@@ -38,7 +38,7 @@ rdf-construct cast SOURCE [OPTIONS]
 |--------|-------------|
 | `-f, --format FORMAT` | Output format (repeatable). Omit for all standard formats except source. |
 | `-o, --output-dir PATH` | Directory for output files (default: same directory as source). |
-| `--allow-flatten` | Merge all named graphs into the default graph when converting from a quad format. |
+| `--allow-flatten` | Allow a source with named graphs to be written to a single-graph format by merging every graph into one. Lossy: graph names are discarded. TriG and N-Quads output always keeps the graphs. |
 
 ### Exit Codes
 
@@ -46,7 +46,7 @@ rdf-construct cast SOURCE [OPTIONS]
 |------|---------|
 | `0` | Every requested format was written |
 | `1` | Finished with something to report — a format was skipped (the source's own) or failed, and at least one was written |
-| `2` | Not done — refused (every requested format the source's own, or a quad source without `--allow-flatten`), a parse error, or every format failed |
+| `2` | Not done — refused (every requested format the source's own, a source with named graphs without `--allow-flatten`, or an N3 source with formulae or variables), a parse error, or every format failed |
 
 ## Supported Formats
 
@@ -61,6 +61,14 @@ The table below lists every format alias `cast` accepts. Aliases are case-insens
 | `n3` | `n3` | `.n3` | No |
 | `trig` | `trig` | `.trig` | Yes |
 | `nquads` | `nq`, `nquads` | `.nq` | Yes |
+
+Two formats can hold more than the table says, and `cast` treats them accordingly:
+
+- **JSON-LD can hold named graphs.** A JSON-LD *source* that holds one is treated as a quad
+  source: see [Quad Formats](#quad-formats-trig-and-n-quads). As a *target*, JSON-LD is written
+  as a single graph ([#543](https://github.com/aigora-de/rdf-construct/issues/543)).
+- **N3 can hold more than RDF.** A source with formulae (`{ … }`) or variables (`@forAll :x`,
+  `?x`) cannot be cast: see [N3 Formulae and Variables](#n3-formulae-and-variables).
 
 ### Default output set
 
@@ -152,28 +160,90 @@ literal bare (`true`, `7`) only when that bare form reads back as the same liter
 
 ## Quad Formats (TriG and N-Quads)
 
-TriG and N-Quads are **multi-graph** formats: a single file can contain multiple named graphs. Turtle, RDF/XML, JSON-LD, and N-Triples are **single-graph** formats.
+TriG and N-Quads are **multi-graph** formats: a single file can hold a default graph and any number of named graphs. Turtle, RDF/XML, N-Triples and N3 are **single-graph** formats. `cast` reads every source into a dataset, so what a quad format is given is what it writes.
 
-By default, `cast` refuses to convert a quad-format source to a single-graph target and prints a clear error:
+### Writing TriG and N-Quads
 
-```
-✗ Source 'dataset.trig' uses a multi-graph format (trig) but the requested
-  target format(s) are single-graph: turtle.
-  Use --allow-flatten to merge all named graphs into the default graph,
-  or choose a quad output format (trig, nquads).
-```
-
-Use `--allow-flatten` to override this. All triples from all named graphs will be merged into the default graph, and a warning will appear in stderr:
+**From a single-graph source**, the triples go in the default graph:
 
 ```bash
-# Flatten a TriG dataset to Turtle
-rdf-construct cast dataset.trig --format ttl --allow-flatten
-
-# Convert between quad formats (no flattening needed)
-rdf-construct cast dataset.trig --format nq
+rdf-construct cast ontology.ttl --format trig
+rdf-construct cast ontology.ttl --format nq
 ```
 
-> **Note:** Flattening is a lossy operation — named graph identity is discarded. Only use `--allow-flatten` when you are certain you do not need to preserve graph provenance.
+- TriG writes the default graph as one unnamed `{ … }` block. That is valid TriG, and means the same as triples written outside any block, but a tool that reads only Turtle will not accept it.
+- N-Quads writes each triple with no graph term, so the lines are the ones `--format nt` writes.
+
+**From a quad source**, every graph is kept, under its own name:
+
+```bash
+# TriG to N-Quads, and back
+rdf-construct cast dataset.trig --format nq
+rdf-construct cast dataset.nq --format trig
+```
+
+The default graph, each named graph, a triple stated in two graphs, and a blank node shared between graphs all come through. Two things to know:
+
+- **A graph named by a blank node** keeps a blank-node name, but not the same label: blank-node labels are local to a file.
+- **TriG labels every blank node** (`_:n…`), where Turtle writes a single-use one inline as `[ … ]`. So TriG output from a source with blank nodes differs from run to run, and is the same graph each time.
+
+### Writing a single-graph format from a source with named graphs
+
+A single-graph format has nowhere to put a graph's name. By default `cast` refuses, before it reads the source:
+
+```
+✗ Source 'dataset.trig' uses a multi-graph format (trig) but the requested target format(s) are single-graph: turtle. Use --allow-flatten to merge all named graphs into the default graph, or choose a quad output format (nquads).
+```
+
+`--allow-flatten` permits it. Every graph is merged into one, a triple stated in several graphs is written once, and a warning on stderr names the formats that were merged:
+
+```bash
+rdf-construct cast dataset.trig --format ttl --allow-flatten
+#   ⚠ Flattened dataset.trig for turtle: all named graphs merged into one graph.
+```
+
+> **Note:** Flattening is lossy: graph names are discarded. Use `--allow-flatten` only when you do not need to know which graph a triple came from.
+
+**The flag never merges for TriG or N-Quads output.** In a request for both kinds, the quad file keeps the graphs and the single-graph file gets the merge:
+
+```bash
+rdf-construct cast dataset.trig --format nq --format ttl --allow-flatten --output-dir out/
+# out/dataset.nq keeps every graph; out/dataset.ttl holds them merged
+```
+
+To get one merged quad file, flatten to Turtle first and cast that.
+
+**A TriG or N-Quads source is refused on its format**, whatever it holds: a `.trig` file with only a default graph still needs the flag for a single-graph target.
+
+### JSON-LD sources with named graphs
+
+JSON-LD can hold named graphs: a node with both `@id` and `@graph` is one, and that includes a document whose top level has an `@id` beside its `@graph`. Most JSON-LD files hold none, so `cast` decides from the content, after reading it. A JSON-LD source that holds a named graph is treated as a quad source:
+
+```bash
+rdf-construct cast dataset.jsonld --format ttl
+# ✗ Source 'dataset.jsonld' holds named graphs but the requested target format(s) are single-graph: turtle. Use --allow-flatten to merge all named graphs into the default graph, or choose a quad output format (trig, nquads).
+
+rdf-construct cast dataset.jsonld --format trig                   # keeps the graphs
+rdf-construct cast dataset.jsonld --format ttl --allow-flatten    # merges them
+```
+
+The default invocation (`rdf-construct cast dataset.jsonld`) asks for Turtle and RDF/XML, so it is refused too. A JSON-LD source with no named graph is cast as any single-graph source is.
+
+## N3 Formulae and Variables
+
+N3 is a superset of Turtle, and some of what it adds is not RDF. `cast` refuses a source that holds:
+
+- **a formula**, a quoted graph written `{ … }`, as in a rule `{ :a :b :c } => { :d :e :f } .`;
+- **a variable**, declared with `@forAll` or written `?x`.
+
+No other format can hold either, so there is nothing to write, and N3 to N3 is [nothing to cast](#source-format-same-as-target). The refusal exits with code `2`, writes nothing, and counts the statements involved:
+
+```bash
+rdf-construct cast rules.n3 --format ttl
+# ✗ Source 'rules.n3' holds N3 constructs that no other format can carry: 1 statement with a formula ({ … }). Only N3 can hold them, so there is nothing cast can write.
+```
+
+N3 that is plain RDF underneath casts as usual: `@forSome` and the path shorthands `:a!:b` and `:a^:b` become ordinary blank nodes.
 
 ## Source Format Same as Target
 
@@ -187,7 +257,7 @@ rdf-construct cast ontology.ttl --format ttl
 # Accepted: xml, json-ld, nt, n3, trig, nquads
 ```
 
-The format is named canonically (`turtle` for `ttl`). For an extension `cast` does not recognise, the source is taken to be Turtle, and the message says so: `ontology.ont is taken to be turtle (cast does not recognise '.ont')`. From a quad source without `--allow-flatten`, the message adds that every format but the other quad format is single-graph and needs the flag, which merges the named graphs.
+The format is named canonically (`turtle` for `ttl`). For an extension `cast` does not recognise, the source is taken to be Turtle, and the message says so: `ontology.ont is taken to be turtle (cast does not recognise '.ont')`. From a TriG or N-Quads source without `--allow-flatten`, the message adds that every format but the other quad format is single-graph and needs the flag, which merges the named graphs.
 
 To re-serialise Turtle as Turtle, use `order`: `cast` does not reorder.
 

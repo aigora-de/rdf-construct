@@ -710,6 +710,21 @@ change, and what to do about it, is listed command by command in the
   was skipped. `CastConverter.convert` reports the all-skipped case as
   `success=False` with an `error`, and a new `skipped_formats` field. **Breaking**:
   see the migration guide.
+- **`cast` writes TriG and N-Quads that hold what the source holds** (#540, #189,
+  #542). It loaded every source into a plain graph, so `-f trig` put every
+  triple in a graph named by a fresh blank node and left the default graph
+  empty, N-Quads → TriG dropped the named graphs at exit 0, and `-f nq` failed
+  from every source. It now loads into a dataset. A single-graph source's
+  triples are written to the default graph (one unnamed `{ … }` block in TriG,
+  no graph term in N-Quads, with one space before the `.`), and a quad source's
+  graphs are kept under their names, with or without `--allow-flatten`: the
+  flag merges only for single-graph formats, and its warning names them. A
+  JSON-LD source that holds named graphs is treated as a quad source, where it
+  used to lose them at exit 0. An N3 source with formulae or variables is
+  refused at exit 2, where it was written as output that did not parse or with
+  the statements missing. The quad guard's advice no longer names the source's
+  own format. Single-graph output from a single-graph source is unchanged.
+  **Breaking**: see the migration guide.
 - **`diff` compares blank nodes by structure, in both directions** (#143). It
   compared triples by the labels rdflib gives blank nodes at parse time, and
   then skipped every blank-node subject. So any file with an `owl:Restriction`
