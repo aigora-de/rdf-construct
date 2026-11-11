@@ -266,6 +266,34 @@ THREE_STATES = [
         Row("cast", "findings", ("cast", ANIMAL, "-f", "turtle", "-f", "nt", "-o", "@tmp/cast")),
         label="skipped",
     ),
+    # Quad output is written from a dataset: N-Quads from any source (#189), and a quad source's
+    # graphs kept (#540). What no single-graph format can hold is refused (#540, #542)
+    _row(Row("cast", "clean", ("cast", ANIMAL, "-f", "nq", "-o", "@tmp/cast")), label="nquads"),
+    _row(
+        Row(
+            "cast",
+            "clean",
+            ("cast", "@tmp/cast_quads.nq", "-f", "trig", "-o", "@tmp/cast"),
+            copied=(str(SMOKE / "cast_quads.nq"),),
+        ),
+        label="quad-to-quad",
+    ),
+    _row(
+        Row(
+            "cast",
+            "refused",
+            ("cast", str(SMOKE / "cast_named_graphs.jsonld"), "-o", "@tmp/cast"),
+        ),
+        label="jsonld-named-graphs",
+    ),
+    _row(
+        Row(
+            "cast",
+            "refused",
+            ("cast", str(SMOKE / "cast_formula.n3"), "-f", "turtle", "-o", "@tmp/cast"),
+        ),
+        label="n3-formula",
+    ),
     _row(Row("order", "clean", ("order", LIBRARY, ORDERING, "-o", "@tmp/order"))),
     _row(Row("order", "refused", ("order", LIBRARY, ORDERING, "-p", "nope", "-o", "@tmp/order"))),
     _row(

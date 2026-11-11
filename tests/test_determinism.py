@@ -163,6 +163,9 @@ CASES = [
         OUT,
         label="order-filtering",
     ),
+    # TriG from a single-graph source without blank nodes: the default graph has no name to
+    # vary (#540). With blank nodes or several graphs it is not reproducible (#190's family).
+    _case("cast", ANIMAL, "-f", "trig", label="cast-trig"),
     # Failing today, each against its issue.
     _case("cast", ANIMAL, "-f", "nt", xfail="#190", label="cast-nt"),
     _case(

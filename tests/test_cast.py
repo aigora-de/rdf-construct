@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import io
+import re
 from pathlib import Path
 from textwrap import dedent
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
-from rdflib import Graph, Namespace, URIRef
+from rdflib import BNode, Dataset, Graph, Namespace, URIRef
+from rdflib.compare import isomorphic
+from rdflib.graph import DATASET_DEFAULT_GRAPH_ID
 from rdflib.namespace import OWL, RDF, RDFS
 
+from rdf_construct.core import preserve_literal_forms
 from rdf_construct.core.formats import (
     FORMAT_ALIASES,
     FormatInfo,
@@ -30,6 +34,9 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+EX = Namespace("http://example.org/")
+DEFAULT_ID = DATASET_DEFAULT_GRAPH_ID
 
 SIMPLE_TTL = dedent(
     """\
@@ -381,12 +388,12 @@ class TestCastConverterEdgeCases:
             pipe_mode=False,
         )
         assert not result.success
-        assert result.error is not None
-        assert (
-            "flatten" in result.error.lower()
-            or "quad" in result.error.lower()
-            or "named graph" in result.error.lower()
+        assert result.error == (
+            "Source 'multi.trig' uses a multi-graph format (trig) but the requested target "
+            "format(s) are single-graph: turtle. Use --allow-flatten to merge all named graphs "
+            "into the default graph, or choose a quad output format (nquads)."
         )
+        assert not out_dir.exists()
 
     def test_quad_source_with_allow_flatten_succeeds(self, trig_file: Path, tmp_path: Path) -> None:
         out_dir = tmp_path / "out"
@@ -399,9 +406,16 @@ class TestCastConverterEdgeCases:
             allow_flatten=True,
         )
         assert result.success
-        assert len(result.written_files) == 1
-        # Flattening should produce a warning
-        assert any("flatten" in w.lower() or "named graph" in w.lower() for w in result.warnings)
+        assert result.written_files == [out_dir / "multi.ttl"]
+        assert result.warnings == [
+            "Flattened multi.trig for turtle: all named graphs merged into one graph."
+        ]
+        flat = Graph()
+        flat.parse(out_dir / "multi.ttl", format="turtle")
+        assert set(flat) == {
+            (EX.Thing, RDF.type, OWL.Class),
+            (EX.OtherThing, RDF.type, OWL.Class),
+        }
 
     def test_partial_failure_reports_failed_formats(self, ttl_file: Path, tmp_path: Path) -> None:
         """When one format fails but another succeeds, result reflects partial failure."""
@@ -536,6 +550,12 @@ class TestCastCLI:
             ],
         )
         assert result.exit_code == 0
+        flat = Graph()
+        flat.parse(out_dir / "multi.ttl", format="turtle")
+        assert set(flat) == {
+            (EX.Thing, RDF.type, OWL.Class),
+            (EX.OtherThing, RDF.type, OWL.Class),
+        }
 
     def test_cast_quad_without_flatten_exits_two(self, trig_file: Path, tmp_path: Path) -> None:
         from click.testing import CliRunner
@@ -557,6 +577,8 @@ class TestCastCLI:
             ],
         )
         assert result.exit_code == 2
+        assert "or choose a quad output format (nquads).\n" in result.stderr
+        assert list(out_dir.iterdir()) == []
 
 
 # ---------------------------------------------------------------------------
@@ -564,6 +586,8 @@ class TestCastCLI:
 # ---------------------------------------------------------------------------
 
 SIMPLE_NT = "<http://example.org/a> <http://example.org/p> <http://example.org/b> .\n"
+# RDF/XML cannot write this predicate (no local name to shorten to); every other format can.
+XML_FAILS_TTL = "<http://example.org/a> <http://example.org/123> <http://example.org/b> .\n"
 MALFORMED_TTL = "@prefix ex: <http://example.org/> .\nex:A a 'owl:Class\n"
 
 TURTLE_ACCEPTED = "Accepted: xml, json-ld, nt, n3, trig, nquads\n"
@@ -811,20 +835,36 @@ class TestCastSameFormat:
         assert result.stdout == ""
         assert sorted(p.name for p in ttl_file.parent.iterdir()) == ["ontology.nt", "ontology.ttl"]
 
-    def test_a_skip_beside_a_partial_failure_exits_one(
-        self, ttl_file: Path, tmp_path: Path
-    ) -> None:
-        """A skip, a failure (nquads, #189) and a written file: finished, with findings."""
+    def test_a_skip_beside_a_partial_failure_exits_one(self, tmp_path: Path) -> None:
+        """A skip, a failure and a written file: finished, with findings.
+
+        The failure is real: RDF/XML cannot write a predicate that has no local name, and no
+        other format minds. rdflib opens the file before it fails, so a partial ``xmlfail.rdf``
+        is left in the directory. That is #409's, so the directory is not asserted to hold
+        nothing else.
+        """
+        source = tmp_path / "xmlfail.ttl"
+        source.write_text(XML_FAILS_TTL, encoding="utf-8")
         out_dir = tmp_path / "out"
         result = self._invoke(
-            str(ttl_file), "-f", "turtle", "-f", "nt", "-f", "nquads", "-o", str(out_dir)
+            str(source), "-f", "turtle", "-f", "nt", "-f", "xml", "-o", str(out_dir)
         )
         assert result.exit_code == 1, result.output
-        assert "  \u26a0 Skipping 'turtle': source and target format are the same.\n" in (
-            result.stderr
-        )
-        assert "\u2717 Partial failure: nquads could not be converted.\n" in result.stderr
-        assert sorted(p.name for p in out_dir.iterdir()) == ["ontology.nt"]
+        assert result.stdout == ""
+        lines = result.stderr.splitlines()
+        failure = "  \u26a0 Failed to write xmlfail.rdf (xml): "
+        assert [failure if line.startswith(failure) else line for line in lines] == [
+            "Casting xmlfail.ttl...",
+            "  Formats: turtle, nt, xml",
+            f"  Output:  {out_dir}/",
+            "  \u26a0 Skipping 'turtle': source and target format are the same.",
+            failure,
+            "\u2717 Partial failure: xml could not be converted.",
+            "  \u2713 xmlfail.nt",
+        ]
+        written = Graph()
+        written.parse(out_dir / "xmlfail.nt", format="nt")
+        assert len(written) == 1
 
     def test_a_parse_error_beside_a_mixed_request_is_the_parse_error(self, tmp_path: Path) -> None:
         source = tmp_path / "bad.ttl"
@@ -844,18 +884,806 @@ class TestCastSameFormat:
         assert result.exit_code == 0, result.output
         assert result.stderr.endswith(f"\nCast 2 file(s) to {out_dir}/\n")
 
-    def test_a_skip_and_a_failure_with_nothing_written_exits_two(
-        self, trig_file: Path, tmp_path: Path
-    ) -> None:
-        """Nothing asked for was done, so 2 (#330, ruling 5); the nquads failure is #189."""
+    def test_a_skip_and_a_failure_with_nothing_written_exits_two(self, tmp_path: Path) -> None:
+        """Nothing asked for was done, so 2 (#330, ruling 5).
+
+        The failure is RDF/XML's, as above, and the partial ``xmlfail.rdf`` it leaves is #409's.
+        """
+        source = tmp_path / "xmlfail.ttl"
+        source.write_text(XML_FAILS_TTL, encoding="utf-8")
         out_dir = tmp_path / "out"
-        result = self._invoke(str(trig_file), "-f", "trig", "-f", "nquads", "-o", str(out_dir))
+        result = self._invoke(str(source), "-f", "turtle", "-f", "xml", "-o", str(out_dir))
         assert result.exit_code == 2, result.output
-        assert "\u2717 All target format conversions failed: nquads\n" in result.stderr
-        assert "Cast " not in result.stderr
+        assert result.stdout == ""
+        lines = result.stderr.splitlines()
+        failure = "  \u26a0 Failed to write xmlfail.rdf (xml): "
+        assert [failure if line.startswith(failure) else line for line in lines] == [
+            "Casting xmlfail.ttl...",
+            "  Formats: turtle, xml",
+            f"  Output:  {out_dir}/",
+            "  \u26a0 Skipping 'turtle': source and target format are the same.",
+            failure,
+            "\u2717 All target format conversions failed: xml",
+        ]
 
     def test_help_defines_a_skip_as_exit_one(self) -> None:
         result = self._invoke("--help")
         assert result.exit_code == 0
         assert "a format was skipped (the" in result.output
         assert "source's own) or failed, and at least one was written" in result.output
+
+
+# ---------------------------------------------------------------------------
+# What quad output holds (#540, #189), and what no format can hold (#542)
+# ---------------------------------------------------------------------------
+
+# Two default-graph triples, two named graphs, a blank node shared by both graphs, and one
+# triple (ex:s ex:both ex:o) stated in the default graph and in ex:g1.
+QUADS_NQ = dedent(
+    """\
+    <http://example.org/d> <http://example.org/p> "default" .
+    <http://example.org/s> <http://example.org/both> <http://example.org/o> .
+    <http://example.org/a> <http://example.org/p> "one" <http://example.org/g1> .
+    _:b <http://example.org/q> <http://example.org/x> <http://example.org/g1> .
+    <http://example.org/s> <http://example.org/both> <http://example.org/o> <http://example.org/g1> .
+    <http://example.org/a> <http://example.org/p> "two" <http://example.org/g2> .
+    _:b <http://example.org/q> <http://example.org/y> <http://example.org/g2> .
+"""
+)
+QUADS_TRIG = dedent(
+    """\
+    @prefix ex: <http://example.org/> .
+    ex:d ex:p "default" .
+    ex:s ex:both ex:o .
+    ex:g1 { ex:a ex:p "one" . _:b ex:q ex:x . ex:s ex:both ex:o . }
+    ex:g2 { ex:a ex:p "two" . _:b ex:q ex:y . }
+"""
+)
+QUADS_JSONLD = dedent(
+    """\
+    {
+      "@context": {"ex": "http://example.org/"},
+      "@graph": [
+        {"@id": "ex:d", "ex:p": "default"},
+        {"@id": "ex:s", "ex:both": {"@id": "ex:o"}},
+        {"@id": "ex:g1", "@graph": [
+          {"@id": "ex:a", "ex:p": "one"},
+          {"@id": "_:b", "ex:q": {"@id": "ex:x"}},
+          {"@id": "ex:s", "ex:both": {"@id": "ex:o"}}
+        ]},
+        {"@id": "ex:g2", "@graph": [
+          {"@id": "ex:a", "ex:p": "two"},
+          {"@id": "_:b", "ex:q": {"@id": "ex:y"}}
+        ]}
+      ]
+    }
+"""
+)
+QUAD_SOURCES = {"nquads": ("d.nq", QUADS_NQ), "trig": ("d.trig", QUADS_TRIG)}
+# The default graph's size, and each named graph's.
+QUADS_SHAPE = (2, {str(EX.g1): 3, str(EX.g2): 2})
+# Every graph merged: ex:s ex:both ex:o is stated twice and counted once.
+QUADS_UNION_SIZE = 6
+
+SINGLE_GRAPH_FORMATS = ["turtle", "xml", "json-ld", "nt", "n3"]
+SINGLE_GRAPH_SOURCES = [
+    ("ontology.ttl", "turtle"),
+    ("ontology.rdf", "xml"),
+    ("ontology.jsonld", "json-ld"),
+    ("ontology.nt", "nt"),
+    ("ontology.n3", "n3"),
+]
+QUAD_FORMATS = ["trig", "nquads"]
+EXTENSION = {
+    "turtle": ".ttl",
+    "xml": ".rdf",
+    "json-ld": ".jsonld",
+    "nt": ".nt",
+    "n3": ".n3",
+    "trig": ".trig",
+    "nquads": ".nq",
+}
+
+FORMULA_N3 = "@prefix : <http://ex/> .\n{ :a :b :c } => { :d :e :f } .\n:x :y :z .\n"
+N3_REFUSED = (
+    "✗ Source '{name}' holds N3 constructs that no other format can carry: {counts}. "
+    "Only N3 can hold them, so there is nothing cast can write.\n"
+)
+
+
+def _cast(*args: str | Path) -> Result:
+    from click.testing import CliRunner
+
+    from rdf_construct.cli import cli
+
+    return CliRunner().invoke(cli, ["cast", *map(str, args)])
+
+
+def _write(tmp_path: Path, name: str, text: str) -> Path:
+    source = tmp_path / "src" / name
+    source.parent.mkdir(exist_ok=True)
+    source.write_text(text, encoding="utf-8")
+    return source
+
+
+def _read(text: str, fmt: str) -> Dataset:
+    """Parse output as the CLI would read it back: literal forms kept, named graphs kept."""
+    with preserve_literal_forms():
+        dataset = Dataset()
+        dataset.parse(data=text, format=fmt)
+    return dataset
+
+
+def _default(dataset: Dataset) -> Graph:
+    return dataset.get_context(DATASET_DEFAULT_GRAPH_ID)
+
+
+def _shape(dataset: Dataset) -> tuple[int, dict[str, int]]:
+    """The default graph's size, and each named graph's by IRI (``_:`` for a blank node)."""
+    named: dict[str, int] = {}
+    for _s, _p, _o, graph in dataset.quads((None, None, None, None)):
+        if graph != DATASET_DEFAULT_GRAPH_ID:
+            key = "_:" if isinstance(graph, BNode) else str(graph)
+            named[key] = named.get(key, 0) + 1
+    return len(_default(dataset)), named
+
+
+def _cast_to(
+    source: Path, fmt: str, tmp_path: Path, *flags: str, with_output_dir: bool
+) -> tuple[Result, str]:
+    """Cast *source* to one format, in pipe mode or with ``-o``, and return what was written."""
+    if not with_output_dir:
+        result = _cast(source, "-f", fmt, *flags)
+        return result, result.stdout
+    out_dir = tmp_path / "out"
+    result = _cast(source, "-f", fmt, *flags, "-o", out_dir)
+    written = out_dir / f"{source.stem}{EXTENSION[fmt]}"
+    assert result.stdout == ""
+    return result, written.read_text(encoding="utf-8") if written.exists() else ""
+
+
+def _assert_quads_kept(dataset: Dataset) -> None:
+    """Every graph of the quad fixture is there, with its own triples and the shared node."""
+    assert _shape(dataset) == QUADS_SHAPE
+    source = _read(QUADS_NQ, "nquads")
+    for name in (DATASET_DEFAULT_GRAPH_ID, EX.g1, EX.g2):
+        assert isomorphic(dataset.get_context(name), source.get_context(name)), name
+    # The blank node shared by ex:g1 and ex:g2 is still one node.
+    assert len({s for s, _p, _o, _g in dataset.quads((None, EX.q, None, None))}) == 1
+    # The triple stated in the default graph and in ex:g1 is still in both.
+    assert {g for _s, _p, _o, g in dataset.quads((EX.s, EX.both, EX.o, None))} == {
+        DATASET_DEFAULT_GRAPH_ID,
+        EX.g1,
+    }
+
+
+def _assert_refused(result: Result, stderr: str) -> None:
+    assert result.exit_code == 2, result.output
+    exc = result.exception
+    assert isinstance(exc, SystemExit) and exc.__cause__ is None
+    assert result.stdout == ""
+    assert result.stderr == stderr
+
+
+class TestCastQuadTargets:
+    """TriG and N-Quads are written from a dataset, so they hold what the source holds (#540)."""
+
+    @pytest.mark.parametrize("with_output_dir", [True, False], ids=["-o", "pipe"])
+    @pytest.mark.parametrize("fmt", QUAD_FORMATS)
+    @pytest.mark.parametrize(("name", "source_format"), SINGLE_GRAPH_SOURCES)
+    def test_single_graph_source_is_written_to_the_default_graph(
+        self, tmp_path: Path, name: str, source_format: str, fmt: str, with_output_dir: bool
+    ) -> None:
+        expected = Graph()
+        expected.parse(data=SIMPLE_TTL, format="turtle")
+        source = _write(tmp_path, name, expected.serialize(format=source_format))
+
+        result, text = _cast_to(source, fmt, tmp_path, with_output_dir=with_output_dir)
+
+        assert result.exit_code == 0, result.output
+        dataset = _read(text, fmt)
+        assert _shape(dataset) == (5, {})
+        assert isomorphic(_default(dataset), expected)
+        # No graph is named, by a blank node (#540) or by rdflib's own default-graph IRI.
+        assert not re.search(r"^_:\S+ \{", text, re.MULTILINE)
+        assert "urn:x-rdflib:default" not in text
+
+    def test_trig_default_graph_is_one_unnamed_block(self, ttl_file: Path) -> None:
+        result = _cast(ttl_file, "-f", "trig")
+        assert result.exit_code == 0, result.output
+        assert re.findall(r"^(.*)\{$", result.stdout, re.MULTILINE) == [""]
+
+    def test_nquads_statements_end_in_one_space_and_match_ntriples(self, ttl_file: Path) -> None:
+        """rdflib leaves two spaces where the graph term would be; ``cast`` writes one (#189)."""
+        nquads = _cast(ttl_file, "-f", "nq")
+        ntriples = _cast(ttl_file, "-f", "nt")
+        assert nquads.exit_code == 0, nquads.output
+        lines = [line for line in nquads.stdout.split("\n") if line]
+        assert len(lines) == 5
+        assert all(line.endswith(" .") and not line.endswith("  .") for line in lines)
+        assert sorted(lines) == sorted(line for line in ntriples.stdout.split("\n") if line)
+
+    def test_nquads_named_and_default_statements_are_spaced_alike(self, tmp_path: Path) -> None:
+        source = _write(tmp_path, "d.trig", QUADS_TRIG)
+        result = _cast(source, "-f", "nquads")
+        assert result.exit_code == 0, result.output
+        assert "  ." not in result.stdout
+        assert '<http://example.org/d> <http://example.org/p> "default" .\n' in result.stdout
+        assert (
+            '<http://example.org/a> <http://example.org/p> "one" <http://example.org/g1> .\n'
+            in result.stdout
+        )
+
+    def test_a_literal_that_looks_like_a_statement_end_is_left_alone(self, tmp_path: Path) -> None:
+        source = _write(
+            tmp_path,
+            "odd.ttl",
+            '<http://example.org/a> <http://example.org/p> "two spaces and a dot  .", '
+            '"then a newline  .\\nmore" .\n',
+        )
+        result = _cast(source, "-f", "nquads")
+        assert result.exit_code == 0, result.output
+        values = {str(o) for o in _default(_read(result.stdout, "nquads")).objects()}
+        assert values == {"two spaces and a dot  .", "then a newline  .\nmore"}
+
+    @pytest.mark.parametrize("with_output_dir", [True, False], ids=["-o", "pipe"])
+    @pytest.mark.parametrize("flags", [(), ("--allow-flatten",)], ids=["no-flag", "allow-flatten"])
+    @pytest.mark.parametrize(("source_format", "fmt"), [("nquads", "trig"), ("trig", "nquads")])
+    def test_quad_to_quad_keeps_every_graph_whatever_the_flag(
+        self,
+        tmp_path: Path,
+        source_format: str,
+        fmt: str,
+        flags: tuple[str, ...],
+        with_output_dir: bool,
+    ) -> None:
+        source = _write(tmp_path, *QUAD_SOURCES[source_format])
+
+        result, text = _cast_to(source, fmt, tmp_path, *flags, with_output_dir=with_output_dir)
+
+        assert result.exit_code == 0, result.output
+        _assert_quads_kept(_read(text, fmt))
+        # Nothing was merged, so nothing is reported as flattened.
+        assert "Flattened" not in result.stderr
+        assert "urn:x-rdflib:default" not in text
+
+    @pytest.mark.parametrize("fmt", QUAD_FORMATS)
+    def test_jsonld_named_graphs_are_kept_in_quad_output(self, tmp_path: Path, fmt: str) -> None:
+        source = _write(tmp_path, "d.jsonld", QUADS_JSONLD)
+        result = _cast(source, "-f", fmt)
+        assert result.exit_code == 0, result.output
+        assert result.stderr == "Casting d.jsonld...\n"
+        _assert_quads_kept(_read(result.stdout, fmt))
+
+    def test_a_blank_node_graph_name_stays_a_blank_node(self, tmp_path: Path) -> None:
+        source = _write(
+            tmp_path,
+            "bn.nq",
+            '<http://example.org/d> <http://example.org/p> "default" .\n'
+            '<http://example.org/a> <http://example.org/p> "named" _:g .\n',
+        )
+        result = _cast(source, "-f", "trig")
+        assert result.exit_code == 0, result.output
+        assert _shape(_read(result.stdout, "trig")) == (1, {"_:": 1})
+
+    def test_a_quad_source_with_only_a_default_graph(self, tmp_path: Path) -> None:
+        source = _write(
+            tmp_path, "def.trig", '{ <http://example.org/d> <http://example.org/p> "default" . }\n'
+        )
+        result = _cast(source, "-f", "nquads")
+        assert result.exit_code == 0, result.output
+        assert result.stdout == '<http://example.org/d> <http://example.org/p> "default" .\n\n'
+
+    def test_a_quad_source_with_only_named_graphs(self, tmp_path: Path) -> None:
+        source = _write(
+            tmp_path,
+            "named.nq",
+            '<http://example.org/a> <http://example.org/p> "one" <http://example.org/g1> .\n',
+        )
+        result = _cast(source, "-f", "trig")
+        assert result.exit_code == 0, result.output
+        assert _shape(_read(result.stdout, "trig")) == (0, {str(EX.g1): 1})
+
+    def test_literal_forms_survive_quad_output(self, tmp_path: Path) -> None:
+        source = _write(
+            tmp_path,
+            "forms.ttl",
+            "<http://example.org/a> <http://example.org/p> "
+            '"007"^^<http://www.w3.org/2001/XMLSchema#integer> .\n',
+        )
+        for fmt in QUAD_FORMATS:
+            result = _cast(source, "-f", fmt)
+            assert result.exit_code == 0, result.output
+            assert [o.n3() for o in _default(_read(result.stdout, fmt)).objects()] == [
+                '"007"^^<http://www.w3.org/2001/XMLSchema#integer>'
+            ]
+
+
+class TestCastFlatten:
+    """``--allow-flatten`` merges the graphs for a single-graph target, and only for one."""
+
+    @pytest.mark.parametrize("fmt", SINGLE_GRAPH_FORMATS)
+    @pytest.mark.parametrize("source_format", ["nquads", "trig"])
+    def test_quad_source_is_merged_for_a_single_graph_target(
+        self, tmp_path: Path, source_format: str, fmt: str
+    ) -> None:
+        source = _write(tmp_path, *QUAD_SOURCES[source_format])
+
+        result = _cast(source, "-f", fmt, "--allow-flatten")
+
+        assert result.exit_code == 0, result.output
+        assert result.stderr == (
+            f"Casting {source.name}...\n"
+            f"  ⚠ Flattened {source.name} for {fmt}: all named graphs merged into one graph.\n"
+        )
+        merged = _default(_read(result.stdout, fmt))
+        assert len(merged) == QUADS_UNION_SIZE
+        union = Graph()
+        for s, p, o, _g in _read(QUADS_NQ, "nquads").quads((None, None, None, None)):
+            union.add((s, p, o))
+        assert isomorphic(merged, union)
+        # The blank node the two graphs shared is one node, with both its statements.
+        assert len(set(merged.subjects(EX.q, None))) == 1
+
+    def test_a_mixed_request_merges_only_for_the_single_graph_target(self, tmp_path: Path) -> None:
+        source = _write(tmp_path, "d.trig", QUADS_TRIG)
+        out_dir = tmp_path / "out"
+
+        result = _cast(source, "-f", "nquads", "-f", "turtle", "--allow-flatten", "-o", out_dir)
+
+        assert result.exit_code == 0, result.output
+        assert (
+            "  ⚠ Flattened d.trig for turtle: all named graphs merged into one graph.\n"
+            in result.stderr
+        )
+        assert sorted(p.name for p in out_dir.iterdir()) == ["d.nq", "d.ttl"]
+        _assert_quads_kept(_read((out_dir / "d.nq").read_text(encoding="utf-8"), "nquads"))
+        merged = Graph()
+        merged.parse(out_dir / "d.ttl", format="turtle")
+        assert len(merged) == QUADS_UNION_SIZE
+
+    def test_a_mixed_request_without_the_flag_is_refused(self, tmp_path: Path) -> None:
+        source = _write(tmp_path, "d.trig", QUADS_TRIG)
+        out_dir = tmp_path / "out"
+        result = _cast(source, "-f", "nquads", "-f", "turtle", "-o", out_dir)
+        assert result.exit_code == 2, result.output
+        assert not out_dir.exists()
+
+    @pytest.mark.parametrize(("source_format", "other"), [("trig", "nquads"), ("nquads", "trig")])
+    def test_the_guard_names_only_the_other_quad_format(
+        self, tmp_path: Path, source_format: str, other: str
+    ) -> None:
+        """The source's own format would be refused as nothing to cast (#330)."""
+        source = _write(tmp_path, *QUAD_SOURCES[source_format])
+        result = _cast(source, "-f", "turtle")
+        _assert_refused(
+            result,
+            f"Casting {source.name}...\n"
+            f"✗ Source '{source.name}' uses a multi-graph format ({source_format}) but the "
+            f"requested target format(s) are single-graph: turtle. Use --allow-flatten to merge "
+            f"all named graphs into the default graph, or choose a quad output format ({other}).\n",
+        )
+
+    def test_help_says_quad_output_keeps_the_graphs(self) -> None:
+        result = _cast("--help")
+        assert result.exit_code == 0
+        text = " ".join(result.output.split())
+        assert "Lossy: graph names are discarded." in text
+        assert "TriG and N-Quads output always keeps the graphs." in text
+        assert "an N3 source with formulae or variables" in text
+
+
+class TestCastJsonLdNamedGraphs:
+    """A JSON-LD source that holds named graphs is a quad source, decided from its content."""
+
+    GUARD = (
+        "✗ Source '{name}' holds named graphs but the requested target format(s) are "
+        "single-graph: {targets}. Use --allow-flatten to merge all named graphs into the default "
+        "graph, or choose a quad output format (trig, nquads).\n"
+    )
+
+    @pytest.mark.parametrize("fmt", ["turtle", "xml", "nt", "n3"])
+    def test_a_single_graph_target_is_refused(self, tmp_path: Path, fmt: str) -> None:
+        source = _write(tmp_path, "d.jsonld", QUADS_JSONLD)
+        result = _cast(source, "-f", fmt)
+        _assert_refused(
+            result, "Casting d.jsonld...\n" + self.GUARD.format(name="d.jsonld", targets=fmt)
+        )
+
+    def test_the_default_formats_are_refused_and_nothing_is_written(self, tmp_path: Path) -> None:
+        source = _write(tmp_path, "d.jsonld", QUADS_JSONLD)
+        out_dir = tmp_path / "out"
+        result = _cast(source, "-o", out_dir)
+        _assert_refused(
+            result,
+            "Casting d.jsonld...\n"
+            "  Formats: turtle, xml\n"
+            f"  Output:  {out_dir}/\n" + self.GUARD.format(name="d.jsonld", targets="turtle, xml"),
+        )
+        assert not out_dir.exists()
+
+    @pytest.mark.parametrize("fmt", ["turtle", "xml", "nt", "n3"])
+    def test_allow_flatten_merges_the_graphs(self, tmp_path: Path, fmt: str) -> None:
+        source = _write(tmp_path, "d.jsonld", QUADS_JSONLD)
+        result = _cast(source, "-f", fmt, "--allow-flatten")
+        assert result.exit_code == 0, result.output
+        assert result.stderr == (
+            "Casting d.jsonld...\n"
+            f"  ⚠ Flattened d.jsonld for {fmt}: all named graphs merged into one graph.\n"
+        )
+        merged = _default(_read(result.stdout, fmt))
+        assert len(merged) == QUADS_UNION_SIZE
+        assert len(set(merged.subjects(EX.q, None))) == 1
+
+    def test_a_top_level_id_beside_graph_is_a_named_graph(self, tmp_path: Path) -> None:
+        """It used to be cast to an empty file at exit 0: the plain graph held nothing."""
+        source = _write(
+            tmp_path,
+            "g.jsonld",
+            '{"@context": {"ex": "http://example.org/"}, "@id": "ex:g",'
+            ' "@graph": [{"@id": "ex:a", "ex:p": "v"}]}\n',
+        )
+        _assert_refused(
+            _cast(source, "-f", "turtle"),
+            "Casting g.jsonld...\n" + self.GUARD.format(name="g.jsonld", targets="turtle"),
+        )
+        kept = _cast(source, "-f", "trig")
+        assert kept.exit_code == 0, kept.output
+        assert _shape(_read(kept.stdout, "trig")) == (0, {str(EX.g): 1})
+
+    def test_a_top_level_graph_alone_is_the_default_graph(self, tmp_path: Path) -> None:
+        source = _write(
+            tmp_path,
+            "plain.jsonld",
+            '{"@context": {"ex": "http://example.org/"},'
+            ' "@graph": [{"@id": "ex:a", "ex:p": "v"}]}\n',
+        )
+        result = _cast(source, "-f", "nt")
+        assert result.exit_code == 0, result.output
+        assert result.stdout == '<http://example.org/a> <http://example.org/p> "v" .\n'
+
+    def test_its_own_format_beside_a_quad_format_is_a_skip_not_a_refusal(
+        self, tmp_path: Path
+    ) -> None:
+        source = _write(tmp_path, "d.jsonld", QUADS_JSONLD)
+        out_dir = tmp_path / "out"
+        result = _cast(source, "-f", "json-ld", "-f", "trig", "-o", out_dir)
+        assert result.exit_code == 1, result.output
+        assert "Flattened" not in result.stderr
+        assert sorted(p.name for p in out_dir.iterdir()) == ["d.trig"]
+        _assert_quads_kept(_read((out_dir / "d.trig").read_text(encoding="utf-8"), "trig"))
+
+    def test_a_parse_error_comes_before_the_guard(self, tmp_path: Path) -> None:
+        source = _write(tmp_path, "bad.jsonld", '{"@graph": [')
+        result = _cast(source, "-f", "turtle")
+        assert result.exit_code == 2, result.output
+        assert "Failed to parse 'bad.jsonld' as json-ld" in result.stderr
+        assert "named graphs" not in result.stderr
+
+
+class TestCastN3Constructs:
+    """A source with N3 formulae or variables is refused: no other format can hold them (#542)."""
+
+    @pytest.mark.parametrize("with_output_dir", [True, False], ids=["-o", "pipe"])
+    @pytest.mark.parametrize("fmt", ["turtle", "xml", "json-ld", "nt", "trig", "nquads"])
+    def test_a_formula_is_refused_for_every_target(
+        self, tmp_path: Path, fmt: str, with_output_dir: bool
+    ) -> None:
+        source = _write(tmp_path, "f.n3", FORMULA_N3)
+        out_dir = tmp_path / "out"
+        refusal = N3_REFUSED.format(name="f.n3", counts="1 statement with a formula ({ … })")
+        if with_output_dir:
+            result = _cast(source, "-f", fmt, "-o", out_dir)
+            header = f"Casting f.n3...\n  Formats: {fmt}\n  Output:  {out_dir}/\n"
+        else:
+            result = _cast(source, "-f", fmt)
+            header = "Casting f.n3...\n"
+        _assert_refused(result, header + refusal)
+        assert not out_dir.exists()
+
+    @pytest.mark.parametrize(
+        ("n3", "counts"),
+        [
+            ("@forAll :x .\n:a :p :x .\n", "1 statement with a variable"),
+            (":a :p ?x .\n:b :p ?y .\n", "2 statements with a variable"),
+            (
+                "{ { :a :b :c } :says :d } => { :e :f :g } .\n",
+                "1 statement with a formula ({ … })",
+            ),
+            (
+                "{ :a :b :c } => { :d :e :f } .\n{ :g :h :i } :says :j .\n:k :p ?x .\n",
+                "2 statements with a formula ({ … }), 1 with a variable",
+            ),
+        ],
+        ids=["forAll", "question-mark", "nested-formula", "formulae-and-variable"],
+    )
+    @pytest.mark.parametrize("fmt", ["turtle", "nquads"])
+    def test_each_construct_is_counted_by_statement(
+        self, tmp_path: Path, n3: str, counts: str, fmt: str
+    ) -> None:
+        source = _write(tmp_path, "c.n3", "@prefix : <http://ex/> .\n" + n3)
+        _assert_refused(
+            _cast(source, "-f", fmt),
+            "Casting c.n3...\n" + N3_REFUSED.format(name="c.n3", counts=counts),
+        )
+
+    @pytest.mark.parametrize(
+        "n3",
+        ["@forSome :y .\n:a :p :y .\n", ":a!:b :p :c .\n", ":a^:b :p :c .\n", ":a => :b .\n"],
+        ids=["forSome", "path-forward", "path-backward", "implies-without-formula"],
+    )
+    @pytest.mark.parametrize("fmt", ["turtle", "nt", "nquads"])
+    def test_n3_that_is_plain_rdf_still_casts(self, tmp_path: Path, n3: str, fmt: str) -> None:
+        source = _write(tmp_path, "plain.n3", "@prefix : <http://ex/> .\n" + n3)
+        expected = Graph()
+        expected.parse(source, format="n3")
+        result = _cast(source, "-f", fmt)
+        assert result.exit_code == 0, result.output
+        assert isomorphic(_default(_read(result.stdout, fmt)), expected)
+
+    def test_a_parse_error_comes_before_the_refusal(self, tmp_path: Path) -> None:
+        source = _write(tmp_path, "bad.n3", "@prefix : <http://ex/> .\n{ :a :b :c } => { :d :e .\n")
+        result = _cast(source, "-f", "turtle")
+        assert result.exit_code == 2, result.output
+        assert "Failed to parse 'bad.n3' as n3" in result.stderr
+        assert "N3 constructs" not in result.stderr
+
+
+class TestCastConverterDatasets:
+    """The library path: ``CastConverter.convert`` holds the same rules as the CLI."""
+
+    def test_pipe_mode_trig_holds_the_default_graph(self, ttl_file: Path) -> None:
+        result = CastConverter().convert(
+            source=ttl_file, formats=["trig"], output_dir=None, pipe_mode=True
+        )
+        assert result.success and result.stdout_content is not None
+        assert _shape(_read(result.stdout_content, "trig")) == (5, {})
+
+    def test_pipe_mode_nquads_is_normalised(self, ttl_file: Path) -> None:
+        result = CastConverter().convert(
+            source=ttl_file, formats=["nquads"], output_dir=None, pipe_mode=True
+        )
+        assert result.success and result.stdout_content is not None
+        assert "  ." not in result.stdout_content
+        assert _shape(_read(result.stdout_content, "nquads")) == (5, {})
+
+    def test_file_mode_nquads_is_normalised(self, ttl_file: Path, tmp_path: Path) -> None:
+        out_dir = tmp_path / "out"
+        result = CastConverter().convert(
+            source=ttl_file, formats=["nquads"], output_dir=out_dir, pipe_mode=False
+        )
+        assert result.success and result.written_files == [out_dir / "ontology.nq"]
+        text = (out_dir / "ontology.nq").read_text(encoding="utf-8")
+        assert "  ." not in text
+        assert _shape(_read(text, "nquads")) == (5, {})
+
+    @pytest.mark.parametrize("allow_flatten", [False, True])
+    def test_quad_to_quad_keeps_every_graph(self, tmp_path: Path, allow_flatten: bool) -> None:
+        source = _write(tmp_path, "d.nq", QUADS_NQ)
+        out_dir = tmp_path / "out"
+        result = CastConverter().convert(
+            source=source,
+            formats=["trig"],
+            output_dir=out_dir,
+            pipe_mode=False,
+            allow_flatten=allow_flatten,
+        )
+        assert result.success and result.warnings == []
+        _assert_quads_kept(_read((out_dir / "d.trig").read_text(encoding="utf-8"), "trig"))
+
+    def test_flatten_merges_every_graph_not_only_the_default_one(self, tmp_path: Path) -> None:
+        """``Dataset.triples()`` reads the default graph alone: 2 of these 6 triples."""
+        source = _write(tmp_path, "d.nq", QUADS_NQ)
+        result = CastConverter().convert(
+            source=source,
+            formats=["nquads", "nt", "turtle"],
+            output_dir=tmp_path / "out",
+            pipe_mode=False,
+            allow_flatten=True,
+        )
+        assert result.success
+        assert result.skipped_formats == ["nquads"]
+        assert result.warnings == [
+            "Flattened d.nq for nt, turtle: all named graphs merged into one graph.",
+            "Skipping 'nquads': source and target format are the same.",
+        ]
+        for name, fmt in (("d.nt", "nt"), ("d.ttl", "turtle")):
+            merged = Graph()
+            merged.parse(tmp_path / "out" / name, format=fmt)
+            assert len(merged) == QUADS_UNION_SIZE, name
+
+    def test_jsonld_named_graphs_are_refused_with_an_error(self, tmp_path: Path) -> None:
+        source = _write(tmp_path, "d.jsonld", QUADS_JSONLD)
+        out_dir = tmp_path / "out"
+        result = CastConverter().convert(
+            source=source, formats=["turtle", "xml"], output_dir=out_dir, pipe_mode=False
+        )
+        assert not result.success and not result.partial_failure
+        assert result.error == (
+            "Source 'd.jsonld' holds named graphs but the requested target format(s) are "
+            "single-graph: turtle, xml. Use --allow-flatten to merge all named graphs into the "
+            "default graph, or choose a quad output format (trig, nquads)."
+        )
+        assert result.written_files == [] and not out_dir.exists()
+
+    def test_jsonld_without_named_graphs_needs_no_flag(self, tmp_path: Path) -> None:
+        graph = Graph()
+        graph.parse(data=SIMPLE_TTL, format="turtle")
+        source = _write(tmp_path, "ontology.jsonld", graph.serialize(format="json-ld"))
+        result = CastConverter().convert(
+            source=source, formats=["turtle"], output_dir=None, pipe_mode=True
+        )
+        assert result.success and result.warnings == []
+
+    def test_n3_formulae_are_refused_with_an_error(self, tmp_path: Path) -> None:
+        source = _write(tmp_path, "f.n3", FORMULA_N3)
+        out_dir = tmp_path / "out"
+        result = CastConverter().convert(
+            source=source, formats=["turtle", "nquads"], output_dir=out_dir, pipe_mode=False
+        )
+        assert not result.success and not result.partial_failure
+        assert result.error == (
+            "Source 'f.n3' holds N3 constructs that no other format can carry: 1 statement with "
+            "a formula ({ … }). Only N3 can hold them, so there is nothing cast can write."
+        )
+        assert result.written_files == [] and not out_dir.exists()
+
+
+class TestCastStatementsThatAreNotRdf:
+    """N3 allows a literal subject and a predicate that is not an IRI; no other format does.
+
+    Without the refusal they are written as N-Quads and N-Triples that do not parse, or dropped.
+    """
+
+    MISPLACED = "a literal subject or a predicate that is not an IRI"
+
+    @pytest.mark.parametrize(
+        ("n3", "counts"),
+        [
+            ('"lit" :p :b .\n', "1 statement with " + MISPLACED),
+            ("7 :p :b .\n", "1 statement with " + MISPLACED),
+            (":a _:p :b .\n", "1 statement with " + MISPLACED),
+            ("@forSome :x .\n:a :x :b .\n", "1 statement with " + MISPLACED),
+            (':a "p" :b .\n', "1 statement with " + MISPLACED),
+            (":a :q!:r :b .\n", "1 statement with " + MISPLACED),
+            ('"lit" :p :b .\n:a _:p :b .\n:x :y :z .\n', "2 statements with " + MISPLACED),
+            (
+                '{ :a :b :c } => { :d :e :f } .\n:k :p ?x .\n"lit" :p :b .\n',
+                "1 statement with a formula ({ … }), 1 with a variable, 1 with " + MISPLACED,
+            ),
+        ],
+        ids=[
+            "literal-subject",
+            "number-subject",
+            "blank-node-predicate",
+            "forSome-predicate",
+            "literal-predicate",
+            "path-predicate",
+            "two-statements",
+            "all-three-kinds",
+        ],
+    )
+    @pytest.mark.parametrize("fmt", ["turtle", "nt", "nquads"])
+    def test_it_is_refused(self, tmp_path: Path, n3: str, counts: str, fmt: str) -> None:
+        source = _write(tmp_path, "g.n3", "@prefix : <http://ex/> .\n" + n3)
+        _assert_refused(
+            _cast(source, "-f", fmt),
+            "Casting g.n3...\n" + N3_REFUSED.format(name="g.n3", counts=counts),
+        )
+
+    def test_a_turtle_source_rdflib_reads_one_from_is_refused_too(self, tmp_path: Path) -> None:
+        """rdflib's Turtle parser lets a blank-node predicate through, so the check is on content."""
+        source = _write(tmp_path, "bp.ttl", "<http://ex/a> _:p <http://ex/b> .\n")
+        _assert_refused(
+            _cast(source, "-f", "nt"),
+            "Casting bp.ttl...\n"
+            + N3_REFUSED.format(name="bp.ttl", counts="1 statement with " + self.MISPLACED),
+        )
+
+    def test_n3_output_can_hold_it_so_that_request_goes_ahead(self, tmp_path: Path) -> None:
+        source = _write(tmp_path, "bp.ttl", "<http://ex/a> _:p <http://ex/b> .\n")
+        result = _cast(source, "-f", "n3")
+        assert result.exit_code == 0, result.output
+        written = Graph()
+        written.parse(data=result.stdout, format="n3")
+        assert len(written) == 1
+
+    def test_n3_beside_another_format_is_refused_whole(self, tmp_path: Path) -> None:
+        source = _write(tmp_path, "bp.ttl", "<http://ex/a> _:p <http://ex/b> .\n")
+        out_dir = tmp_path / "out"
+        result = _cast(source, "-f", "n3", "-f", "nt", "-o", out_dir)
+        assert result.exit_code == 2, result.output
+        assert not out_dir.exists()
+
+
+class TestCastReviewFindings:
+    """Shapes the independent review of #544 found untested."""
+
+    def test_the_default_graph_term_older_rdflib_writes_is_removed(self) -> None:
+        """rdflib before 7.3 names the default graph in N-Quads by its internal IRI."""
+
+        class OldRdflibDataset:
+            def serialize(self, destination, format):  # type: ignore[no-untyped-def]  # noqa: A002
+                destination.write(
+                    b'<http://ex/a> <http://ex/p> "v" <urn:x-rdflib:default> .\n'
+                    b'<http://ex/a> <http://ex/p> "w" <http://ex/g> .\n'
+                    b'<http://ex/a> <http://ex/p> "x"  .\n\n'
+                )
+
+        content = CastConverter._serialise(OldRdflibDataset(), "nquads")  # type: ignore[arg-type]
+        assert content == (
+            b'<http://ex/a> <http://ex/p> "v" .\n'
+            b'<http://ex/a> <http://ex/p> "w" <http://ex/g> .\n'
+            b'<http://ex/a> <http://ex/p> "x" .\n\n'
+        )
+
+    def test_a_repeated_format_is_named_once_in_the_flatten_warning(self, tmp_path: Path) -> None:
+        source = _write(tmp_path, "d.trig", QUADS_TRIG)
+        result = _cast(
+            source, "-f", "ttl", "-f", "ttl", "-f", "nq", "--allow-flatten", "-o", tmp_path / "out"
+        )
+        assert (
+            "  ⚠ Flattened d.trig for turtle: all named graphs merged into one graph.\n"
+            in result.stderr
+        )
+
+    def test_a_blank_node_graph_name_used_in_the_default_graph_is_still_the_name(
+        self, tmp_path: Path
+    ) -> None:
+        source = _write(
+            tmp_path,
+            "bg.nq",
+            "<http://ex/a> <http://ex/p> <http://ex/b> _:g .\n"
+            "<http://ex/doc> <http://ex/hasGraph> _:g .\n",
+        )
+        result = _cast(source, "-f", "trig")
+        assert result.exit_code == 0, result.output
+        dataset = _read(result.stdout, "trig")
+        names = {g for _s, _p, _o, g in dataset.quads((None, None, None, None)) if g != DEFAULT_ID}
+        assert set(_default(dataset).objects()) == names and len(names) == 1
+
+    @pytest.mark.xfail(strict=True, reason="#545: rdflib's TriG serialiser writes it as [ ]")
+    def test_a_blank_node_graph_name_used_in_a_named_graph_is_still_the_name(
+        self, tmp_path: Path
+    ) -> None:
+        source = _write(
+            tmp_path,
+            "bg.nq",
+            "<http://ex/a> <http://ex/p> <http://ex/b> _:g .\n"
+            "<http://ex/doc> <http://ex/hasGraph> _:g <http://ex/meta> .\n",
+        )
+        result = _cast(source, "-f", "trig")
+        assert result.exit_code == 0, result.output
+        dataset = _read(result.stdout, "trig")
+        names = {g for _s, _p, _o, g in dataset.quads((None, None, None, None)) if g != DEFAULT_ID}
+        objects = {
+            o for _s, _p, o, _g in dataset.quads((None, URIRef("http://ex/hasGraph"), None, None))
+        }
+        assert objects < names
+
+    def test_the_same_shape_survives_trig_to_nquads(self, tmp_path: Path) -> None:
+        source = _write(
+            tmp_path,
+            "bg.trig",
+            "<http://ex/meta> { <http://ex/doc> <http://ex/hasGraph> _:g . }\n"
+            "_:g { <http://ex/a> <http://ex/p> <http://ex/b> . }\n",
+        )
+        result = _cast(source, "-f", "nquads")
+        assert result.exit_code == 0, result.output
+        dataset = _read(result.stdout, "nquads")
+        names = {g for _s, _p, _o, g in dataset.quads((None, None, None, None)) if g != DEFAULT_ID}
+        objects = {
+            o for _s, _p, o, _g in dataset.quads((None, URIRef("http://ex/hasGraph"), None, None))
+        }
+        assert objects < names
+
+    def test_an_empty_jsonld_named_graph_is_not_a_named_graph(self, tmp_path: Path) -> None:
+        source = _write(
+            tmp_path,
+            "e.jsonld",
+            '{"@context": {"ex": "http://example.org/"}, "@graph": ['
+            '{"@id": "ex:a", "ex:p": "v"}, {"@id": "ex:g1", "@graph": []}]}\n',
+        )
+        result = _cast(source, "-f", "nt")
+        assert result.exit_code == 0, result.output
+        assert result.stdout == '<http://example.org/a> <http://example.org/p> "v" .\n'
