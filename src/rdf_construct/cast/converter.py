@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from rdflib import Dataset, Graph
+from rdflib import BNode, Dataset, Graph, Literal
 from rdflib.graph import DATASET_DEFAULT_GRAPH_ID, QuotedGraph
 from rdflib.term import Variable
 
@@ -158,6 +158,10 @@ def nothing_to_cast_message(source: Path, source_format: str, *, allow_flatten: 
 # ---------------------------------------------------------------------------
 
 
+#: How rdflib before 7.3 writes the default graph's name in an N-Quads statement.
+_DEFAULT_GRAPH_TERM = f" <{DATASET_DEFAULT_GRAPH_ID}>".encode()
+
+
 def named_graphs_message(
     source: Path, source_format: str, single_graph_targets: Sequence[str]
 ) -> str:
@@ -206,50 +210,57 @@ def has_named_graphs(dataset: Dataset) -> bool:
     )
 
 
-def n3_only_statements(dataset: Dataset) -> tuple[int, int]:
-    """Count the statements holding a term that only N3 can carry (#542).
+def n3_only_statements(dataset: Dataset) -> tuple[int, int, int]:
+    """Count the statements that only N3 can carry (#542).
 
-    An N3 formula (``{ … }``) parses into a ``QuotedGraph`` and an N3 variable
-    (``@forAll :x``, ``?x``) into a ``Variable``. Neither is an IRI, a blank node or a
-    literal, so no other format can hold them: rdflib's serialisers write the first as
-    text that does not parse, or drop the statement. Statements are counted rather than
+    Three things parse that are not RDF triples. An N3 formula (``{ … }``) becomes a
+    ``QuotedGraph`` and an N3 variable (``@forAll :x``, ``?x``) a ``Variable``: neither
+    is an IRI, a blank node or a literal. And N3 allows a literal as a subject and a
+    blank node or a literal as a predicate, which rdflib's Turtle parser lets through
+    as well. No other format can hold any of them: rdflib's serialisers write text
+    that does not parse, or drop the statement. Statements are counted rather than
     formulae, because a formula nested in another makes the latter ambiguous.
 
     Args:
         dataset: A parsed source.
 
     Returns:
-        The number of statements with a formula, and the number with a variable. A
-        statement holding both is counted in each.
+        The number of statements with a formula, the number with a variable, and the
+        number with a literal subject or a blank-node or literal predicate. A statement
+        can be counted in more than one.
     """
-    formulae = variables = 0
+    formulae = variables = misplaced = 0
     for s, p, o, _graph in dataset.quads((None, None, None, None)):
         terms = (s, p, o)
         formulae += any(isinstance(term, QuotedGraph) for term in terms)
         variables += any(isinstance(term, Variable) for term in terms)
-    return formulae, variables
+        misplaced += isinstance(s, Literal) or isinstance(p, BNode | Literal)
+    return formulae, variables, misplaced
 
 
-def n3_only_message(source: Path, formulae: int, variables: int) -> str:
-    """Explain why a source with N3 formulae or variables cannot be cast.
+def n3_only_message(source: Path, formulae: int, variables: int, misplaced: int = 0) -> str:
+    """Explain why a source with statements only N3 can carry cannot be cast.
 
     Args:
         source: The source file.
         formulae: The number of statements holding a formula.
         variables: The number of statements holding a variable.
+        misplaced: The number of statements with a literal subject, or a predicate
+            that is not an IRI.
 
     Returns:
         The message, without any ``Error:`` prefix.
     """
-
-    def statements(count: int) -> str:
-        return f"{count} statement{'' if count == 1 else 's'}"
-
-    counts = []
-    if formulae:
-        counts.append(f"{statements(formulae)} with a formula ({{ … }})")
-    if variables:
-        counts.append(f"{variables if formulae else statements(variables)} with a variable")
+    kinds = (
+        (formulae, "a formula ({ … })"),
+        (variables, "a variable"),
+        (misplaced, "a literal subject or a predicate that is not an IRI"),
+    )
+    counts: list[str] = []
+    for count, kind in kinds:
+        if count:
+            noun = "" if counts else f" statement{'' if count == 1 else 's'}"
+            counts.append(f"{count}{noun} with {kind}")
     return (
         f"Source '{source.name}' holds N3 constructs that no other format can carry: "
         f"{', '.join(counts)}. "
@@ -334,15 +345,17 @@ class CastConverter:
             return result
 
         # --- 3a. N3 constructs that no other format can carry (#542) ----------
-        formulae, variables = n3_only_statements(dataset)
-        if formulae or variables:
-            result.error = n3_only_message(source, formulae, variables)
+        # N3 output can hold them, so a request for nothing else goes ahead.
+        formulae, variables, misplaced = n3_only_statements(dataset)
+        other_targets = [f for f in formats if f not in (source_format, "n3")]
+        if (formulae or variables or misplaced) and other_targets:
+            result.error = n3_only_message(source, formulae, variables, misplaced)
             result.success = False
             return result
 
         # --- 3b. A JSON-LD source holding named graphs is a quad source (#540) -
         holds_graphs = is_quad_source or (source_format == "json-ld" and has_named_graphs(dataset))
-        merged_targets = [f for f in single_graph_targets if f != source_format]
+        merged_targets = list(dict.fromkeys(f for f in single_graph_targets if f != source_format))
         if holds_graphs and merged_targets and not allow_flatten:
             result.error = named_graphs_message(source, source_format, merged_targets)
             result.success = False
@@ -470,8 +483,11 @@ class CastConverter:
 
         rdflib writes a default-graph N-Quads statement with two spaces before the
         ``.``, one either side of the graph term it leaves out. That is valid but not
-        canonical, so it is rewritten to one. The rewrite is exact: N-Quads escapes
-        newlines inside literals, so only a statement can end a line.
+        canonical, so it is rewritten to one. rdflib before 7.3 does not leave the
+        term out: it names the default graph by its own internal IRI, which is
+        removed, so that the default graph is unnamed on every rdflib 7. Both
+        rewrites are exact: N-Quads escapes newlines inside literals, so only a
+        statement can end a line.
 
         Args:
             graph: The rdflib graph or dataset to serialise.
@@ -485,4 +501,5 @@ class CastConverter:
         content = buf.getvalue()
         if fmt == "nquads":
             content = content.replace(b"  .\n", b" .\n")
+            content = content.replace(_DEFAULT_GRAPH_TERM + b" .\n", b" .\n")
         return content

@@ -720,9 +720,10 @@ change, and what to do about it, is listed command by command in the
   graphs are kept under their names, with or without `--allow-flatten`: the
   flag merges only for single-graph formats, and its warning names them. A
   JSON-LD source that holds named graphs is treated as a quad source, where it
-  used to lose them at exit 0. An N3 source with formulae or variables is
-  refused at exit 2, where it was written as output that did not parse or with
-  the statements missing. The quad guard's advice no longer names the source's
+  used to lose them at exit 0. A source with N3 formulae or variables, or with
+  a statement that is not an RDF triple (a literal subject, a predicate that is
+  not an IRI), is refused at exit 2, where it was written as output that did
+  not parse or with the statements missing. The quad guard's advice no longer names the source's
   own format. Single-graph output from a single-graph source is unchanged.
   **Breaking**: see the migration guide.
 - **`diff` compares blank nodes by structure, in both directions** (#143). It

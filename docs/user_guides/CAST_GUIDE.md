@@ -182,10 +182,11 @@ rdf-construct cast dataset.trig --format nq
 rdf-construct cast dataset.nq --format trig
 ```
 
-The default graph, each named graph, a triple stated in two graphs, and a blank node shared between graphs all come through. Two things to know:
+The default graph, each named graph, a triple stated in two graphs, and a blank node shared between graphs all come through. Three things to know:
 
 - **A graph named by a blank node** keeps a blank-node name, but not the same label: blank-node labels are local to a file.
-- **TriG labels every blank node** (`_:n…`), where Turtle writes a single-use one inline as `[ … ]`. So TriG output from a source with blank nodes differs from run to run, and is the same graph each time.
+- **Known limitation:** in TriG output, a blank node that names a graph and is used once as an object inside a named graph is written `[ ]`, so that statement no longer points at the graph ([#545](https://github.com/aigora-de/rdf-construct/issues/545)). N-Quads output keeps it.
+- **TriG labels blank nodes** (`_:n…`) that Turtle would write inline as `[ … ]`. So TriG output from a source with blank nodes differs from run to run, and is the same graph each time.
 
 ### Writing a single-graph format from a source with named graphs
 
@@ -229,21 +230,24 @@ rdf-construct cast dataset.jsonld --format ttl --allow-flatten    # merges them
 
 The default invocation (`rdf-construct cast dataset.jsonld`) asks for Turtle and RDF/XML, so it is refused too. A JSON-LD source with no named graph is cast as any single-graph source is.
 
+`cast` sees the named graphs rdflib's JSON-LD parser reports. A named graph with nothing in it does not count, and a graph with no `@id` of its own (an `@graph` given as a property's value, or through `"@container": "@graph"`) is read into the default graph.
+
 ## N3 Formulae and Variables
 
 N3 is a superset of Turtle, and some of what it adds is not RDF. `cast` refuses a source that holds:
 
 - **a formula**, a quoted graph written `{ … }`, as in a rule `{ :a :b :c } => { :d :e :f } .`;
-- **a variable**, declared with `@forAll` or written `?x`.
+- **a variable**, declared with `@forAll` or written `?x`;
+- **a statement that is not an RDF triple**: one with a literal as its subject (`"lit" :p :b .`), or with a predicate that is not an IRI (`:a _:p :b .`, or a path such as `:a :q!:r :b .`).
 
-No other format can hold either, so there is nothing to write, and N3 to N3 is [nothing to cast](#source-format-same-as-target). The refusal exits with code `2`, writes nothing, and counts the statements involved:
+No other format can hold any of them, so there is nothing to write, and N3 to N3 is [nothing to cast](#source-format-same-as-target). The check is on what was read, not on the extension: rdflib's Turtle parser accepts a blank-node predicate, and a `.ttl` file with one is refused for every format but N3. The refusal exits with code `2`, writes nothing, and counts the statements involved:
 
 ```bash
 rdf-construct cast rules.n3 --format ttl
 # ✗ Source 'rules.n3' holds N3 constructs that no other format can carry: 1 statement with a formula ({ … }). Only N3 can hold them, so there is nothing cast can write.
 ```
 
-N3 that is plain RDF underneath casts as usual: `@forSome` and the path shorthands `:a!:b` and `:a^:b` become ordinary blank nodes.
+N3 that is plain RDF underneath casts as usual: a `@forSome` name and the path shorthands `:a!:b` and `:a^:b` become ordinary blank nodes, which are fine as a subject or an object.
 
 ## Source Format Same as Target
 

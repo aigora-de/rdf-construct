@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 EX = Namespace("http://example.org/")
+DEFAULT_ID = DATASET_DEFAULT_GRAPH_ID
 
 SIMPLE_TTL = dedent(
     """\
@@ -1526,3 +1527,163 @@ class TestCastConverterDatasets:
             "a formula ({ … }). Only N3 can hold them, so there is nothing cast can write."
         )
         assert result.written_files == [] and not out_dir.exists()
+
+
+class TestCastStatementsThatAreNotRdf:
+    """N3 allows a literal subject and a predicate that is not an IRI; no other format does.
+
+    Without the refusal they are written as N-Quads and N-Triples that do not parse, or dropped.
+    """
+
+    MISPLACED = "a literal subject or a predicate that is not an IRI"
+
+    @pytest.mark.parametrize(
+        ("n3", "counts"),
+        [
+            ('"lit" :p :b .\n', "1 statement with " + MISPLACED),
+            ("7 :p :b .\n", "1 statement with " + MISPLACED),
+            (":a _:p :b .\n", "1 statement with " + MISPLACED),
+            ("@forSome :x .\n:a :x :b .\n", "1 statement with " + MISPLACED),
+            (':a "p" :b .\n', "1 statement with " + MISPLACED),
+            (":a :q!:r :b .\n", "1 statement with " + MISPLACED),
+            ('"lit" :p :b .\n:a _:p :b .\n:x :y :z .\n', "2 statements with " + MISPLACED),
+            (
+                '{ :a :b :c } => { :d :e :f } .\n:k :p ?x .\n"lit" :p :b .\n',
+                "1 statement with a formula ({ … }), 1 with a variable, 1 with " + MISPLACED,
+            ),
+        ],
+        ids=[
+            "literal-subject",
+            "number-subject",
+            "blank-node-predicate",
+            "forSome-predicate",
+            "literal-predicate",
+            "path-predicate",
+            "two-statements",
+            "all-three-kinds",
+        ],
+    )
+    @pytest.mark.parametrize("fmt", ["turtle", "nt", "nquads"])
+    def test_it_is_refused(self, tmp_path: Path, n3: str, counts: str, fmt: str) -> None:
+        source = _write(tmp_path, "g.n3", "@prefix : <http://ex/> .\n" + n3)
+        _assert_refused(
+            _cast(source, "-f", fmt),
+            "Casting g.n3...\n" + N3_REFUSED.format(name="g.n3", counts=counts),
+        )
+
+    def test_a_turtle_source_rdflib_reads_one_from_is_refused_too(self, tmp_path: Path) -> None:
+        """rdflib's Turtle parser lets a blank-node predicate through, so the check is on content."""
+        source = _write(tmp_path, "bp.ttl", "<http://ex/a> _:p <http://ex/b> .\n")
+        _assert_refused(
+            _cast(source, "-f", "nt"),
+            "Casting bp.ttl...\n"
+            + N3_REFUSED.format(name="bp.ttl", counts="1 statement with " + self.MISPLACED),
+        )
+
+    def test_n3_output_can_hold_it_so_that_request_goes_ahead(self, tmp_path: Path) -> None:
+        source = _write(tmp_path, "bp.ttl", "<http://ex/a> _:p <http://ex/b> .\n")
+        result = _cast(source, "-f", "n3")
+        assert result.exit_code == 0, result.output
+        written = Graph()
+        written.parse(data=result.stdout, format="n3")
+        assert len(written) == 1
+
+    def test_n3_beside_another_format_is_refused_whole(self, tmp_path: Path) -> None:
+        source = _write(tmp_path, "bp.ttl", "<http://ex/a> _:p <http://ex/b> .\n")
+        out_dir = tmp_path / "out"
+        result = _cast(source, "-f", "n3", "-f", "nt", "-o", out_dir)
+        assert result.exit_code == 2, result.output
+        assert not out_dir.exists()
+
+
+class TestCastReviewFindings:
+    """Shapes the independent review of #544 found untested."""
+
+    def test_the_default_graph_term_older_rdflib_writes_is_removed(self) -> None:
+        """rdflib before 7.3 names the default graph in N-Quads by its internal IRI."""
+
+        class OldRdflibDataset:
+            def serialize(self, destination, format):  # type: ignore[no-untyped-def]  # noqa: A002
+                destination.write(
+                    b'<http://ex/a> <http://ex/p> "v" <urn:x-rdflib:default> .\n'
+                    b'<http://ex/a> <http://ex/p> "w" <http://ex/g> .\n'
+                    b'<http://ex/a> <http://ex/p> "x"  .\n\n'
+                )
+
+        content = CastConverter._serialise(OldRdflibDataset(), "nquads")  # type: ignore[arg-type]
+        assert content == (
+            b'<http://ex/a> <http://ex/p> "v" .\n'
+            b'<http://ex/a> <http://ex/p> "w" <http://ex/g> .\n'
+            b'<http://ex/a> <http://ex/p> "x" .\n\n'
+        )
+
+    def test_a_repeated_format_is_named_once_in_the_flatten_warning(self, tmp_path: Path) -> None:
+        source = _write(tmp_path, "d.trig", QUADS_TRIG)
+        result = _cast(
+            source, "-f", "ttl", "-f", "ttl", "-f", "nq", "--allow-flatten", "-o", tmp_path / "out"
+        )
+        assert (
+            "  ⚠ Flattened d.trig for turtle: all named graphs merged into one graph.\n"
+            in result.stderr
+        )
+
+    def test_a_blank_node_graph_name_used_in_the_default_graph_is_still_the_name(
+        self, tmp_path: Path
+    ) -> None:
+        source = _write(
+            tmp_path,
+            "bg.nq",
+            "<http://ex/a> <http://ex/p> <http://ex/b> _:g .\n"
+            "<http://ex/doc> <http://ex/hasGraph> _:g .\n",
+        )
+        result = _cast(source, "-f", "trig")
+        assert result.exit_code == 0, result.output
+        dataset = _read(result.stdout, "trig")
+        names = {g for _s, _p, _o, g in dataset.quads((None, None, None, None)) if g != DEFAULT_ID}
+        assert set(_default(dataset).objects()) == names and len(names) == 1
+
+    @pytest.mark.xfail(strict=True, reason="#545: rdflib's TriG serialiser writes it as [ ]")
+    def test_a_blank_node_graph_name_used_in_a_named_graph_is_still_the_name(
+        self, tmp_path: Path
+    ) -> None:
+        source = _write(
+            tmp_path,
+            "bg.nq",
+            "<http://ex/a> <http://ex/p> <http://ex/b> _:g .\n"
+            "<http://ex/doc> <http://ex/hasGraph> _:g <http://ex/meta> .\n",
+        )
+        result = _cast(source, "-f", "trig")
+        assert result.exit_code == 0, result.output
+        dataset = _read(result.stdout, "trig")
+        names = {g for _s, _p, _o, g in dataset.quads((None, None, None, None)) if g != DEFAULT_ID}
+        objects = {
+            o for _s, _p, o, _g in dataset.quads((None, URIRef("http://ex/hasGraph"), None, None))
+        }
+        assert objects < names
+
+    def test_the_same_shape_survives_trig_to_nquads(self, tmp_path: Path) -> None:
+        source = _write(
+            tmp_path,
+            "bg.trig",
+            "<http://ex/meta> { <http://ex/doc> <http://ex/hasGraph> _:g . }\n"
+            "_:g { <http://ex/a> <http://ex/p> <http://ex/b> . }\n",
+        )
+        result = _cast(source, "-f", "nquads")
+        assert result.exit_code == 0, result.output
+        dataset = _read(result.stdout, "nquads")
+        names = {g for _s, _p, _o, g in dataset.quads((None, None, None, None)) if g != DEFAULT_ID}
+        objects = {
+            o for _s, _p, o, _g in dataset.quads((None, URIRef("http://ex/hasGraph"), None, None))
+        }
+        assert objects < names
+
+    def test_an_empty_jsonld_named_graph_is_not_a_named_graph(self, tmp_path: Path) -> None:
+        source = _write(
+            tmp_path,
+            "e.jsonld",
+            '{"@context": {"ex": "http://example.org/"}, "@graph": ['
+            '{"@id": "ex:a", "ex:p": "v"}, {"@id": "ex:g1", "@graph": []}]}\n',
+        )
+        result = _cast(source, "-f", "nt")
+        assert result.exit_code == 0, result.output
+        assert result.stdout == '<http://example.org/a> <http://example.org/p> "v" .\n'
