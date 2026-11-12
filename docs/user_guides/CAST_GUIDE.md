@@ -182,10 +182,9 @@ rdf-construct cast dataset.trig --format nq
 rdf-construct cast dataset.nq --format trig
 ```
 
-The default graph, each named graph, a triple stated in two graphs, and a blank node shared between graphs all come through. Three things to know:
+The default graph, each named graph, a triple stated in two graphs, and a blank node shared between graphs all come through. Two things to know:
 
-- **A graph named by a blank node** keeps a blank-node name, but not the same label: blank-node labels are local to a file.
-- **Known limitation:** in TriG output, a blank node that names a graph and is used once as an object inside a named graph is written `[ ]`, so that statement no longer points at the graph ([#545](https://github.com/aigora-de/rdf-construct/issues/545)). N-Quads output keeps it.
+- **A graph named by a blank node** keeps a blank-node name, but not the same label: blank-node labels are local to a file. A statement that points at that graph still points at it.
 - **TriG labels blank nodes** (`_:n…`) that Turtle would write inline as `[ … ]`. So TriG output from a source with blank nodes differs from run to run, and is the same graph each time.
 
 ### Writing a single-graph format from a source with named graphs

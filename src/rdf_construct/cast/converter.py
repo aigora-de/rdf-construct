@@ -26,10 +26,11 @@ from __future__ import annotations
 import io
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from rdflib import BNode, Dataset, Graph, Literal
+from rdflib import BNode, Dataset, Graph, Literal, plugin
 from rdflib.graph import DATASET_DEFAULT_GRAPH_ID, QuotedGraph
+from rdflib.serializer import Serializer
 from rdflib.term import Variable
 
 from rdf_construct.core.formats import (
@@ -269,6 +270,73 @@ def n3_only_message(source: Path, formulae: int, variables: int, misplaced: int 
 
 
 # ---------------------------------------------------------------------------
+# A graph named by a blank node, in TriG (#545)
+# ---------------------------------------------------------------------------
+
+
+class GraphNameReferences:
+    """Mixin for rdflib's TriG serialiser: a blank node that names a graph keeps its label.
+
+    rdflib writes a blank node inline, as ``[ … ]``, when it is an object and is
+    referred to once. It counts each use as an object or as a subject, across the
+    whole dataset, but not the use as a graph's name. So a blank node that names a
+    graph and is otherwise used once, as an object, was written ``[ ]``, and the
+    statement no longer pointed at the graph. Counting the name as a reference
+    makes rdflib write the label in both places.
+
+    The count is rdflib's private ``_references``. If a later rdflib no longer has
+    it, a dataset in which a blank node names a graph is refused, rather than
+    written with the link lost. This does not notice an rdflib that keeps the
+    attribute and decides inlining some other way: the tests are what would.
+    """
+
+    store: Any
+    _references: dict[Any, int]
+
+    def preprocess(self) -> None:
+        """Count every blank-node graph name as a reference, after rdflib's own count.
+
+        Raises:
+            RuntimeError: If a blank node names a graph and this rdflib's serialiser
+                keeps no reference count.
+        """
+        names = {
+            graph
+            for _s, _p, _o, graph in self.store.quads((None, None, None, None))
+            if isinstance(graph, BNode)
+        }
+        # Checked before rdflib's own pass, which would fail on the missing count first.
+        if names and not hasattr(self, "_references"):
+            raise RuntimeError(
+                "this version of rdflib writes TriG in a way cast does not know, so a "
+                "graph named by a blank node could lose its name. Use --format nquads, "
+                "which keeps it"
+            )
+        super().preprocess()  # type: ignore[misc]
+        for name in names:
+            self._references[name] += 1
+
+
+def trig_serialiser(dataset: Dataset) -> Serializer:
+    """Build a TriG serialiser for *dataset* that keeps each blank-node graph name (#545).
+
+    It is built over whichever class is registered for ``trig`` when this is
+    called. Inside the CLI that is not rdflib's own but the one that keeps literal
+    forms (#377), so a fixed base class here would undo that.
+
+    Args:
+        dataset: The parsed source.
+
+    Returns:
+        The serialiser; call its ``serialize`` with a binary stream.
+    """
+    registered: type[Serializer] = plugin.get("trig", Serializer)
+    serialiser = type("GraphNameTrigSerializer", (GraphNameReferences, registered), {})
+    built: Serializer = serialiser(dataset)
+    return built
+
+
+# ---------------------------------------------------------------------------
 # Converter
 # ---------------------------------------------------------------------------
 
@@ -412,6 +480,12 @@ class CastConverter:
                     # is built in memory first. The other formats keep rdflib's own
                     # write to the destination: what a failed write leaves is #409's.
                     out_path.write_bytes(self._serialise(graph, fmt))
+                elif fmt == "trig":
+                    # Built, then opened and written, as rdflib does it, through our
+                    # serialiser (#545).
+                    serialiser = trig_serialiser(dataset)
+                    with out_path.open("wb") as stream:
+                        serialiser.serialize(stream)
                 else:
                     graph.serialize(destination=str(out_path), format=fmt)
                 result.written_files.append(out_path)
@@ -497,7 +571,10 @@ class CastConverter:
             The serialised RDF, UTF-8 encoded.
         """
         buf = io.BytesIO()
-        graph.serialize(destination=buf, format=fmt)
+        if fmt == "trig":
+            trig_serialiser(graph).serialize(buf)  # type: ignore[arg-type]
+        else:
+            graph.serialize(destination=buf, format=fmt)
         content = buf.getvalue()
         if fmt == "nquads":
             content = content.replace(b"  .\n", b" .\n")
