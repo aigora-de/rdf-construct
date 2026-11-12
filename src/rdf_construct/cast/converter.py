@@ -26,7 +26,7 @@ from __future__ import annotations
 import io
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import IO, TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any
 
 from rdflib import BNode, Dataset, Graph, Literal, plugin
 from rdflib.graph import DATASET_DEFAULT_GRAPH_ID, QuotedGraph
@@ -317,20 +317,23 @@ class GraphNameReferences:
             self._references[name] += 1
 
 
-def write_trig(dataset: Dataset, stream: IO[bytes]) -> None:
-    """Write *dataset* to *stream* as TriG, keeping each blank-node graph name (#545).
+def trig_serialiser(dataset: Dataset) -> Serializer:
+    """Build a TriG serialiser for *dataset* that keeps each blank-node graph name (#545).
 
-    The serialiser is built over whichever class is registered for ``trig`` when
-    this is called. Inside the CLI that is not rdflib's own but the one that keeps
-    literal forms (#377), so a fixed base class here would undo that.
+    It is built over whichever class is registered for ``trig`` when this is
+    called. Inside the CLI that is not rdflib's own but the one that keeps literal
+    forms (#377), so a fixed base class here would undo that.
 
     Args:
         dataset: The parsed source.
-        stream: A binary stream to write to.
+
+    Returns:
+        The serialiser; call its ``serialize`` with a binary stream.
     """
     registered: type[Serializer] = plugin.get("trig", Serializer)
     serialiser = type("GraphNameTrigSerializer", (GraphNameReferences, registered), {})
-    serialiser(dataset).serialize(stream)
+    built: Serializer = serialiser(dataset)
+    return built
 
 
 # ---------------------------------------------------------------------------
@@ -478,9 +481,11 @@ class CastConverter:
                     # write to the destination: what a failed write leaves is #409's.
                     out_path.write_bytes(self._serialise(graph, fmt))
                 elif fmt == "trig":
-                    # Opened and written as rdflib does it, through our serialiser (#545).
+                    # Built, then opened and written, as rdflib does it, through our
+                    # serialiser (#545).
+                    serialiser = trig_serialiser(dataset)
                     with out_path.open("wb") as stream:
-                        write_trig(dataset, stream)
+                        serialiser.serialize(stream)
                 else:
                     graph.serialize(destination=str(out_path), format=fmt)
                 result.written_files.append(out_path)
@@ -567,7 +572,7 @@ class CastConverter:
         """
         buf = io.BytesIO()
         if fmt == "trig":
-            write_trig(graph, buf)  # type: ignore[arg-type]
+            trig_serialiser(graph).serialize(buf)  # type: ignore[arg-type]
         else:
             graph.serialize(destination=buf, format=fmt)
         content = buf.getvalue()

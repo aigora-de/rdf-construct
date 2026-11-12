@@ -1834,6 +1834,13 @@ class _KeepsNoReferenceCount(GUARDED_FORMATS["trig"]):  # type: ignore[misc]
         del self._references
 
 
+class _CannotBeBuilt(GUARDED_FORMATS["trig"]):  # type: ignore[misc]
+    """A TriG serialiser that fails as it is constructed, before anything is written."""
+
+    def __init__(self, store: Dataset) -> None:
+        raise ValueError("cannot be built")
+
+
 NO_COUNT = (
     "this version of rdflib writes TriG in a way cast does not know, so a graph named by "
     "a blank node could lose its name. Use --format nquads, which keeps it"
@@ -1933,6 +1940,16 @@ class TestCastBlankNodeGraphNames:
         assert beside.exit_code == 1, beside.output
         assert f"⚠ Failed to write bg.trig (trig): {NO_COUNT}\n" in beside.stderr
         assert (tmp_path / "b" / "bg.ttl").exists()
+
+    def test_a_serialiser_that_cannot_be_built_leaves_no_file(self, tmp_path: Path) -> None:
+        """The serialiser is built before the file is opened, as rdflib does it."""
+        statements, _held = GRAPH_NAME_ROWS["in an IRI-named graph"]
+        source = _write(tmp_path, "bg.nq", _as_nquads(statements))
+        with patch.dict(GUARDED_FORMATS, {"trig": _CannotBeBuilt}):
+            result = _cast(source, "-f", "trig", "-o", tmp_path / "out")
+        assert result.exit_code == 2, result.output
+        assert "⚠ Failed to write bg.trig (trig): cannot be built\n" in result.stderr
+        assert not (tmp_path / "out" / "bg.trig").exists()
 
     def test_the_reference_count_is_needed_only_when_a_blank_node_names_a_graph(self) -> None:
         class NoCount:
