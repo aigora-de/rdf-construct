@@ -711,7 +711,7 @@ change, and what to do about it, is listed command by command in the
   `success=False` with an `error`, and a new `skipped_formats` field. **Breaking**:
   see the migration guide.
 - **`cast` writes TriG and N-Quads that hold what the source holds** (#540, #189,
-  #542). It loaded every source into a plain graph, so `-f trig` put every
+  #542, #545). It loaded every source into a plain graph, so `-f trig` put every
   triple in a graph named by a fresh blank node and left the default graph
   empty, N-Quads → TriG dropped the named graphs at exit 0, and `-f nq` failed
   from every source. It now loads into a dataset. A single-graph source's
@@ -719,6 +719,8 @@ change, and what to do about it, is listed command by command in the
   no graph term in N-Quads, with one space before the `.`), and a quad source's
   graphs are kept under their names, with or without `--allow-flatten`: the
   flag merges only for single-graph formats, and its warning names them. A
+  blank node that names a graph is written with its label wherever it is
+  used, so a statement that points at the graph still does (#545). A
   JSON-LD source that holds named graphs is treated as a quad source, where it
   used to lose them at exit 0. A source with N3 formulae or variables, or with
   a statement that is not an RDF triple (a literal subject, a predicate that is

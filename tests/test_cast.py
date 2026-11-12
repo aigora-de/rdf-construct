@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import re
 from pathlib import Path
 from textwrap import dedent
@@ -13,9 +14,11 @@ import pytest
 from rdflib import BNode, Dataset, Graph, Namespace, URIRef
 from rdflib.compare import isomorphic
 from rdflib.graph import DATASET_DEFAULT_GRAPH_ID
-from rdflib.namespace import OWL, RDF, RDFS
+from rdflib.namespace import OWL, RDF, RDFS, XSD
+from rdflib.plugins.serializers.trig import TrigSerializer
 
 from rdf_construct.core import preserve_literal_forms
+from rdf_construct.core.literal_forms import GUARDED_FORMATS
 from rdf_construct.core.formats import (
     FORMAT_ALIASES,
     FormatInfo,
@@ -25,7 +28,7 @@ from rdf_construct.core.formats import (
     is_quad_format,
     normalise_format,
 )
-from rdf_construct.cast.converter import CastConverter, ConversionResult
+from rdf_construct.cast.converter import CastConverter, ConversionResult, GraphNameReferences
 
 if TYPE_CHECKING:
     from click.testing import Result
@@ -1642,7 +1645,6 @@ class TestCastReviewFindings:
         names = {g for _s, _p, _o, g in dataset.quads((None, None, None, None)) if g != DEFAULT_ID}
         assert set(_default(dataset).objects()) == names and len(names) == 1
 
-    @pytest.mark.xfail(strict=True, reason="#545: rdflib's TriG serialiser writes it as [ ]")
     def test_a_blank_node_graph_name_used_in_a_named_graph_is_still_the_name(
         self, tmp_path: Path
     ) -> None:
@@ -1687,3 +1689,268 @@ class TestCastReviewFindings:
         result = _cast(source, "-f", "nt")
         assert result.exit_code == 0, result.output
         assert result.stdout == '<http://example.org/a> <http://example.org/p> "v" .\n'
+
+
+# ---------------------------------------------------------------------------
+# A graph named by a blank node, and used as an object (#545)
+# ---------------------------------------------------------------------------
+
+_A = "<http://ex/a> <http://ex/p> <http://ex/b>"
+_DOC = "<http://ex/doc> <http://ex/hasGraph>"
+_META = "<http://ex/meta>"
+_FIRST, _REST, _NIL = f"<{RDF.first}>", f"<{RDF.rest}>", f"<{RDF.nil}>"
+
+#: Each row is a dataset as N-Quads statements, and what :func:`_identity` says it holds. In
+#: every one ``_:g`` names a graph and is used as an object. rdflib's own TriG serialiser
+#: loses the link in all but ``default``, ``also a subject``, the two ``twice`` rows and
+#: ``heads a list``.
+GRAPH_NAME_ROWS: dict[str, tuple[list[str], tuple[int, int, int, int]]] = {
+    "in its own graph": ([f"{_A} _:g", f"{_DOC} _:g _:g"], (2, 1, 1, 0)),
+    "in an IRI-named graph": ([f"{_A} _:g", f"{_DOC} _:g {_META}"], (2, 1, 1, 0)),
+    "in another blank-node graph": ([f"{_A} _:g", f"{_DOC} _:g _:h"], (2, 2, 1, 0)),
+    "in the default graph": ([f"{_A} _:g", f"{_DOC} _:g"], (2, 1, 1, 0)),
+    "also a subject": (
+        [f"{_A} _:g", f"{_DOC} _:g {_META}", f"_:g <http://ex/created> <http://ex/x> {_META}"],
+        (3, 1, 1, 1),
+    ),
+    "twice in one graph": (
+        [f"{_A} _:g", f"{_DOC} _:g {_META}", f"<http://ex/doc2> <http://ex/hasGraph> _:g {_META}"],
+        (3, 1, 2, 0),
+    ),
+    "twice in two graphs": (
+        [f"{_A} _:g", f"{_DOC} _:g {_META}", f"{_DOC} _:g <http://ex/meta2>"],
+        (3, 1, 2, 0),
+    ),
+    "a list member": (
+        [
+            f"{_A} _:g",
+            f"<http://ex/doc> <http://ex/graphs> _:l {_META}",
+            f"_:l {_FIRST} _:g {_META}",
+            f"_:l {_REST} {_NIL} {_META}",
+        ],
+        (4, 2, 1, 0),
+    ),
+    "heads a list": (
+        [f"_:g {_FIRST} <http://ex/x> _:g", f"_:g {_REST} {_NIL} _:g", f"{_DOC} _:g _:g"],
+        (3, 1, 1, 2),
+    ),
+    "two graphs naming each other": (
+        [f"{_DOC} _:h _:g", "<http://ex/doc2> <http://ex/hasGraph> _:g _:h"],
+        (2, 2, 2, 0),
+    ),
+    "a member of a nested list": (
+        [
+            f"{_A} _:g",
+            f"<http://ex/doc> <http://ex/graphs> _:l {_META}",
+            f"_:l {_FIRST} _:m {_META}",
+            f"_:l {_REST} {_NIL} {_META}",
+            f"_:m {_FIRST} _:g {_META}",
+            f"_:m {_REST} {_NIL} {_META}",
+        ],
+        (6, 3, 1, 0),
+    ),
+    "the only triple of its own graph": ([f"{_DOC} _:g _:g"], (1, 1, 1, 0)),
+    "the object of a blank-node subject": (
+        [
+            f"{_A} _:g",
+            f"<http://ex/doc> <http://ex/prov> _:x {_META}",
+            f"_:x <http://ex/hasGraph> _:g {_META}",
+        ],
+        (3, 2, 1, 0),
+    ),
+}
+
+
+def _terms(statement: str) -> tuple[str, str, str, str | None]:
+    parts = statement.split(" ")
+    return parts[0], parts[1], parts[2], parts[3] if len(parts) == 4 else None
+
+
+def _as_nquads(statements: list[str]) -> str:
+    return "".join(f"{statement} .\n" for statement in statements)
+
+
+def _as_jsonld(statements: list[str]) -> str:
+    def name(term: str) -> str:
+        return term if term.startswith("_:") else term[1:-1]
+
+    graphs: dict[str | None, list[dict[str, object]]] = {}
+    for s, p, o, g in map(_terms, statements):
+        graphs.setdefault(g, []).append({"@id": name(s), name(p): [{"@id": name(o)}]})
+    document: list[dict[str, object]] = []
+    for g, nodes in graphs.items():
+        if g is None:
+            document.extend(nodes)
+        else:
+            document.append({"@id": name(g), "@graph": nodes})
+    return json.dumps(document)
+
+
+#: The sources that can hold the rows. A TriG source cannot be cast to TriG (#330).
+SOURCE_WRITERS = {"nquads": _as_nquads, "json-ld": _as_jsonld}
+
+
+def _identity(dataset: Dataset) -> tuple[int, int, int, int]:
+    """What a dataset holds, counted so that a blank node split in two shows.
+
+    Returns:
+        The statements, the distinct blank nodes (graph names included), the objects that
+        are a graph's name, and the subjects that are a graph's name.
+    """
+    quads = list(dataset.quads((None, None, None, None)))
+    names = {g for _s, _p, _o, g in quads if isinstance(g, BNode)}
+    nodes = names | {term for s, _p, o, _g in quads for term in (s, o) if isinstance(term, BNode)}
+    return (
+        len(quads),
+        len(nodes),
+        sum(o in names for _s, _p, o, _g in quads),
+        sum(s in names for s, _p, _o, _g in quads),
+    )
+
+
+def _trig_from(serialiser: type[TrigSerializer], dataset: Dataset) -> Dataset:
+    buf = io.BytesIO()
+    serialiser(dataset).serialize(buf)
+    return _read(buf.getvalue().decode("utf-8"), "trig")
+
+
+class _ListsTheDefaultGraphOnce(TrigSerializer):
+    """rdflib's TriG serialiser, as it would be if it did not list the default graph twice."""
+
+    def __init__(self, store: Dataset) -> None:
+        super().__init__(store)
+        self.contexts = list({context.identifier: context for context in self.contexts}.values())
+
+
+class _KeepsNoReferenceCount(GUARDED_FORMATS["trig"]):  # type: ignore[misc]
+    """Stands in for an rdflib whose TriG serialiser has no ``_references``.
+
+    A simulation: nothing below it can serialise either, so it shows only what ``cast``
+    does when the count is missing, not what such an rdflib would write.
+    """
+
+    def reset(self) -> None:
+        super().reset()
+        del self._references
+
+
+NO_COUNT = (
+    "this version of rdflib writes TriG in a way cast does not know, so a graph named by "
+    "a blank node could lose its name. Use --format nquads, which keeps it"
+)
+
+
+class TestCastBlankNodeGraphNames:
+    """In TriG, a blank node that names a graph is written with its label wherever it is used."""
+
+    @pytest.mark.parametrize("with_output_dir", [False, True], ids=["pipe", "-o"])
+    @pytest.mark.parametrize("source_format", SOURCE_WRITERS)
+    @pytest.mark.parametrize("row", GRAPH_NAME_ROWS)
+    def test_a_statement_that_points_at_the_graph_still_does(
+        self, tmp_path: Path, row: str, source_format: str, with_output_dir: bool
+    ) -> None:
+        statements, held = GRAPH_NAME_ROWS[row]
+        text = SOURCE_WRITERS[source_format](statements)
+        # The fixture is what the row says it is, from this source format too.
+        assert _identity(_read(text, source_format)) == held
+        source = _write(tmp_path, f"bg{EXTENSION[source_format]}", text)
+        result, written = _cast_to(source, "trig", tmp_path, with_output_dir=with_output_dir)
+        assert result.exit_code == 0, result.output
+        assert _identity(_read(written, "trig")) == held
+
+    @pytest.mark.parametrize("with_output_dir", [False, True], ids=["pipe", "-o"])
+    def test_a_blank_node_that_names_nothing_is_still_written_inline(
+        self, tmp_path: Path, with_output_dir: bool
+    ) -> None:
+        source = _write(tmp_path, "z.nq", f"<http://ex/doc> <http://ex/p> _:z {_META} .\n")
+        result, written = _cast_to(source, "trig", tmp_path, with_output_dir=with_output_dir)
+        assert result.exit_code == 0, result.output
+        assert "ns1:doc ns1:p [ ] ." in written
+
+    def test_the_default_graph_row_does_not_rest_on_rdflib_listing_it_twice(self) -> None:
+        """rdflib counts every default-graph triple twice, which is all that keeps this row.
+
+        With the default graph listed once, as a fixed rdflib would, rdflib's serialiser
+        loses the link there too, and the graph-name count keeps it.
+        """
+        statements, held = GRAPH_NAME_ROWS["in the default graph"]
+        dataset = _read(_as_nquads(statements), "nquads")
+        assert _identity(_trig_from(TrigSerializer, dataset)) == held
+        assert _identity(_trig_from(_ListsTheDefaultGraphOnce, dataset)) != held
+        counted = type("Counted", (GraphNameReferences, _ListsTheDefaultGraphOnce), {})
+        assert _identity(_trig_from(counted, dataset)) == held
+
+    @pytest.mark.parametrize("with_output_dir", [False, True], ids=["pipe", "-o"])
+    def test_a_literal_beside_a_graph_name_keeps_its_form(
+        self, tmp_path: Path, with_output_dir: bool
+    ) -> None:
+        """The serialiser is built over the CLI's own, which keeps literal forms (#377)."""
+        statements, held = GRAPH_NAME_ROWS["in an IRI-named graph"]
+        flag = f'<http://ex/a> <http://ex/flag> "1"^^<{XSD.boolean}> _:g .\n'
+        source = _write(tmp_path, "bg.nq", _as_nquads(statements) + flag)
+        result, written = _cast_to(source, "trig", tmp_path, with_output_dir=with_output_dir)
+        assert result.exit_code == 0, result.output
+        dataset = _read(written, "trig")
+        assert _identity(dataset) == (held[0] + 1, *held[1:])
+        (literal,) = (
+            o for _s, _p, o, _g in dataset.quads((None, URIRef("http://ex/flag"), None, None))
+        )
+        assert (str(literal), literal.datatype) == ("1", XSD.boolean)
+
+    @pytest.mark.parametrize("pipe_mode", [True, False], ids=["pipe", "file"])
+    def test_the_library_path_keeps_the_name(self, tmp_path: Path, pipe_mode: bool) -> None:
+        statements, held = GRAPH_NAME_ROWS["in an IRI-named graph"]
+        source = _write(tmp_path, "bg.nq", _as_nquads(statements))
+        result = CastConverter().convert(
+            source=source, formats=["trig"], output_dir=tmp_path / "out", pipe_mode=pipe_mode
+        )
+        assert result.success, result.error
+        if pipe_mode:
+            assert result.stdout_content is not None
+            written = result.stdout_content
+        else:
+            written = (tmp_path / "out" / "bg.trig").read_text(encoding="utf-8")
+        assert _identity(_read(written, "trig")) == held
+
+    def test_without_a_reference_count_the_name_is_refused_not_lost(self, tmp_path: Path) -> None:
+        """If rdflib drops ``_references``, the cast fails and says where to go."""
+        statements, _held = GRAPH_NAME_ROWS["in an IRI-named graph"]
+        source = _write(tmp_path, "bg.nq", _as_nquads(statements))
+        with patch.dict(GUARDED_FORMATS, {"trig": _KeepsNoReferenceCount}):
+            piped = _cast(source, "-f", "trig")
+            to_file, written = _cast_to(source, "trig", tmp_path, with_output_dir=True)
+            beside = _cast(
+                source, "-f", "trig", "-f", "ttl", "--allow-flatten", "-o", tmp_path / "b"
+            )
+        assert piped.exit_code == 2, piped.output
+        assert piped.stdout == ""
+        assert piped.stderr.endswith(f"✗ Failed to serialise to trig: {NO_COUNT}\n")
+        assert to_file.exit_code == 2, to_file.output
+        assert f"⚠ Failed to write bg.trig (trig): {NO_COUNT}\n" in to_file.stderr
+        # The file is opened before the serialiser runs, as rdflib does it: what a failed
+        # write leaves behind is #409's.
+        assert written == ""
+        assert beside.exit_code == 1, beside.output
+        assert f"⚠ Failed to write bg.trig (trig): {NO_COUNT}\n" in beside.stderr
+        assert (tmp_path / "b" / "bg.ttl").exists()
+
+    def test_the_reference_count_is_needed_only_when_a_blank_node_names_a_graph(self) -> None:
+        class NoCount:
+            """A serialiser with nothing to count in: only ``store`` and ``preprocess``."""
+
+            def __init__(self, store: Dataset) -> None:
+                self.store = store
+                self.preprocessed = False
+
+            def preprocess(self) -> None:
+                self.preprocessed = True
+
+        counted = type("Counted", (GraphNameReferences, NoCount), {})
+        iri_named = counted(_read(f"{_A} {_META} .\n", "nquads"))
+        iri_named.preprocess()
+        assert iri_named.preprocessed
+
+        blank_named = counted(_read(f"{_A} _:g .\n", "nquads"))
+        with pytest.raises(RuntimeError, match="Use --format nquads, which keeps it"):
+            blank_named.preprocess()
+        assert not blank_named.preprocessed
