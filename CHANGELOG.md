@@ -325,7 +325,7 @@ change, and what to do about it, is listed command by command in the
   each resolved against the test file's directory.
 
 ### Changed
-- **Typed literals keep the lexical form the source wrote** (#377). rdflib
+- **Typed literals keep the lexical form the source wrote** (#377, #547). rdflib
   normalised every typed literal as it parsed it, so every command wrote
   `"007"^^xsd:integer` as `"7"`, and `"1"^^xsd:boolean` beside `"true"` on one
   subject and predicate became one triple, at exit 0. The CLI now runs every
@@ -337,7 +337,8 @@ change, and what to do about it, is listed command by command in the
   and `"01"` never conflict. `refactor deprecate` recognises
   `owl:deprecated "1"^^xsd:boolean`. A bare number in a Turtle source is still
   canonicalised by rdflib's parser, and JSON-LD output still writes booleans and
-  numbers from their value (#462). Library callers keep rdflib's defaults
+  numbers from their value (#462). The guard works on every rdflib from 7.0.0
+  (#547). Library callers keep rdflib's defaults
   unless they use `preserve_literal_forms()`. See
   [Typed literals](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#typed-literals)
   in the migration note.
