@@ -1971,3 +1971,94 @@ class TestCastBlankNodeGraphNames:
         with pytest.raises(RuntimeError, match="Use --format nquads, which keeps it"):
             blank_named.preprocess()
         assert not blank_named.preprocessed
+
+
+# ---------------------------------------------------------------------------
+# JSON-LD from a dataset's default graph (#549)
+# ---------------------------------------------------------------------------
+
+
+class TestCastJsonLdDefaultGraph:
+    """JSON-LD output holds the source's statements at the top level, in no named graph.
+
+    rdflib 7.0.0 writes a dataset's default graph to JSON-LD as a graph named
+    ``urn:x-rdflib:default``. Later rdflibs do not, so on them only the test of what is
+    handed to rdflib can fail; the others are the check when the suite runs on 7.0.0.
+    """
+
+    SOURCE = (
+        "<http://example.org/a> <http://example.org/p> _:b .\n"
+        '_:b <http://example.org/q> "007"^^<http://www.w3.org/2001/XMLSchema#integer> .\n'
+    )
+
+    @pytest.mark.parametrize("with_output_dir", [False, True], ids=["pipe", "output-dir"])
+    def test_the_statements_are_in_no_named_graph(
+        self, tmp_path: Path, with_output_dir: bool
+    ) -> None:
+        source = _write(tmp_path, "one.nt", self.SOURCE)
+
+        result, text = _cast_to(source, "json-ld", tmp_path, with_output_dir=with_output_dir)
+
+        assert result.exit_code == 0, result.output
+        assert "@graph" not in text
+        assert str(DATASET_DEFAULT_GRAPH_ID) not in text
+        back = Graph().parse(data=text, format="json-ld")
+        assert isomorphic(back, Graph().parse(data=self.SOURCE, format="nt"))
+
+    @pytest.mark.parametrize("with_output_dir", [False, True], ids=["pipe", "output-dir"])
+    def test_rdflib_is_handed_a_plain_graph(self, tmp_path: Path, with_output_dir: bool) -> None:
+        """Not the dataset's own default graph, which is what rdflib 7.0.0 wraps."""
+        source = _write(tmp_path, "one.nt", self.SOURCE)
+        handed: list[Graph] = []
+        original = Graph.serialize
+
+        def recording(self: Graph, destination=None, format="xml", **kwargs):  # type: ignore[no-untyped-def]
+            if format == "json-ld":
+                handed.append(self)
+            return original(self, destination=destination, format=format, **kwargs)
+
+        with patch.object(Graph, "serialize", recording):
+            result, _text = _cast_to(source, "json-ld", tmp_path, with_output_dir=with_output_dir)
+
+        assert result.exit_code == 0, result.output
+        [graph] = handed
+        assert type(graph) is Graph
+        assert isinstance(graph.identifier, BNode)
+        assert len(graph) == 2
+
+    def test_the_copy_keeps_the_prefixes(self, tmp_path: Path) -> None:
+        source = _write(
+            tmp_path,
+            "one.ttl",
+            "@prefix my: <http://example.org/mine#> .\nmy:a my:p my:b .\n",
+        )
+        handed: list[Graph] = []
+        original = Graph.serialize
+
+        def recording(self: Graph, destination=None, format="xml", **kwargs):  # type: ignore[no-untyped-def]
+            handed.append(self)
+            return original(self, destination=destination, format=format, **kwargs)
+
+        with patch.object(Graph, "serialize", recording):
+            result = _cast(source, "-f", "json-ld")
+
+        assert result.exit_code == 0, result.output
+        assert ("my", URIRef("http://example.org/mine#")) in set(handed[0].namespaces())
+
+    @pytest.mark.parametrize("fmt", ["turtle", "xml", "n3"])
+    def test_the_other_formats_are_still_written_from_the_default_graph(
+        self, tmp_path: Path, fmt: str
+    ) -> None:
+        source = _write(tmp_path, "one.nt", self.SOURCE)
+        handed: list[Graph] = []
+        original = Graph.serialize
+
+        def recording(self: Graph, destination=None, format="xml", **kwargs):  # type: ignore[no-untyped-def]
+            handed.append(self)
+            return original(self, destination=destination, format=format, **kwargs)
+
+        with patch.object(Graph, "serialize", recording):
+            result = _cast(source, "-f", fmt)
+
+        assert result.exit_code == 0, result.output
+        assert handed[0].identifier == DATASET_DEFAULT_GRAPH_ID

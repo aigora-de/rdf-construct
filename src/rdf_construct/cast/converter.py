@@ -458,6 +458,10 @@ class CastConverter:
                 graph = union
             else:
                 graph = dataset.get_context(DATASET_DEFAULT_GRAPH_ID)
+                if fmt == "json-ld":
+                    # rdflib 7.0.0 writes a dataset's default graph to JSON-LD as a
+                    # graph named urn:x-rdflib:default (#549).
+                    graph = self._plain_copy(graph)
 
             if pipe_mode:
                 # Single format → stdout; we do not write any file.
@@ -550,6 +554,24 @@ class CastConverter:
         for prefix, ns in dataset.namespaces():
             flat.bind(prefix, ns)
         return flat
+
+    @staticmethod
+    def _plain_copy(graph: Graph) -> Graph:
+        """Copy *graph* into a plain graph that belongs to no dataset.
+
+        Args:
+            graph: A graph, typically a dataset's default graph.
+
+        Returns:
+            A plain :class:`~rdflib.Graph` holding the same triples and prefix
+            bindings, under an identifier of its own.
+        """
+        plain = Graph()
+        for triple in graph:
+            plain.add(triple)
+        for prefix, ns in graph.namespaces():
+            plain.bind(prefix, ns)
+        return plain
 
     @staticmethod
     def _serialise(graph: Graph, fmt: str) -> bytes:
