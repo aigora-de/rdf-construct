@@ -14,7 +14,7 @@ import pytest
 from pathlib import Path
 from textwrap import dedent
 
-from rdflib import Graph, URIRef, Literal, Namespace
+from rdflib import Graph, URIRef, Literal, Namespace, Variable
 from rdflib.namespace import RDF, RDFS, OWL
 
 # Import from the merge module
@@ -251,9 +251,11 @@ class TestConflictDetector:
         detector = ConflictDetector()
         conflicts = detector.detect_conflicts(sources)
 
-        # The two ex:Ontology labels differ, but the header is #171's to merge, so it is left
-        # out; nothing else overlaps (#193)
-        assert conflicts == []
+        # Both sources declare ex:Ontology, with different English labels: a header's annotations
+        # go through the tiers like any subject's (#171), and nothing else overlaps (#193)
+        assert [(str(c.subject), str(c.predicate)) for c in conflicts] == [
+            ("http://example.org/Ontology", str(RDFS.label))
+        ]
 
     def test_detect_label_conflict(self, core_ontology, conflicting_ontology):
         """Test detection of conflicting labels."""
@@ -500,27 +502,28 @@ class TestRuleEngine:
         parser = PatternParser()
         s, p, o = parser.parse_pattern("?s ?p ?o")
 
-        assert s == "?s"
-        assert p == "?p"
-        assert o == "?o"
+        # Variables are rdflib Variables, named without the ?, never a bare str (#492)
+        assert (s, p, o) == (Variable("s"), Variable("p"), Variable("o"))
+        assert all(isinstance(term, Variable) for term in (s, p, o))
 
     def test_pattern_parser_uri(self):
         """Test parsing patterns with URIs."""
         parser = PatternParser()
         s, p, o = parser.parse_pattern("?s <http://example.org/prop> ?o")
 
-        assert s == "?s"
+        assert s == Variable("s")
         assert p == URIRef("http://example.org/prop")
-        assert o == "?o"
+        assert not isinstance(p, Variable)
+        assert o == Variable("o")
 
     def test_pattern_parser_type_shorthand(self):
         """Test parsing 'a' shorthand for rdf:type."""
         parser = PatternParser()
         s, p, o = parser.parse_pattern("?s a ?type")
 
-        assert s == "?s"
+        assert s == Variable("s")
         assert p == RDF.type
-        assert o == "?type"
+        assert o == Variable("type")
 
     def test_rule_engine_find_matches(self, data_file):
         """Test finding matches in a graph."""
@@ -532,8 +535,17 @@ class TestRuleEngine:
 
         matches = engine._find_matches(data, "?s a ex:Building")
 
-        # Should find the building instances
-        assert len(matches) >= 2
+        # The two buildings' type triples, and nothing else: not their labels or locations, and
+        # not the place's type (#492)
+        ex = "http://example.org/"
+        assert {t for m in matches for t in m.matched_triples} == {
+            (URIRef(ex + "building1"), RDF.type, URIRef(ex + "Building")),
+            (URIRef(ex + "building2"), RDF.type, URIRef(ex + "Building")),
+        }
+        assert {m.bindings["s"] for m in matches} == {
+            URIRef(ex + "building1"),
+            URIRef(ex + "building2"),
+        }
 
 
 # Formatter tests

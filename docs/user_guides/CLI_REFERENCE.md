@@ -244,8 +244,10 @@ rdf-construct docs SOURCE [OPTIONS]
 - `--no-instances`: Exclude instances from documentation
 - `--no-shapes`: Exclude SHACL shapes from documentation
 - `--no-skos`: Exclude SKOS concepts and concept schemes from documentation
-- `--include TYPES`: Include only these entity types (comma-separated: `classes`, `properties`, `object_properties`, `datatype_properties`, `annotation_properties`, `other_properties`, `instances`, `shapes`, `concepts`)
+- `--include TYPES`: Include only these entity types (comma-separated: `classes`, `properties`, `object_properties`, `datatype_properties`, `annotation_properties`, `other_properties`, `instances`, `shapes`, `concepts`; `concept_schemes` and `skos` are spellings of `concepts`)
 - `--exclude TYPES`: Exclude these entity types (same names as `--include`)
+
+An unrecognised or empty name is refused at exit 2 before anything is written, with the accepted names. So is a selection that leaves no entity type (`--include classes --exclude classes`, or a config with every entity `include_*` key false), and a `--no-` flag with an `--include` that names its type (`--no-instances --include instances`).
 
 **Examples**:
 
@@ -287,7 +289,7 @@ rdf-construct cast SOURCE [OPTIONS]
 **Options**:
 - `-f, --format FORMAT`: Output format, repeatable. Omit for all standard formats except source. Single format writes to stdout (pipe mode).
 - `-o, --output-dir PATH`: Output directory for files (default: same directory as source)
-- `--allow-flatten`: Merge all named graphs into the default graph when converting from a quad format (TriG, N-Quads) to a single-graph format
+- `--allow-flatten`: Allow a source with named graphs to be written to a single-graph format by merging every graph into one. Lossy: graph names are discarded. TriG and N-Quads output always keeps the graphs
 
 **Supported format aliases** (case-insensitive):
 
@@ -317,11 +319,20 @@ Converts to `turtle`, `xml`, and `json-ld`, excluding the source format. Writes 
 
 **Quad format handling**:
 
-Converting a quad-format source (TriG, N-Quads) to a single-graph format is rejected by default with a clear error. Use `--allow-flatten` to merge all named graphs into the default graph:
+TriG and N-Quads output holds what the source holds: a single-graph source's triples in the default graph, and a quad source's named graphs under their own names.
+
+```bash
+rdf-construct cast ontology.ttl --format nq
+rdf-construct cast dataset.trig --format nq
+```
+
+Writing a source with named graphs to a single-graph format is refused by default. A TriG or N-Quads source is refused on its format; a JSON-LD source when it holds a named graph. Use `--allow-flatten` to merge every graph into one. The flag never merges for TriG or N-Quads output:
 
 ```bash
 rdf-construct cast dataset.trig --format ttl --allow-flatten
 ```
+
+An N3 source with formulae (`{ … }`) or variables is refused: no other format can hold them. See the [Cast Guide](CAST_GUIDE.md#n3-formulae-and-variables).
 
 **Examples**:
 
@@ -349,9 +360,11 @@ rdf-construct cast ontology.rdf --format ttl | rdf-construct lint /dev/stdin
 ```
 
 **Exit Codes**:
-- `0`: All conversions succeeded
-- `1`: Partial failure — some formats failed, at least one succeeded
-- `2`: Complete failure (parse error, or all formats failed)
+- `0`: Every requested format was written
+- `1`: Finished with something to report — a format was skipped (the source's own) or failed, and at least one was written
+- `2`: Not done — refused (every requested format the source's own, a source with named graphs without `--allow-flatten`, or an N3 source with formulae or variables), a parse error, or every format failed
+
+When every requested format is the source's own, `cast` refuses before reading the source, in pipe mode too: `nothing to cast: ontology.ttl is already turtle (from its extension), and turtle was the only format requested.`
 
 ---
 
@@ -502,10 +515,12 @@ rdf-construct diff OLD_FILE NEW_FILE [OPTIONS]
 **Options**:
 - `-o, --output PATH`: Write output to file instead of stdout; refused (exit 2) if it names either input
 - `-f, --format FORMAT`: Output format: `text`, `markdown`, `md`, `json` (default: text)
-- `--show TYPES`: Show only these change types (comma-separated: added,removed,modified)
-- `--hide TYPES`: Hide these change types
-- `--entities TYPES`: Show only these entity types (comma-separated: classes,properties,instances)
+- `--show TYPES`: Show only these change types (comma-separated: `added`, `removed`, `modified`)
+- `--hide TYPES`: Hide these change types; not with `--show`, and not all three
+- `--entities TYPES`: Show only these entity types (comma-separated: `classes`, `properties`, `object_properties`, `datatype_properties`, `annotation_properties`, `other_properties`, `individuals`, `ontology`, `untyped`, `structures`)
 - `--ignore-predicates LIST`: Ignore these predicates in comparison (comma-separated CURIEs)
+
+A filter changes only what is shown, never the exit code, and the output says what it left out. A value it does not recognise, or an empty one, is refused (exit 2) before anything is written. See [Filtering](DIFF_GUIDE.md#filtering).
 
 **Examples**:
 
@@ -559,19 +574,25 @@ rdf-construct lint SOURCE [SOURCE...] [OPTIONS]
 - `--list-rules`: List available rules and exit
 - `--init`: Generate a default `.rdf-lint.yml` config file and exit
 - `--fail-on SEVERITY`: Lowest severity that makes the run exit 1: `error`, `warning`, `info` or
-  `never` (default: error)
+  `never` (default: error). A file that could not be parsed exits 2 whatever it says
+
+`.rdf-lint.yml` takes `level`, `enable`, `disable`, `severity` and `external_namespaces`: a
+list of namespaces (IRIs, `<IRIs>` or CURIEs such as `ies:`) whose terms are not the ontology's
+own. A reference into one is never dangling, and its terms need no label or comment. A borrowed
+vocabulary's terms, on another host from the file's own ontology, are skipped without it. See
+[Whose terms are checked](LINT_GUIDE.md#whose-terms-are-checked).
 
 **Available Rules**:
 
 | Rule | Category | Severity | Description |
 |------|----------|----------|-------------|
 | `orphan-class` | Structural | warning | Class with no superclass or subclasses |
-| `dangling-reference` | Structural | error | Reference to undefined entity |
+| `dangling-reference` | Structural | error | Reference to an undefined entity in a namespace the file claims |
 | `circular-subclass` | Structural | error | Circular subclass hierarchy |
 | `property-no-type` | Structural | error | Property without type declaration |
-| `empty-ontology` | Structural | error | Ontology with no classes or properties |
-| `missing-label` | Documentation | warning | Entity without rdfs:label |
-| `missing-comment` | Documentation | warning | Entity without rdfs:comment |
+| `empty-ontology` | Structural | error | `owl:Ontology` header says nothing about the ontology: no annotation and no `owl:versionIRI` |
+| `missing-label` | Documentation | warning | One of the ontology's own entities without rdfs:label |
+| `missing-comment` | Documentation | warning | One of the ontology's own entities without rdfs:comment |
 | `redundant-subclass` | Best Practice | info | Redundant subclass declaration |
 | `property-no-domain` | Best Practice | info | Property without rdfs:domain |
 | `property-no-range` | Best Practice | info | Property without rdfs:range |
@@ -610,8 +631,11 @@ rdf-construct lint --init
 
 **Exit Codes**:
 - `0`: No findings at or above `--fail-on` (default: error)
-- `1`: Findings at or above `--fail-on`
-- `2`: Input refused or run failed (invalid options or config, file not found, parse error)
+- `1`: Findings at or above `--fail-on`. A finding on a deprecated term is info, whatever the
+  level, unless a `severity:` override names its rule
+- `2`: Input refused or run failed (invalid options or config, file not found, a directory given
+  as a file), or a file could not be parsed. The parse failure is printed beside the other
+  files' results
 
 ---
 
@@ -634,14 +658,17 @@ rdf-construct merge [SOURCES...] -o OUTPUT [OPTIONS]
 - `-r, --report PATH`: Write conflict report to file; refused (exit 2) if it names an input or the same file as `-o` or `--data-output`, whether or not the merge has conflicts
 - `--report-format FORMAT`: Report format: `text`, `markdown`, `md` (default: markdown)
 - `--imports STRATEGY`: owl:imports handling: `preserve`, `remove`, `merge` (default: preserve)
+- `--ontology-iri IRI`: IRI of the merged ontology, its one `owl:Ontology` header; overrides the config's `namespaces.base`. Refused (exit 2) unless it is an absolute IRI, or if it reads as a prefixed name in a source's prefixes
 - `--migrate-data PATH`: Data file(s) to migrate (can specify multiple)
-- `--migration-rules PATH`: YAML file with migration rules
+- `--migration-rules PATH`: YAML file with migration rules; **not read yet** ([#172](https://github.com/aigora-de/rdf-construct/issues/172)): give rules under the config's `migrate_data: rules:`
 - `--data-output PATH`: Output path for migrated data; refused (exit 2) if it names an input or the same file as `-o` or `--report`
 - `--dry-run`: Write nothing; list the files a real run would write
 - `--no-colour`: Disable coloured output
 - `--init`: Generate a default merge configuration file
 
-A data file that is missing or cannot be parsed is refused (exit 2) before anything is written.
+The output has at most one `owl:Ontology` header. `--ontology-iri` (or `namespaces.base`) names it, with one `prov:wasDerivedFrom` per source, unless it would hold nothing but its type and imports (no source header can be recorded): then it is not written, and the run warns and exits 0, or, when the sources share one header, that header is kept (#520); sources that all declare the same one header keep it; otherwise the output has no header, and the run warns, showing the command that names it, and exits 0. Each source header is demoted: it loses `owl:Ontology`, `owl:versionIRI`, `owl:imports`, `owl:priorVersion`, `owl:backwardCompatibleWith` and `owl:incompatibleWith`, and keeps the rest. See [Ontology Identity](MERGE_SPLIT_GUIDE.md#ontology-identity).
+
+A data file that is missing or cannot be parsed is refused (exit 2) before anything is written, and so is a migration rule that cannot be read: a prefix no data file or `namespaces.preferred_prefixes` binds, a pattern that is not three terms, an unknown `type:` or `bind:`. A rule that matches nothing in any data file, or a match left unchanged because a `bind` found no value, is listed on stderr and the run exits 1. See [Complex Migration](MERGE_SPLIT_GUIDE.md#complex-migration-transformation-rules).
 
 **Conflict Resolution Strategies**:
 
@@ -657,6 +684,9 @@ A data file that is missing or cannot be parsed is refused (exit 2) before anyth
 ```bash
 # Basic merge of two ontologies
 rdf-construct merge core.ttl extension.ttl -o merged.ttl
+
+# Name the merged ontology
+rdf-construct merge core.ttl extension.ttl -o merged.ttl --ontology-iri http://example.org/merged
 
 # With priorities (extension wins conflicts)
 rdf-construct merge core.ttl extension.ttl -o merged.ttl -p 1 -p 2
@@ -731,8 +761,8 @@ migrate_data:
 
 **Exit Codes**:
 - `0`: Merge successful, no unresolved conflicts
-- `1`: Merge successful, but unresolved conflicts marked in output
-- `2`: Input refused or run failed (invalid options or config, file not found, parse error)
+- `1`: Merge successful, but unresolved conflicts marked in output, or a migration rule matched nothing or left a match unchanged
+- `2`: Input refused or run failed (invalid options or config, file not found, parse error, a migration rule that cannot be read)
 
 ---
 
@@ -1306,12 +1336,12 @@ rdf-construct cq-test ONTOLOGY TEST_FILE [OPTIONS]
 - `TEST_FILE`: YAML file containing competency question tests
 
 **Options**:
-- `-o, --output PATH`: Write output to file instead of stdout; refused (exit 2) if it names the ontology, the test file or a `--data` file
+- `-o, --output PATH`: Write output to file instead of stdout; refused (exit 2) if it names the ontology, the test file, a `--data` file or a file the test file's `data:` loads
 - `-f, --format FORMAT`: Output format: `text`, `json`, `junit` (default: text)
 - `-d, --data PATH`: Additional RDF data files (can specify multiple)
 - `-t, --tag TAG`: Run only tests with this tag (can specify multiple)
 - `-x, --exclude-tag TAG`: Skip tests with this tag (can specify multiple)
-- `--fail-fast`: Stop on first failure
+- `--fail-fast`: Stop after the first question that fails or errors; the rest are reported as not run, and still counted in the total
 - `-v, --verbose`: Show query text and timing
 
 **Test File Format**:
@@ -1319,16 +1349,20 @@ rdf-construct cq-test ONTOLOGY TEST_FILE [OPTIONS]
 ```yaml
 prefixes:
   ex: http://example.org/
+  owl: http://www.w3.org/2002/07/owl#
+  rdfs: http://www.w3.org/2000/01/rdf-schema#
 
 questions:
-  - name: "Animal hierarchy exists"
+  - id: cq-001
+    name: "Animal hierarchy exists"
     description: "Verify Animal is the root class"
     query: |
       ASK { ex:Animal a owl:Class }
     expect: true
     tags: [schema, required]
 
-  - name: "Dogs are mammals"
+  - id: cq-002
+    name: "Dogs are mammals"
     query: |
       SELECT ?dog WHERE {
         ?dog rdfs:subClassOf ex:Mammal
@@ -1353,7 +1387,7 @@ rdf-construct cq-test ontology.ttl tests.yml --format junit -o results.xml
 # Verbose output with timing
 rdf-construct cq-test ontology.ttl tests.yml --verbose
 
-# Stop on first failure
+# Stop after the first failure or error
 rdf-construct cq-test ontology.ttl tests.yml --fail-fast
 
 # Include additional test data
@@ -1363,7 +1397,9 @@ rdf-construct cq-test ontology.ttl tests.yml -d test-data.ttl
 **Exit Codes**:
 - `0`: All tests passed
 - `1`: One or more tests failed
-- `2`: Error occurred (invalid file, parse error, etc.)
+- `2`: Error occurred (invalid file, parse error, a test file of the wrong shape, no questions to run, etc.)
+
+The test file is checked before anything runs: an unknown key, a `data:` source that loads no triples, or a selection with nothing to check (no questions, tags that match none, every question `skip: true`) is refused at exit 2. See [What a Test File May Contain](CQ_TEST_GUIDE.md#what-a-test-file-may-contain).
 
 ---
 
@@ -1376,7 +1412,7 @@ rdf-construct stats FILE [FILE...] [OPTIONS]
 ```
 
 **Arguments**:
-- `FILE`: One or more RDF ontology files
+- `FILE`: One or more RDF ontology files. Several files are reported as one: the figures are for their union (not an `owl:imports` closure), and a file named twice is read once. With `--compare`, exactly two files, each reported separately
 
 **Options**:
 - `-o, --output PATH`: Write output to file instead of stdout; refused (exit 2) if it names one of the input files
@@ -1386,7 +1422,7 @@ rdf-construct stats FILE [FILE...] [OPTIONS]
 - `--exclude CATEGORIES`: Exclude these metric categories (comma-separated)
 
 **Metric Categories**:
-- `basic`: Counts (triples, classes, properties, individuals)
+- `basic`: Counts (triples, classes, object, datatype, annotation and other properties, individuals)
 - `hierarchy`: Structure (depth, branching, orphans)
 - `properties`: Coverage (domain, range, functional, symmetric)
 - `documentation`: Labels and comments coverage

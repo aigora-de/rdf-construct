@@ -31,7 +31,8 @@ def format_junit(results: CQTestResults, verbose: bool = False) -> str:
     testsuite.set("tests", str(results.total_count))
     testsuite.set("failures", str(results.failed_count))
     testsuite.set("errors", str(results.error_count))
-    testsuite.set("skipped", str(results.skipped_count))
+    # Every <skipped> element: the author's skips and what --fail-fast did not reach (#137)
+    testsuite.set("skipped", str(results.skipped_count + results.not_run_count))
     testsuite.set("time", f"{results.total_duration_ms / 1000:.3f}")
 
     if results.ontology_file:
@@ -82,6 +83,10 @@ def _format_testcase(result: CQTestResult, verbose: bool) -> ET.Element:
         skipped = ET.SubElement(testcase, "skipped")
         if result.test.skip_reason:
             skipped.set("message", result.test.skip_reason)
+
+    elif result.status == CQStatus.NOT_RUN:
+        skipped = ET.SubElement(testcase, "skipped")
+        skipped.set("message", result.message)
 
     # Add system-out for verbose mode
     if verbose:

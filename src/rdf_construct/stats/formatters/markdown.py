@@ -29,7 +29,12 @@ def format_markdown_stats(stats: OntologyStats, graph: Optional[Graph] = None) -
 
     lines.append(f"## Ontology Statistics")
     lines.append("")
-    lines.append(f"**Source:** `{stats.source}`")
+    if len(stats.sources) == 1:
+        lines.append(f"**Source:** `{stats.sources[0]}`")
+    else:
+        lines.append(f"**Sources (union of {len(stats.sources)} files):**")
+        lines.append("")
+        lines.extend(f"- `{source}`" for source in stats.sources)
     lines.append("")
 
     # Summary table
@@ -38,6 +43,7 @@ def format_markdown_stats(stats: OntologyStats, graph: Optional[Graph] = None) -
     lines.append(f"| Classes | {stats.basic.classes} |")
     lines.append(f"| Object Properties | {stats.basic.object_properties} |")
     lines.append(f"| Datatype Properties | {stats.basic.datatype_properties} |")
+    lines.append(f"| Other Properties | {stats.basic.other_properties} |")
     lines.append(f"| Max Hierarchy Depth | {stats.hierarchy.max_depth} |")
     lines.append(
         f"| Documentation Coverage | {_format_pct(stats.documentation.classes_documented_pct)} |"

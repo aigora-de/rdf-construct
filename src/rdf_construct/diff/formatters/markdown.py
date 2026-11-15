@@ -9,6 +9,7 @@ from rdf_construct.diff.change_types import (
     GraphDiff,
     TripleChange,
 )
+from rdf_construct.diff.filters import not_shown_line, not_shown_sentence
 
 
 # Section headings for entity types
@@ -17,6 +18,7 @@ ENTITY_TYPE_HEADINGS = {
     EntityType.OBJECT_PROPERTY: "Object Properties",
     EntityType.DATATYPE_PROPERTY: "Datatype Properties",
     EntityType.ANNOTATION_PROPERTY: "Annotation Properties",
+    EntityType.OTHER_PROPERTY: "Other Properties",
     EntityType.INDIVIDUAL: "Instances",
     EntityType.ONTOLOGY: "Ontology Metadata",
     EntityType.OTHER: "Other",
@@ -49,6 +51,11 @@ def format_markdown(diff: GraphDiff, graph: Graph | None = None) -> str:
         lines.append("No semantic differences found.")
         return "\n".join(lines)
 
+    # A filter that left everything out says what it hid, never that nothing changed (#144)
+    if diff.shows_nothing and any(diff.not_shown.values()):
+        lines.append(not_shown_sentence(diff))
+        return "\n".join(lines)
+
     # Summary at top
     summary = diff.summary
     lines.append("## Summary")
@@ -61,6 +68,8 @@ def format_markdown(diff: GraphDiff, graph: Graph | None = None) -> str:
             f"- **{len(diff.added_structures)}** blank-node structures added, "
             f"**{len(diff.removed_structures)}** removed"
         )
+    if any(diff.not_shown.values()):
+        lines.append(f"- {not_shown_line(diff)}")
     lines.append("")
 
     # Added entities

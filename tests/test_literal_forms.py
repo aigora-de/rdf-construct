@@ -14,6 +14,7 @@ The fixture, ``tests/fixtures/literals/lit.ttl``, states 16 triples; rdflib's de
 from __future__ import annotations
 
 import sys
+import warnings
 from pathlib import Path
 
 import pytest
@@ -29,7 +30,11 @@ from rdflib.serializer import Serializer
 
 from rdf_construct.cli import cli
 from rdf_construct.core import preserve_literal_forms
-from rdf_construct.core.literal_forms import GUARDED_FORMATS, bare_form_is_faithful
+from rdf_construct.core.literal_forms import (
+    GUARDED_FORMATS,
+    _pname_method,
+    bare_form_is_faithful,
+)
 from rdf_construct.core.predicate_tiers import value_key
 from rdf_construct.localise.entities import is_deprecated
 from rdf_construct.merge.config import ConflictConfig, MergeConfig, SourceConfig
@@ -143,7 +148,39 @@ def test_unguarded_turtle_would_change_a_datatype() -> None:
     assert '"1"^^<http://www.w3.org/2001/XMLSchema#integer>' in literals(back)
 
 
-# -- set and restored -------------------------------------------------------------------------
+# -- rdflib before 7.6.0 names the method getQName (#547) --------------------------------------
+
+
+class _Before76:
+    """Stands in for a serialiser from rdflib 7.0.0 to 7.5.0, which has no ``get_pname``."""
+
+    def getQName(self, uri: object, gen_prefix: bool = True) -> str:  # noqa: N802
+        return "old"
+
+
+class _From76(_Before76):
+    """Stands in for one from rdflib 7.6.0 on, which has both."""
+
+    def get_pname(self, uri: object, gen_prefix: bool = True) -> str:
+        return "new"
+
+
+def test_the_guard_uses_get_qname_where_there_is_no_get_pname() -> None:
+    """A stand-in, so it runs on any rdflib. The real check is this suite on rdflib 7.0 to 7.5."""
+    assert _pname_method(_Before76())(XSD.integer, True) == "old"
+
+
+def test_the_guard_prefers_get_pname() -> None:
+    assert _pname_method(_From76())(XSD.integer, True) == "new"
+
+
+@pytest.mark.parametrize("fmt", ["turtle", "n3", "trig"])
+def test_the_guard_raises_no_deprecation_warning(fmt: str) -> None:
+    """rdflib 7.6.0 kept ``getQName`` as an alias that warns; the guard must not call it there."""
+    with preserve_literal_forms(), warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        text = SOURCE.serialize(format=fmt)
+    assert '"007"^^xsd:integer' in text
 
 
 def _stock() -> None:

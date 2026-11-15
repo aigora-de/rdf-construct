@@ -106,6 +106,7 @@ rdf-construct cast dataset.trig --format ttl --allow-flatten
 # Merge ontologies
 rdf-construct merge core.ttl ext.ttl -o merged.ttl
 rdf-construct merge core.ttl ext.ttl -o merged.ttl -p 1 -p 2  # With priorities
+rdf-construct merge core.ttl ext.ttl -o merged.ttl --ontology-iri http://example.org/merged  # Name it
 rdf-construct merge core.ttl ext.ttl --dry-run                # Preview
 
 # Split ontologies

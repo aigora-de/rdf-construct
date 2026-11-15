@@ -43,7 +43,7 @@ from rdflib.serializer import Serializer
 from rdflib.term import Literal, Node
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
 
 def bare_form_is_faithful(literal: Literal, text: str) -> bool:
@@ -76,6 +76,18 @@ def bare_form_is_faithful(literal: Literal, text: str) -> bool:
     return str(canonical) == lexical and text == lexical
 
 
+def _pname_method(serialiser: Any) -> Callable[[Node, bool], str | None]:
+    """Return the serialiser's method that abbreviates an IRI: ``get_pname``, else ``getQName``.
+
+    rdflib 7.6.0 renamed ``getQName`` to ``get_pname`` and kept the old name as a deprecated
+    alias. ``get_pname`` is preferred, so that alias is never called where the new name exists.
+    """
+    method: Callable[[Node, bool], str | None] = (
+        getattr(serialiser, "get_pname", None) or serialiser.getQName
+    )
+    return method
+
+
 class _LiteralFormGuard(TurtleSerializer):
     """Writes a shorthand literal bare only when :func:`bare_form_is_faithful` says so."""
 
@@ -97,10 +109,12 @@ class _LiteralFormGuard(TurtleSerializer):
             and node.datatype is not None
             and not bare_form_is_faithful(node, text)
         ):
-            # The same datatype callback rdflib's TurtleSerializer.label passes.
+            # The same datatype callback rdflib's TurtleSerializer.label passes. Before rdflib
+            # 7.6.0 that method is getQName (#547); the fallback goes when the floor is 7.6.0 (#548).
+            pname = _pname_method(self)
             quoted: str = node._literal_n3(
                 use_plain=False,
-                qname_callback=lambda dt: self.get_pname(dt, _GEN_QNAME_FOR_DT),
+                qname_callback=lambda dt: pname(dt, _GEN_QNAME_FOR_DT),
             )
             return quoted
         return text

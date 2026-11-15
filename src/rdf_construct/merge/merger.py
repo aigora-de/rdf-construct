@@ -8,7 +8,7 @@ This module provides the main OntologyMerger class that:
 - Writes merged output with conflict markers
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TextIO
 
@@ -31,6 +31,13 @@ from rdf_construct.merge.conflicts import (
     generate_conflict_marker,
     generate_conflict_end_marker,
 )
+from rdf_construct.merge.identity import (
+    MergeIdentity,
+    apply_identity,
+    check_ontology_iri,
+    curie_clash,
+    read_headers,
+)
 from rdf_construct.merge.prefixes import bind_exactly, combine_prefixes
 
 
@@ -48,6 +55,7 @@ class MergeResult:
         success: Whether merge completed without errors
         error: Error message if success is False
         prefix_notes: One line per source prefix not written as declared (#357)
+        identity: What the merge did to the sources' ontology headers (#171)
     """
 
     merged_graph: Graph | None = None
@@ -59,6 +67,7 @@ class MergeResult:
     success: bool = True
     error: str | None = None
     prefix_notes: list[str] = field(default_factory=list)
+    identity: MergeIdentity | None = None
 
     @property
     def has_conflicts(self) -> bool:
@@ -94,6 +103,8 @@ class OntologyMerger:
             ignore_predicates=config.conflicts.ignore_predicates,
             predicate_tiers=config.conflicts.predicate_tiers,
         )
+        # The merged ontology's IRI, from namespaces.base, checked when the merge runs (#171)
+        self._ontology: URIRef | None = None
 
     def merge(self) -> MergeResult:
         """Execute the merge operation.
@@ -119,6 +130,33 @@ class OntologyMerger:
             result.success = False
             result.error = "No source files to merge"
             return result
+
+        # The merged ontology's IRI, refused before anything is written if it is not one (#171)
+        self._ontology = None
+        if self.config.namespaces.base is not None:
+            try:
+                self._ontology = check_ontology_iri(self.config.namespaces.base)
+            except ValueError as e:
+                result.success = False
+                result.error = f"Cannot use the ontology IRI: {e}"
+                return result
+            clash = curie_clash(
+                str(self._ontology),
+                [
+                    (
+                        "namespaces.preferred_prefixes",
+                        dict(self.config.namespaces.preferred_prefixes),
+                    ),
+                    *(
+                        (Path(s.path).name, {p: str(n) for p, n in s.graph.namespaces()})
+                        for s in sources
+                    ),
+                ],
+            )
+            if clash:
+                result.success = False
+                result.error = f"Cannot use the ontology IRI: {clash}"
+                return result
 
         # Detect conflicts
         result.conflicts = self.detector.detect_conflicts(sources)
@@ -172,6 +210,9 @@ class OntologyMerger:
         except Exception as e:
             raise ValueError(f"Failed to parse {src_config.path}: {e}")
 
+        # A derivation stamp names the source as it states itself, before any remapping (#171)
+        headers = read_headers(graph, src_config.path.name)
+
         # Apply namespace remapping if configured
         if src_config.namespace_remap:
             graph = self._remap_namespaces(graph, src_config.namespace_remap)
@@ -183,6 +224,7 @@ class OntologyMerger:
             graph=graph,
             path=str(src_config.path),
             priority=src_config.priority,
+            headers=headers,
         )
 
     def _remap_namespaces(self, graph: Graph, remappings: dict[str, str]) -> Graph:
@@ -286,6 +328,23 @@ class OntologyMerger:
         # Handle owl:imports
         merged = self._handle_imports(merged, sources)
 
+        # At most one ontology header: named, kept, or none, the sources' demoted (#171). Two
+        # sources with one file name are told apart by their paths
+        names = [Path(s.path).name for s in sources]
+        shown = [s.path if names.count(n) > 1 else n for s, n in zip(sources, names, strict=True)]
+        result.identity = apply_identity(
+            merged,
+            [
+                (
+                    replace(s.headers, name=name) if s.headers else read_headers(Graph(), name),
+                    s.graph,
+                )
+                for s, name in zip(sources, shown, strict=True)
+            ],
+            self._ontology,
+            carry_imports=self.config.imports is not ImportsStrategy.REMOVE,
+        )
+
         return merged
 
     def _handle_imports(self, merged: Graph, sources: list[SourceGraph]) -> Graph:
@@ -385,6 +444,7 @@ def merge_files(
     priorities: list[int] | None = None,
     conflict_strategy: str = "priority",
     dry_run: bool = False,
+    ontology_iri: str | None = None,
 ) -> MergeResult:
     """Convenience function to merge files with minimal configuration.
 
@@ -394,11 +454,19 @@ def merge_files(
         priorities: Optional list of priorities (same order as sources)
         conflict_strategy: Strategy name: priority, first, last, mark_all
         dry_run: If True, don't write output
+        ontology_iri: The merged ontology's IRI (#171). Without one, a merge of headed sources
+            writes no ontology header; ``MergeResult.identity`` says what was demoted.
 
     Returns:
         MergeResult with merge information
     """
-    from .config import SourceConfig, OutputConfig, ConflictConfig, ConflictStrategy
+    from .config import (
+        SourceConfig,
+        OutputConfig,
+        ConflictConfig,
+        ConflictStrategy,
+        NamespaceConfig,
+    )
 
     if priorities is None:
         priorities = list(range(1, len(sources) + 1))
@@ -411,6 +479,7 @@ def merge_files(
         sources=source_configs,
         output=OutputConfig(path=output),
         conflicts=ConflictConfig(strategy=strategy),
+        namespaces=NamespaceConfig(base=ontology_iri),
         dry_run=dry_run,
     )
 

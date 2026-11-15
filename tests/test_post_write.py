@@ -25,13 +25,14 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner, Result
 from rdflib import Graph, Literal, Namespace, URIRef
-from rdflib.namespace import RDF, RDFS, SH
+from rdflib.namespace import OWL, RDF, RDFS, SH
 
 from rdf_construct.cli import cli
 from rdf_construct.core import preserve_literal_forms
 from rdf_construct.core.verify import CONTRACTS, Triple, check_contract, describe
 from rdf_construct.core.vocab import CLASS_TYPES
 from rdf_construct.docs import extract_all
+from rdf_construct.merge.identity import ONTOLOGY_ONLY
 from tests.test_cli_smoke import assert_no_crash
 
 REPO = Path(__file__).parent.parent
@@ -241,10 +242,25 @@ def _merge(tmp_path: Path, monkeypatch, sources: list[Path]) -> Graph:
     return _parse(out)
 
 
+def _demoted(inputs: Sequence[Graph]) -> list[Triple]:
+    """What an unnamed merge removes from each source header: its type, version IRI and the
+    predicates only an ontology takes (#171)."""
+    removed: list[Triple] = []
+    for graph in inputs:
+        for header in graph.subjects(RDF.type, OWL.Ontology):
+            for predicate in (RDF.type, OWL.versionIRI, *ONTOLOGY_ONLY):
+                for value in graph.objects(header, predicate):
+                    if predicate != RDF.type or value == OWL.Ontology:
+                        removed.append((header, predicate, value))
+    return removed
+
+
 def test_merge_keeps_every_source_triple(tmp_path, monkeypatch):
     sources = [EXAMPLES / "merge" / "merge_core.ttl", EXAMPLES / "merge" / "merge_extension.ttl"]
     merged = _merge(tmp_path, monkeypatch, sources)
-    _assert_holds("merge", inputs=[_parse(s) for s in sources], outputs=[merged])
+    inputs = [_parse(s) for s in sources]
+    # Two ontologies and nothing to name the result, so both headers are demoted (#171)
+    _assert_holds("merge", inputs=inputs, outputs=[merged], excluded=_demoted(inputs))
 
 
 def test_merge_keeps_every_blank_node_structure(tmp_path, monkeypatch):
@@ -258,8 +274,10 @@ def test_merge_keeps_every_blank_node_structure(tmp_path, monkeypatch):
 def test_merge_drops_the_losers_of_resolved_conflicts(tmp_path, monkeypatch):
     sources = [EXAMPLES / "merge" / "merge_core.ttl", EXAMPLES / "merge" / "merge_conflicting.ttl"]
     merged = _merge(tmp_path, monkeypatch, sources)
+    inputs = [_parse(s) for s in sources]
+    # merge_conflicting.ttl has no header, so merge_core.ttl's is demoted (#171)
     _assert_holds(
-        "merge", inputs=[_parse(s) for s in sources], outputs=[merged], excluded=MERGE_LOSERS
+        "merge", inputs=inputs, outputs=[merged], excluded=[*MERGE_LOSERS, *_demoted(inputs)]
     )
 
 

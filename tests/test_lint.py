@@ -104,6 +104,7 @@ class TestDanglingReferenceRule:
         """Reference to undefined entity should be flagged."""
         g = Graph()
         g.add((EX.Building, RDF.type, OWL.Class))
+        g.add((EX.Room, RDF.type, OWL.Class))  # two definitions claim the namespace (#69)
         g.add((EX.Building, RDFS.subClassOf, EX.Structure))  # Structure not defined
 
         issues = check_dangling_reference(g)

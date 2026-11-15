@@ -78,6 +78,8 @@ from rdf_construct.merge.merger import (
     merge_files,
 )
 
+from rdf_construct.merge.identity import MergeIdentity
+
 from rdf_construct.merge.migrator import (
     DataMigrator,
     MigrationResult,
@@ -91,6 +93,10 @@ from rdf_construct.merge.rules import (
     PatternParser,
     Match,
     Binding,
+    ResolvedRule,
+    RuleError,
+    parse_declaring,
+    resolve_rules,
 )
 
 from rdf_construct.merge.formatters import (
@@ -140,6 +146,7 @@ __all__ = [
     "OntologyMerger",
     "MergeResult",
     "merge_files",
+    "MergeIdentity",
     # Migrator
     "DataMigrator",
     "MigrationResult",
@@ -151,6 +158,10 @@ __all__ = [
     "PatternParser",
     "Match",
     "Binding",
+    "ResolvedRule",
+    "RuleError",
+    "parse_declaring",
+    "resolve_rules",
     # Formatters
     "TextFormatter",
     "MarkdownFormatter",

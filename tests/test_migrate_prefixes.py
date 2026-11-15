@@ -170,41 +170,54 @@ class TestMergeDataMigration:
             'written as "d1:".'
         ]
 
-    def test_a_rule_curie_the_data_does_not_declare_still_resolves(self, tmp_path):
-        """N-Triples data declares no prefix; a rule's foaf: must not become an IRI <foaf:…>."""
+    @staticmethod
+    def _given_name_config(tmp_path: Path, preferred: dict[str, str] | None) -> tuple[Path, Path]:
+        """A merge config whose rule names foaf:, over N-Triples data that declares no prefix."""
         ont = _write(tmp_path, "ont.ttl", ONTOLOGY)
         data = _write(tmp_path, "people.nt", f'<{D}ann> <{FOAF}name> "Ann Lee" .\n')
         dout = tmp_path / "dout.ttl"
         config = tmp_path / "merge.yml"
-        config.write_text(
-            yaml.safe_dump(
-                {
-                    "sources": [{"path": str(ont)}],
-                    "migrate_data": {
-                        "sources": [str(data)],
-                        "output": str(dout),
-                        "rules": [
+        body: dict[str, object] = {
+            "sources": [{"path": str(ont)}],
+            "migrate_data": {
+                "sources": [str(data)],
+                "output": str(dout),
+                "rules": [
+                    {
+                        "type": "transform",
+                        "description": "given name",
+                        "match": "?s foaf:name ?name",
+                        "construct": [
                             {
-                                "type": "transform",
-                                "description": "given name",
-                                "match": "?s foaf:name ?name",
-                                "construct": [
-                                    {
-                                        "pattern": "?s foaf:givenName ?given",
-                                        "bind": "STRBEFORE(?name, ' ') AS ?given",
-                                    }
-                                ],
-                                "delete_matched": False,
+                                "pattern": "?s foaf:givenName ?given",
+                                "bind": "STRBEFORE(?name, ' ') AS ?given",
                             }
                         ],
-                    },
-                }
-            )
-        )
+                        "delete_matched": False,
+                    }
+                ],
+            },
+        }
+        if preferred is not None:
+            body["namespaces"] = {"preferred_prefixes": preferred}
+        config.write_text(yaml.safe_dump(body))
+        return config, dout
+
+    def test_a_rule_curie_no_data_file_declares_is_refused(self, tmp_path):
+        """Rule CURIEs resolve strictly, never through rdflib's table (#492): foaf: is refused."""
+        config, dout = self._given_name_config(tmp_path, None)
+        merged = tmp_path / "merged.ttl"
+        result = _run("merge", "-c", config, "-o", merged)
+        assert result.exit_code == 2, result.output
+        assert "'foaf:name': prefix 'foaf' is not bound" in result.output
+        assert not merged.exists() and not dout.exists()
+
+    def test_a_rule_curie_resolves_through_preferred_prefixes(self, tmp_path):
+        """The config's preferred_prefixes give a rule's CURIE its meaning (#492, as #357)."""
+        config, dout = self._given_name_config(tmp_path, {"foaf": FOAF})
         result = _run("merge", "-c", config, "-o", tmp_path / "merged.ttl")
         assert result.exit_code == 0, result.output
-        text = dout.read_text()
-        assert _prefixes(text)["foaf"] == FOAF
         g = Graph().parse(dout)
         assert (URIRef(D + "ann"), URIRef(FOAF + "givenName"), Literal("Ann")) in g
+        assert (URIRef(D + "ann"), URIRef(FOAF + "name"), Literal("Ann Lee")) in g
         assert not any(str(p).startswith("foaf:") for p in g.predicates())

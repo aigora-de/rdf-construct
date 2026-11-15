@@ -547,13 +547,29 @@ def test_an_ignored_predicate_inside_a_structure_is_ignored(tmp_path: Path) -> N
     assert "rdfs:comment" not in result.stdout
 
 
-def test_a_filter_keeps_structures_that_belong_to_no_entity() -> None:
-    """Filters select entities; a structure with no owner is not hidden as a side effect."""
+def test_a_filter_counts_the_structures_it_hides() -> None:
+    """A structure with no owner follows the change types by action, and --entities only by
+    name; one that is hidden is counted, so the diff still differs (#144)."""
     old, new, _ = SHAPES["all disjoint classes"]
-    diff = filter_diff(_diff(old, new), show_types={"modified"})
+    whole = _diff(old, new)
+    assert whole.added_structures and whole.removed_structures
 
-    assert diff.added_structures and diff.removed_structures
-    assert not diff.is_identical
+    # Structures are only ever added or removed, never modified
+    diff = filter_diff(whole, show_types={"modified"})
+    assert not diff.added_structures and not diff.removed_structures
+    assert diff.not_shown["structures"] == 2
+    assert diff.shows_nothing and not diff.is_identical
+
+    added = filter_diff(whole, show_types={"added"})
+    assert added.added_structures == whole.added_structures and not added.removed_structures
+    assert added.not_shown["structures"] == 1
+
+    classes = filter_diff(whole, entity_types={"classes"})
+    assert not classes.added_structures and classes.not_shown["structures"] == 2
+    named = filter_diff(whole, entity_types={"classes", "structures"})
+    assert named.added_structures == whole.added_structures
+    assert named.removed_structures == whole.removed_structures
+    assert named.not_shown["structures"] == 0
 
 
 def test_is_tree() -> None:
@@ -661,8 +677,11 @@ def test_the_example_pair_differs_only_inside_blank_nodes() -> None:
 class TestDiffGuideExamples:
     """`DIFF_GUIDE.md`'s blank-node section is a capture of these runs, and must stay one."""
 
-    def test_the_guides_output_is_what_the_command_prints(self) -> None:
-        argv = ["diff", "examples/diff/v1.ttl", "examples/diff/v2.ttl"]
+    @pytest.mark.parametrize(
+        "options", [(), ("--entities", "classes")], ids=["unfiltered", "entities-classes"]
+    )
+    def test_the_guides_output_is_what_the_command_prints(self, options: tuple[str, ...]) -> None:
+        argv = ["diff", "examples/diff/v1.ttl", "examples/diff/v2.ttl", *options]
         command = "rdf-construct " + " ".join(argv)
         guide = GUIDE.read_text(encoding="utf-8")
         assert f"```bash\n{command}\n```" in guide, f"the guide no longer shows `{command}`"

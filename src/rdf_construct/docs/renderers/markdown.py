@@ -155,6 +155,12 @@ class MarkdownRenderer:
             lines.append(entities.ontology.description)
             lines.append("")
 
+        # The derivation stamp: metadata about this document, not a term of it (#371)
+        if entities.ontology.derived_from:
+            targets = ", ".join(f"`{t}`" for t in entities.ontology.derived_from)
+            lines.append(f"**Derived from:** {targets}")
+            lines.append("")
+
         # Statistics
         lines.append("## Overview")
         lines.append("")
@@ -1237,6 +1243,12 @@ class MarkdownRenderer:
 
         if entities.ontology.description:
             lines.append(entities.ontology.description)
+            lines.append("")
+
+        # The derivation stamp: metadata about this document, not a term of it (#371)
+        if entities.ontology.derived_from:
+            targets = ", ".join(f"`{t}`" for t in entities.ontology.derived_from)
+            lines.append(f"**Derived from:** {targets}")
             lines.append("")
 
         # TOC

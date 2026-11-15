@@ -255,6 +255,45 @@ def test_help_exits_cleanly(command: str):
 THREE_STATES = [
     _row(Row("cast", "clean", ("cast", ANIMAL, "-f", "nt", "-o", "@tmp/cast"))),
     _row(Row("cast", "refused", ("cast", ANIMAL, "-f", "nope"))),
+    # Every requested format the source's own casts nothing, in pipe mode and with -o, and a
+    # skip beside a written format is something to report (#330)
+    _row(
+        Row("cast", "refused", ("cast", ANIMAL, "-f", "turtle", "-o", "@tmp/cast")),
+        label="same-format",
+    ),
+    _row(Row("cast", "refused", ("cast", ANIMAL, "-f", "ttl")), label="same-format-pipe"),
+    _row(
+        Row("cast", "findings", ("cast", ANIMAL, "-f", "turtle", "-f", "nt", "-o", "@tmp/cast")),
+        label="skipped",
+    ),
+    # Quad output is written from a dataset: N-Quads from any source (#189), and a quad source's
+    # graphs kept (#540). What no single-graph format can hold is refused (#540, #542)
+    _row(Row("cast", "clean", ("cast", ANIMAL, "-f", "nq", "-o", "@tmp/cast")), label="nquads"),
+    _row(
+        Row(
+            "cast",
+            "clean",
+            ("cast", "@tmp/cast_quads.nq", "-f", "trig", "-o", "@tmp/cast"),
+            copied=(str(SMOKE / "cast_quads.nq"),),
+        ),
+        label="quad-to-quad",
+    ),
+    _row(
+        Row(
+            "cast",
+            "refused",
+            ("cast", str(SMOKE / "cast_named_graphs.jsonld"), "-o", "@tmp/cast"),
+        ),
+        label="jsonld-named-graphs",
+    ),
+    _row(
+        Row(
+            "cast",
+            "refused",
+            ("cast", str(SMOKE / "cast_formula.n3"), "-f", "turtle", "-o", "@tmp/cast"),
+        ),
+        label="n3-formula",
+    ),
     _row(Row("order", "clean", ("order", LIBRARY, ORDERING, "-o", "@tmp/order"))),
     _row(Row("order", "refused", ("order", LIBRARY, ORDERING, "-p", "nope", "-o", "@tmp/order"))),
     _row(
@@ -300,8 +339,41 @@ THREE_STATES = [
         ),
         label="output-is-input",
     ),
+    # A filter is display: a valid one keeps the verdict, and a bad one is refused before
+    # anything is written (#144)
+    _row(Row("diff", "findings", ("diff", ANIMAL, SIMPLE, "--show", "added")), label="filtered"),
+    _row(
+        Row("diff", "refused", ("diff", ANIMAL, SIMPLE, "--show", "addedd", "-o", "@tmp/d.txt")),
+        label="bad-filter",
+    ),
     _row(Row("docs", "clean", ("docs", ANIMAL, "-o", "@tmp/docs"))),
     _row(Row("docs", "refused", ("docs", ANIMAL, "--format", "nope", "-o", "@tmp/docs"))),
+    # An entity filter that names nothing known, or leaves nothing to document, is refused
+    # before anything is written (#252)
+    _row(
+        Row("docs", "refused", ("docs", ANIMAL, "--include", "clases", "-o", "@tmp/docs")),
+        label="bad-include",
+    ),
+    _row(
+        Row("docs", "refused", ("docs", ANIMAL, "--exclude", "clases", "-o", "@tmp/docs")),
+        label="bad-exclude",
+    ),
+    _row(
+        Row(
+            "docs",
+            "refused",
+            ("docs", ANIMAL, "--include", "classes", "--exclude", "classes", "-o", "@tmp/docs"),
+        ),
+        label="empty-selection",
+    ),
+    _row(
+        Row(
+            "docs",
+            "refused",
+            ("docs", ANIMAL, "--no-instances", "--include", "instances", "-o", "@tmp/docs"),
+        ),
+        label="contradiction",
+    ),
     _row(Row("shacl-gen", "clean", ("shacl-gen", ANIMAL, "-o", "@tmp/shapes.ttl"))),
     _row(
         Row("shacl-gen", "refused", ("shacl-gen", ANIMAL, "-C", MALFORMED_YAML, "-o", "@tmp/s.ttl"))
@@ -424,7 +496,29 @@ THREE_STATES = [
         )
     ),
     _row(Row("cq-test", "findings", ("cq-test", ANIMAL, str(SMOKE / "cq_failing.yml")))),
+    _row(
+        Row(
+            "cq-test",
+            "findings",
+            ("cq-test", ANIMAL, str(SMOKE / "cq_fail_fast.yml"), "--fail-fast"),
+        ),
+        label="fail-fast",
+    ),
     _row(Row("cq-test", "refused", ("cq-test", ANIMAL, MALFORMED_YAML))),
+    _row(
+        Row(
+            "cq-test",
+            "refused",
+            (
+                "cq-test",
+                ANIMAL,
+                str(EXAMPLES / "cq-test" / "cq_tests_animal.yml"),
+                "--tag",
+                "no-such-tag",
+            ),
+        ),
+        label="empty-selection",
+    ),
     _row(
         Row("cq-test", "refused", ("cq-test", ANIMAL, str(SMOKE / "cq_ask_count.yml"))),
         label="ask-count",
@@ -456,6 +550,7 @@ THREE_STATES = [
         label="output-is-input",
     ),
     _row(Row("describe", "clean", ("describe", ANIMAL))),
+    _row(Row("describe", "clean", ("describe", ANIMAL, "--reasoning")), label="reasoning"),
     _row(Row("describe", "refused", ("describe", ANIMAL, "--format", "nope"))),
     _row(
         Row(
@@ -921,7 +1016,7 @@ MALFORMED = [
         label="yaml",
     ),
     _row(Row("contexts", "refused", ("contexts", MALFORMED_YAML)), xfail="#318", label="yaml"),
-    _row(Row("lint", "refused", ("lint", MALFORMED_TTL)), xfail="#322", label="ttl"),
+    _row(Row("lint", "refused", ("lint", MALFORMED_TTL)), label="ttl"),
     _row(Row("diff", "refused", ("diff", MALFORMED_TTL, ANIMAL)), label="ttl"),
     _row(Row("docs", "refused", ("docs", MALFORMED_TTL, "-o", "@tmp/docs")), label="ttl"),
     _row(

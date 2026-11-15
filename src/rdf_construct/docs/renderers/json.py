@@ -356,6 +356,7 @@ class JSONRenderer:
             "imports": [str(uri) for uri in onto.imports],
             "namespaces": onto.namespaces,
             "annotations": onto.annotations,
+            "derived_from": [str(uri) for uri in onto.derived_from],
         }
 
     def render_index(self, entities: "ExtractedEntities") -> Path:

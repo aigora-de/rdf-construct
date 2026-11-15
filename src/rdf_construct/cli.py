@@ -3,7 +3,8 @@
 import shlex
 import sys
 import traceback
-from collections.abc import Iterable, Sequence
+import warnings
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Any
@@ -52,6 +53,7 @@ from rdf_construct.core.formats import (
     normalise_format,
 )
 from rdf_construct.core.literal_forms import preserve_literal_forms
+from rdf_construct.core.utils import parse_failure_message
 from rdf_construct.core.outdir import OUTPUT_MARKER, foreign_entries, mark_output_dir, read_marker
 from rdf_construct.core.output_paths import (
     PlannedOutput,
@@ -61,6 +63,11 @@ from rdf_construct.core.output_paths import (
 )
 
 from rdf_construct.cast import CastConverter
+from rdf_construct.cast.converter import (
+    formats_other_than,
+    nothing_to_cast,
+    nothing_to_cast_message,
+)
 
 from rdf_construct.uml import (
     load_uml_config,
@@ -88,7 +95,24 @@ LINT_LEVELS = ["strict", "standard", "relaxed"]
 LINT_FORMATS = ["text", "json"]
 LINT_FAIL_ON = ["error", "warning", "info", "never"]
 
-from rdf_construct.diff import compare_files, format_diff, filter_diff, parse_filter_string
+from rdf_construct.diff import (
+    CHANGE_TYPE_NAMES,
+    ENTITY_TYPE_NAMES,
+    UnknownFilterError,
+    build_filter,
+    compare_files,
+    filter_diff,
+    format_diff,
+    normalise_change_types,
+    normalise_entity_types,
+)
+from rdf_construct.docs.config import (
+    ENTITY_TYPE_NAMES as DOCS_ENTITY_TYPE_NAMES,
+    ENTITY_TYPE_TOGGLES as DOCS_ENTITY_TYPE_TOGGLES,
+    EntityFilterError,
+    apply_entity_filter,
+    normalise_entity_types as normalise_docs_entity_types,
+)
 
 from rdf_construct.puml2rdf import (
     ConversionConfig,
@@ -101,7 +125,7 @@ from rdf_construct.puml2rdf import (
     validate_rdf,
 )
 
-from rdf_construct.cq import load_test_suite, CQTestRunner, format_results
+from rdf_construct.cq import load_test_suite, CQTestRunner, CQTestSuite, format_results
 
 from rdf_construct.stats import (
     collect_stats,
@@ -120,10 +144,15 @@ from rdf_construct.merge import (
     DataMigrationConfig,
     OntologyMerger,
     MergeResult,
+    MergeIdentity,
+    NamespaceConfig,
     load_merge_config,
     create_default_config,
     get_formatter,
     migrate_data_graphs,
+    resolve_rules,
+    RuleError,
+    parse_declaring,
     # Split imports
     OntologySplitter,
     SplitConfig,
@@ -263,11 +292,15 @@ def parse_into(graph: Graph, source: Path, rdf_format: str) -> None:
     try:
         graph.parse(str(source), format=rdf_format)
     except Exception as exc:
-        detail = str(exc) or type(exc).__name__
-        raise Refusal(f"Could not parse {source} as {rdf_format}: {detail}") from exc
+        raise Refusal(parse_failure_message(source, rdf_format, exc)) from exc
 
 
-def check_outputs(outputs: Sequence[tuple[str, Path]], inputs: Sequence[Path]) -> None:
+def check_outputs(
+    outputs: Sequence[tuple[str, Path]],
+    inputs: Sequence[Path],
+    *,
+    named_in: Mapping[Path, str] | None = None,
+) -> None:
     """Refuse a run whose outputs are one file, or would replace one of its inputs (#412).
 
     Call it once every output path and input is known, before the first byte is written. Two
@@ -281,6 +314,9 @@ def check_outputs(outputs: Sequence[tuple[str, Path]], inputs: Sequence[Path]) -
         outputs: Each file the run would write, with the option that names it (``-o``,
             ``--report``), in the order it would write them.
         inputs: Every file the run reads that no output may replace.
+        named_in: For an input the user did not name on the command line, where it came from,
+            keyed by the path in ``inputs``. It is added to that input's line, after
+            ``, which`` (``cq-test``'s ``data:`` files, #439).
 
     Raises:
         Refusal: When any output collides with another or would replace an input. The message
@@ -295,8 +331,10 @@ def check_outputs(outputs: Sequence[tuple[str, Path]], inputs: Sequence[Path]) -
         named = " and ".join(flags[id(output)] for output in group)
         problems.append(f"{named} name one file, {group[0].path}. Choose different paths.")
     for output, existing in outputs_over_inputs(planned, inputs):
+        source = (named_in or {}).get(existing)
+        where = f", which {source}" if source else ""
         problems.append(
-            f"{flags[id(output)]} {output.path} would replace the input {existing}. "
+            f"{flags[id(output)]} {output.path} would replace the input {existing}{where}. "
             "Choose another path."
         )
 
@@ -354,6 +392,26 @@ def check_default_output_dir(
         f"Leaving it untouched. Pass -o <dir> to write somewhere else, "
         f"or --overwrite to write into {path}/ anyway."
     )
+
+
+INVOCATION = "rdf_construct.invocation"
+"""``ctx.meta`` key for the arguments the program was run with, as given (#171)."""
+
+
+def rerun_command(*extra: str) -> str:
+    """The command the user ran, shell-quoted, with ``extra`` appended.
+
+    Read from the root context, so it is the same under a shell and under ``CliRunner``; a
+    command invoked without the root group falls back to ``sys.argv``.
+
+    Args:
+        *extra: Arguments to append.
+
+    Returns:
+        A command line that can be pasted into a shell.
+    """
+    given = click.get_current_context().meta.get(INVOCATION) or sys.argv[1:]
+    return shlex.join(["rdf-construct", *given, *extra])
 
 
 class CrashHandlingGroup(click.Group):
@@ -418,6 +476,29 @@ class CrashHandlingGroup(click.Group):
             traceback.print_exception(exc, file=sys.stderr)
             raise SystemExit(2) from exc
 
+    def make_context(
+        self,
+        info_name: str | None,
+        args: list[str],
+        parent: click.Context | None = None,
+        **extra: Any,
+    ) -> click.Context:
+        """Make the root context, keeping the arguments as given for a command to quote back.
+
+        Args:
+            info_name: The program name.
+            args: The arguments to parse.
+            parent: The parent context, if any.
+            **extra: Passed through to ``click.Group.make_context``.
+
+        Returns:
+            The context, with the arguments under ``ctx.meta[INVOCATION]``.
+        """
+        given = list(args)
+        ctx = super().make_context(info_name, args, parent=parent, **extra)
+        ctx.meta[INVOCATION] = given
+        return ctx
+
 
 @click.group(cls=CrashHandlingGroup)
 @click.version_option(__version__, prog_name="rdf-construct")
@@ -460,8 +541,9 @@ def cli():
     "--allow-flatten",
     is_flag=True,
     help=(
-        "Merge all named graphs into the default graph when converting from "
-        "a quad format (TriG, N-Quads) to a single-graph format."
+        "Allow a source with named graphs to be written to a single-graph "
+        "format by merging every graph into one. Lossy: graph names are "
+        "discarded. TriG and N-Quads output always keeps the graphs."
     ),
 )
 def cast(
@@ -483,7 +565,7 @@ def cast(
     \b
     Multiple --format flags write files to the output directory:
 
-        rdf-construct cast ontology.ttl --format ttl --format xml
+        rdf-construct cast ontology.ttl --format xml --format nt
 
     \b
     Omitting --format converts to ttl, xml, and json-ld (excluding source format):
@@ -496,9 +578,13 @@ def cast(
 
     \b
     Exit codes:
-        0 - All conversions succeeded
-        1 - Partial failure (some formats failed, some succeeded)
-        2 - Complete failure (parse error, or all formats failed)
+        0 - Every requested format was written
+        1 - Finished with something to report: a format was skipped (the
+            source's own) or failed, and at least one was written
+        2 - Not done: refused (every format the source's own, a source
+            with named graphs without --allow-flatten, or an N3 source
+            with formulae or variables), a parse error, or every format
+            failed
     """
     source_format = infer_rdf_format(source)
 
@@ -511,6 +597,13 @@ def cast(
             raise SystemExit(2)
     else:
         normalised = default_cast_formats(source_format)
+
+    # Every requested format is the source's own: refuse before reading anything (#330)
+    if nothing_to_cast(source_format, normalised):
+        raise Refusal(
+            nothing_to_cast_message(source, source_format, allow_flatten=allow_flatten),
+            accepted=formats_other_than(source_format),
+        )
 
     # Decide pipe mode: exactly one format AND no explicit output dir → stdout
     pipe_mode = len(normalised) == 1 and output_dir is None
@@ -544,12 +637,14 @@ def cast(
             click.echo("", err=True)
             for path in result.written_files:
                 click.secho(f"  \u2713 {path.name}", fg="green", err=True)
-            click.secho(
-                f"\nCast {len(result.written_files)} file(s) to {effective_dir}/",
-                fg="cyan",
-                err=True,
-            )
-        raise SystemExit(0)
+            summary = f"\nCast {len(result.written_files)} file(s) to {effective_dir}/"
+            if result.skipped_formats:
+                summary += (
+                    f"; skipped {', '.join(result.skipped_formats)} (the source's own format)."
+                )
+            click.secho(summary, fg="cyan", err=True)
+        # A skipped format is something to report (#330)
+        raise SystemExit(1 if result.skipped_formats else 0)
 
     elif result.partial_failure:
         click.secho(
@@ -1109,6 +1204,28 @@ def profiles(config: Path):
         click.echo()
 
 
+def _docs_entity_filter(
+    ctx: click.Context, param: click.Parameter, value: str | None
+) -> tuple[str, ...] | None:
+    """Read ``--include`` or ``--exclude`` into canonical entity types, or refuse it (#252).
+
+    Refused during argument processing, so before the config is read or anything is written.
+    """
+    if value is None:
+        return None
+    try:
+        # Split in order, not into a set, so the message names bad values in the order given
+        return normalise_docs_entity_types(value.split(","))
+    except EntityFilterError as e:
+        raise click.BadParameter(str(e), ctx=ctx, param=param) from e
+
+
+_DOCS_ENTITY_HELP = (
+    f"comma-separated: {', '.join(DOCS_ENTITY_TYPE_NAMES)}; "
+    "concept_schemes and skos are spellings of concepts"
+)
+
+
 @cli.command()
 @click.argument("sources", nargs=-1, required=True, type=click.Path(exists=True, path_type=Path))
 @click.option(
@@ -1343,7 +1460,7 @@ def contexts(config: Path):
 
 
 @cli.command()
-@click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
+@click.argument("sources", nargs=-1, type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option(
     "--level",
     "-l",
@@ -1400,7 +1517,10 @@ def contexts(config: Path):
     type=click.Choice(LINT_FAIL_ON),
     default="error",
     show_default=True,
-    help="Lowest severity that makes the run exit 1 ('never' always exits 0)",
+    help=(
+        "Lowest severity that makes the run exit 1 ('never' exits 0 unless a file "
+        "could not be parsed)"
+    ),
 )
 def lint(
     sources: tuple[Path, ...],
@@ -1426,7 +1546,7 @@ def lint(
     Exit codes:
       0 - No findings at or above --fail-on (default: error)
       1 - Findings at or above --fail-on
-      2 - Input refused or run failed
+      2 - Input refused, a file could not be parsed, or run failed
 
     \b
     Examples:
@@ -1567,7 +1687,11 @@ def lint(
     click.echo(f"Scanning {len(sources)} file(s)...")
     click.echo()
 
-    summary = engine.lint_files(list(sources))
+    # An external_namespaces CURIE a file does not bind is refused before any finding is shown
+    try:
+        summary = engine.lint_files(list(sources))
+    except ValueError as e:
+        raise Refusal(str(e)) from e
 
     # Format and output results
     use_colour = not no_colour and output_format == "text"
@@ -1589,8 +1713,11 @@ def _lint_exit_code(summary: LintSummary, fail_on: str) -> int:
         fail_on: Lowest severity that counts as a finding: error, warning, info or never.
 
     Returns:
-        1 if any finding is at or above ``fail_on``, otherwise 0.
+        2 if any file could not be parsed, whatever ``fail_on`` says (#322); otherwise 1 if any
+        finding is at or above ``fail_on``, and 0 if none is.
     """
+    if summary.unparsed:
+        return 2
     counts = {
         "error": summary.total_errors,
         "warning": summary.total_errors + summary.total_warnings,
@@ -1598,6 +1725,34 @@ def _lint_exit_code(summary: LintSummary, fail_on: str) -> int:
         "never": 0,
     }
     return 1 if counts[fail_on] > 0 else 0
+
+
+def _change_type_filter(
+    ctx: click.Context, param: click.Parameter, value: str | None
+) -> tuple[str, ...] | None:
+    """Read ``--show`` or ``--hide`` into canonical change types, or refuse it (#144).
+
+    Refused during argument processing, so before ``-o`` is checked or a file is parsed.
+    """
+    if value is None:
+        return None
+    try:
+        # Split in order, not into a set, so the message names bad values in the order given
+        return normalise_change_types(value.split(","))
+    except UnknownFilterError as e:
+        raise click.BadParameter(str(e), ctx=ctx, param=param) from e
+
+
+def _entity_type_filter(
+    ctx: click.Context, param: click.Parameter, value: str | None
+) -> tuple[str, ...] | None:
+    """Read ``--entities`` into canonical entity types, or refuse it (#144)."""
+    if value is None:
+        return None
+    try:
+        return normalise_entity_types(value.split(","))
+    except UnknownFilterError as e:
+        raise click.BadParameter(str(e), ctx=ctx, param=param) from e
 
 
 @cli.command()
@@ -1620,17 +1775,21 @@ def _lint_exit_code(summary: LintSummary, fail_on: str) -> int:
 @click.option(
     "--show",
     type=str,
-    help="Show only these change types (comma-separated: added,removed,modified)",
+    callback=_change_type_filter,
+    help=f"Show only these change types (comma-separated: {','.join(CHANGE_TYPE_NAMES)}). "
+    "Changes only what is shown, never the exit code",
 )
 @click.option(
     "--hide",
     type=str,
-    help="Hide these change types (comma-separated: added,removed,modified)",
+    callback=_change_type_filter,
+    help="Hide these change types (comma-separated); not with --show",
 )
 @click.option(
     "--entities",
     type=str,
-    help="Show only these entity types (comma-separated: classes,properties,instances)",
+    callback=_entity_type_filter,
+    help=f"Show only these entity types (comma-separated: {', '.join(ENTITY_TYPE_NAMES)})",
 )
 @click.option(
     "--ignore-predicates",
@@ -1642,9 +1801,9 @@ def diff(
     new_file: Path,
     output: Path | None,
     output_format: str,
-    show: str | None,
-    hide: str | None,
-    entities: str | None,
+    show: tuple[str, ...] | None,
+    hide: tuple[str, ...] | None,
+    entities: tuple[str, ...] | None,
     ignore_predicates: str | None,
 ):
     """Compare two RDF files and show semantic differences.
@@ -1661,16 +1820,23 @@ def diff(
 
     \b
     Exit codes:
-        0 - Graphs are semantically identical
+        0 - Graphs are semantically identical (a filter never changes the exit code)
         1 - Differences were found
         2 - Error occurred
     """
+    # A filter that can show nothing is refused before anything is read or written (#144)
+    try:
+        build_filter(show, hide, entities, labels=("--show", "--hide", "--entities"))
+    except UnknownFilterError as e:
+        raise click.UsageError(str(e), ctx=click.get_current_context()) from e
+
     if output:
         check_outputs([("-o", output)], [old_file, new_file])
 
     try:
         # Parse ignored predicates
         ignore_preds: set[URIRef] | None = None
+        ignored: list[str] = []
         if ignore_predicates:
             temp_graph = Graph()
             temp_graph.parse(str(old_file), format="turtle")
@@ -1681,6 +1847,7 @@ def diff(
                 uri = expand_curie(temp_graph, pred_str)
                 if uri:
                     ignore_preds.add(uri)
+                    ignored.append(pred_str)
                 else:
                     click.secho(
                         f"Warning: Could not expand predicate '{pred_str}'",
@@ -1692,17 +1859,14 @@ def diff(
         click.echo(f"Comparing {old_file.name} \u2192 {new_file.name}...", err=True)
         diff_result = compare_files(old_file, new_file, ignore_predicates=ignore_preds)
 
-        # Apply filters
+        # Apply filters. The filtered diff counts what it leaves out, so its is_identical,
+        # and with it the exit code, still describes the graphs (#144)
         if show or hide or entities:
-            show_types = parse_filter_string(show) if show else None
-            hide_types = parse_filter_string(hide) if hide else None
-            entity_types = parse_filter_string(entities) if entities else None
-
             diff_result = filter_diff(
                 diff_result,
-                show_types=show_types,
-                hide_types=hide_types,
-                entity_types=entity_types,
+                show_types=set(show) if show else None,
+                hide_types=set(hide) if hide else None,
+                entity_types=set(entities) if entities else None,
             )
 
         # Load graph for CURIE formatting
@@ -1723,7 +1887,9 @@ def diff(
 
         # Exit code: 0 if identical, 1 if different
         if diff_result.is_identical:
-            click.secho("Graphs are semantically identical.", fg="green", err=True)
+            # Identical under the comparison asked for: say which predicates it ignored (#144)
+            ignoring = f", ignoring {', '.join(dict.fromkeys(ignored))}" if ignored else ""
+            click.secho(f"Graphs are semantically identical{ignoring}.", fg="green", err=True)
             sys.exit(0)
         else:
             sys.exit(1)
@@ -1810,18 +1976,14 @@ def diff(
 @click.option(
     "--include",
     type=str,
-    help=(
-        "Include only these entity types "
-        "(comma-separated: classes,properties,instances,shapes,concepts)"
-    ),
+    callback=_docs_entity_filter,
+    help=f"Include only these entity types ({_DOCS_ENTITY_HELP})",
 )
 @click.option(
     "--exclude",
     type=str,
-    help=(
-        "Exclude these entity types "
-        "(comma-separated: classes,properties,instances,shapes,concepts)"
-    ),
+    callback=_docs_entity_filter,
+    help=f"Exclude these entity types ({_DOCS_ENTITY_HELP})",
 )
 def docs(
     sources: tuple[Path, ...],
@@ -1836,8 +1998,8 @@ def docs(
     no_instances: bool,
     no_shapes: bool,
     no_skos: bool,
-    include: str | None,
-    exclude: str | None,
+    include: tuple[str, ...] | None,
+    exclude: tuple[str, ...] | None,
 ):
     """Generate documentation from RDF ontologies.
 
@@ -1882,6 +2044,13 @@ def docs(
     else:
         doc_config = DocsConfig()
 
+    # Whether the config itself switched an entity type off, for the refusal below (#252)
+    config_switched_off = config is not None and not all(
+        getattr(doc_config, toggle)
+        for toggles in DOCS_ENTITY_TYPE_TOGGLES.values()
+        for toggle in toggles
+    )
+
     # Apply CLI overrides
     if flag_given("output"):
         doc_config.output_dir = output
@@ -1903,39 +2072,47 @@ def docs(
     if title:
         doc_config.title = title
 
-    # Parse include/exclude filters
-    if include:
-        types = [t.strip().lower() for t in include.split(",")]
-        doc_config.include_classes = "classes" in types
-        doc_config.include_object_properties = "properties" in types or "object_properties" in types
-        doc_config.include_datatype_properties = (
-            "properties" in types or "datatype_properties" in types
+    # Entity filters (#252). The names were checked by the option callbacks; what is left is
+    # whether they contradict a --no- flag, and whether anything is left to document. Both
+    # are refused here, before anything is written.
+    if include is not None:
+        for flag_name, option, entity_type in (
+            ("no_instances", "--no-instances", "instances"),
+            ("no_shapes", "--no-shapes", "shapes"),
+            ("no_skos", "--no-skos", "concepts"),
+        ):
+            if flag_given(flag_name) and entity_type in include:
+                raise click.UsageError(
+                    f"{option} and --include {entity_type} contradict each other; drop one.",
+                    ctx=click.get_current_context(),
+                )
+    try:
+        apply_entity_filter(doc_config, include, exclude)
+    except EntityFilterError as e:
+        # Name what switched the types off. --include sets every toggle, so after it only
+        # --exclude counts; without it, the --no- flags and the config count too.
+        switched_off = []
+        if include is not None:
+            switched_off.append(f"--include {','.join(include)}")
+        else:
+            for flag_name, option in (
+                ("no_instances", "--no-instances"),
+                ("no_shapes", "--no-shapes"),
+                ("no_skos", "--no-skos"),
+            ):
+                if flag_given(flag_name):
+                    switched_off.append(option)
+            if config_switched_off:
+                switched_off.append(f"the include_* keys in {config}")
+        if exclude is not None:
+            switched_off.append(f"--exclude {','.join(exclude)}")
+        named = " and ".join(
+            [", ".join(switched_off[:-1]), switched_off[-1]] if switched_off[1:] else switched_off
         )
-        doc_config.include_annotation_properties = (
-            "properties" in types or "annotation_properties" in types
-        )
-        doc_config.include_other_properties = "properties" in types or "other_properties" in types
-        doc_config.include_instances = "instances" in types
-        doc_config.include_shapes = "shapes" in types
-        # One toggle covers both SKOS kinds; "concepts", "concept_schemes"
-        # and "skos" are accepted spellings of it.
-        doc_config.include_skos = any(t in types for t in ("concepts", "concept_schemes", "skos"))
-
-    if exclude:
-        types = [t.strip().lower() for t in exclude.split(",")]
-        if "classes" in types:
-            doc_config.include_classes = False
-        if "properties" in types:
-            doc_config.include_object_properties = False
-            doc_config.include_datatype_properties = False
-            doc_config.include_annotation_properties = False
-            doc_config.include_other_properties = False
-        if "instances" in types:
-            doc_config.include_instances = False
-        if "shapes" in types:
-            doc_config.include_shapes = False
-        if any(t in types for t in ("concepts", "concept_schemes", "skos")):
-            doc_config.include_skos = False
+        # "the include_* keys" is plural on its own; a single option is not
+        plural = len(switched_off) > 1 or (include is None and exclude is None)
+        verb = "leave" if plural else "leaves"
+        raise Refusal(f"Nothing to document: {named} {verb} no entity type switched on.") from e
 
     # Refuse what would fail before anything is written (#301). The generator creates the
     # output directory, so every check, the parse included, comes before it runs: a refusal
@@ -2626,7 +2803,7 @@ def puml2rdf(
 @click.option(
     "--fail-fast",
     is_flag=True,
-    help="Stop on first failure",
+    help="Stop after the first question that fails or errors; the rest are reported as not run",
 )
 def cq_test(
     ontology: Path,
@@ -2668,7 +2845,7 @@ def cq_test(
     Exit codes:
         0 - All tests passed
         1 - One or more tests failed
-        2 - Error occurred (invalid file, parse error, etc.)
+        2 - Error occurred (invalid file, parse error, no questions to run, etc.)
     """
     if output:
         check_outputs([("-o", output)], [ontology, test_file, *data])
@@ -2689,15 +2866,16 @@ def cq_test(
         click.echo(f"Loading tests: {test_file.name}...", err=True)
         suite = load_test_suite(test_file)
 
-        # Filter by tags
-        if tag or exclude_tag:
-            include_tags = set(tag) if tag else None
-            exclude_tags = set(exclude_tag) if exclude_tag else None
-            suite = suite.filter_by_tags(include_tags, exclude_tags)
+        # The files the test file's data: names are known only now; nothing is written yet (#439)
+        if output:
+            check_outputs(
+                [("-o", output)],
+                suite.data_files,
+                named_in={p: f"{test_file} loads through 'data:'" for p in suite.data_files},
+            )
 
-        if not suite.questions:
-            click.secho("No tests to run (check tag filters)", fg="yellow", err=True)
-            sys.exit(0)
+        # An empty selection is refused: a run that checked nothing didn't do it (#135)
+        suite = _cq_selection(suite, test_file, tag, exclude_tag)
 
         # Run tests
         click.echo(f"Running {len(suite.questions)} test(s)...", err=True)
@@ -2724,6 +2902,9 @@ def cq_test(
         else:
             sys.exit(0)
 
+    except click.ClickException:
+        # A Refusal is the command's own answer, not an unexpected error
+        raise
     except FileNotFoundError as e:
         click.secho(f"Error: {e}", fg="red", err=True)
         sys.exit(2)
@@ -2733,6 +2914,62 @@ def cq_test(
     except Exception as e:
         click.secho(f"Error: {type(e).__name__}: {e}", fg="red", err=True)
         sys.exit(2)
+
+
+def _cq_selection(
+    suite: CQTestSuite,
+    test_file: Path,
+    tag: tuple[str, ...],
+    exclude_tag: tuple[str, ...],
+) -> CQTestSuite:
+    """Apply ``--tag``/``--exclude-tag`` and refuse a selection with nothing to check (#135).
+
+    Args:
+        suite: The suite as loaded from ``test_file``
+        test_file: The test file, for the message
+        tag: Tags to include, from ``--tag``
+        exclude_tag: Tags to exclude, from ``--exclude-tag``
+
+    Returns:
+        The selected suite, holding at least one question that is not ``skip: true``
+
+    Raises:
+        Refusal: When the file has no questions, the filters leave none, or every
+            selected question has ``skip: true``. A filter refusal names the tags the
+            suite defines.
+    """
+    name = test_file.name
+    if not suite.questions:
+        raise Refusal(f"no questions to run: 'questions:' in {name} is an empty list")
+
+    selected = suite
+    if tag or exclude_tag:
+        selected = suite.filter_by_tags(set(tag) or None, set(exclude_tag) or None)
+
+    if not selected.questions:
+        defined = sorted({t for q in suite.questions for t in q.tags})
+        unmatched = [t for t in tag if not any(t in q.tags for q in suite.questions)]
+        matched = [t for t in tag if t not in unmatched]
+        reasons = []
+        if unmatched:
+            named = ", ".join(f"--tag {t}" for t in unmatched)
+            verb = "matches" if len(unmatched) == 1 else "match"
+            reasons.append(f"{named} {verb} no question in {name}")
+        if matched or not tag:
+            # What a matching tag (or the whole file) selected, the exclusions removed
+            excluded = " ".join(f"--exclude-tag {t}" for t in exclude_tag)
+            if matched:
+                requested = " ".join(f"--tag {t}" for t in matched)
+                reasons.append(f"{excluded} removes every question {requested} selected")
+            else:
+                reasons.append(f"{excluded} removes every question in {name}")
+        why = "; ".join(reasons)
+        raise Refusal(f"no questions to run: {why}\nTags defined: {', '.join(defined) or '(none)'}")
+
+    if all(q.skip for q in selected.questions):
+        raise Refusal("no questions to run: every selected question has skip: true")
+
+    return selected
 
 
 def _infer_format(path: Path) -> str:
@@ -2756,6 +2993,30 @@ def _infer_format(path: Path) -> str:
         ".json": "json-ld",
     }
     return format_map.get(suffix, "turtle")
+
+
+def _union_inputs(files: Sequence[Path]) -> tuple[list[Path], list[str]]:
+    """The files a ``stats`` union reads: each file once, however it is named (#140).
+
+    Parsing one file twice into a graph doubles every blank-node structure in it, so a file
+    named again, by another spelling or through a symbolic link, is read only the first time.
+
+    Args:
+        files: The files as given, in order.
+
+    Returns:
+        The files to read, in order, and a note for each one left out.
+    """
+    kept: list[Path] = []
+    notes: list[str] = []
+    for path in files:
+        first = next((k for k in kept if is_same_file(path, k)), None)
+        if first is None:
+            kept.append(path)
+        else:
+            same = "is named twice" if str(path) == str(first) else f"is {first}"
+            notes.append(f"Note: {path} {same}, read once")
+    return kept, notes
 
 
 @cli.command()
@@ -2800,7 +3061,10 @@ def stats(
     """Compute and display ontology statistics.
 
     Analyses one or more RDF ontology files and displays comprehensive metrics
-    about structure, complexity, and documentation coverage.
+    about structure, complexity, and documentation coverage. Several files are
+    analysed as one: the figures are for their union (not an owl:imports
+    closure), and a file named twice is read once. With --compare, two files
+    are analysed separately and compared.
 
     \b
     Examples:
@@ -2859,14 +3123,38 @@ def stats(
         if exclude:
             exclude_set = {cat.strip().lower() for cat in exclude.split(",")}
 
-        # Load graphs
-        graphs: list[tuple[Graph, Path]] = []
-        for filepath in files:
+        def _load(filepath: Path) -> Graph:
             click.echo(f"Loading {filepath}...", err=True)
             graph = Graph()
-            graph.parse(str(filepath), format="turtle")
-            graphs.append((graph, filepath))
+            try:
+                graph.parse(str(filepath), format="turtle")
+            except Exception as e:
+                raise ValueError(f"Failed to parse {filepath}: {e}") from e
             click.echo(f"  Loaded {len(graph)} triples", err=True)
+            return graph
+
+        # Load graphs: one per file to compare, else one graph holding the union (#140)
+        graphs: list[tuple[Graph, Path]] = []
+        if compare:
+            for filepath in files:
+                graphs.append((_load(filepath), filepath))
+        else:
+            sources, notes = _union_inputs(files)
+            for note in notes:
+                click.echo(note, err=True)
+            # The first file's graph is the union, so one file is read exactly as before
+            union = _load(sources[0])
+            defaults = set(Graph().namespaces())
+            for filepath in sources[1:]:
+                part = _load(filepath)
+                union += part
+                # Each prefix the file declares; the first file's binding wins, a namespace
+                # keeps the prefix it was first given, and rdflib numbers a clash (ex1:)
+                for prefix, namespace in part.namespaces():
+                    if (prefix, namespace) not in defaults:
+                        union.bind(prefix, namespace, override=False)
+            if len(sources) > 1:
+                click.echo(f"Union of {len(sources)} files: {len(union)} triples", err=True)
 
         if compare:
             # Comparison mode
@@ -2876,13 +3164,13 @@ def stats(
             click.echo("Collecting statistics...", err=True)
             old_stats = collect_stats(
                 old_graph,
-                source=str(old_path),
+                sources=[old_path],
                 include=include_set,
                 exclude=exclude_set,
             )
             new_stats = collect_stats(
                 new_graph,
-                source=str(new_path),
+                sources=[new_path],
                 include=include_set,
                 exclude=exclude_set,
             )
@@ -2897,13 +3185,13 @@ def stats(
                 graph=new_graph,
             )
         else:
-            # Single file or multiple files (show stats for first)
-            graph, filepath = graphs[0]
+            # One file, or the union of several (#140)
+            graph = union
 
             click.echo("Collecting statistics...", err=True)
             ontology_stats = collect_stats(
                 graph,
-                source=str(filepath),
+                sources=sources,
                 include=include_set,
                 exclude=exclude_set,
             )
@@ -2964,7 +3252,7 @@ def stats(
 @click.option(
     "--reasoning",
     is_flag=True,
-    help="Include reasoning analysis",
+    help="Deprecated: never ran a reasoner; removed in rdf-construct 0.8.0",
 )
 @click.option(
     "--no-colour",
@@ -3018,19 +3306,37 @@ def describe(
     """
     from rdf_construct.describe import describe_file, format_description
 
+    # Deprecated (#220): the flag never ran a reasoner. Said once, before anything can refuse,
+    # because it is about the invocation; it never changes the exit code. Removed by #299.
+    if reasoning:
+        keeps_key = output_format.lower() == "json" and not brief
+        tail = "its JSON 'reasoning' key is kept until then" if keeps_key else "it does nothing"
+        message = (
+            "⚠ --reasoning is deprecated and will be removed in rdf-construct 0.8.0: "
+            f"it never ran a reasoner, and {tail}"
+        )
+        click.echo(message if no_colour else click.style(message, fg="yellow"), err=True)
+
     if output:
         check_outputs([("-o", output)], [file])
 
     try:
         click.echo(f"Analysing {file}...", err=True)
 
-        # Perform analysis
-        description = describe_file(
-            file,
-            brief=brief,
-            resolve_imports=not no_resolve,
-            include_reasoning=reasoning,
-        )
+        # Perform analysis. The line above already told the user; the library's own
+        # DeprecationWarning for include_reasoning is for library callers only.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="include_reasoning is deprecated",
+                category=DeprecationWarning,
+            )
+            description = describe_file(
+                file,
+                brief=brief,
+                resolve_imports=not no_resolve,
+                include_reasoning=reasoning,
+            )
 
         # Format output
         use_colour = not no_colour and output_format == "text" and output is None
@@ -3063,6 +3369,88 @@ def describe(
     except Exception as e:
         click.secho(f"Error: {e}", fg="red", err=True)
         sys.exit(2)
+
+
+def _report_merge_identity(
+    identity: MergeIdentity, config_file: Path | None, use_colour: bool
+) -> None:
+    """Say what the merge did to ontology headers (#171): the summary, notes and warning.
+
+    Args:
+        identity: What the merge did.
+        config_file: The config the run used, if any, to point at ``namespaces.base``.
+        use_colour: Whether to colour the warning.
+    """
+    from rdf_construct.merge.identity import describe as describe_header
+
+    if identity.kept:
+        kept = f"<{identity.ontology}>" if identity.ontology is not None else "a blank-node header"
+        click.echo(f"Ontology: {kept} (kept: every source declares this one)")
+    elif identity.ontology is not None:
+        given_as = "--ontology-iri" if flag_given("ontology_iri") else "namespaces.base"
+        click.echo(f"Ontology: <{identity.ontology}> (from: {given_as})")
+    elif identity.declined is not None:
+        click.echo(f"Ontology: none (<{identity.declined}> not written: nothing to say about it)")
+    elif identity.demoted:
+        click.echo("Ontology: none")
+    for header, name in identity.demoted:
+        click.echo(f"  Demoted: {describe_header(header, name)}")
+    for name, targets in identity.stamped:
+        click.echo(f"  Derived from: {', '.join(f'<{t}>' for t in targets)} ({name})")
+    for reason in identity.unstamped:
+        click.echo(f"  Not recorded as derived from: {reason}")
+    if identity.moved_imports:
+        click.echo(f"  Imports kept on the merged header: {len(identity.moved_imports)}")
+    if identity.self_imports:
+        click.echo(
+            f"  Imports dropped, as the merge contains them: "
+            f"{', '.join(f'<{t}>' for t in identity.self_imports)}"
+        )
+    for note in identity.notes:
+        click.echo(note, err=True)
+    colour = "yellow" if use_colour else None
+    if identity.declined is not None:
+        click.secho(
+            f"\u26a0 No ontology header written: <{identity.declined}> would say nothing but its "
+            "type and imports, as no source header can be recorded as derived from.",
+            fg=colour,
+            err=True,
+        )
+        _report_dropped_imports(identity.dropped_imports, colour)
+        click.secho("  To keep it, give a source a named ontology header.", fg=colour, err=True)
+        return
+    if not identity.unnamed:
+        return
+    click.secho(
+        f"\u26a0 No ontology header written: {len(identity.demoted)} source header(s) demoted, "
+        "and nothing names the merged ontology.",
+        fg=colour,
+        err=True,
+    )
+    _report_dropped_imports(identity.dropped_imports, colour)
+    click.secho(
+        "  To name it, run this again with IRI replaced by the merged ontology's IRI:",
+        fg=colour,
+        err=True,
+    )
+    click.echo(f"    {rerun_command('--ontology-iri', 'IRI')}", err=True)
+    if config_file is not None:
+        click.secho(f"  or set namespaces.base: IRI in {config_file}", fg=colour, err=True)
+
+
+def _report_dropped_imports(dropped: list[URIRef], colour: str | None) -> None:
+    """List the imports a merge could not carry onto a header, five at most.
+
+    Args:
+        dropped: The imports not written.
+        colour: The warning's colour, or ``None``.
+    """
+    if not dropped:
+        return
+    shown = dropped[:5]
+    more = len(dropped) - len(shown)
+    listed = ", ".join(f"<{t}>" for t in shown) + (f" and {more} more" if more else "")
+    click.secho(f"  Their imports are not written: {listed}", fg=colour, err=True)
 
 
 def _replace_config_sources(config: MergeConfig, sources: Sequence[Path]) -> None:
@@ -3121,19 +3509,23 @@ def _apply_priorities(sources: Sequence[SourceConfig], priority: Sequence[int]) 
         src.priority = value
 
 
-def _load_merge_data(paths: Sequence[Path]) -> list[tuple[Path, Graph]]:
+def _load_merge_data(
+    paths: Sequence[Path],
+) -> tuple[list[tuple[Path, Graph]], list[tuple[Path, dict[str, str]]]]:
     """Read every data file a merge migrates, before anything is written (#437).
 
     Args:
         paths: The data files, from ``--migrate-data`` or the config's ``migrate_data``.
 
     Returns:
-        Each path with its parsed graph, in order.
+        Each path with its parsed graph, in order; and each path with every prefix it declares,
+        which its graph may not keep (#492).
 
     Raises:
         Refusal: A file is missing or cannot be parsed.
     """
     graphs: list[tuple[Path, Graph]] = []
+    declared: list[tuple[Path, dict[str, str]]] = []
     for path in paths:
         # A config's paths are not checked by Click, as --migrate-data's are
         if not path.exists():
@@ -3141,11 +3533,11 @@ def _load_merge_data(paths: Sequence[Path]) -> list[tuple[Path, Graph]]:
         # "core", so the data's own org: is not pushed aside to org1: (#358)
         graph = Graph(bind_namespaces="core")
         try:
-            graph.parse(path.as_posix())
+            declared.append((path, parse_declaring(graph, path)))
         except Exception as e:
             raise Refusal(f"Could not parse data file {path}: {e}") from e
         graphs.append((path, graph))
-    return graphs
+    return graphs, declared
 
 
 def _echo_merge_dry_run(config: MergeConfig, report: Path | None, result: MergeResult) -> None:
@@ -3223,7 +3615,7 @@ def _echo_merge_dry_run(config: MergeConfig, report: Path | None, result: MergeR
 @click.option(
     "--migration-rules",
     type=click.Path(exists=True, path_type=Path),
-    help="YAML file with migration rules",
+    help="YAML file with migration rules; not read yet (#172): use the config's migrate_data rules",
 )
 @click.option(
     "--data-output",
@@ -3239,6 +3631,13 @@ def _echo_merge_dry_run(config: MergeConfig, report: Path | None, result: MergeR
     "--no-colour",
     is_flag=True,
     help="Disable coloured output",
+)
+@click.option(
+    "--ontology-iri",
+    help=(
+        "IRI of the merged ontology: its one owl:Ontology header (overrides the config's "
+        "namespaces.base). Without one, a merge of headed sources writes no header"
+    ),
 )
 @click.option(
     "--init",
@@ -3260,6 +3659,7 @@ def merge(
     data_output: Path | None,
     dry_run: bool,
     no_colour: bool,
+    ontology_iri: str | None,
     init_config: bool,
 ):
     """Merge multiple RDF ontology files.
@@ -3275,18 +3675,32 @@ def merge(
       0 - Merged; every conflict was resolved by --strategy, or there were none
       1 - Merged, with conflicts marked in the output for review: always for
           rdfs:domain, rdfs:range and functional properties; for labels under
-          mark_all, or when the highest-priority sources are tied
+          mark_all, or when the highest-priority sources are tied; or a data
+          migration rule matched nothing, or left a match unchanged
       2 - Input refused or run failed (invalid options or config, parse error,
-          a data file that cannot be read, etc.)
+          a data file or migration rule that cannot be read, etc.)
 
     \b
     With --config, an option given on the command line overrides the file,
     and SOURCES replace its sources:.
 
     \b
+    The output has at most one owl:Ontology header (#171). --ontology-iri,
+    or namespaces.base in a config, names it, and each source is recorded
+    with prov:wasDerivedFrom. Without either, sources that share one header
+    keep it; otherwise the output has no header and the run warns, showing
+    the command that names it. Unless kept, each source header is demoted: it
+    loses owl:Ontology, owl:versionIRI, owl:imports, owl:priorVersion,
+    owl:backwardCompatibleWith and owl:incompatibleWith, and keeps the rest.
+
+    \b
     Examples:
       # Basic merge of two files
       rdf-construct merge core.ttl ext.ttl -o merged.ttl
+
+      # Name the merged ontology
+      rdf-construct merge core.ttl ext.ttl -o merged.ttl \\
+          --ontology-iri http://example.org/merged
 
       # With priorities (higher wins conflicts)
       rdf-construct merge core.ttl ext.ttl -o merged.ttl -p 1 -p 2
@@ -3354,6 +3768,8 @@ def merge(
             config.migrate_data.data_sources = list(migrate_data)
         if flag_given("data_output") and config.migrate_data is not None:
             config.migrate_data.output_path = data_output
+        if flag_given("ontology_iri"):
+            config.namespaces.base = ontology_iri
         _apply_priorities(config.sources, priority)
     else:
         # Build config from CLI arguments: each source's priority is its position, unless -p
@@ -3375,6 +3791,7 @@ def merge(
         config = MergeConfig(
             sources=source_configs,
             output=OutputConfig(path=output),
+            namespaces=NamespaceConfig(base=ontology_iri),
             conflicts=ConflictConfig(
                 strategy=conflict_strategy,
                 report_path=report,
@@ -3384,6 +3801,17 @@ def merge(
             dry_run=dry_run,
         )
 
+    # The merged ontology's IRI must be one, before anything is read or written (#171)
+    if config.namespaces.base is not None:
+        from rdf_construct.merge.identity import check_ontology_iri
+
+        given_as = "--ontology-iri" if flag_given("ontology_iri") else "namespaces.base"
+        try:
+            check_ontology_iri(config.namespaces.base)
+        except ValueError as e:
+            raise Refusal(f"{given_as} is not an ontology IRI: {e}") from e
+
+    # A data migration needs data and somewhere to write it, or it does nothing (#497)
     migration = config.migrate_data
     if migration and migration.data_sources:
         if migration.output_path is None:
@@ -3413,7 +3841,23 @@ def merge(
 
     # Read every data file before writing anything, so that one that is missing or cannot be
     # parsed refuses the run instead of failing after the ontology is written (#437)
-    data_graphs = _load_merge_data(migration.data_sources if migration else [])
+    data_graphs, declared = _load_merge_data(migration.data_sources if migration else [])
+
+    # A rule's CURIE means one IRI across every data file's declarations and the config's
+    # preferred_prefixes, and a rule that cannot be read refuses the run before anything is
+    # written (#492)
+    rule_prefixes: list[tuple[Path, dict[str, str]]] = []
+    if config_file and config.namespaces.preferred_prefixes:
+        rule_prefixes.append((config_file, dict(config.namespaces.preferred_prefixes)))
+    rule_prefixes.extend(declared)
+    if migration and migration.rules and data_graphs:
+        try:
+            resolve_rules(
+                migration.rules,
+                [*rule_prefixes, *((path, extract_prefix_map(g)) for path, g in data_graphs)],
+            )
+        except RuleError as e:
+            raise Refusal(f"Cannot read {e}") from e
 
     # Execute merge
     click.echo("Merging ontologies...")
@@ -3432,6 +3876,8 @@ def merge(
     click.echo(text_formatter.format_merge_result(result, result.merged_graph))
     for note in result.prefix_notes:
         click.echo(note, err=True)
+    if result.identity is not None:
+        _report_merge_identity(result.identity, config_file, use_colour)
 
     # Write output (unless dry run)
     if not dry_run and result.merged_graph and config.output:
@@ -3450,6 +3896,7 @@ def merge(
         click.echo(f"  Conflict report: {report}")
 
     # Handle data migration
+    rule_findings = False
     if config.migrate_data and config.migrate_data.data_sources:
         click.echo()
         click.echo("Migrating data...")
@@ -3474,12 +3921,29 @@ def merge(
             uri_map=uri_map if uri_map else None,
             rules=config.migrate_data.rules if config.migrate_data.rules else None,
             output_path=config.migrate_data.output_path if not dry_run else None,
+            prefixes=rule_prefixes,
         )
 
         if migration_result.success:
             click.echo(text_formatter.format_migration_result(migration_result))
             for note in migration_result.prefix_notes:
                 click.echo(note, err=True)
+            # A rule that did nothing, or left a match alone, is a finding: exit 1 (#492)
+            for name in migration_result.unmatched_rules:
+                click.secho(
+                    f"\u26a0 Matched nothing in any data file: {name}",
+                    fg="yellow",
+                    err=True,
+                )
+                rule_findings = True
+            for name, kept in migration_result.stats.rules_kept.items():
+                click.secho(
+                    f"\u26a0 Left {kept} match(es) unchanged, as a construct built no value: "
+                    f"{name}",
+                    fg="yellow",
+                    err=True,
+                )
+                rule_findings = True
             if config.migrate_data.output_path and not dry_run:
                 click.secho(
                     f"\u2713 Wrote migrated data to {config.migrate_data.output_path}",
@@ -3504,6 +3968,8 @@ def merge(
             f"\u26a0 {len(result.unresolved_conflicts)} unresolved conflict(s) " "marked in output",
             fg="yellow",
         )
+        raise SystemExit(1)
+    elif rule_findings:
         raise SystemExit(1)
     else:
         raise SystemExit(0)

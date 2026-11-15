@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from rdflib import Graph, RDF, RDFS
 from rdflib.namespace import OWL
 
+from rdf_construct.stats.metrics.basic import get_all_properties
+
 
 @dataclass
 class PropertyStats:
@@ -19,8 +21,8 @@ class PropertyStats:
         domain_coverage: Proportion of properties with domain (0.0 - 1.0).
         range_coverage: Proportion of properties with range (0.0 - 1.0).
         inverse_pairs: Number of owl:inverseOf pairs.
-        functional: Number of owl:FunctionalProperty properties.
-        symmetric: Number of owl:SymmetricProperty properties.
+        functional: Number of the ontology's own properties typed owl:FunctionalProperty.
+        symmetric: Number of the ontology's own properties typed owl:SymmetricProperty.
     """
 
     with_domain: int = 0
@@ -33,16 +35,8 @@ class PropertyStats:
 
 
 def _get_all_properties(graph: Graph) -> set:
-    """Get all properties from the graph (object + datatype + annotation)."""
-    props = set()
-    for prop_type in (
-        OWL.ObjectProperty,
-        OWL.DatatypeProperty,
-        OWL.AnnotationProperty,
-        RDF.Property,
-    ):
-        props |= set(graph.subjects(RDF.type, prop_type))
-    return props
+    """Get all properties from the graph: the ontology's own, of all four kinds (#138, #371)."""
+    return get_all_properties(graph)
 
 
 def collect_property_stats(graph: Graph) -> PropertyStats:
@@ -68,14 +62,15 @@ def collect_property_stats(graph: Graph) -> PropertyStats:
 
     # Count inverse pairs (each owl:inverseOf creates a pair)
     # Count unique pairs (A inverseOf B = B inverseOf A)
-    inverse_subjects = set(graph.subjects(OWL.inverseOf, None))
+    # Like every count here, only the ontology's own properties (#371)
+    inverse_subjects = set(graph.subjects(OWL.inverseOf, None)) & properties
     inverse_pairs = len(inverse_subjects)  # Each subject represents one pair relationship
 
     # Count functional properties
-    functional = len(set(graph.subjects(RDF.type, OWL.FunctionalProperty)))
+    functional = sum(1 for p in properties if (p, RDF.type, OWL.FunctionalProperty) in graph)
 
     # Count symmetric properties
-    symmetric = len(set(graph.subjects(RDF.type, OWL.SymmetricProperty)))
+    symmetric = sum(1 for p in properties if (p, RDF.type, OWL.SymmetricProperty) in graph)
 
     return PropertyStats(
         with_domain=with_domain,
