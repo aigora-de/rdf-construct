@@ -634,6 +634,15 @@ change, and what to do about it, is listed command by command in the
   `DeprecationWarning` when given `include_reasoning=True`.
 
 ### Fixed
+- **`docs` falls back to the qname when a label is only whitespace** (#260). An
+  entity labelled `"   "` was linked from the index with no visible text:
+  nothing to click in HTML, and `[   ](…)` in Markdown. A label with no
+  non-whitespace content is now treated as absent, as an empty one already
+  was, so the next label is tried: one in another language if the entity has
+  one, otherwise the qname. In the JSON output such an entity's `label` is
+  `null`, as it is for an entity with no label; it was the empty or
+  whitespace string. A label made only of zero-width characters is still
+  used as it is.
 - **`lint`'s `dangling-reference` no longer claims a namespace from one node**
   (#69). A namespace is checked only when the file defines two or more entities
   in it, or the reference lies within the file's own ontology IRI, and a
