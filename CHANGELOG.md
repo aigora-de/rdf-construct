@@ -634,6 +634,15 @@ change, and what to do about it, is listed command by command in the
   `DeprecationWarning` when given `include_reasoning=True`.
 
 ### Fixed
+- **`docs` falls back to the qname when a label is only whitespace** (#260). An
+  entity labelled `"   "` was linked from the index with no visible text:
+  nothing to click in HTML, and `[   ](…)` in Markdown. A label with no
+  non-whitespace content is now treated as absent, as an empty one already
+  was, so the next label is tried: one in another language if the entity has
+  one, otherwise the qname. In the JSON output such an entity's `label` is
+  `null`, as it is for an entity with no label; it was the empty or
+  whitespace string. A label made only of zero-width characters is still
+  used as it is.
 - **`lint`'s `dangling-reference` no longer claims a namespace from one node**
   (#69). A namespace is checked only when the file defines two or more entities
   in it, or the reference lies within the file's own ontology IRI, and a
@@ -645,6 +654,16 @@ change, and what to do about it, is listed command by command in the
 - **`missing-label` and `missing-comment` no longer fire on a borrowed
   vocabulary's term** (#368), including the `prov:wasDerivedFrom` that `order`,
   `split` and a named `merge` declare for their stamp.
+- **The derivation stamp is declared an `owl:AnnotationProperty` even when the
+  source types `prov:wasDerivedFrom` only generically** (#426). `order`,
+  `split` and a named `merge` skipped the declaration when the source typed
+  the property `rdf:Property`, `owl:FunctionalProperty` or
+  `owl:DeprecatedProperty`, so their output used the stamp as an annotation
+  without declaring it one. Only a kind-specific type (an object, datatype or
+  annotation property) suppresses the declaration now, because an IRI typed
+  as both an annotation and another kind of property is outside OWL 2 DL. A
+  source that types it `owl:FunctionalProperty` stays outside OWL 2 DL either
+  way: an annotation property cannot be functional.
 - **`docs` no longer documents, and `stats` no longer counts, a term the
   ontology does not own** (#371).
 - **An inline blank node with several objects for one predicate is valid
