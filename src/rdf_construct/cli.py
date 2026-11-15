@@ -3811,13 +3811,24 @@ def merge(
         except ValueError as e:
             raise Refusal(f"{given_as} is not an ontology IRI: {e}") from e
 
+    # A data migration needs data and somewhere to write it, or it does nothing (#497)
+    migration = config.migrate_data
+    if migration and migration.data_sources:
+        if migration.output_path is None:
+            raise Refusal(
+                "Data migration requires --data-output or migrate_data.output in the config."
+            )
+    elif data_output is not None or (migration and migration.output_path is not None):
+        raise Refusal(
+            "A data output requires --migrate-data or migrate_data.sources in the config."
+        )
+
     # Every output is known now, before anything is read or written (#412)
     planned: list[tuple[str, Path]] = []
     if config.output:
         planned.append(("-o", config.output.path))
     if report:
         planned.append(("--report", report))
-    migration = config.migrate_data
     if migration and migration.data_sources and migration.output_path:
         planned.append(("--data-output", migration.output_path))
     read = [

@@ -913,6 +913,16 @@ change, and what to do about it, is listed command by command in the
   second `skos:prefLabel` in one tag is reported as malformed (SKOS S14), a
   second `rdfs:label` as ambiguous. Sources tied at the highest priority are
   not picked between: the conflict is marked and the run exits 1.
+- **`merge` refuses a data migration with nowhere to write, and a data output
+  with no data** (#497). `--migrate-data` (or `migrate_data.sources`) without
+  `--data-output` (or `migrate_data.output`) migrated the data, printed a
+  summary, wrote it nowhere and exited 0. `--data-output` with no data to
+  migrate was ignored without a word. Both are now refused with exit 2 before
+  anything is read or written, under `--dry-run` too, and the message names
+  the option and the config key to add. A config that sets
+  `migrate_data.output` and no `sources` is refused as well. See
+  [`merge`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#merge)
+  in the migration note.
 - **`merge` refuses a predicate in `ignore_predicates` that it cannot resolve**
   (#193). `ignore_predicates: ["rdfs:label"]` silently matched nothing. A CURIE
   now resolves against `rdf`, `rdfs`, `owl`, `xsd`, `xml` and the config's own

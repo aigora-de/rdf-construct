@@ -257,3 +257,58 @@ class TestLibrary:
         from_graphs = migrate_data_graphs([(path, graph)], output_path=tmp_path / "b.ttl")
         assert from_files.success and from_graphs.success
         assert (tmp_path / "a.ttl").read_bytes() == (tmp_path / "b.ttl").read_bytes()
+
+
+class TestMigrationOutputRequired:
+    @pytest.mark.parametrize("configured", [False, True])
+    @pytest.mark.parametrize("dry_run", [False, True])
+    def test_data_without_output_is_refused(
+        self, runner: CliRunner, tmp_path: Path, configured: bool, dry_run: bool
+    ) -> None:
+        data = data_file(tmp_path)
+        out = tmp_path / "merged.ttl"
+        if configured:
+            config = write_yaml(
+                tmp_path / "m.yml",
+                {"sources": [str(LABELS_A)], "migrate_data": {"sources": [str(data)]}},
+            )
+            argv = ["merge", "-c", str(config), "-o", str(out)]
+        else:
+            argv = ["merge", str(LABELS_A), "-o", str(out), "--migrate-data", str(data)]
+        argv += ["--dry-run"] if dry_run else []
+        result, before, after = invoke(runner, argv, tmp_path)
+        assert result.exit_code == 2, result.output
+        assert "--data-output" in result.output
+        assert "migrate_data.output" in result.output
+        assert_wrote_nothing(before, after)
+
+    @pytest.mark.parametrize("configured", [False, True])
+    def test_output_without_data_is_refused(
+        self, runner: CliRunner, tmp_path: Path, configured: bool
+    ) -> None:
+        if configured:
+            config = write_yaml(tmp_path / "m.yml", {"sources": [str(LABELS_A)]})
+            argv = ["merge", "-c", str(config)]
+        else:
+            argv = ["merge", str(LABELS_A)]
+        argv += ["-o", str(tmp_path / "merged.ttl"), "--data-output", str(tmp_path / "data.ttl")]
+        result, before, after = invoke(runner, argv, tmp_path)
+        assert result.exit_code == 2, result.output
+        assert "--migrate-data" in result.output
+        assert_wrote_nothing(before, after)
+
+    def test_config_output_without_sources_is_refused(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        config = write_yaml(
+            tmp_path / "m.yml",
+            {
+                "sources": [str(LABELS_A)],
+                "migrate_data": {"output": str(tmp_path / "data.ttl")},
+            },
+        )
+        argv = ["merge", "-c", str(config), "-o", str(tmp_path / "merged.ttl")]
+        result, before, after = invoke(runner, argv, tmp_path)
+        assert result.exit_code == 2, result.output
+        assert "migrate_data.sources" in result.output
+        assert_wrote_nothing(before, after)
