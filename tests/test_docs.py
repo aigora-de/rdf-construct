@@ -454,6 +454,48 @@ class TestEdgeCases:
         # Should still generate, using QName as fallback
         assert result.classes_count == 1
 
+    def test_class_with_whitespace_label(self, output_dir: Path):
+        """A whitespace-only label falls back to the qname like an empty one (#260)."""
+        g = Graph()
+        g.bind("ex", EX)
+        g.bind("owl", OWL)
+        g.bind("rdfs", RDFS)
+        g.add((EX.Blank, RDF.type, OWL.Class))
+        g.add((EX.Blank, RDFS.label, Literal("   ")))
+
+        config = DocsConfig(output_dir=output_dir, format="html")
+        generator = DocsGenerator(config)
+
+        result = generator.generate(g)
+
+        assert result.classes_count == 1
+        # The index must link with the qname as visible text. A whitespace-only
+        # link renders as nothing to click (#260).
+        index_content = (output_dir / "index.html").read_text()
+        assert "ex:Blank" in index_content
+
+    def test_whitespace_label_tries_another_language_then_null_in_json(self, output_dir: Path):
+        """The next label is tried before the qname, and the JSON says null, not "" (#260)."""
+        g = Graph()
+        g.bind("ex", EX)
+        g.add((EX.Other, RDF.type, OWL.Class))
+        g.add((EX.Other, RDFS.label, Literal("   ", lang="en")))
+        g.add((EX.Other, RDFS.label, Literal("Gebäude", lang="de")))
+        for name, text in (("Blank", "\t\n"), ("Nbsp", "\u00a0"), ("Empty", "")):
+            g.add((EX[name], RDF.type, OWL.Class))
+            g.add((EX[name], RDFS.label, Literal(text)))
+
+        DocsGenerator(DocsConfig(output_dir=output_dir, format="json")).generate(g)
+
+        data = json.loads((output_dir / "index.json").read_text(encoding="utf-8"))
+        labels = {c["qname"]: c["label"] for c in data["classes"]}
+        assert labels == {
+            "ex:Other": "Gebäude",
+            "ex:Blank": None,
+            "ex:Nbsp": None,
+            "ex:Empty": None,
+        }
+
     def test_circular_hierarchy(self, output_dir: Path):
         """Test handling of circular class hierarchies."""
         g = Graph()
