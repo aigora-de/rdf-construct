@@ -474,6 +474,28 @@ class TestEdgeCases:
         index_content = (output_dir / "index.html").read_text()
         assert "ex:Blank" in index_content
 
+    def test_whitespace_label_tries_another_language_then_null_in_json(self, output_dir: Path):
+        """The next label is tried before the qname, and the JSON says null, not "" (#260)."""
+        g = Graph()
+        g.bind("ex", EX)
+        g.add((EX.Other, RDF.type, OWL.Class))
+        g.add((EX.Other, RDFS.label, Literal("   ", lang="en")))
+        g.add((EX.Other, RDFS.label, Literal("Gebäude", lang="de")))
+        for name, text in (("Blank", "\t\n"), ("Nbsp", "\u00a0"), ("Empty", "")):
+            g.add((EX[name], RDF.type, OWL.Class))
+            g.add((EX[name], RDFS.label, Literal(text)))
+
+        DocsGenerator(DocsConfig(output_dir=output_dir, format="json")).generate(g)
+
+        data = json.loads((output_dir / "index.json").read_text(encoding="utf-8"))
+        labels = {c["qname"]: c["label"] for c in data["classes"]}
+        assert labels == {
+            "ex:Other": "Gebäude",
+            "ex:Blank": None,
+            "ex:Nbsp": None,
+            "ex:Empty": None,
+        }
+
     def test_circular_hierarchy(self, output_dir: Path):
         """Test handling of circular class hierarchies."""
         g = Graph()
@@ -1780,19 +1802,9 @@ class TestSKOSRendering:
         config = DocsConfig(output_dir=output_dir, format="json", single_page=True)
         DocsGenerator(config).generate(skos_vocabulary)
 
-        data = json.loads((output_dir / "index.json").read_text())
+        data = json.loads((output_dir / "ontology.json").read_text())
         assert len(data["concepts"]) == 7
         assert len(data["concept_schemes"]) == 2
-
-    def test_json_single_page_writes_index_json(
-        self, skos_vocabulary: Graph, output_dir: Path
-    ):
-        """Single-page JSON uses the documented name index.json, like multi-page (#258)."""
-        config = DocsConfig(output_dir=output_dir, format="json", single_page=True)
-        DocsGenerator(config).generate(skos_vocabulary)
-
-        assert (output_dir / "index.json").exists()
-        assert not (output_dir / "ontology.json").exists()
 
 
 class TestSKOSIndexAndSinglePage:
