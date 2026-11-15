@@ -1,0 +1,5 @@
+@prefix c: <http://example.org/c#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+# No ontology header.
+c:Thing a owl:Class .

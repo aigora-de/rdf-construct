@@ -1,0 +1,10 @@
+# Four classes whose local names share a prefix (#226): a selection by substring picks the
+# neighbours of Cat; a selection by equality picks Cat alone.
+@prefix ex: <http://example.org/pets#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+<http://example.org/pets> a owl:Ontology .
+ex:Cat a owl:Class .
+ex:Category a owl:Class .
+ex:Catalogue a owl:Class .
+ex:Dog a owl:Class .

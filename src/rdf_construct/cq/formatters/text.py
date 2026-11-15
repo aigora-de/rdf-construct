@@ -55,6 +55,13 @@ def format_text(results: CQTestResults, verbose: bool = False, use_color: bool =
     summary = _format_summary(results, use_color)
     lines.append(summary)
 
+    # What --fail-fast did not reach (#137)
+    if results.not_run_count:
+        lines.append(
+            f"{results.ran_count} of {results.total_count} run — stopped by --fail-fast "
+            f"after '{results.stopped_after}'"
+        )
+
     # Total duration
     if verbose:
         lines.append(f"Total duration: {results.total_duration_ms:.1f}ms")
@@ -69,6 +76,7 @@ def _format_result_line(result: CQTestResult, verbose: bool, use_color: bool) ->
         CQStatus.FAIL: ("FAIL", "red"),
         CQStatus.ERROR: ("ERROR", "red"),
         CQStatus.SKIP: ("SKIP", "yellow"),
+        CQStatus.NOT_RUN: ("NOT RUN", "yellow"),
     }
 
     status_text, color = status_map[result.status]

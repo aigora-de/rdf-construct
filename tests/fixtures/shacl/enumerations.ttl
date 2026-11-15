@@ -1,0 +1,17 @@
+# The three owl:oneOf forms, each listed out of alphabetical order, one with a repeat (#227).
+@prefix ex: <http://example.org/enum#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://example.org/enum> a owl:Ontology .
+
+ex:Car a owl:Class .
+ex:Colour a owl:Class ; owl:oneOf ( ex:blue ex:red ex:green ex:red ) .
+
+# A named enumerated class
+ex:hasColour a owl:ObjectProperty ; rdfs:domain ex:Car ; rdfs:range ex:Colour .
+# An inline enumeration of individuals
+ex:hasTrim a owl:ObjectProperty ; rdfs:domain ex:Car ; rdfs:range [ owl:oneOf ( ex:chrome ex:black ) ] .
+# An inline enumerated datatype
+ex:size a owl:DatatypeProperty ; rdfs:domain ex:Car ;
+    rdfs:range [ a rdfs:Datatype ; owl:oneOf ( "S" "M" "L" ) ] .

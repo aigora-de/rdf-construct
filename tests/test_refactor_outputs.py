@@ -422,15 +422,6 @@ class TestInPlace:
 class TestUnchanged:
     """What #411 and #414 leave as it was on ``main``."""
 
-    def test_single_source_without_o_writes_nothing(self, tmp_path):
-        """#183's case is P37's to decide; it still writes nothing at exit 0."""
-        _write(tmp_path, {"a.ttl": _ontology("A")})
-
-        result, before, after = _run(["refactor", "rename", "@/a.ttl", *REN_X], tmp_path)
-
-        assert result.exit_code == 0, result.output
-        assert before == after
-
     def test_two_sources_into_a_fresh_directory(self, tmp_path):
         _write(tmp_path, {"x/a.ttl": _ontology("A"), "y/b.ttl": _ontology("B")})
 
@@ -466,24 +457,45 @@ class TestConfigOutput:
         assert "ex:New" in (tmp_path / "renamed.ttl").read_text()
 
 
-def test_guide_refusal_is_the_real_output(monkeypatch):
-    """``REFACTOR_GUIDE.md``'s in-place refusal runs verbatim and prints what it shows."""
+def _guide_examples(heading: str) -> list[tuple[str, str]]:
+    """Each command in a ``REFACTOR_GUIDE.md`` section with the output block that follows it."""
     import re
+
+    guide = (
+        Path(__file__).parent.parent / "docs" / "user_guides" / "REFACTOR_GUIDE.md"
+    ).read_text()
+    start = guide.index(heading)
+    section = guide[start : guide.index("\n### ", start + 1)]
+    return re.findall(r"```bash\n(.*?)```\n\n```(?:text)?\n(.*?)```", section, re.S)
+
+
+@pytest.mark.parametrize(
+    "heading, index, exit_code",
+    [
+        ("### Where Output Goes", 0, 2),  # no -o (#183)
+        ("### Where Output Goes", 1, 2),  # in place without --in-place (#411)
+        ("### A Rename That Matches Nothing", 0, 1),  # (#183)
+    ],
+    ids=["no-output", "in-place", "matches-nothing"],
+)
+def test_guide_example_is_the_real_output(tmp_path, monkeypatch, heading, index, exit_code):
+    """``REFACTOR_GUIDE.md``'s examples run verbatim and print what they show on stderr."""
     import shlex
+    import shutil
 
     from rdf_construct.cli import cli
 
     root = Path(__file__).parent.parent
-    guide = (root / "docs" / "user_guides" / "REFACTOR_GUIDE.md").read_text()
-    section = guide[guide.index("### Where Output Goes") : guide.index("### CURIEs")]
-    command, shown = re.findall(r"```(?:bash)?\n(.*?)```", section, re.S)
+    shutil.copytree(root / "examples" / "refactor", tmp_path / "examples" / "refactor")
+    command, shown = _guide_examples(heading)[index]
     argv = shlex.split(command.replace("\\\n", " "))
     assert argv[0] == "rdf-construct"
 
-    monkeypatch.chdir(root)
-    before = (root / "examples" / "refactor" / "typos.ttl").read_bytes()
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "examples" / "refactor" / "typos.ttl"
+    before = source.read_bytes()
     result = CliRunner().invoke(cli, argv[1:])
 
-    assert result.exit_code == 2
-    assert result.output == shown
-    assert (root / "examples" / "refactor" / "typos.ttl").read_bytes() == before
+    assert result.exit_code == exit_code, result.output
+    assert result.stderr == shown
+    assert source.read_bytes() == before

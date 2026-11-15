@@ -1,0 +1,9 @@
+# #356: a file whose org: is not W3C's Organization ontology.
+@prefix org: <http://example.org/myorg#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://example.org/myorg> a owl:Ontology .
+org:Team a owl:Class .
+org:secret a owl:DatatypeProperty ;
+    rdfs:domain org:Team .

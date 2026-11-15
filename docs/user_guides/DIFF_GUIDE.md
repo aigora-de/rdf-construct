@@ -52,7 +52,10 @@ rdf-construct diff [OPTIONS] OLD_FILE NEW_FILE
 
 - `0` — Graphs are semantically identical, blank nodes included
 - `1` — Differences were found, or a blank-node structure was too large to compare (see [Blank Nodes](#blank-nodes))
-- `2` — Error occurred (file not found, parse error, etc.)
+- `2` — Error occurred (file not found, parse error, a filter value it does not recognise, etc.)
+
+A filter (`--show`, `--hide`, `--entities`) never changes the exit code: it changes only what is
+shown. See [Filtering](#filtering).
 
 ## Output Formats
 
@@ -161,6 +164,23 @@ rdf-construct diff old.ttl new.ttl --format json
 
 ## Filtering
 
+A filter changes only what is shown. The exit code, the `Graphs are semantically identical.`
+verdict and the JSON's `identical` always describe the whole comparison. A filtered view that
+leaves changes out says how many and of what kind, so a filter can never make two different
+files look identical.
+
+A value the filter does not recognise is refused at exit 2, before anything is read or written,
+naming each unknown value in the order given, a near match where there is one, and every
+accepted name:
+
+```text
+Error: Invalid value for '--show': unknown change type 'addedd' (did you mean 'added'?). Accepted: added, removed, modified
+```
+
+Each option is checked on its own, so with mistakes in two options the second is reported once
+the first is fixed. An empty value (`--show ""`, `--show ,`) is refused too. Names are matched ignoring case, and
+whitespace around them is ignored.
+
 ### By Change Type
 
 Show only specific types of changes:
@@ -174,6 +194,9 @@ rdf-construct diff old.ttl new.ttl --hide modified
 ```
 
 Valid change types: `added`, `removed`, `modified`
+
+`--show` and `--hide` cannot be used together, since `--show` already hides every change type it
+does not name, and `--hide` cannot hide all three. Either is refused at exit 2.
 
 ### By Entity Type
 
@@ -192,12 +215,60 @@ rdf-construct diff old.ttl new.ttl --entities classes,instances
 
 Valid entity types:
 
-- `classes` — OWL/RDFS classes
-- `properties` — All property types
-- `object_properties` — OWL ObjectProperty
-- `datatype_properties` — OWL DatatypeProperty
-- `annotation_properties` — OWL AnnotationProperty
-- `individuals` / `instances` — Named instances
+- `classes` — terms typed `owl:Class`, `rdfs:Class` or `owl:DeprecatedClass`
+- `properties` — all property types, the four below
+- `object_properties` — terms typed `owl:ObjectProperty`, or an OWL characteristic that implies
+  it, such as `owl:TransitiveProperty` or `owl:SymmetricProperty`
+- `datatype_properties` — terms typed `owl:DatatypeProperty`
+- `annotation_properties` — terms typed `owl:AnnotationProperty`
+- `other_properties` — properties whose kind the file does not say: typed `rdf:Property`,
+  `owl:FunctionalProperty` or `owl:DeprecatedProperty` and none of the above. They are listed as
+  `Property`, under `Other Properties` in markdown and `other_properties` in the JSON
+- `individuals` / `instances` — other typed terms
+- `ontology` — the `owl:Ontology` header
+- `untyped` — subjects with no `rdf:type` in the file they are listed from
+- `structures` — blank-node structures that belong to no named entity, such as an
+  `owl:AllDisjointClasses` (see [Blank Nodes](#blank-nodes))
+
+The other spellings accepted are `class`, `object-properties`, `objprops`,
+`datatype-properties`, `dataprops`, `annotation-properties`, `annprops`, `other-properties` and
+`otherprops`.
+
+Each entity is listed once, under the first of these that its types allow: ontology, class,
+object, datatype, annotation, other property, individual. A class punned as a property is listed
+as a `Class`. `stats`, which counts rather than lists, counts such a term under each of its kinds.
+
+### Blank-node structures under a filter
+
+A blank-node structure that belongs to a named entity is shown or hidden with that entity. One
+that belongs to none is added or removed, never modified, so `--show` and `--hide` apply to it by
+that action. `--entities` hides it unless the list names `structures`. Either way, what is hidden
+is counted:
+
+```bash
+rdf-construct diff examples/diff/v1.ttl examples/diff/v2.ttl --entities classes
+```
+
+```text
+Comparing v1.ttl → v2.ttl
+
+MODIFIED (2 entities):
+  ~ Class bld:Building
+    + rdfs:subClassOf [ a owl:Restriction ; owl:minCardinality "2"^^xsd:nonNegativeInteger ; owl:onProperty bld:hasFloor ]
+    - rdfs:subClassOf [ a owl:Restriction ; owl:minCardinality "1"^^xsd:nonNegativeInteger ; owl:onProperty bld:hasFloor ]
+  ~ Class bld:Room
+    + [ a owl:Axiom ; owl:annotatedProperty rdfs:subClassOf ; owl:annotatedSource bld:Room ; owl:annotatedTarget bld:Space ; rdfs:comment "A room is an enclosed space."@en ]
+    - [ a owl:Axiom ; owl:annotatedProperty rdfs:subClassOf ; owl:annotatedSource bld:Room ; owl:annotatedTarget bld:Space ; rdfs:comment "A room is a space."@en ]
+
+Summary: 0 added, 0 removed, 2 modified
+Not shown: 2 blank-node structures (--entities classes).
+```
+
+When a filter leaves nothing to show, the output says so instead of listing anything, for
+example: `No added changes. 3 changes not shown (2 modified, 1 blank-node structure) — run
+without --show to see them.` The JSON gains a `filter` object, only under a filter, holding the
+names applied and `not_shown`, the counts it left out, keyed like `summary`; `summary` counts
+what is shown.
 
 ### Ignoring Predicates
 
@@ -211,9 +282,13 @@ rdf-construct diff old.ttl new.ttl --ignore-predicates dcterms:modified
 rdf-construct diff old.ttl new.ttl --ignore-predicates dcterms:modified,dcterms:created
 ```
 
+Unlike a filter, ignoring a predicate changes the comparison, and so the exit code. When nothing
+else differs, `diff` exits 0 and names what it ignored:
+`Graphs are semantically identical, ignoring dcterms:modified.`
+
 ## CI Integration
 
-Use exit codes for CI pipelines:
+Use exit codes for CI pipelines. A filter does not change them, so gate on an unfiltered diff:
 
 ```bash
 # Fail CI if ontology changed unexpectedly
@@ -248,6 +323,7 @@ The diff detects these as **changes**:
 2. **Literal type changes** — `"42"` (string) vs `42` (integer)
 3. **Language tag changes** — `"Building"@en` vs `"Building"`
 4. **Changes inside blank nodes** — a restriction's cardinality, an axiom annotation's comment, a list's members (see [Blank Nodes](#blank-nodes))
+5. **Lexical form changes** — `"01"^^xsd:integer` vs `"1"^^xsd:integer`: one value written two ways is two literals in RDF 1.1, and neither file is normalised as it is read ([#377](https://github.com/aigora-de/rdf-construct/issues/377)). A bare number in a Turtle file (`007`) is canonicalised by rdflib's parser, so it reads as `7`
 
 ## Blank Nodes
 
@@ -332,13 +408,20 @@ The usual cause is a reasoner's output: an OWL-RL closure states that every blan
 asserted files instead. Everything outside the set-aside structure is still compared and
 reported. [#388](https://github.com/aigora-de/rdf-construct/issues/388) records the cost and the options for removing the limit.
 
+### Datatypes
+
+A term typed `rdfs:Datatype` is listed as an `Instance`
+([#530](https://github.com/aigora-de/rdf-construct/issues/530)).
+
 ### Large Ontologies
 
 The diff loads both graphs into memory. For very large ontologies (>100k triples), consider:
 
 - Splitting into modules before comparison
-- Using `--entities` to focus on specific entity types
 - Running on a machine with adequate RAM
+
+`--entities` does not help: both graphs are parsed and compared in full before any filter is
+applied.
 
 ## Programmatic Use
 
@@ -364,6 +447,12 @@ else:
 filtered = filter_diff(diff, show_types={"added"})
 print(format_diff(filtered, format_name="text"))
 ```
+
+A filtered diff's `is_identical` still describes the graphs, and `not_shown` counts what the
+filter left out, so `format_diff` says what was hidden. `filter_diff` raises `UnknownFilterError`,
+a `ValueError`, for a name it does not recognise, an empty set, `show_types` with `hide_types`,
+or `hide_types` naming every change type, and for a diff that is already filtered: filter the
+diff `compare_files` returned.
 
 ## Examples
 

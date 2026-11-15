@@ -127,6 +127,7 @@ src/rdf_construct/
 │   ├── formatters.py
 │   ├── merger.py
 │   ├── migrator.py
+│   ├── prefixes.py
 │   ├── rules.py
 │   └── splitter.py
 ├── refactor/
@@ -302,6 +303,7 @@ tests/
 - `descendants_of()` - find all descendants of a root
 - `sort_with_roots()` - root-based branch ordering
 - `sort_subjects()` - main sorting dispatcher
+- `normalise_sort_mode()` - check a mode against `SORT_MODES`; raises `UnknownSortModeError`
 
 **`core/serialiser.py`**
 - `format_term()` - format RDF terms as Turtle strings
@@ -320,6 +322,12 @@ tests/
 - `outputs_over_inputs()`, `is_same_file()` - outputs that would replace an input (`os.path.samefile`)
 - Reports only; each command decides what to refuse (`refactor rename`, #411). Nine more commands
   refuse every case through `cli.py`'s `check_outputs()` (#412)
+
+**`core/names.py`**
+- `normalise_names()` - map names a user typed to a command's canonical names, or refuse every
+  bad one at once with a did-you-mean and the accepted names (`error=` picks the exception)
+- Shared by `diff`'s `--show`/`--hide`/`--entities` (#144) and `docs`' `--include`/`--exclude`
+  (#252)
 
 **`core/utils.py`**
 - `extract_prefix_map()` - get namespaces from graph
@@ -516,6 +524,12 @@ Combine multiple RDF ontologies with conflict detection, namespace management, a
 - Simple URI substitution
 - Build URI map from namespace remappings
 - Shared infrastructure for split/refactor commands
+
+**`merge/prefixes.py`**
+- `combine_prefixes()` - one prefix per namespace across several sources, with a note for each
+  declaration not written as declared (#357, #358)
+- `table_gaps()`, `fill_table_gaps()` - rdflib's prefix table, only where it displaces nothing
+- `bind_exactly()` - bind a decided prefix map into a `core` graph
 
 **`merge/rules.py`**
 - `RuleEngine` class - execute transformation rules

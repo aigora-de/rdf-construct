@@ -2,7 +2,10 @@
 
 ``resolve_curie`` (#182) never returns its input verbatim and never consults rdflib's built-in
 prefix table. ``in_namespace`` and ``rebase_iri`` (#184) match a namespace at a boundary rather
-than as a string prefix.
+than as a string prefix: a namespace ending in anything but a letter or a digit is a plain
+prefix (#422), and a ``:`` inside an IRI's authority is never a boundary (#423).
+``claiming_namespace`` and ``rebase_by_rules`` resolve overlapping rules by the longest match
+(#424).
 """
 
 import pytest
@@ -10,9 +13,12 @@ from rdflib import Graph, URIRef
 
 from rdf_construct.core import (
     CurieError,
+    claiming_namespace,
     expand_curie,
     extract_prefix_map,
     in_namespace,
+    nested_rules,
+    rebase_by_rules,
     rebase_iri,
     resolve_curie,
 )
@@ -138,3 +144,103 @@ class TestNamespaceBoundary:
         assert rebase_iri(f"{ONT}#One", ONT, new) == f"{new}#One"
         assert rebase_iri(f"{ONT}/extra#Three", ONT, new) == f"{new}/extra#Three"
         assert rebase_iri("http://example.org/ontology#Two", ONT, new) is None
+
+    @pytest.mark.parametrize(
+        ("namespace", "iri"),
+        [
+            ("http://purl.obolibrary.org/obo/GO_", "http://purl.obolibrary.org/obo/GO_0008150"),
+            ("http://example.org/items?id=", "http://example.org/items?id=7"),
+            ("http://example.org/term-", "http://example.org/term-42"),
+            ("http://example.org/v1.", "http://example.org/v1.Thing"),
+        ],
+    )
+    def test_a_stem_is_a_plain_prefix(self, namespace: str, iri: str) -> None:
+        assert in_namespace(iri, namespace)
+        assert (
+            rebase_iri(iri, namespace, "http://n.org/") == "http://n.org/" + iri[len(namespace) :]
+        )
+
+    def test_a_stem_still_needs_its_whole_text(self) -> None:
+        assert not in_namespace(
+            "http://purl.obolibrary.org/obo/GOX_1", "http://purl.obolibrary.org/obo/GO_"
+        )
+        assert not in_namespace("http://example.org/items?id=7", "http://example.org/items?id")
+
+    @pytest.mark.parametrize(
+        "iri",
+        ["http://example.org:8080/a#X", "http://example.org:8080", "https://example.org:443/"],
+    )
+    def test_a_port_is_another_authority(self, iri: str) -> None:
+        namespace = iri.split(":")[0] + "://example.org"
+        assert not in_namespace(iri, namespace)
+        assert in_namespace(iri.split(":")[0] + "://example.org/ont#Y", namespace)
+
+    def test_a_namespace_may_name_the_port(self) -> None:
+        assert in_namespace("http://example.org:8080/a#X", "http://example.org:8080")
+        assert not in_namespace("http://example.org:80801/a#X", "http://example.org:8080")
+
+    def test_colons_in_user_information_are_not_boundaries(self) -> None:
+        assert not in_namespace("http://user:pw@example.org/a", "http://user")
+
+    @pytest.mark.parametrize("namespace", ["http://example.org:", "http://example.", "http://ex"])
+    def test_a_namespace_that_ends_within_the_authority_takes_nothing_more(
+        self, namespace: str
+    ) -> None:
+        assert not in_namespace("http://example.org:8080/a#X", namespace)
+        assert not in_namespace("http://example.org/a#X", namespace)
+
+    @pytest.mark.parametrize("namespace", ["http://", "http:", "http"])
+    def test_a_namespace_before_the_authority_takes_the_scheme(self, namespace: str) -> None:
+        assert in_namespace("http://example.org:8080/a#X", namespace)
+
+    def test_ipv6_literal(self) -> None:
+        assert in_namespace("http://[::1]/a#X", "http://[::1]")
+        assert in_namespace("http://[::1]", "http://[::1]")
+        assert not in_namespace("http://[::1]:8080/a#X", "http://[::1]")
+
+    def test_colon_after_the_authority_is_a_boundary(self) -> None:
+        assert in_namespace("http://example.org/a:b", "http://example.org/a")
+        assert in_namespace("tag:example.org,2026:a:b", "tag:example.org,2026")
+
+
+class TestLongestRule:
+    """Overlapping rules resolve by the longest match, whatever their order (#424)."""
+
+    RULES = {
+        "http://e.org/core/": "http://n.org/core/",
+        "http://e.org/core/sub/": "http://n.org/sub/",
+    }
+
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_the_longest_rule_wins_in_either_order(self, reverse: bool) -> None:
+        rules = dict(reversed(self.RULES.items())) if reverse else dict(self.RULES)
+        assert rebase_by_rules("http://e.org/core/A", rules) == "http://n.org/core/A"
+        assert rebase_by_rules("http://e.org/core/sub/B", rules) == "http://n.org/sub/B"
+        assert rebase_by_rules("http://e.org/other/C", rules) is None
+
+    def test_one_pass_never_chains(self) -> None:
+        rules = {"http://a.org/": "http://b.org/", "http://b.org/": "http://c.org/"}
+        assert rebase_by_rules("http://a.org/X", rules) == "http://b.org/X"
+
+    def test_the_boundary_rule_applies(self) -> None:
+        rules = {"http://example.org/ont": "http://n.org/ont", "http://example.org": "http://x.org"}
+        assert rebase_by_rules("http://example.org/ontology#Two", rules) == (
+            "http://x.org/ontology#Two"
+        )
+        assert rebase_by_rules("http://example.org:8080/a#X", rules) is None
+
+    @pytest.mark.parametrize(
+        ("iri", "expected"),
+        [
+            ("http://e.org/core/sub/B", "http://e.org/core/sub/"),
+            ("http://e.org/core/A", "http://e.org/core/"),
+            ("http://e.org/coreX/A", None),
+        ],
+    )
+    def test_claiming_namespace(self, iri: str, expected: str | None) -> None:
+        assert claiming_namespace(iri, self.RULES) == expected
+
+    def test_nested_rules_are_named(self) -> None:
+        rules = [*self.RULES, "http://x.org/", "http://example.org", "http://example.org:8080/"]
+        assert nested_rules(rules) == [("http://e.org/core/sub/", "http://e.org/core/")]
+        assert nested_rules(["http://x.org/"]) == []

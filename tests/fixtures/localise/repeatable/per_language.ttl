@@ -1,0 +1,15 @@
+@prefix ex:   <http://example.org/ont#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# #405 (P81): a per-language property with two source values. Out of P81's scope, so its merge
+# output is pinned byte for byte, as release/v0.7.0 (9294e96) wrote it: preserve keeps the
+# first German value, overwrite the last.
+ex:Building a owl:Class ;
+    rdfs:label "Building"@en, "Edifice"@en ;
+    skos:prefLabel "Building"@en, "Edifice"@en .
+
+ex:House a owl:Class ;
+    rdfs:label "House"@en, "Haus"@de ;
+    skos:prefLabel "House"@en, "Home"@en .

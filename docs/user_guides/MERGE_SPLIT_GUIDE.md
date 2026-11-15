@@ -46,16 +46,17 @@ rdf-construct merge [OPTIONS] [SOURCES]...
 | Option | Description | Default |
 |--------|-------------|---------|
 | `-o, --output PATH` | Output file (required); see [Where Output Goes](#where-output-goes) | - |
-| `-c, --config PATH` | YAML configuration file | - |
-| `-p, --priority INT` | Priority for each source (repeatable) | 1, 2, 3... |
+| `-c, --config PATH` | YAML configuration file; see [Configuration File](#configuration-file) for how options and source arguments combine with it | - |
+| `-p, --priority INT` | Priority for each source, in order (repeatable); a source without one keeps its own; more values than sources is refused | 1, 2, 3... |
 | `--strategy` | Conflict resolution: `priority`, `first`, `last`, `mark_all` | `priority` |
 | `-r, --report PATH` | Write conflict report; see [Where Output Goes](#where-output-goes) | - |
 | `--report-format` | Report format: `text`, `markdown` | `markdown` |
 | `--imports` | owl:imports handling: `preserve`, `remove`, `merge` | `preserve` |
+| `--ontology-iri IRI` | IRI of the merged ontology; overrides `namespaces.base`. See [Ontology Identity](#ontology-identity) | - |
 | `--migrate-data PATH` | Data file(s) to migrate (repeatable) | - |
 | `--migration-rules PATH` | YAML file with migration rules | - |
 | `--data-output PATH` | Output path for migrated data; see [Where Output Goes](#where-output-goes) | - |
-| `--dry-run` | Show what would happen without writing | `False` |
+| `--dry-run` | Write nothing; list the files a real run would write | `False` |
 | `--no-colour` | Disable coloured output | `False` |
 | `--init` | Generate default configuration file | - |
 
@@ -65,7 +66,9 @@ rdf-construct merge [OPTIONS] [SOURCES]...
 |------|---------|
 | 0 | Merged; every conflict was resolved by `--strategy`, or there were none |
 | 1 | Merged, with conflicts marked in the output for review: always for `rdfs:domain`, `rdfs:range` and functional properties; for labels under `mark_all`, or when the highest-priority sources are tied |
-| 2 | Input refused or run failed (invalid options or config, file not found, parse error, an output that names an input or another output) |
+| 2 | Input refused or run failed (invalid options or config, file not found, parse error, a data file that cannot be read, an output that names an input or another output, an `--ontology-iri` or `namespaces.base` that is not an absolute IRI, or reads as a prefixed name) |
+
+A merge that writes no ontology header still exits 0: see [Ontology Identity](#ontology-identity).
 
 #### Where Output Goes
 
@@ -89,6 +92,10 @@ Error: Nothing was written:
 The report is written only when the merge has conflicts, but the check doesn't depend on that:
 `--report` naming `-o` is refused even for sources that agree. There is no flag that allows it.
 To merge `b.ttl` into `a.ttl`, write the merge to a new file and move it into place yourself.
+
+Every data file is read before anything is written, so one that is missing or cannot be parsed is
+refused at exit 2 with nothing written. `--dry-run` makes the same checks, writes nothing, and ends
+by naming each file a real run would write.
 
 ### Conflict Detection
 
@@ -125,6 +132,14 @@ untagged literal is its own bucket. Subtags are not matched: `@en` and `@en-gb` 
 `"Building"` and `"Building"^^xsd:string` are one value, as RDF 1.1 says, so they never conflict;
 both spellings are still written to the output.
 
+One value written two ways is not a disagreement either: `"1"^^xsd:integer` and
+`"01"^^xsd:integer`, or an `xsd:dateTime` written with `Z` and again with `+00:00`, never conflict,
+even for a functional property. Both forms are written to the output as the sources wrote them,
+because RDF 1.1 counts them as two literals
+([#377](https://github.com/aigora-de/rdf-construct/issues/377)). So two restrictions that differ
+only in such a form, `owl:cardinality "1"` in one source and `"01"` in another, are two blank-node
+structures, and both are written.
+
 The conflict types say why a second value matters:
 
 | Type | Tier | Meaning |
@@ -139,21 +154,28 @@ that.
 
 #### Moving a predicate between tiers
 
-The tiers can be overridden in the configuration file, by full IRI:
+The tiers can be overridden in the configuration file, by IRI or CURIE:
 
 ```yaml
+namespaces:
+  preferred_prefixes:
+    dcterms: "http://purl.org/dc/terms/"
 conflicts:
   ignore_predicates:            # never a conflict: the same as repeatable
-    - "http://www.w3.org/2000/01/rdf-schema#isDefinedBy"
+    - "rdfs:isDefinedBy"
   predicate_tiers:
-    repeatable:   ["http://www.w3.org/2000/01/rdf-schema#label"]
-    per_language: ["http://purl.org/dc/terms/title"]
+    repeatable:   ["rdfs:label"]
+    per_language: ["dcterms:title"]
     load_bearing: ["<http://example.org/maxOccupancy>"]
 ```
 
-The configuration wins over the defaults and over a source's `owl:FunctionalProperty`
-declaration. A predicate placed in two tiers, an unknown tier name, or a prefixed name such as
-`rdfs:label` is refused with exit 2.
+A CURIE here resolves against `rdf`, `rdfs`, `owl`, `xsd`, `xml` and the prefixes the configuration
+binds under `namespaces.preferred_prefixes`: the prefixes the merged output is written with,
+whatever the sources declare. The sources' own prefixes are not used, because two sources may give
+one prefix two meanings. The configuration wins over the defaults and over a source's
+`owl:FunctionalProperty` declaration. A predicate placed in two tiers, an unknown tier name, or a
+CURIE whose prefix is not bound there (such as `skos:prefLabel` with no `skos` preference) is
+refused with exit 2.
 
 #### Resolution Strategies
 
@@ -260,10 +282,88 @@ The Markdown report includes:
 
 | Limitation | Issue |
 |------------|-------|
-| The ontology header (`owl:Ontology` subjects) is not checked: two sources' header labels are both written | #171 |
-| Predicates in the configuration must be full IRIs; prefixed names are refused rather than resolved | #357 |
 | Conflict markers come out in a different order from run to run | #173 |
 | Values are compared as written, so `"1.0"` and `"1.00"` (`xsd:decimal`) on a functional property are reported as a conflict | — |
+
+### Ontology Identity
+
+An OWL 2 ontology document holds one ontology, so the merged output has at most one
+`owl:Ontology` header ([#171](https://github.com/aigora-de/rdf-construct/issues/171)). It comes
+from the first of these that applies, and the run prints it as `Ontology:`:
+
+1. **Named:** `--ontology-iri`, or `namespaces.base` in a config file; the flag wins. The IRI is
+   used exactly as given. The output gets one header at it, with no `owl:versionIRI`, and one
+   `prov:wasDerivedFrom` per source, naming the source's version IRI, or its ontology IRI where it
+   has none. A source is named as it was read, before any `namespace_remap`. A source with no
+   header, or only a blank-node one, cannot be named, and neither is one whose IRI is the merged
+   one; the run says so. When that leaves the header with nothing but its type and imports, it
+   is **not written**: the output has no header, the run warns, naming the IRI and any imports it
+   could not carry, and it exits 0
+   ([#520](https://github.com/aigora-de/rdf-construct/issues/520)). If the sources share one
+   header, as under 2, that header is kept instead, so naming a merge never gives less than not
+   naming it.
+2. **Kept:** every source declares exactly one header, all at one IRI with the same version IRIs:
+   a single file, a file merged with itself, or modules split under one `ontology_iri:`. That
+   header is left as it is.
+3. **None:** otherwise. The output has no ontology header, and the run warns, naming the headers
+   it demoted and the imports it could not carry, and shows the command that names the result.
+   It exits 0: a document without a header is a valid one, which OWL tools load as an anonymous
+   ontology.
+
+Under 1 and 3, every source header is **demoted**. It loses its `owl:Ontology` type, its
+`owl:versionIRI`, and the four predicates only an ontology takes (`owl:imports`,
+`owl:priorVersion`, `owl:backwardCompatibleWith`, `owl:incompatibleWith`), any of which would
+make it an ontology again. Everything else stays on its own IRI: its title, its licence, its
+`owl:versionInfo`, and anything else declared at that IRI, such as a class it is punned with.
+
+A demoted header's imports move to the named header under `--imports preserve` and `merge`, and
+are not written under `remove`. An import of an ontology the merge contains, by its IRI or its
+version IRI, is dropped either way: the output already holds it.
+
+The two example ontologies are separate ontologies, so merging them writes no header:
+
+```bash
+rdf-construct merge examples/merge/merge_core.ttl examples/merge/merge_extension.ttl -o merged.ttl
+```
+
+```
+⚠ No ontology header written: 2 source header(s) demoted, and nothing names the merged ontology.
+  To name it, run this again with IRI replaced by the merged ontology's IRI:
+    rdf-construct merge examples/merge/merge_core.ttl examples/merge/merge_extension.ttl -o merged.ttl --ontology-iri IRI
+```
+
+Naming it gives the merged ontology its header and records where it came from:
+
+```bash
+rdf-construct merge examples/merge/merge_core.ttl examples/merge/merge_extension.ttl -o merged.ttl --ontology-iri http://example.org/merged
+```
+
+```turtle
+ex:merged a owl:Ontology ;
+    prov:wasDerivedFrom ex:Ontology,
+        ex:extension .
+```
+
+Two sources with no header give the named header nothing to say, so it is not written:
+
+```bash
+rdf-construct merge examples/merge/merge_conflicting.ttl examples/merge/merge_instances.ttl -o merged.ttl --ontology-iri http://example.org/merged
+```
+
+```
+⚠ No ontology header written: <http://example.org/merged> would say nothing but its type and imports, as no source header can be recorded as derived from.
+  To keep it, give a source a named ontology header.
+```
+
+`--ontology-iri` must be an absolute IRI. An empty value, one with no scheme, one containing a
+space, `<`, `>`, `"`, `{`, `}`, `|`, `\`, `^` or a backtick, and one that reads as a prefixed name
+in a source's prefixes or `namespaces.preferred_prefixes` (`ex:Merged`) are refused at exit 2 before anything is written. An IRI that
+is already a source's ontology IRI, or one of its terms, is accepted with a `Note:`.
+
+| Limitation | Issue |
+|------------|-------|
+| Splitting an unnamed merge, `split` finds no header, so it cannot tell a borrowed namespace from the source's own, and a module may claim one such as GeoSPARQL's. Name the merge first | — |
+| When a source types `prov:wasDerivedFrom` only as `rdf:Property`, the stamp's `owl:AnnotationProperty` declaration is left out | #426 |
 
 ### Blank Nodes
 
@@ -279,7 +379,8 @@ ex:A rdfs:subClassOf [ a owl:Restriction ;
         owl:someValuesFrom ex:B ] .
 ```
 
-Merging a file with itself gives the file back, with no conflicts.
+Merging a file with itself gives the file back, with no conflicts, unless it declares more than
+one ontology header (see [Ontology Identity](#ontology-identity)).
 
 Everything else is kept apart:
 
@@ -289,7 +390,7 @@ Everything else is kept apart:
 - **A structure that differs at all**, such as one carrying an `rdfs:comment` the other lacks, or
   a list in a different order, is a different structure, and both are written.
 - **A structure stated twice in one source** is written twice, so a file merged with itself, or
-  alone, is unchanged.
+  alone, is unchanged (unless it declares more than one ontology header).
 
 Blank nodes are compared after namespace remapping, so a remapped source shares its structures
 with the sources it is merged with. A blank node `merge` writes with a label (`_:b…`, used when
@@ -315,20 +416,55 @@ sources:
       "http://old.example.org/": "http://example.org/"
 ```
 
-A key ending in `#`, `/` or `:` matches every IRI that starts with it. A key without one matches
-only at a namespace boundary: `http://example.org/ont` remaps `…/ont#One` and `…/ont/extra#Three`, but
-not `…/ontology#Two`. Prefix bindings move with the namespaces they name.
+A key ending in anything but a letter or a digit matches every IRI that starts with it: `#`, `/`
+and `:`, and also a stem such as OBO's `http://purl.obolibrary.org/obo/GO_`. A key ending in a
+letter or a digit matches only at a namespace boundary: `http://example.org/ont` remaps
+`…/ont#One` and `…/ont/extra#Three`, but not `…/ontology#Two`. An IRI's authority is never
+divided, so `http://example.org` does not remap `http://example.org:8080/…`. Prefix bindings move
+with the namespaces they name.
 
-#### Preferred Prefixes
+When keys overlap, each IRI moves by the **longest** key that contains it, whatever order they are
+written in, and moves once. `merge` names each pair of keys where one lies within the other.
 
-Standardise prefix bindings in output:
+#### Prefixes in the Output
+
+Each source's prefixes are written as it declares them: a source's `org:` stays `org:`, even
+though rdflib binds `org` to the W3C Organization ontology. When sources disagree, one rule
+decides:
+
+- **One prefix, two namespaces:** the first source on the command line keeps the prefix (the
+  first under `sources:` in a configuration file). The other namespace is written as `ex1:`,
+  `ex2:` and so on. For the empty prefix `:` it is named after its namespace's last path segment
+  (`http://b.example.org/ont#` → `ont:`, numbered if taken), or `default1:` when that segment is
+  not a valid prefix. A generated name never takes a prefix that any source declares.
+- **One namespace, two prefixes:** the first is kept, and the other source's CURIEs are written
+  with it.
+- **A namespace no source names**, as in an N-Triples source, takes rdflib's usual prefix for it
+  (`foaf:`, `skos:`) when no source uses that prefix. A namespace rdflib has no prefix for is
+  written with a generated `ns1:`.
+
+Every declaration that is not written as declared is named on stderr, and the run still exits 0:
+
+```bash
+rdf-construct merge examples/animal_ontology.ttl examples/simple_ontology.ttl -o merged.ttl --ontology-iri http://example.org/merged
+```
+
+```
+Note: simple_ontology.ttl declares "ex:" for <http://example.org/test#>, which animal_ontology.ttl uses for <http://example.org/animals#>; written as "ex1:". Set namespaces.preferred_prefixes to choose.
+```
+
+To choose instead, set `namespaces.preferred_prefixes`. A preference claims its prefix before any
+source does, even one a source holds, and the source that held it is renamed by the rule above:
 
 ```yaml
 namespaces:
   preferred_prefixes:
-    ex: "http://example.org/"
-    rdfs: "http://www.w3.org/2000/01/rdf-schema#"
+    animal: "http://example.org/animals#"
+    ex: "http://example.org/test#"
 ```
+
+The same rule applies to data migration's output when several `--migrate-data` files are combined
+(`preferred_prefixes` applies to the ontology only).
 
 ### owl:imports Handling
 
@@ -344,6 +480,9 @@ rdf-construct merge ... --imports remove
 # Deduplicate imports
 rdf-construct merge ... --imports merge
 ```
+
+A source header's own imports follow [Ontology Identity](#ontology-identity): they move to a named
+header, and are not written when nothing names the merge.
 
 ### Data Migration
 
@@ -361,50 +500,95 @@ rdf-construct merge core.ttl ext.ttl -o merged.ttl \
 
 #### Complex Migration (Transformation Rules)
 
-For structural changes, define migration rules in YAML:
+For structural changes, give migration rules under `migrate_data: rules:` in a merge config:
 
 ```yaml
-# migration-rules.yml
-migrations:
-  # Simple rename
-  - type: rename
-    from: "http://old.example.org/ont#LegacyClass"
-    to: "http://example.org/ont#ModernClass"
-    description: "Rename legacy class"
+# merge.yml
+sources:
+  - core.ttl
+  - ext.ttl
 
-  # Property split
-  - type: transform
-    description: "Split fullName into givenName and familyName"
-    match: "?s ex:fullName ?name"
-    construct:
-      - pattern: "?s ex:givenName ?given"
-        bind: "STRBEFORE(?name, ' ') AS ?given"
-      - pattern: "?s ex:familyName ?family"
-        bind: "STRAFTER(?name, ' ') AS ?family"
-    delete_matched: true
+namespaces:
+  preferred_prefixes:
+    ex: "http://example.org/ont#"
 
-  # Type migration
-  - type: transform
-    description: "Migrate Company to Organisation"
-    match: "?s a ex:Company"
-    construct:
-      - pattern: "?s a ex:Organisation"
-      - pattern: "?s ex:organisationType ex:Commercial"
-    delete_matched: true
+migrate_data:
+  sources:
+    - data/people.ttl
+  output: migrated.ttl
+  rules:
+    # Simple rename
+    - type: rename
+      from: "http://old.example.org/ont#LegacyClass"
+      to: "http://example.org/ont#ModernClass"
+      description: "Rename legacy class"
+
+    # Property split
+    - type: transform
+      description: "Split fullName into givenName and familyName"
+      match: "?s ex:fullName ?name"
+      construct:
+        - pattern: "?s ex:givenName ?given"
+          bind: "STRBEFORE(?name, ' ') AS ?given"
+        - pattern: "?s ex:familyName ?family"
+          bind: "STRAFTER(?name, ' ') AS ?family"
+      delete_matched: true
+
+    # Type migration
+    - type: transform
+      description: "Migrate Company to Organisation"
+      match: "?s a ex:Company"
+      construct:
+        - pattern: "?s a ex:Organisation"
+        - pattern: "?s ex:organisationType ex:Commercial"
+      delete_matched: true
 ```
+
+Apply with:
+
+```bash
+rdf-construct merge -c merge.yml -o merged.ttl
+```
+
+`--migration-rules` and `migrate_data: rules_file:` are **not read yet**
+([#172](https://github.com/aigora-de/rdf-construct/issues/172)): a rules file given either way has
+no effect. Put the rules inline, as above.
 
 A `rename` rule moves the IRI wherever the data uses it: as a subject, as an object, or as a
 predicate, so the same rule renames a property or a class. The migration summary counts each
 position on its own line: `Subjects updated`, `Predicates updated` and `Objects updated`.
 
-Apply with:
+A `transform` rule finds every triple its `match:` pattern matches, builds the `construct:`
+triples from each match, and removes the matched triples when `delete_matched` is true (the
+default). Only the triples the pattern matches are touched. How a rule is read:
 
-```bash
-rdf-construct merge core.ttl ext.ttl -o merged.ttl \
-    --migrate-data data/*.ttl \
-    --migration-rules migration-rules.yml \
-    --data-output migrated/
-```
+- A pattern is three terms, written as in Turtle. `?name` is a variable, and a variable used twice
+  must match one value. `a` in the predicate position is `rdf:type`.
+- An IRI is written in full, as `<…>`, or as a CURIE. A CURIE's prefix must be declared by a data
+  file or bound by `namespaces.preferred_prefixes`, or be one of `rdf`, `rdfs`, `owl`, `xsd` and
+  `xml`. Two files that bind it to different namespaces are refused, since the rule would mean two
+  things; so is a data file that binds one of those five elsewhere.
+  rdflib's built-in prefixes (`foaf:`, `skos:`…) are not used: bind them under
+  `preferred_prefixes`.
+- A literal is `"text"`, `"text"@en`, `"7"^^xsd:integer`, a bare number or `true`/`false`. A match
+  compares terms exactly, so `40` matches `"40"^^xsd:integer` and not `"40"` or
+  `"40.0"^^xsd:decimal`. `"x"` does not match `"x"^^xsd:string`, though RDF 1.1 says they are one
+  term: rdflib tells them apart.
+- `_:name` in a construct pattern is a new blank node for each match, shared by that match's
+  construct patterns. A match pattern cannot hold one; use a variable.
+- `bind:` gives the construct pattern's object a value, in one of three forms:
+  `STRBEFORE(?var, ' ') AS ?v`, `STRAFTER(?var, ' ') AS ?v`, which keep a language tag, and
+  `((?var - n) * m/d) AS ?v`, computed in decimal and written as an `xsd:decimal`. It computes on
+  a literal of a numeric datatype only; `"40"` or `"40"@en` leaves its match unchanged.
+  `STRBEFORE` and `STRAFTER` read an IRI as its text, where SPARQL would refuse it.
+- Rules run in order, each on the data the one before it left.
+
+A rule that cannot be read is refused at exit 2, before anything is written: a pattern that is not
+three terms, a prefix that is not bound, an unknown `type:` or `bind:` form, a `rename` without
+`from:` or `to:`, or a construct variable the match does not bind. A rule that matches nothing in
+any data file is listed on stderr, and so is a match left unchanged because a `bind` found no
+value (`STRBEFORE` on a name with no space). Each is named as `migration rule N ('description')`.
+The data is still written, and the run exits 1.
 
 ### Configuration File
 
@@ -433,7 +617,7 @@ output:
 
 # Namespace handling
 namespaces:
-  base: "http://example.org/"
+  base: "http://example.org/merged"  # the merged ontology's IRI
   preferred_prefixes:
     ex: "http://example.org/"
     ies: "http://ies.data.gov.uk/ontology/ies4#"
@@ -454,7 +638,7 @@ migrate_data:
     - data/split_instances.ttl
     - data/relationships.ttl
   output: data/migrated.ttl
-  rules_file: migration-rules.yml
+  rules_file: migration-rules.yml  # not read yet (#172); give rules: inline
 ```
 
 Use with:
@@ -462,6 +646,13 @@ Use with:
 ```bash
 rdf-construct merge --config merge.yml
 ```
+
+An option given on the command line overrides the file, even at its default value:
+`--strategy priority` overrides `strategy: mark_all`. `-p` replaces the sources' priorities in
+order, `--migrate-data` replaces `migrate_data: sources:` and `--data-output` its `output:`; the
+file's `rules:` still apply. Source files given on the command line replace `sources:` (a `Note:`
+on stderr says so). A run that would replace a source with a `namespace_remap` is refused, since
+the remap would be lost.
 
 ### Merge Examples
 
@@ -502,10 +693,22 @@ rdf-construct merge --config migrate-config.yml
 
 ```bash
 # Check for conflicts without writing
-rdf-construct merge core.ttl ext.ttl -o merged.ttl --dry-run
+rdf-construct merge examples/merge/merge_core.ttl examples/merge/merge_conflicting.ttl \
+    -o merged.ttl --report conflicts.md --dry-run
 
 # Exit code 0 = merged, 1 = conflicts marked for review, 2 = refused or failed
 echo "Exit code: $?"
+```
+
+The run ends by saying what it would have written; the report is named only when there are
+conflicts to put in it:
+
+```
+Dry run: would write -o merged.ttl
+Dry run: would write --report conflicts.md (4 conflict(s))
+Dry run: nothing was written.
+
+⚠ 2 unresolved conflict(s) marked in output
 ```
 
 ### Merge Best Practices
@@ -565,7 +768,7 @@ rdf-construct split SOURCE [OPTIONS]
 | `-c, --config PATH` | YAML configuration file | - |
 | `--by-namespace` | Auto-detect modules from namespaces | `False` |
 | `--migrate-data PATH` | Data file(s) to split (repeatable) | - |
-| `--data-output PATH` | Output directory for split data | - |
+| `--data-output PATH` | Output directory for split data | the config's `split_data: output_dir`, else the output directory |
 | `--unmatched` | What to do with unmatched subjects: `common` (collect them in one module) or `error` (refuse the run) | `common` |
 | `--common-name` | Name of the module that collects unmatched subjects | `unmatched` |
 | `--no-manifest` | Don't generate manifest.yml | `False` |
@@ -579,7 +782,7 @@ rdf-construct split SOURCE [OPTIONS]
 |------|---------|
 | 0 | Split successful |
 | 1 | Split successful, with unmatched subjects in their own module, or a module that could not be given an ontology IRI |
-| 2 | Input refused or run failed (invalid options or config, file not found, parse error, `--unmatched error` with unmatched subjects, an unmatched module whose name another module already has) |
+| 2 | Input refused or run failed (invalid options or config, file not found, parse error, `--unmatched error` with unmatched subjects, an unmatched module whose name another module already has, outputs that clash or leave their directory; see [Where Module Files Go](#where-module-files-go)) |
 
 ### When `modules/` already holds other files
 
@@ -617,7 +820,7 @@ If your ontology uses distinct namespaces for different domains (e.g., `org:`, `
 How modules are found and named:
 
 - **A module is a namespace that the source's classes and properties actually use.** A prefix you declare but never use makes no module, and neither do rdflib's built-in prefixes. An empty file gives no modules.
-- **An entity belongs to the longest declared namespace that contains it.** With `env:` bound to `…/env/` and `building:` to `…/env/building/`, `building:Door` goes to `building.ttl` and `env:Thing` to `env.ttl`. An IRI under `env:` in a path nobody declared, such as `…/env/x/Y`, stays with `env`.
+- **An entity belongs to the longest declared namespace that contains it.** With `env:` bound to `…/env/` and `building:` to `…/env/building/`, `building:Door` goes to `building.ttl` and `env:Thing` to `env.ttl`. An IRI under `env:` in a path nobody declared, such as `…/env/x/Y`, stays with `env`. Namespaces are matched as `merge`'s `namespace_remap` keys are, so a prefix bound to a stem such as `GO:` → `…/obo/GO_` makes a module of its own.
 - **An entity under no declared namespace** belongs to the namespace its own IRI implies: everything up to its last `#`, `/` or `:`.
 - **A module is named after the prefix your file declares** for its namespace, as written, so `org:` gives `org.ttl` even though rdflib binds `org` to another vocabulary. The name is used for the file, the manifest `name:` and every dependency entry.
 - **Where there is no prefix,** the name comes from the namespace's last path segment: N-Triples, an undeclared namespace, or the empty prefix `:`. `http://example.org/ontology#` gives `ontology.ttl`.
@@ -685,6 +888,31 @@ split:
 
   generate_manifest: true
 ```
+
+### Where Module Files Go
+
+Each `output:` is a path relative to `output_dir`; a subdirectory such as `core/core.ttl` is
+created. Before it reads the source, `split` checks every file it could write: the modules, the
+unmatched module, `manifest.yml`, its `.rdf-construct` marker and, with data, each
+`prefix` + module name + `.ttl`. A run is refused at exit 2, with nothing written and every
+problem listed, when ([#413](https://github.com/aigora-de/rdf-construct/issues/413)):
+
+- an output is an absolute path, or resolves outside its directory (`../x.ttl`, or through a
+  symbolic link): move `output_dir` up instead;
+- two of them are one file, compared without case, so `A.ttl` and `a.ttl` clash on every system;
+- an output is `manifest.yml` (unless `--no-manifest`) or `.rdf-construct`;
+- an output is the source, a data file or the config;
+- two modules share a `name:`, compared without case, or the unmatched module's name or output is
+  another module's. This is checked whenever the strategy is `common`, whether or not anything
+  ends up unmatched.
+
+```
+Error: Nothing was written:
+  module 'core' (output: ../core.ttl) is outside output_dir (modules): it resolves to /work/core.ttl. Give a path inside it, or move output_dir up.
+  module 'org' (output: same.ttl) and module 'building' (output: same.ttl) name one file, modules/same.ttl. Choose different paths.
+```
+
+`--dry-run` is refused the same way, and `--overwrite` permits none of it.
 
 ### Include Descendants
 
@@ -874,6 +1102,9 @@ Instances are assigned to modules based on their `rdf:type`:
 - Instance of `org:Company` → `data_organisation.ttl`
 - Instance of `building:Floor` → `data_building.ttl`
 
+Without `--data-output`, data goes to the config's `split_data: output_dir`, or else to the
+directory the modules go to. The config's `prefix` applies with `--migrate-data` too.
+
 Configuration:
 
 ```yaml
@@ -954,6 +1185,7 @@ One module for each of the file's `ex:`, `org:` and `building:` namespaces, name
 | `--no-manifest`, `--migrate-data` and `--data-output` have no effect with `--by-namespace` | #179 |
 | The order of a module's `imports` and `dependencies` (and of the `deps:` shown above) changes from run to run | #181 |
 | Module files are written in rdflib's alphabetical order, not in semantic order | #305 |
+| A source with no `owl:Ontology` header gives each module a header with nothing but its type, or its type and `owl:imports`, and `lint` reports each one as `empty-ontology`. Until it is fixed, put `severity: {empty-ontology: warning}` in `.rdf-lint.yml` | #517 |
 
 #### Split with Data Migration
 
@@ -1007,8 +1239,8 @@ Shows what would be created without writing files.
 ### Merge: "No conflicts but labels differ"
 
 That is usually correct. Labels in different language tags never conflict, a source whose labels
-are a subset of another's agrees with it, and the ontology header is not checked yet (#171). Any
-predicate not in the tier table, such as `dcterms:title`, is repeatable. To have one treated as a
+are a subset of another's agrees with it, and two ontologies at different IRIs never share a
+label. Any predicate not in the tier table, such as `dcterms:title`, is repeatable. To have one treated as a
 label, place it in a tier in the configuration file:
 
 ```yaml

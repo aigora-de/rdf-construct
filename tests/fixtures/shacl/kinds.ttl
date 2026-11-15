@@ -1,0 +1,12 @@
+# What a target may name: a class shacl-gen shapes, one it does not shape yet (#228),
+# one typed both ways, and a superclass that is only referenced.
+@prefix a: <http://example.org/a#> .
+@prefix x: <http://other.org/x#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://example.org/a> a owl:Ontology .
+a:Old a owl:DeprecatedClass .
+a:Both a owl:Class, owl:DeprecatedClass .
+a:Kid a owl:Class ;
+    rdfs:subClassOf x:Animal .

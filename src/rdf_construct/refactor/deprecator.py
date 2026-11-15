@@ -162,9 +162,10 @@ class OntologyDeprecator:
             if isinstance(comment, Literal):
                 info.current_comments.append(str(comment))
 
-        # Check if already deprecated
+        # Check if already deprecated. "1"^^xsd:boolean is true too: by value, now that the
+        # CLI no longer normalises it to "true" on parse (#377).
         for obj in graph.objects(entity_uri, OWL.deprecated):
-            if str(obj).lower() == "true":
+            if (isinstance(obj, Literal) and obj.value is True) or str(obj).lower() == "true":
                 info.was_already_deprecated = True
                 result.stats.entities_already_deprecated += 1
                 break

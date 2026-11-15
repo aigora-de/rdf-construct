@@ -1,0 +1,34 @@
+@startuml
+title Building Example
+
+package building {
+  class Building {
+    floorArea : Area
+    height : Length
+    builtIn : Year
+    surveyed : Month
+    lastInspected : Timestamp
+    value : Money
+    currency : Currency
+    occupancy : Percentage
+    temperature : Temperature
+  }
+}
+
+package core {
+  class Asset {
+    assetId : Identifier
+    uuid : UUID
+    statusCode : Code
+  }
+}
+
+package geo {
+  class Site {
+    name : string
+  }
+}
+
+Building --|> Asset
+Building --> Site : locatedAt
+@enduml

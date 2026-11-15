@@ -5,7 +5,7 @@ constraints. Converters are composable and applied by the generator.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from rdflib import BNode, Graph, Literal, Namespace, RDF, RDFS, URIRef, XSD
@@ -32,7 +32,8 @@ class PropertyConstraint:
         node_kind: Node kind constraint (sh:nodeKind).
         name: Human-readable name (sh:name).
         description: Description (sh:description).
-        in_values: Enumeration of allowed values (sh:in).
+        in_values: Enumeration of allowed values (sh:in), in source order; None when there
+            is no enumeration, so an empty list can mean "no value allowed".
         pattern: Regex pattern for string values (sh:pattern).
         min_inclusive: Minimum value inclusive (sh:minInclusive).
         max_inclusive: Maximum value inclusive (sh:maxInclusive).
@@ -47,7 +48,7 @@ class PropertyConstraint:
     node_kind: URIRef | None = None
     name: str | None = None
     description: str | None = None
-    in_values: list[URIRef | Literal] = field(default_factory=list)
+    in_values: list[URIRef | Literal] | None = None
     pattern: str | None = None
     min_inclusive: Literal | None = None
     max_inclusive: Literal | None = None
@@ -56,8 +57,8 @@ class PropertyConstraint:
     def merge(self, other: "PropertyConstraint") -> "PropertyConstraint":
         """Merge another constraint into this one.
 
-        Values from other take precedence for single-value fields.
-        Lists are combined.
+        Values from other take precedence for single-value fields. Two ``sh:in`` lists both
+        apply, so they are intersected, in this constraint's order (#227).
 
         Args:
             other: Constraint to merge from.
@@ -78,7 +79,7 @@ class PropertyConstraint:
             node_kind=other.node_kind or self.node_kind,
             name=other.name or self.name,
             description=other.description or self.description,
-            in_values=list(set(self.in_values + other.in_values)),
+            in_values=_intersect(self.in_values, other.in_values),
             pattern=other.pattern or self.pattern,
             min_inclusive=other.min_inclusive or self.min_inclusive,
             max_inclusive=other.max_inclusive or self.max_inclusive,
@@ -121,7 +122,7 @@ class PropertyConstraint:
         if self.description:
             shapes_graph.add((prop_shape, SH.description, Literal(self.description)))
 
-        if self.in_values:
+        if self.in_values is not None:
             # Create an RDF list for sh:in
             in_list = _create_rdf_list(shapes_graph, self.in_values)
             shapes_graph.add((prop_shape, SH["in"], in_list))
@@ -139,6 +140,18 @@ class PropertyConstraint:
             shapes_graph.add((prop_shape, SH.order, Literal(self.order)))
 
         return prop_shape
+
+
+def _intersect(
+    first: list[URIRef | Literal] | None, second: list[URIRef | Literal] | None
+) -> list[URIRef | Literal] | None:
+    """The values both lists allow, in ``first``'s order; a missing list allows anything."""
+    if first is None:
+        return second
+    if second is None:
+        return first
+    allowed = set(second)
+    return [value for value in first if value in allowed]
 
 
 def _create_rdf_list(graph: Graph, items: list) -> BNode:
@@ -259,8 +272,10 @@ class DomainRangeConverter(Converter):
             constraint = PropertyConstraint(path=prop)
 
             # Get range if defined
+            # A blank-node range (owl:unionOf, an inline owl:oneOf or datatype) is not an IRI,
+            # and sh:class and sh:datatype take only IRIs: it is not written (#487)
             range_value = source_graph.value(prop, RDFS.range)
-            if range_value:
+            if isinstance(range_value, URIRef):
                 if self._is_datatype(range_value, source_graph):
                     constraint.datatype = range_value
                 else:
@@ -357,10 +372,10 @@ class CardinalityConverter(Converter):
                 constraint.max_count = int(qual_card)
                 # Also get the qualification
                 on_class = source_graph.value(superclass, OWL.onClass)
-                if on_class:
+                if isinstance(on_class, URIRef):
                     constraint.node_class = on_class
                 on_data = source_graph.value(superclass, OWL.onDataRange)
-                if on_data:
+                if isinstance(on_data, URIRef):
                     constraint.datatype = on_data
                 has_constraint = True
 
@@ -369,7 +384,7 @@ class CardinalityConverter(Converter):
             if qual_min:
                 constraint.min_count = int(qual_min)
                 on_class = source_graph.value(superclass, OWL.onClass)
-                if on_class:
+                if isinstance(on_class, URIRef):
                     constraint.node_class = on_class
                 has_constraint = True
 
@@ -378,7 +393,7 @@ class CardinalityConverter(Converter):
             if qual_max:
                 constraint.max_count = int(qual_max)
                 on_class = source_graph.value(superclass, OWL.onClass)
-                if on_class:
+                if isinstance(on_class, URIRef):
                     constraint.node_class = on_class
                 has_constraint = True
 
@@ -467,7 +482,8 @@ class EnumerationConverter(Converter):
             # Check if range has owl:oneOf
             one_of = source_graph.value(range_value, OWL.oneOf)
             if one_of:
-                values = self._extract_list(source_graph, one_of)
+                # In the list's own order, repeats dropped (#227)
+                values = list(dict.fromkeys(self._extract_list(source_graph, one_of)))
                 if values:
                     constraints.append(PropertyConstraint(path=prop, in_values=values))
 
@@ -518,6 +534,8 @@ ALL_CONVERTERS: list[type[Converter]] = [
 def get_converters_for_level(level: "StrictnessLevel") -> list[Converter]:
     """Get converter instances appropriate for strictness level.
 
+    ``strict`` currently gives the same converters as ``standard``.
+
     Args:
         level: The strictness level.
 
@@ -529,14 +547,10 @@ def get_converters_for_level(level: "StrictnessLevel") -> list[Converter]:
     if level == StrictnessLevel.MINIMAL:
         return [DomainRangeConverter()]
 
-    elif level == StrictnessLevel.STANDARD:
-        return [
-            DomainRangeConverter(),
-            CardinalityConverter(),
-            FunctionalPropertyConverter(),
-        ]
-
-    else:  # STRICT
+    # Standard and strict share one list: once sh:closed stopped depending on the level
+    # (#224) and enumerations reached the default level (#227), strict had nothing of its
+    # own. It is kept as an alias for constraints a later release may add.
+    else:  # STANDARD, STRICT
         return [
             DomainRangeConverter(),
             CardinalityConverter(),

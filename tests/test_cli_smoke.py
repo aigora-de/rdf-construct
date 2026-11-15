@@ -55,6 +55,10 @@ TRANSLATIONS = str(SMOKE / "translations_de.yml")
 GB_ONLY = str(REPO / "tests" / "fixtures" / "ies" / "ies-env-building-classification.ttl")
 MALFORMED_TTL = str(SMOKE / "malformed.ttl")
 MALFORMED_YAML = str(SMOKE / "malformed.yml")
+TWO_CATS = str(REPO / "tests" / "fixtures" / "shacl" / "two_cats.ttl")
+ORDER_BAD_SORT = str(SMOKE / "order_bad_sort.yml")
+ORDER_BAD_PREFIX_ORDER = str(SMOKE / "order_bad_prefix_order.yml")
+ORDER_BAD_ROOTS = str(SMOKE / "order_bad_roots.yml")
 
 # The exit-code convention decided on #286.
 STATE_CODE = {"clean": 0, "findings": 1, "refused": 2}
@@ -251,8 +255,59 @@ def test_help_exits_cleanly(command: str):
 THREE_STATES = [
     _row(Row("cast", "clean", ("cast", ANIMAL, "-f", "nt", "-o", "@tmp/cast"))),
     _row(Row("cast", "refused", ("cast", ANIMAL, "-f", "nope"))),
+    # Every requested format the source's own casts nothing, in pipe mode and with -o, and a
+    # skip beside a written format is something to report (#330)
+    _row(
+        Row("cast", "refused", ("cast", ANIMAL, "-f", "turtle", "-o", "@tmp/cast")),
+        label="same-format",
+    ),
+    _row(Row("cast", "refused", ("cast", ANIMAL, "-f", "ttl")), label="same-format-pipe"),
+    _row(
+        Row("cast", "findings", ("cast", ANIMAL, "-f", "turtle", "-f", "nt", "-o", "@tmp/cast")),
+        label="skipped",
+    ),
+    # Quad output is written from a dataset: N-Quads from any source (#189), and a quad source's
+    # graphs kept (#540). What no single-graph format can hold is refused (#540, #542)
+    _row(Row("cast", "clean", ("cast", ANIMAL, "-f", "nq", "-o", "@tmp/cast")), label="nquads"),
+    _row(
+        Row(
+            "cast",
+            "clean",
+            ("cast", "@tmp/cast_quads.nq", "-f", "trig", "-o", "@tmp/cast"),
+            copied=(str(SMOKE / "cast_quads.nq"),),
+        ),
+        label="quad-to-quad",
+    ),
+    _row(
+        Row(
+            "cast",
+            "refused",
+            ("cast", str(SMOKE / "cast_named_graphs.jsonld"), "-o", "@tmp/cast"),
+        ),
+        label="jsonld-named-graphs",
+    ),
+    _row(
+        Row(
+            "cast",
+            "refused",
+            ("cast", str(SMOKE / "cast_formula.n3"), "-f", "turtle", "-o", "@tmp/cast"),
+        ),
+        label="n3-formula",
+    ),
     _row(Row("order", "clean", ("order", LIBRARY, ORDERING, "-o", "@tmp/order"))),
     _row(Row("order", "refused", ("order", LIBRARY, ORDERING, "-p", "nope", "-o", "@tmp/order"))),
+    _row(
+        Row("order", "refused", ("order", LIBRARY, ORDER_BAD_SORT, "-o", "@tmp/order")),
+        label="sort-mode",
+    ),
+    _row(
+        Row("order", "refused", ("order", LIBRARY, ORDER_BAD_PREFIX_ORDER, "-o", "@tmp/order")),
+        label="prefix-order",
+    ),
+    _row(
+        Row("order", "refused", ("order", LIBRARY, ORDER_BAD_ROOTS, "-o", "@tmp/order")),
+        label="roots",
+    ),
     _row(Row("profiles", "clean", ("profiles", ORDERING))),
     _row(Row("profiles", "refused", ("profiles", "@tmp/missing.yml"))),
     _row(Row("uml", "clean", ("uml", ANIMAL, "-C", UML_CONTEXTS, "-o", "@tmp/uml"))),
@@ -284,11 +339,118 @@ THREE_STATES = [
         ),
         label="output-is-input",
     ),
+    # A filter is display: a valid one keeps the verdict, and a bad one is refused before
+    # anything is written (#144)
+    _row(Row("diff", "findings", ("diff", ANIMAL, SIMPLE, "--show", "added")), label="filtered"),
+    _row(
+        Row("diff", "refused", ("diff", ANIMAL, SIMPLE, "--show", "addedd", "-o", "@tmp/d.txt")),
+        label="bad-filter",
+    ),
     _row(Row("docs", "clean", ("docs", ANIMAL, "-o", "@tmp/docs"))),
     _row(Row("docs", "refused", ("docs", ANIMAL, "--format", "nope", "-o", "@tmp/docs"))),
+    # An entity filter that names nothing known, or leaves nothing to document, is refused
+    # before anything is written (#252)
+    _row(
+        Row("docs", "refused", ("docs", ANIMAL, "--include", "clases", "-o", "@tmp/docs")),
+        label="bad-include",
+    ),
+    _row(
+        Row("docs", "refused", ("docs", ANIMAL, "--exclude", "clases", "-o", "@tmp/docs")),
+        label="bad-exclude",
+    ),
+    _row(
+        Row(
+            "docs",
+            "refused",
+            ("docs", ANIMAL, "--include", "classes", "--exclude", "classes", "-o", "@tmp/docs"),
+        ),
+        label="empty-selection",
+    ),
+    _row(
+        Row(
+            "docs",
+            "refused",
+            ("docs", ANIMAL, "--no-instances", "--include", "instances", "-o", "@tmp/docs"),
+        ),
+        label="contradiction",
+    ),
     _row(Row("shacl-gen", "clean", ("shacl-gen", ANIMAL, "-o", "@tmp/shapes.ttl"))),
     _row(
         Row("shacl-gen", "refused", ("shacl-gen", ANIMAL, "-C", MALFORMED_YAML, "-o", "@tmp/s.ttl"))
+    ),
+    _row(
+        Row(
+            "shacl-gen",
+            "refused",
+            ("shacl-gen", ANIMAL, "--classes", "ex:Nope", "-o", "@tmp/s.ttl"),
+        ),
+        label="unmatched-target",
+    ),
+    _row(
+        Row(
+            "shacl-gen", "refused", ("shacl-gen", TWO_CATS, "--classes", "Cat", "-o", "@tmp/s.ttl")
+        ),
+        label="ambiguous-target",
+    ),
+    _row(
+        Row(
+            "shacl-gen",
+            "refused",
+            (
+                "shacl-gen",
+                ANIMAL,
+                "-C",
+                str(SMOKE / "shacl_scalar_targets.yml"),
+                "-o",
+                "@tmp/s.ttl",
+            ),
+        ),
+        label="scalar-targets",
+    ),
+    _row(
+        Row(
+            "shacl-gen",
+            "refused",
+            (
+                "shacl-gen",
+                ANIMAL,
+                "-C",
+                str(SMOKE / "shacl_unbound_ignored.yml"),
+                "-o",
+                "@tmp/s.ttl",
+            ),
+        ),
+        label="unbound-ignored-prefix",
+    ),
+    _row(
+        Row(
+            "shacl-gen",
+            "refused",
+            (
+                "shacl-gen",
+                ANIMAL,
+                "-C",
+                str(SMOKE / "shacl_bad_namespace.yml"),
+                "-o",
+                "@tmp/s.ttl",
+            ),
+        ),
+        label="suffix-shape-namespace",
+    ),
+    _row(
+        Row(
+            "shacl-gen",
+            "refused",
+            (
+                "shacl-gen",
+                ANIMAL,
+                "-C",
+                str(SMOKE / "shacl_removed_key.yml"),
+                "-o",
+                "@tmp/s.ttl",
+            ),
+        ),
+        label="removed-key",
     ),
     _row(
         Row(
@@ -334,7 +496,29 @@ THREE_STATES = [
         )
     ),
     _row(Row("cq-test", "findings", ("cq-test", ANIMAL, str(SMOKE / "cq_failing.yml")))),
+    _row(
+        Row(
+            "cq-test",
+            "findings",
+            ("cq-test", ANIMAL, str(SMOKE / "cq_fail_fast.yml"), "--fail-fast"),
+        ),
+        label="fail-fast",
+    ),
     _row(Row("cq-test", "refused", ("cq-test", ANIMAL, MALFORMED_YAML))),
+    _row(
+        Row(
+            "cq-test",
+            "refused",
+            (
+                "cq-test",
+                ANIMAL,
+                str(EXAMPLES / "cq-test" / "cq_tests_animal.yml"),
+                "--tag",
+                "no-such-tag",
+            ),
+        ),
+        label="empty-selection",
+    ),
     _row(
         Row("cq-test", "refused", ("cq-test", ANIMAL, str(SMOKE / "cq_ask_count.yml"))),
         label="ask-count",
@@ -366,6 +550,7 @@ THREE_STATES = [
         label="output-is-input",
     ),
     _row(Row("describe", "clean", ("describe", ANIMAL))),
+    _row(Row("describe", "clean", ("describe", ANIMAL, "--reasoning")), label="reasoning"),
     _row(Row("describe", "refused", ("describe", ANIMAL, "--format", "nope"))),
     _row(
         Row(
@@ -440,6 +625,30 @@ THREE_STATES = [
     ),
     _row(
         Row(
+            "split",
+            "refused",
+            ("split", MONOLITH, "-c", str(SMOKE / "split_shared_output.yml"), "-o", "@tmp/split"),
+        ),
+        label="shared-output",
+    ),
+    _row(
+        Row(
+            "split",
+            "refused",
+            (
+                "split",
+                "@tmp/split_monolith.ttl",
+                "-c",
+                str(SMOKE / "split_over_source.yml"),
+                "-o",
+                "@tmp/",
+            ),
+            copied=(MONOLITH,),
+        ),
+        label="over-source",
+    ),
+    _row(
+        Row(
             "refactor rename",
             "clean",
             (
@@ -459,6 +668,24 @@ THREE_STATES = [
             "refused",
             ("refactor", "rename", str(EXAMPLES / "refactor" / "typos.ttl"), "-o", "@tmp/r.ttl"),
         )
+    ),
+    _row(
+        Row(
+            "refactor rename",
+            "refused",
+            (
+                "refactor",
+                "rename",
+                str(EXAMPLES / "refactor" / "typos.ttl"),
+                "--from",
+                "http://example.org/ont#Addres",
+                "--to",
+                "http://example.org/ont#Structure",
+                "-o",
+                "@tmp/r.ttl",
+            ),
+        ),
+        label="onto-existing-iri",
     ),
     _row(
         Row(
@@ -502,6 +729,79 @@ THREE_STATES = [
                 "@tmp/d.ttl",
             ),
         )
+    ),
+    _row(
+        Row(
+            "refactor rename",
+            "refused",
+            (
+                "refactor",
+                "rename",
+                str(EXAMPLES / "refactor" / "typos.ttl"),
+                "--from",
+                "http://example.org/ont#Buiding",
+                "--to",
+                "http://example.org/ont#Building",
+            ),
+        ),
+        label="no-output",
+    ),
+    _row(
+        Row(
+            "refactor rename",
+            "refused",
+            (
+                "refactor",
+                "rename",
+                "-c",
+                str(EXAMPLES / "refactor" / "renames.yml"),
+                "--from",
+                "http://example.org/ont#Organistion",
+                "--to",
+                "http://example.org/ont#Organisation",
+                "-o",
+                "@tmp/r.ttl",
+            ),
+        ),
+        label="config-with-operation",
+    ),
+    _row(
+        Row(
+            "refactor deprecate",
+            "refused",
+            (
+                "refactor",
+                "deprecate",
+                "@tmp/legacy.ttl",
+                "@tmp/typos.ttl",
+                "--entity",
+                "http://example.org/ont#LegacyPerson",
+                "-o",
+                "@tmp/legacy.ttl",
+            ),
+            copied=(
+                str(EXAMPLES / "refactor" / "legacy.ttl"),
+                str(EXAMPLES / "refactor" / "typos.ttl"),
+            ),
+        ),
+        label="output-over-source",
+    ),
+    _row(
+        Row(
+            "refactor deprecate",
+            "refused",
+            (
+                "refactor",
+                "deprecate",
+                "-c",
+                str(EXAMPLES / "refactor" / "deprecations.yml"),
+                "--message",
+                "",
+                "-o",
+                "@tmp/d.ttl",
+            ),
+        ),
+        label="config-with-operation",
     ),
     _row(
         Row(
@@ -716,7 +1016,7 @@ MALFORMED = [
         label="yaml",
     ),
     _row(Row("contexts", "refused", ("contexts", MALFORMED_YAML)), xfail="#318", label="yaml"),
-    _row(Row("lint", "refused", ("lint", MALFORMED_TTL)), xfail="#322", label="ttl"),
+    _row(Row("lint", "refused", ("lint", MALFORMED_TTL)), label="ttl"),
     _row(Row("diff", "refused", ("diff", MALFORMED_TTL, ANIMAL)), label="ttl"),
     _row(Row("docs", "refused", ("docs", MALFORMED_TTL, "-o", "@tmp/docs")), label="ttl"),
     _row(

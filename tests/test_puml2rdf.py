@@ -3,6 +3,8 @@
 Tests cover parsing, conversion, validation, and merging functionality.
 """
 
+import re
+
 import pytest
 from pathlib import Path
 from textwrap import dedent
@@ -1326,8 +1328,9 @@ class TestValidateConvertsAndChecks:
 
         assert result.exit_code == 0, result.output
         assert "Converting to RDF..." in result.output
-        assert "Conversion warnings:" in result.output
-        assert "Validation complete: 3 warnings" in result.output
+        assert "Generated: " in result.output
+        # One warning for the unknown type, not one each from the validator and converter (#155)
+        assert "Validation complete: 2 warnings" in result.output
         assert _wrote_nothing(tmp_path)
 
     def test_validate_clean_diagram(self, tmp_path: Path) -> None:
@@ -1486,7 +1489,7 @@ class TestBlocks:
 
     @pytest.mark.parametrize(
         "opener",
-        ["legend right", "/' a comment", "skinparam class {", "title", "header", "enum Colour {"],
+        ["legend right", "skinparam class {", "title", "header", "enum Colour {"],
     )
     def test_unclosed_block_is_reported(self, tmp_path: Path, opener: str) -> None:
         """A block that never closes names its opening line instead of hiding the rest."""
@@ -1574,6 +1577,196 @@ class TestLineBreaks:
         assert error.line_content.startswith('package "http://example.org/mine#" as owl')
 
 
+class TestPropertyAndIndividualBoxes:
+    """A box drawn as a property or an individual is named, not converted to a class (#395)."""
+
+    @pytest.mark.parametrize(
+        ("line", "kind"),
+        [
+            # The default rendering's spots, as `uml` writes them
+            ("class ex.eats << (O, #FFFFFF) owl:ObjectProperty >> #CCCCCC", "object property"),
+            (
+                "class ex.weight << (D, #FFFFFF) owl:DatatypeProperty >> #CCCCCC",
+                "datatype property",
+            ),
+            (
+                "class ex.note << (A, #FFFFFF) owl:AnnotationProperty >> #CCCCCC",
+                "annotation property",
+            ),
+            ("class ex.manages << (P, #FFFFFF) rdf:Property >> #CCCCCC", "property"),
+            ('class "Fido" as ex.Fido << (I, #FFFFFF) ex:Dog >>', "individual"),
+            ("class ex.Fido  (I, #FFFFFF) <<owl:NamedIndividual>>", "individual"),
+            # ODM's names, a characteristic after the first included
+            ('class "eats" as ex.eats <<objectProperty>> #CCCCCC', "object property"),
+            ("class ex.knows <<objectProperty, symmetricProperty>> #CCCCCC", "object property"),
+            ("class ex.id <<datatypeProperty, functionalProperty>> #CCCCCC", "datatype property"),
+            ("class ex.note <<annotationProperty>>", "annotation property"),
+            ("class ex.manages <<rdfProperty>>", "property"),
+            ("class ex.ancestor <<transitiveProperty>>", "object property"),
+            ("class ex.Fido <<individual: ex:Dog>>", "individual"),
+            ("class ex.Fido <<individual>>", "individual"),
+            # Written by hand, as a prefixed type name
+            ("class ex.eats <<owl:ObjectProperty>>", "object property"),
+            ("class ex.ancestor <<owl:TransitiveProperty>>", "object property"),
+            ("class ex.id <<owl:FunctionalProperty>>", "property"),
+            ("class ex.Fido <<owl:NamedIndividual>>", "individual"),
+        ],
+    )
+    def test_box_is_named_and_not_a_class(self, line: str, kind: str) -> None:
+        """The box is not in the model, and its line is named with what it was drawn as."""
+        result = PlantUMLParser().parse(f"@startuml\nclass ex.Dog\n{line}\n@enduml\n")
+
+        assert [cls.name for cls in result.model.classes] == ["Dog"]
+        [warning] = result.warnings
+        name = re.search(r"(?:as\s+|class\s+)(ex\.\w+)", line)
+        assert name is not None
+        assert warning.line_number == 3
+        assert warning.code == "unmodelled"
+        assert warning.kind == kind
+        assert warning.message == (
+            f"{kind} {name.group(1)} is not converted: only classes are, "
+            f"so {name.group(1)} is not in the output"
+        )
+        assert warning.line_content == line.strip()
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "class ex.Animal << (C, #FFFFFF) owl:Class >>",
+            "class ex.Animal << (C, #FFFFFF) rdfs:Class >>",
+            'class "Animal" as ex.Animal <<owlClass>>',
+            "class ex.Animal <<rdfsClass>>",
+            "class ex.Animal <<owl:Class>>",
+            "class ex.Animal <<foo>>",
+            "class ex.Animal <<abstract>>",
+            "class ex.Animal << (E, #FF7700) Entity >>",
+        ],
+    )
+    def test_class_box_still_converts(self, line: str) -> None:
+        """A class's stereotype, or one that does not say, leaves the box a class."""
+        result = PlantUMLParser().parse(f"@startuml\n{line}\n@enduml\n")
+
+        assert [cls.name for cls in result.model.classes] == ["Animal"]
+        assert result.warnings == []
+
+    def test_cli_writes_no_class_for_them(self, tmp_path: Path) -> None:
+        """Only the class is written, at exit 0; --strict refuses the run and writes nothing."""
+        text = dedent(
+            """\
+            @startuml
+            class Dog
+            class "eats" as eats <<objectProperty>> #CCCCCC
+            class "Fido" as Fido << (I, #FFFFFF) Dog >>
+            @enduml
+            """
+        )
+        result = _run(tmp_path, text)
+
+        assert result.exit_code == 0, result.output
+        graph = Graph().parse(tmp_path / "diagram.ttl")
+        assert [str(c).rsplit("#", 1)[-1] for c in graph.subjects(RDF.type, OWL.Class)] == ["Dog"]
+        assert "1 object property box not converted, only classes are (3)" in result.output
+        assert "1 individual box not converted, only classes are (4)" in result.output
+
+        (tmp_path / "diagram.ttl").unlink()
+        strict = _run(tmp_path, text, "--strict")
+        assert strict.exit_code == 1, strict.output
+        assert _wrote_nothing(tmp_path)
+
+    def test_many_boxes_are_folded_by_kind(self, tmp_path: Path) -> None:
+        """Each kind is one line in the CLI, however many boxes there are."""
+        boxes = "".join(f"class p{n} <<objectProperty>>\n" for n in range(12))
+        result = _run(tmp_path, f"@startuml\nclass A\n{boxes}@enduml\n")
+
+        assert result.exit_code == 0, result.output
+        assert (
+            "⚠ 12 object property boxes not converted, only classes are "
+            "(3, 4, 5, 6, 7, 8, 9, 10, 11, 12, … 2 more) — they are not in the output."
+        ) in result.output
+        assert "p0 is not converted" not in result.output
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "Fido --|> Dog",
+            "Dog <|-- Fido",
+            "Dog --> Fido : owns",
+            "Fido -u-|> Dog : <<rdfs:subClassOf>>",
+        ],
+    )
+    def test_line_naming_a_box_is_named_not_refused(self, tmp_path: Path, line: str) -> None:
+        """A relationship to a dropped box is dropped with it, not left to name an undeclared class."""
+        text = f"@startuml\nclass Dog\nclass Fido <<individual: Dog>>\n{line}\n@enduml\n"
+        result = PlantUMLParser().parse(text)
+
+        assert result.model.relationships == []
+        [box, named] = result.warnings
+        assert box.kind == "individual"
+        assert named.code == "unmodelled"
+        assert named.kind == "relationship"
+        assert named.line_number == 4
+        assert named.message == (
+            f"{line} names individual Fido, which is not converted, "
+            "so this line is not in the output"
+        )
+
+        cli_result = _run(tmp_path, text)
+        assert cli_result.exit_code == 0, cli_result.output
+        assert "1 line naming a box that is not converted (4)" in cli_result.output
+
+    def test_punned_term_keeps_its_class(self) -> None:
+        """A name with a class box too, as a punned term has, is still the class (IES)."""
+        text = dedent(
+            """\
+            @startuml
+            class ex.Flow << (C, #FFFFFF) rdfs:Class >>
+            class ex.WoodFlow << (C, #FFFFFF) rdfs:Class >>
+            class ex.WoodFlow << (I, #FFFFFF) ex:ClassOfFlow >>
+            ex.WoodFlow -u-|> ex.Flow : <<rdfs:subClassOf>>
+            @enduml
+            """
+        )
+        result = PlantUMLParser().parse(text)
+
+        assert [cls.name for cls in result.model.classes] == ["Flow", "WoodFlow"]
+        assert [(r.source, r.target) for r in result.model.relationships] == [
+            ("ex.WoodFlow", "ex.Flow")
+        ]
+        assert [w.kind for w in result.warnings] == ["individual"]
+        assert not validate_puml(result.model).has_errors
+
+    @pytest.mark.parametrize("mode", ["default", "odm"])
+    def test_uml_output_converts_only_its_classes(self, mode: str) -> None:
+        """Over `uml`'s own diagrams, every class box converts and nothing else does."""
+        from rdf_construct.uml import collect_diagram_entities, load_uml_config, render_plantuml
+        from rdf_construct.uml.odm_renderer import render_odm_plantuml
+
+        examples = Path(__file__).parent.parent / "examples"
+        config = load_uml_config(examples / "uml" / "uml_contexts.yml")
+        render = render_plantuml if mode == "default" else render_odm_plantuml
+        class_box = re.compile(
+            r'^class\s+(?:"[^"]*"\s+as\s+)?([\w.]+)\s.*(?:\(C, |<<(?:owlClass|rdfsClass)>>)'
+        )
+        for source, context in [
+            ("animal_ontology.ttl", "full"),
+            ("organisation_ontology.ttl", "full"),
+        ]:
+            graph = Graph().parse(examples / source)
+            entities = collect_diagram_entities(
+                graph, config.get_context(context), config.defaults.get("selectors", {})
+            )
+            diagram = render(graph, entities)
+            classes = {m.group(1) for line in diagram.splitlines() if (m := class_box.match(line))}
+            boxes = len(re.findall(r"^class\s", diagram, re.MULTILINE))
+
+            result = PlantUMLParser().parse(diagram)
+
+            assert {cls.qualified_name for cls in result.model.classes} == classes
+            dropped = [w for w in result.warnings if w.kind and w.kind != "relationship"]
+            assert len(dropped) == boxes - len(classes) > 0
+            assert not validate_puml(result.model).has_errors
+
+
 def test_parse_warning_is_exported() -> None:
     """`ParseWarning` is public API beside `ParseError` and `ParseResult` (#402)."""
     from rdf_construct import puml2rdf
@@ -1583,3 +1776,256 @@ def test_parse_warning_is_exported() -> None:
         puml2rdf.ParseWarning
         is __import__("rdf_construct.puml2rdf.parser", fromlist=["ParseWarning"]).ParseWarning
     )
+
+
+DEFAULT = "http://example.org/ontology"
+
+
+def _written(tmp_path: Path, text: str, *options: str) -> tuple[object, Graph]:
+    """Run the CLI over *text*, expecting exit 0, and read back what it wrote."""
+    result = _run(tmp_path, text, *options)
+    assert result.exit_code == 0, result.output
+    graph = Graph().parse(tmp_path / "diagram.ttl", format="turtle")
+    return result, graph
+
+
+def _classes(graph: Graph) -> set[str]:
+    """Every class the graph declares, by its full IRI."""
+    return {str(cls) for cls in graph.subjects(RDF.type, OWL.Class)}
+
+
+class TestNestedPackages:
+    """A class in a nested package is filed under the innermost package (#391).
+
+    An IRI-less package nested in another is qualified by its parent's name, as PlantUML
+    qualifies it (measured with PlantUML 1.2026.9: `outer.inner`, `outer.inner.Inner`), so its
+    namespace is the one `class outer.inner.X` already gets.
+    """
+
+    def test_two_levels_with_a_class_before_and_after_the_inner_block(self, tmp_path: Path) -> None:
+        """Only the class inside the inner block moves; those around it stay in `outer`."""
+        text = (
+            "@startuml\npackage outer {\n  class Outer\n  package inner {\n    class Inner\n"
+            "  }\n  class After\n}\n@enduml\n"
+        )
+        _result, graph = _written(tmp_path, text)
+
+        assert _classes(graph) == {
+            f"{DEFAULT}/outer#Outer",
+            f"{DEFAULT}/outer.inner#Inner",
+            f"{DEFAULT}/outer#After",
+        }
+
+    def test_three_levels_agree_with_the_dotted_spelling(self, tmp_path: Path) -> None:
+        """`a { b { c { X } } }` and `class a.b.c.Z` are one package, so one namespace."""
+        text = (
+            "@startuml\npackage a {\n package b {\n  package c {\n   class X\n  }\n"
+            "  class Y\n }\n}\nclass a.b.c.Z\n@enduml\n"
+        )
+        _result, graph = _written(tmp_path, text)
+
+        assert _classes(graph) == {
+            f"{DEFAULT}/a.b.c#X",
+            f"{DEFAULT}/a.b.c#Z",
+            f"{DEFAULT}/a.b#Y",
+        }
+        assert "@prefix a.b.c: " in (tmp_path / "diagram.ttl").read_text(encoding="utf-8")
+
+    def test_same_name_under_two_parents_stays_apart(self, tmp_path: Path) -> None:
+        """Two packages called `inner` are two packages, as they are in PlantUML."""
+        text = (
+            "@startuml\npackage a {\n package inner {\n  class X\n }\n}\n"
+            "package b {\n package inner {\n  class Y\n }\n}\n@enduml\n"
+        )
+        _result, graph = _written(tmp_path, text)
+
+        assert _classes(graph) == {f"{DEFAULT}/a.inner#X", f"{DEFAULT}/b.inner#Y"}
+
+    def test_a_package_with_an_iri_keeps_it_and_its_plain_sibling_is_qualified(
+        self, tmp_path: Path
+    ) -> None:
+        """A nested IRI names its own namespace; a plain package in an IRI'd one is qualified."""
+        text = (
+            '@startuml\npackage "http://example.org/outer#" as out {\n'
+            '  package "http://example.org/inner#" as inn {\n    class Inner\n  }\n'
+            "  package plain {\n    class Plain\n  }\n  class Own\n}\n@enduml\n"
+        )
+        _result, graph = _written(tmp_path, text)
+
+        assert _classes(graph) == {
+            "http://example.org/inner#Inner",
+            f"{DEFAULT}/out.plain#Plain",
+            "http://example.org/outer#Own",
+        }
+
+    def test_the_parser_files_the_class_under_the_qualified_name(self) -> None:
+        """`PumlPackage.name` and `PumlClass.package` are the qualified name."""
+        result = PlantUMLParser().parse(
+            "@startuml\npackage outer {\n  package inner {\n    class Inner\n  }\n}\n@enduml\n"
+        )
+
+        assert [package.name for package in result.model.packages] == ["outer", "outer.inner"]
+        assert [cls.qualified_name for cls in result.model.classes] == ["outer.inner.Inner"]
+
+    def test_guide_example_is_the_real_output(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``PUML2RDF_GUIDE.md``'s nesting example runs verbatim and writes what it shows."""
+        import shlex
+
+        from rdflib.compare import isomorphic
+
+        guide = (
+            Path(__file__).parent.parent / "docs" / "user_guides" / "PUML2RDF_GUIDE.md"
+        ).read_text(encoding="utf-8")
+        section = guide[
+            guide.index("**A package nested in another**") : guide.index(
+                "**A package with an IRI and no alias**"
+            )
+        ]
+        blocks = dict(re.findall(r"```(\w+)\n(.*?)```", section, re.S))
+        argv = shlex.split(blocks["bash"])
+        assert argv[:2] == ["rdf-construct", "puml2rdf"]
+
+        monkeypatch.chdir(tmp_path)
+        Path(argv[2]).write_text(blocks["plantuml"], encoding="utf-8")
+        result = CliRunner().invoke(cli, argv[1:])
+
+        assert result.exit_code == 0, result.output
+        written = Graph().parse(tmp_path / argv[argv.index("-o") + 1], format="turtle")
+        assert isomorphic(written, Graph().parse(data=blocks["turtle"], format="turtle"))
+
+    def test_a_nested_name_does_not_take_a_derived_prefix(self, tmp_path: Path) -> None:
+        """The prefix check binds `outer.inner`, so `inner` is free for a URI package's prefix."""
+        text = (
+            '@startuml\npackage "http://example.org/inner#" {\n  class Derived\n}\n'
+            "package outer {\n  package inner {\n    class Nested\n  }\n}\n@enduml\n"
+        )
+        _result, graph = _written(tmp_path, text)
+
+        assert _classes(graph) == {
+            "http://example.org/inner#Derived",
+            f"{DEFAULT}/outer.inner#Nested",
+        }
+
+
+class TestComments:
+    """No pass, check or report reads a comment, by PlantUML's own rule (#394, #475).
+
+    Measured with PlantUML 1.2026.9: a line starting with `'` is a comment; `/'` at a line
+    start opens a block that ends at a `'/` on the same line, or on the first line ending in
+    `'/`; a `/' … '/` ending a line is a trailing comment.
+    """
+
+    @pytest.mark.parametrize(
+        ("lines", "expected"),
+        [
+            pytest.param(
+                "class Kept\n/'\nclass Retired\n'/\n' class AlsoRetired",
+                {"Kept"},
+                id="block-holds-a-class",
+            ),
+            pytest.param(
+                "class A\nclass B\n/'\nA --> B : link\nB <|-- C\nnote \"x\" as N1\n'/",
+                {"A", "B"},
+                id="block-holds-arrows-and-a-note",
+            ),
+            pytest.param("/'\npackage old {\n'/\nclass B", {"B"}, id="block-holds-a-brace"),
+            pytest.param(
+                "class A\n/'\npackage \"http://ex.org/x#\" as : {\n'/",
+                {"A"},
+                id="block-holds-an-illegal-prefix",
+            ),
+            pytest.param(
+                "' package ghost {\nclass A\n' }\nclass B\n' A --> B : rel",
+                {"A", "B"},
+                id="line-comment-holds-a-package",
+            ),
+            pytest.param(
+                "class A\n/'\n  hidden\nclass Hidden '/\nclass After",
+                {"A", "After"},
+                id="block-closes-on-a-line-ending-in-the-closer",
+            ),
+            pytest.param("class A\n  /' indented\n  class H\n  '/", {"A"}, id="indented-block"),
+            pytest.param("class A\n/' x '/ class C", {"A", "C"}, id="text-after-one-line-block"),
+            pytest.param("class A\nclass B /' x '/", {"A", "B"}, id="trailing-block"),
+            pytest.param(
+                "class \"a /' b\" as X /' c '/", {"X"}, id="trailing-block-after-a-quoted-opener"
+            ),
+        ],
+    )
+    def test_comments_are_neither_converted_nor_reported(
+        self, tmp_path: Path, lines: str, expected: set[str]
+    ) -> None:
+        """The passes and the reporter agree: --strict exits 0, and only the classes shown are."""
+        result, graph = _written(tmp_path, f"@startuml\n{lines}\n@enduml\n", "--strict")
+
+        assert "Parse warnings" not in result.output
+        assert _classes(graph) == {f"{DEFAULT}#{name}" for name in expected}
+
+    def test_a_commented_title_is_not_the_ontology_label(self, tmp_path: Path) -> None:
+        """`' title …` gives the ontology no label."""
+        text = "@startuml\nclass A\n' title Ghost title\n' note \"ghost\" as N9\n@enduml\n"
+        _result, graph = _written(tmp_path, text, "--strict")
+
+        assert (URIRef(DEFAULT), RDF.type, OWL.Ontology) in graph
+        assert list(graph.objects(URIRef(DEFAULT), RDFS.label)) == []
+
+    def test_a_trailing_comment_is_not_part_of_an_arrow_label(self, tmp_path: Path) -> None:
+        """`A --> B : rel /' x '/` names the property `rel`."""
+        text = "@startuml\nclass A\nclass B\nA --> B : rel /' not this '/\n@enduml\n"
+        _result, graph = _written(tmp_path, text, "--strict")
+
+        assert set(graph.subjects(RDF.type, OWL.ObjectProperty)) == {URIRef(f"{DEFAULT}#rel")}
+
+    def test_a_comment_line_in_a_note_is_not_note_text(self, tmp_path: Path) -> None:
+        """A `'` line inside a note body is a comment, as it is in PlantUML."""
+        text = "@startuml\nclass A\nnote right of A\n  Visible.\n  ' not this\nend note\n@enduml\n"
+        _result, graph = _written(tmp_path, text)
+
+        assert [str(o) for o in graph.objects(None, RDFS.comment)] == ["Visible."]
+
+    def test_a_comment_opener_inside_quotes_is_text(self, tmp_path: Path) -> None:
+        """A mid-line `/'` that does not end the line in `'/` is not a comment."""
+        text = (
+            "@startuml\nclass \"Owner's /' x\" as Owner\nclass A\n"
+            "note right of A : a /' b\n@enduml\n"
+        )
+        _result, graph = _written(tmp_path, text)
+
+        assert _classes(graph) == {f"{DEFAULT}#Owner", f"{DEFAULT}#A"}
+        assert [str(o) for o in graph.objects(None, RDFS.comment)] == ["a /' b"]
+
+    @pytest.mark.parametrize(
+        "lines",
+        [
+            pytest.param("/' never closed\n  class Never", id="never-closed"),
+            pytest.param("/'\n  class Retired\n'/ class AfterClose", id="closer-not-at-line-end"),
+        ],
+    )
+    def test_a_block_comment_never_closed_is_refused(self, tmp_path: Path, lines: str) -> None:
+        """PlantUML draws nothing for it, so nothing is written, at exit 2, naming the opener."""
+        result = _run(tmp_path, f"@startuml\nclass A\n{lines}\n@enduml\n")
+
+        assert result.exit_code == 2, result.output
+        assert "Line 3: this block comment is never closed" in result.output
+        assert "closes on a line that ends with '/" in result.output
+        assert _wrote_nothing(tmp_path)
+
+    def test_line_numbers_after_a_comment_are_the_files_own(self) -> None:
+        """Blanking keeps every newline, so a warning after a comment names its own line."""
+        text = "@startuml\nclass A\n/'\n  one\n  two\n'/\n' three\nnonsense\n@enduml\n"
+        result = PlantUMLParser().parse(text)
+
+        assert [(w.line_number, w.code) for w in result.warnings] == [(8, "not-understood")]
+
+    def test_blanking_keeps_every_offset(self) -> None:
+        """Comments become spaces: the length and every newline stay where they were."""
+        text = "class A /' x '/\n/'\nclass B\n'/ y '/\n' z\n/' w '/ class C\n"
+        blanked = PlantUMLParser()._blank_comments(text)
+
+        assert len(blanked) == len(text)
+        assert [i for i, c in enumerate(blanked) if c == "\n"] == [
+            i for i, c in enumerate(text) if c == "\n"
+        ]
+        assert blanked.split() == ["class", "A", "class", "C"]

@@ -37,6 +37,11 @@ from rdf_construct.shacl.generator import (
     generate_shapes_to_file,
 )
 from rdf_construct.shacl.namespaces import SH, SHACL_PREFIXES
+from rdf_construct.shacl.selection import (
+    Selection,
+    ShaclSelectionError,
+    resolve_selection,
+)
 
 __all__ = [
     # Configuration
@@ -48,6 +53,10 @@ __all__ = [
     "ShapeGenerator",
     "generate_shapes",
     "generate_shapes_to_file",
+    # Selection
+    "Selection",
+    "ShaclSelectionError",
+    "resolve_selection",
     # Converters
     "PropertyConstraint",
     # Namespaces

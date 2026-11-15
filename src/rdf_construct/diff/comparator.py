@@ -20,6 +20,13 @@ from rdflib.term import Node
 
 from rdf_construct.core.blank_nodes import blank_node_components, is_tree, label_by_content
 from rdf_construct.core.serialiser import format_term
+from rdf_construct.core.vocab import (
+    ANNOTATION_PROPERTY_TYPES,
+    CLASS_TYPES,
+    DATATYPE_PROPERTY_TYPES,
+    GENERIC_PROPERTY_TYPES,
+    OBJECT_PROPERTY_TYPES,
+)
 from rdf_construct.diff.change_types import (
     ChangeType,
     EntityChange,
@@ -347,6 +354,10 @@ def _load_graph(path: Path) -> Graph:
 def _determine_entity_type(graph: Graph, subject: URIRef) -> EntityType:
     """Determine the semantic type of an entity.
 
+    One type per entity (routing): the first of ontology, class, object, datatype and
+    annotation property, other property and individual that its types allow, each from
+    `rdf_construct.core.vocab` (#138).
+
     Args:
         graph: The RDF graph containing the entity.
         subject: The entity URI.
@@ -361,18 +372,19 @@ def _determine_entity_type(graph: Graph, subject: URIRef) -> EntityType:
         return EntityType.ONTOLOGY
 
     # Check for classes
-    if OWL.Class in types or RDFS.Class in types:
+    if types & CLASS_TYPES:
         return EntityType.CLASS
 
     # Check for property types
-    if OWL.ObjectProperty in types:
+    if types & OBJECT_PROPERTY_TYPES:
         return EntityType.OBJECT_PROPERTY
-    if OWL.DatatypeProperty in types:
+    if types & DATATYPE_PROPERTY_TYPES:
         return EntityType.DATATYPE_PROPERTY
-    if OWL.AnnotationProperty in types:
+    if types & ANNOTATION_PROPERTY_TYPES:
         return EntityType.ANNOTATION_PROPERTY
-    if RDF.Property in types:
-        return EntityType.OBJECT_PROPERTY  # Default property type
+    if types & GENERIC_PROPERTY_TYPES:
+        # A property, of a kind the source does not say: never guessed (#138)
+        return EntityType.OTHER_PROPERTY
 
     # If it has any type assertions (but not class/property), it's an individual
     if types:
@@ -427,7 +439,7 @@ def _get_superclasses(graph: Graph, subject: URIRef) -> list[URIRef] | None:
         List of superclass URIs, or None if not a class.
     """
     types = set(graph.objects(subject, RDF.type))
-    if OWL.Class not in types and RDFS.Class not in types:
+    if not types & CLASS_TYPES:
         return None
 
     superclasses = [sc for sc in graph.objects(subject, RDFS.subClassOf) if isinstance(sc, URIRef)]

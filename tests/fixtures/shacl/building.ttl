@@ -1,0 +1,14 @@
+# The SHACL guide's selection examples run against this file, copied in as ontology.ttl.
+@prefix bld: <http://example.org/building#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://example.org/building> a owl:Ontology .
+bld:Building a owl:Class .
+bld:BuildingPart a owl:Class .
+bld:Floor a owl:Class ;
+    rdfs:subClassOf bld:BuildingPart .
+bld:Room a owl:Class ;
+    rdfs:subClassOf bld:BuildingPart .
+bld:name a owl:DatatypeProperty ;
+    rdfs:domain bld:Building .

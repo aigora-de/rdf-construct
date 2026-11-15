@@ -24,6 +24,7 @@ from rdf_construct.core.predicate_tiers import (
     language_bucket,
     value_key,
 )
+from rdf_construct.merge.identity import SourceHeaders
 
 
 class ConflictType(Enum):
@@ -199,12 +200,14 @@ class SourceGraph:
         path: Path to the source file
         priority: Priority for conflict resolution
         triple_count: Number of triples in the graph
+        headers: Its ontology headers as read, before any remapping (#171)
     """
 
     graph: Graph
     path: str
     priority: int
     triple_count: int = 0
+    headers: SourceHeaders | None = None
 
     def __post_init__(self):
         """Calculate triple count."""
@@ -258,12 +261,10 @@ class ConflictDetector:
         """
         tiers = dict(self.tiers)
         functional: set[URIRef] = set()
-        headers: set[Node] = set()
         for source in sources:
             for s in source.graph.subjects(RDF.type, OWL.FunctionalProperty):
                 if isinstance(s, URIRef) and s not in self.configured:
                     functional.add(s)
-            headers.update(source.graph.subjects(RDF.type, OWL.Ontology))
         for predicate in functional:
             tiers[predicate] = PredicateTier.LOAD_BEARING
         checked = [p for p, tier in tiers.items() if tier is not PredicateTier.REPEATABLE]
@@ -277,9 +278,6 @@ class ConflictDetector:
                     # A blank node is labelled by its content, every triple on it included
                     # (#170), so two sources share one only where they agree on all of it
                     if not isinstance(s, URIRef):
-                        continue
-                    # The ontology header is #171's to merge; until then both pass through
-                    if s in headers:
                         continue
                     bucket = language_bucket(o) if per_language else None
                     by_source = index.setdefault((s, predicate, bucket), {})

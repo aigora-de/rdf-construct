@@ -109,15 +109,22 @@ def value_key(value: Node) -> Node:
     In RDF 1.1 a literal with no datatype and no tag is an ``xsd:string``, but rdflib keeps
     ``"x"`` and ``"x"^^xsd:string`` apart, so the typed form is folded to the plain one here.
 
+    A well-typed literal of any other datatype is folded to its canonical lexical form, so
+    ``"01"^^xsd:integer`` and ``"1"^^xsd:integer`` compare equal: one value, written two ways, is
+    not a disagreement (#377). The datatype is kept, so ``"1"^^xsd:int`` and ``"1"^^xsd:integer``
+    still differ, and an ill-typed literal is compared as written.
+
     Args:
         value: The object of a triple.
 
     Returns:
-        A term equal for two values that differ only in the case of their language tag, or only
-        in whether ``xsd:string`` is written.
+        A term equal for two values that differ only in the case of their language tag, only in
+        whether ``xsd:string`` is written, or only in the lexical form of one typed value.
     """
     if isinstance(value, Literal) and value.language:
         return Literal(str(value), lang=value.language.lower())
     if isinstance(value, Literal) and value.datatype == XSD.string:
         return Literal(str(value))
+    if isinstance(value, Literal) and value.datatype is not None and not value.ill_typed:
+        return Literal(str(value), datatype=value.datatype, normalize=True)
     return value

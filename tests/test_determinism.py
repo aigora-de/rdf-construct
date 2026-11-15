@@ -89,9 +89,31 @@ CASES = [
     _case("docs", ANIMAL, "-o", OUT, label="docs-html"),
     _case("docs", ANIMAL, "-f", "json", "-o", OUT, label="docs-json"),
     _case("describe", ANIMAL, "--no-colour", label="describe"),
+    _case(
+        "describe",
+        ANIMAL,
+        "--reasoning",
+        "-f",
+        "json",
+        normalise=mask_timestamps,
+        label="describe-json-reasoning",
+    ),
     _case("diff", ANIMAL, SIMPLE, expect_exit=1, label="diff"),
     _case("diff", DIFF_V1, DIFF_V2, expect_exit=1, label="diff-blank-nodes"),
     _case("diff", DIFF_V1, DIFF_V2, "-f", "json", expect_exit=1, label="diff-blank-nodes-json"),
+    _case("diff", DIFF_V1, DIFF_V2, "--show", "added", expect_exit=1, label="diff-show"),
+    _case(
+        "diff",
+        DIFF_V1,
+        DIFF_V2,
+        "--show",
+        "added",
+        "-f",
+        "json",
+        expect_exit=1,
+        label="diff-show-json",
+    ),
+    _case("diff", DIFF_V1, DIFF_V2, "--entities", "classes", expect_exit=1, label="diff-entities"),
     _case(
         "merge",
         str(MERGE / "merge_core.ttl"),
@@ -113,6 +135,14 @@ CASES = [
     ),
     _case("cq-test", ANIMAL, str(EXAMPLES / "cq-test" / "cq_tests_animal.yml"), label="cq-test"),
     _case(
+        "cq-test",
+        ANIMAL,
+        str(Path(__file__).parent / "fixtures" / "smoke" / "cq_fail_fast.yml"),
+        "--fail-fast",
+        expect_exit=1,
+        label="cq-test-fail-fast",
+    ),
+    _case(
         "refactor",
         "rename",
         str(EXAMPLES / "refactor" / "typos.ttl"),
@@ -133,6 +163,9 @@ CASES = [
         OUT,
         label="order-filtering",
     ),
+    # TriG from a single-graph source without blank nodes: the default graph has no name to
+    # vary (#540). With blank nodes or several graphs it is not reproducible (#190's family).
+    _case("cast", ANIMAL, "-f", "trig", label="cast-trig"),
     # Failing today, each against its issue.
     _case("cast", ANIMAL, "-f", "nt", xfail="#190", label="cast-nt"),
     _case(

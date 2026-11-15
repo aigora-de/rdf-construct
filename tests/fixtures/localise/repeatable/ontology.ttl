@@ -1,0 +1,16 @@
+@prefix ex:   <http://example.org/ont#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# #405 (P81): repeatable properties with several values in the source language. Two entities
+# whose sets differ, so a translation lost from either shows. Seeded from merge/conflicts/multilang.
+ex:Building a owl:Class ;
+    rdfs:label "Building"@en ;
+    rdfs:comment "A structure."@en ;
+    skos:altLabel "Structure"@en, "Edifice"@en .
+
+ex:Bridge a owl:Class ;
+    rdfs:label "Bridge"@en ;
+    rdfs:comment "One."@en, "Two."@en ;
+    skos:altLabel "Span"@en, "Crossing"@en, "Viaduct"@en .

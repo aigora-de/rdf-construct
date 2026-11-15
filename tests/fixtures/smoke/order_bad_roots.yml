@@ -1,0 +1,7 @@
+# roots: written as one string, not a list (#241): read a character at a time, it would
+# anchor nothing and say so to no one. It is refused before anything is written. The smoke
+# row passes -o @tmp/order.
+profiles:
+  good:
+    sections:
+      - classes: {sort: topological, roots: lib:Work}

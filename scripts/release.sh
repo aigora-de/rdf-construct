@@ -54,7 +54,8 @@ has been proven to work.
 
 Checks performed:
 
-  git        on main, tracked tree clean, in sync with origin
+  git        on main (--check also on release/vX.Y.Z), tracked tree clean,
+             in sync with origin, and main is the release branch's tip
   gate       scripts/ci-local.sh passes
   versions   pyproject.toml = __init__.py = CHANGELOG = README.md = CLAUDE.md
   changelog  top entry is dated, matches the version, [Unreleased] is empty,
@@ -104,10 +105,21 @@ printf '\033[1mrdf-construct release %s\033[0m\n' "$TAG"
 
 # --- checks -------------------------------------------------------------------
 
+# main holds the last release; work for the next one lands on release/vX.Y.Z
+# and reaches main only by a fast-forward when it is cut. A release therefore
+# runs on main, after that fast-forward. --check may also run on the release
+# branch itself, as a pre-flight before main is moved.
 check_git() {
   say "git state"
   local branch; branch="$(git rev-parse --abbrev-ref HEAD)"
-  [[ "$branch" == main ]] && ok "on main" || bad "on '$branch', not main"
+  local release_branch="release/$TAG"
+  if [[ "$branch" == main ]]; then
+    ok "on main"
+  elif [[ "$branch" == "$release_branch" && "$MODE" == check ]]; then
+    ok "on $release_branch (pre-flight; the release itself runs on main)"
+  else
+    bad "on '$branch', not main"
+  fi
 
   if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
     bad "tracked files are modified — commit or revert first"
@@ -117,12 +129,35 @@ check_git() {
 
   git fetch --quiet origin 2>/dev/null
   local ahead behind
-  ahead="$(git rev-list --count origin/main..HEAD 2>/dev/null || echo 0)"
-  behind="$(git rev-list --count HEAD..origin/main 2>/dev/null || echo 0)"
-  if [[ "$ahead" == 0 && "$behind" == 0 ]]; then
-    ok "in sync with origin/main"
+  ahead="$(git rev-list --count "origin/$branch..HEAD" 2>/dev/null || echo 0)"
+  behind="$(git rev-list --count "HEAD..origin/$branch" 2>/dev/null || echo 0)"
+  if ! git rev-parse -q --verify "refs/remotes/origin/$branch" >/dev/null; then
+    bad "'$branch' is not on origin"
+  elif [[ "$ahead" == 0 && "$behind" == 0 ]]; then
+    ok "in sync with origin/$branch"
   else
-    bad "out of sync with origin/main ($ahead ahead, $behind behind)"
+    bad "out of sync with origin/$branch ($ahead ahead, $behind behind)"
+  fi
+
+  # A main the release branch has moved past since the fast-forward would be
+  # tagged and built without the commits that came after it. (A main never
+  # fast-forwarded at all still carries the last version, which the version
+  # and tag checks refuse.)
+  if git rev-parse -q --verify "refs/remotes/origin/$release_branch" >/dev/null; then
+    if [[ "$branch" == main ]]; then
+      if [[ "$(git rev-parse HEAD)" == "$(git rev-parse "origin/$release_branch")" ]]; then
+        ok "main is $release_branch"
+      else
+        bad "main is not $release_branch — fast-forward it first"
+      fi
+    elif [[ "$branch" == "$release_branch" ]]; then
+      if git merge-base --is-ancestor origin/main HEAD; then
+        ok "main can fast-forward to $release_branch"
+      else
+        bad "main cannot fast-forward to $release_branch — it holds commits this branch lacks"
+        note "see CONTRIBUTING.md, Release Process"
+      fi
+    fi
   fi
 }
 
