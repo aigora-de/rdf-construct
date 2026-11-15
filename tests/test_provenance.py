@@ -118,6 +118,12 @@ class TestStampDerivation:
         stamp_derivation(graph, A, [A_V1])
         assert (PROV.wasDerivedFrom, RDF.type, OWL.AnnotationProperty) in graph
 
+    def test_a_lone_deprecated_property_still_gets_the_declaration(self) -> None:
+        graph = Graph()
+        graph.add((PROV.wasDerivedFrom, RDF.type, OWL.DeprecatedProperty))
+        stamp_derivation(graph, A, [A_V1])
+        assert (PROV.wasDerivedFrom, RDF.type, OWL.AnnotationProperty) in graph
+
     def test_an_existing_annotation_declaration_is_kept(self) -> None:
         graph = Graph()
         graph.add((PROV.wasDerivedFrom, RDF.type, OWL.AnnotationProperty))
