@@ -1,0 +1,8 @@
+@prefix ex: <http://example.org/ont#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+ex:Alpha a owl:Class . ex:Beta a owl:Class . ex:Gamma a owl:Class . ex:Delta a owl:Class .
+ex:p1 a owl:ObjectProperty ; rdfs:domain ex:Alpha .
+ex:p2 a owl:ObjectProperty ; rdfs:domain ex:Beta .
+ex:p3 a owl:ObjectProperty ; rdfs:domain ex:Gamma .
+ex:p4 a owl:ObjectProperty ; rdfs:domain ex:Delta .

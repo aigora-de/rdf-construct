@@ -155,7 +155,14 @@ class TextFormatter(Formatter):
         return " ".join(parts)
 
     def format_result(self, result: LintResult) -> str:
-        """Format a single file's lint result."""
+        """Format a single file's lint result.
+
+        A file that could not be parsed is one line, the parse failure, in the error colour (#322).
+        """
+        if result.parse_error is not None:
+            return self._colour(
+                result.parse_error, self.COLOURS["bold"], self._severity_colour(Severity.ERROR)
+            )
         if not result.issues:
             return ""
 
@@ -204,6 +211,13 @@ class TextFormatter(Formatter):
         files_str = f"{len(summary.results)} file{'s' if len(summary.results) != 1 else ''}"
 
         summary_line = f"Found {', '.join(summary_parts)} in {files_str}"
+        unparsed = len(summary.unparsed)
+        if unparsed:
+            # Not a finding, so not in the counts; the run exits 2 (#322)
+            unparsed_text = f"{unparsed} file{'s' if unparsed != 1 else ''} could not be parsed"
+            summary_line += "; " + self._colour(
+                unparsed_text, self._severity_colour(Severity.ERROR)
+            )
         lines.append(summary_line)
 
         return "\n".join(lines)
@@ -217,6 +231,7 @@ class JsonFormatter(Formatter):
         "files": [
             {
                 "path": "file.ttl",
+                "parse_error": null,
                 "issues": [
                     {
                         "rule": "orphan-class",
@@ -230,7 +245,7 @@ class JsonFormatter(Formatter):
                 "summary": {"errors": 1, "warnings": 0, "info": 0}
             }
         ],
-        "summary": {"errors": 1, "warnings": 0, "info": 0, "files": 1}
+        "summary": {"errors": 1, "warnings": 0, "info": 0, "files": 1, "unparsed": 0}
     }
     """
 
@@ -262,6 +277,7 @@ class JsonFormatter(Formatter):
         """Format a single file's lint result as JSON."""
         data = {
             "path": str(result.file_path),
+            "parse_error": result.parse_error,
             "issues": [self._issue_to_dict(i, result.graph) for i in result.issues],
             "summary": {
                 "errors": result.error_count,
@@ -280,6 +296,7 @@ class JsonFormatter(Formatter):
             "files": [
                 {
                     "path": str(r.file_path),
+                    "parse_error": r.parse_error,
                     "issues": [self._issue_to_dict(i, r.graph) for i in r.issues],
                     "summary": {
                         "errors": r.error_count,
@@ -294,6 +311,7 @@ class JsonFormatter(Formatter):
                 "warnings": summary.total_warnings,
                 "info": summary.total_info,
                 "files": len(summary.results),
+                "unparsed": len(summary.unparsed),
             },
         }
 

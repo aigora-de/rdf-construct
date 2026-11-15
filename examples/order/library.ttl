@@ -1,0 +1,109 @@
+@prefix lib: <http://example.org/library#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# A small ontology for the ORDER_GUIDE.md worked examples.
+#
+# It is built so that alphabetical and hierarchical order visibly DISAGREE:
+# every class sorts before its own parent, and lib:authoredBy sorts before the
+# property it specialises. A profile that claims to order by hierarchy and does
+# not is therefore obvious in the output rather than plausible.
+#
+# It also carries one term of each kind the selectors distinguish, including the
+# awkward ones: a property declared only by an OWL characteristic, and a property
+# whose kind cannot be inferred at all.
+
+<http://example.org/library>
+    a owl:Ontology ;
+    rdfs:label "Library Ontology"@en ;
+    rdfs:comment "Worked example for the rdf-construct ordering guide."@en ;
+    owl:versionIRI <http://example.org/library/1.0.0> ;
+    owl:versionInfo "1.0.0" .
+
+# ── Classes ────────────────────────────────────────────────────────────────
+# Alphabetically: Anthology, Article, Book, Journal, Work
+# By hierarchy:   Work, then Article/Book/Journal, then Anthology
+
+lib:Work a owl:Class ;
+    rdfs:label "Work"@en ;
+    rdfs:comment "Anything the library holds a record of."@en .
+
+lib:Book a owl:Class ;
+    rdfs:label "Book"@en ;
+    rdfs:subClassOf lib:Work .
+
+lib:Article a owl:Class ;
+    rdfs:label "Article"@en ;
+    rdfs:subClassOf lib:Work .
+
+lib:Journal a owl:Class ;
+    rdfs:label "Journal"@en ;
+    rdfs:subClassOf lib:Work ;
+    rdfs:subClassOf [
+        a owl:Restriction ;
+        owl:onProperty lib:publishes ;
+        owl:someValuesFrom lib:Article
+    ] .
+
+lib:Anthology a owl:Class ;
+    rdfs:label "Anthology"@en ;
+    rdfs:subClassOf lib:Book .
+
+# ── Object properties ──────────────────────────────────────────────────────
+# Alphabetically: authoredBy, publishes, relatedTo
+# By hierarchy:   relatedTo, then authoredBy
+
+lib:relatedTo a owl:ObjectProperty ;
+    rdfs:label "related to"@en ;
+    rdfs:domain lib:Work ;
+    rdfs:range lib:Work .
+
+lib:authoredBy a owl:ObjectProperty ;
+    rdfs:label "authored by"@en ;
+    rdfs:subPropertyOf lib:relatedTo ;
+    rdfs:domain lib:Work .
+
+lib:publishes a owl:ObjectProperty ;
+    rdfs:label "publishes"@en ;
+    rdfs:domain lib:Journal ;
+    rdfs:range lib:Article .
+
+# Declared ONLY by an OWL characteristic. It is still an object property, and
+# `select: obj_props` claims it — see the guide's "Selectors" section.
+lib:cites a owl:TransitiveProperty ;
+    rdfs:label "cites"@en .
+
+# ── Datatype properties ────────────────────────────────────────────────────
+
+lib:title a owl:DatatypeProperty ;
+    rdfs:label "title"@en ;
+    rdfs:domain lib:Work ;
+    rdfs:range xsd:string .
+
+lib:isbn a owl:DatatypeProperty ;
+    rdfs:label "ISBN"@en ;
+    rdfs:domain lib:Book ;
+    rdfs:range xsd:string .
+
+# ── Annotation property ────────────────────────────────────────────────────
+
+lib:shelfMark a owl:AnnotationProperty ;
+    rdfs:label "shelf mark"@en .
+
+# ── A property whose KIND cannot be inferred ───────────────────────────────
+# owl:FunctionalProperty is a subclass of rdf:Property only: nothing here says
+# object or datatype. `select: other_props` is the section that claims it.
+
+lib:catalogueNumber a owl:FunctionalProperty ;
+    rdfs:label "catalogue number"@en .
+
+# ── Individuals ────────────────────────────────────────────────────────────
+
+lib:GreatExpectations a lib:Book , owl:NamedIndividual ;
+    rdfs:label "Great Expectations"@en ;
+    lib:title "Great Expectations" .
+
+lib:NatureJournal a lib:Journal , owl:NamedIndividual ;
+    rdfs:label "Nature"@en .

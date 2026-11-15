@@ -15,6 +15,10 @@ from typing import Any
 import yaml
 from rdflib import URIRef
 
+from rdf_construct.core.predicate_tiers import PredicateTier, build_tiers
+from rdf_construct.core.utils import CurieError, resolve_curie
+from rdf_construct.merge.prefixes import core_bindings
+
 
 class ConflictStrategy(Enum):
     """Strategy for resolving conflicting values."""
@@ -73,7 +77,8 @@ class NamespaceConfig:
     """Configuration for namespace handling.
 
     Attributes:
-        base: Base namespace for the merged output.
+        base: The merged ontology's IRI, used as given (#171). Without it, a merge of
+            headed sources writes no ontology header.
         remappings: Global namespace remapping rules.
         preferred_prefixes: Preferred prefix bindings for output.
     """
@@ -91,11 +96,14 @@ class ConflictConfig:
         strategy: How to resolve conflicts.
         report_path: Optional path to write conflict report.
         ignore_predicates: Predicates to ignore in conflict detection.
+        predicate_tiers: Tier name (repeatable, per_language, load_bearing) to the predicates
+            placed in it, over the defaults in `rdf_construct.core.predicate_tiers`.
     """
 
     strategy: ConflictStrategy = ConflictStrategy.PRIORITY
     report_path: Path | None = None
     ignore_predicates: set[str] = field(default_factory=set)
+    predicate_tiers: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass
@@ -262,10 +270,15 @@ class MergeConfig:
         # Parse conflicts
         conf_data = data.get("conflicts", {})
         strategy_str = conf_data.get("strategy", "priority").upper()
+        # A CURIE in the conflicts section means what the output's prefixes say: rdf, rdfs, owl,
+        # xsd and xml, and the config's own preferred_prefixes (#357)
+        prefixes = {**dict(core_bindings()), **(namespaces.preferred_prefixes or {})}
+        ignore_predicates, predicate_tiers = _parse_predicate_tiers(conf_data, prefixes)
         conflicts = ConflictConfig(
             strategy=ConflictStrategy[strategy_str],
             report_path=Path(conf_data["report"]) if conf_data.get("report") else None,
-            ignore_predicates=set(conf_data.get("ignore_predicates", [])),
+            ignore_predicates=ignore_predicates,
+            predicate_tiers=predicate_tiers,
         )
 
         # Parse imports strategy
@@ -293,6 +306,64 @@ class MergeConfig:
             migrate_data=migrate_data,
             dry_run=data.get("dry_run", False),
         )
+
+
+def _predicate_iri(text: Any, key: str, prefixes: dict[str, str]) -> str:
+    """Resolve one predicate in the conflicts config to an IRI.
+
+    A CURIE resolves against rdf, rdfs, owl, xsd and xml and the config's own
+    ``namespaces.preferred_prefixes``: the prefixes the merged output is written with whatever
+    the sources declare (#357). The sources' prefixes are not used, because two sources may give
+    one prefix two meanings.
+    """
+    try:
+        return str(resolve_curie(prefixes, str(text)))
+    except CurieError as e:
+        raise ValueError(
+            f"conflicts.{key}: {text!r} is not an IRI, and its prefix is not bound here. Bind "
+            f"the prefix under namespaces.preferred_prefixes, or give the full IRI, as "
+            f"'http://www.w3.org/2004/02/skos/core#prefLabel'"
+        ) from e
+
+
+def _parse_predicate_tiers(
+    conf_data: dict[str, Any], prefixes: dict[str, str]
+) -> tuple[set[str], dict[str, list[str]]]:
+    """Read and check `ignore_predicates` and `predicate_tiers` from the conflicts section.
+
+    Raises:
+        ValueError: If a tier name is unknown, a predicate is not an IRI, or one predicate is
+            placed in two tiers.
+    """
+    ignore = {
+        _predicate_iri(p, "ignore_predicates", prefixes)
+        for p in conf_data.get("ignore_predicates") or []
+    }
+
+    raw = conf_data.get("predicate_tiers") or {}
+    if not isinstance(raw, dict):
+        raise ValueError("conflicts.predicate_tiers must map tier names to lists of predicates")
+    names = [t.value for t in PredicateTier]
+    tiers: dict[str, list[str]] = {}
+    for name, predicates in raw.items():
+        if name not in names:
+            raise ValueError(
+                f"conflicts.predicate_tiers: unknown tier {name!r}. Tiers: {', '.join(names)}"
+            )
+        if not isinstance(predicates, list):
+            raise ValueError(f"conflicts.predicate_tiers.{name} must be a list of predicates")
+        tiers[name] = [_predicate_iri(p, f"predicate_tiers.{name}", prefixes) for p in predicates]
+
+    overrides: dict[PredicateTier, list[URIRef]] = {
+        PredicateTier.REPEATABLE: [URIRef(p) for p in sorted(ignore)]
+    }
+    for name, predicates in tiers.items():
+        overrides.setdefault(PredicateTier(name), []).extend(URIRef(p) for p in predicates)
+    try:
+        build_tiers(overrides)
+    except ValueError as e:
+        raise ValueError(f"conflicts: {e}; ignore_predicates counts as repeatable") from e
+    return ignore, tiers
 
 
 def load_merge_config(path: Path) -> MergeConfig:
@@ -330,7 +401,9 @@ output:
 
 # Namespace handling
 namespaces:
-  # base: "http://example.org/merged#"
+  # The merged ontology's IRI; without it, a merge of headed sources writes no
+  # ontology header (#171). --ontology-iri overrides it.
+  # base: "http://example.org/merged"
   remappings: {}
   preferred_prefixes: {}
 
@@ -338,6 +411,11 @@ namespaces:
 conflicts:
   strategy: priority  # priority, first, last, or mark_all
   # report: conflicts.md  # Optional conflict report
+  # Move a predicate into a tier, by full IRI. Unlisted predicates are repeatable.
+  # predicate_tiers:
+  #   repeatable: ["http://www.w3.org/2000/01/rdf-schema#label"]
+  #   per_language: ["http://purl.org/dc/terms/title"]
+  #   load_bearing: ["http://example.org/maxOccupancy"]
 
 # owl:imports handling
 imports: preserve  # preserve, remove, update, or merge

@@ -1,0 +1,16 @@
+# A translation file whose metadata names no target_language, for the CLI smoke test (#159).
+# Merging it would write untagged literals, which localise reads as the source language.
+metadata:
+  source_file: examples/animal_ontology.ttl
+  source_language: en
+  tool: rdf-construct
+  properties:
+  - rdfs:label
+entities:
+- uri: http://example.org/animals#Animal
+  type: owl:Class
+  labels:
+  - property: rdfs:label
+    source: Animal
+    translation: Tier
+    status: translated

@@ -1,0 +1,10 @@
+# A competency question every IES file answers: the realistic tier of the CLI smoke test (#195).
+# IES declares its classes as rdfs:Class only, never owl:Class.
+version: "1.0"
+prefixes:
+  rdfs: "http://www.w3.org/2000/01/rdf-schema#"
+questions:
+  - id: cq-smoke-ies
+    name: "The ontology declares a class"
+    query: "ASK { ?s a rdfs:Class }"
+    expect: true

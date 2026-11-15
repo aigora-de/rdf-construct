@@ -65,11 +65,11 @@ from rdf_construct.merge.conflicts import (
     Conflict,
     ConflictType,
     ConflictValue,
+    ConflictSource,
     ConflictDetector,
     SourceGraph,
     generate_conflict_marker,
     generate_conflict_end_marker,
-    filter_semantic_conflicts,
 )
 
 from rdf_construct.merge.merger import (
@@ -78,11 +78,14 @@ from rdf_construct.merge.merger import (
     merge_files,
 )
 
+from rdf_construct.merge.identity import MergeIdentity
+
 from rdf_construct.merge.migrator import (
     DataMigrator,
     MigrationResult,
     MigrationStats,
     migrate_data_files,
+    migrate_data_graphs,
 )
 
 from rdf_construct.merge.rules import (
@@ -90,6 +93,10 @@ from rdf_construct.merge.rules import (
     PatternParser,
     Match,
     Binding,
+    ResolvedRule,
+    RuleError,
+    parse_declaring,
+    resolve_rules,
 )
 
 from rdf_construct.merge.formatters import (
@@ -106,7 +113,9 @@ from rdf_construct.merge.splitter import (
     ModuleDefinition,
     UnmatchedStrategy,
     SplitDataConfig,
+    SplitOutputError,
     ModuleStats,
+    check_split_outputs,
     split_by_namespace,
     create_default_split_config,
 )
@@ -128,25 +137,31 @@ __all__ = [
     "Conflict",
     "ConflictType",
     "ConflictValue",
+    "ConflictSource",
     "ConflictDetector",
     "SourceGraph",
     "generate_conflict_marker",
     "generate_conflict_end_marker",
-    "filter_semantic_conflicts",
     # Merger
     "OntologyMerger",
     "MergeResult",
     "merge_files",
+    "MergeIdentity",
     # Migrator
     "DataMigrator",
     "MigrationResult",
     "MigrationStats",
     "migrate_data_files",
+    "migrate_data_graphs",
     # Rules
     "RuleEngine",
     "PatternParser",
     "Match",
     "Binding",
+    "ResolvedRule",
+    "RuleError",
+    "parse_declaring",
+    "resolve_rules",
     # Formatters
     "TextFormatter",
     "MarkdownFormatter",
@@ -159,6 +174,8 @@ __all__ = [
     "ModuleDefinition",
     "UnmatchedStrategy",
     "SplitDataConfig",
+    "SplitOutputError",
+    "check_split_outputs",
     "ModuleStats",
     "split_by_namespace",
     "create_default_split_config",

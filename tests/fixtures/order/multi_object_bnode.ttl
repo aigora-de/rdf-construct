@@ -1,0 +1,22 @@
+# An inline blank node with several objects for one predicate (#343).
+#
+# An RDFS closure gives every blank node `a rdfs:Resource` alongside its own
+# type, and an inline node with two languages carries two comments. The output
+# must write each predicate once with a comma-separated object list; repeating
+# the predicate after the ',' is not Turtle, and rdflib refuses to read the
+# file back.
+@prefix ex: <http://example.org/multi#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ex:A a owl:Class .
+
+ex:B a owl:Class ;
+    rdfs:subClassOf [
+        a owl:Restriction , rdfs:Resource ;
+        owl:onProperty ex:p ;
+        owl:someValuesFrom ex:A ;
+        rdfs:comment "first note" , "second note" ;
+    ] .
+
+ex:p a owl:ObjectProperty .

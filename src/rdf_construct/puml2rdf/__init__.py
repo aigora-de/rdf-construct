@@ -20,6 +20,7 @@ Example:
 """
 
 from rdf_construct.puml2rdf.model import (
+    NamespaceMapping,
     PropertyKind,
     PumlAttribute,
     PumlClass,
@@ -32,6 +33,7 @@ from rdf_construct.puml2rdf.model import (
 from rdf_construct.puml2rdf.parser import (
     ParseError,
     ParseResult,
+    ParseWarning,
     PlantUMLParser,
 )
 from rdf_construct.puml2rdf.converter import (
@@ -42,12 +44,12 @@ from rdf_construct.puml2rdf.converter import (
 )
 from rdf_construct.puml2rdf.config import (
     DatatypeMapping,
-    NamespaceMapping,
     PumlImportConfig,
     create_default_config,
     load_import_config,
 )
 from rdf_construct.puml2rdf.merger import (
+    MergeConflict,
     MergeResult,
     OntologyMerger,
     merge_with_existing,
@@ -76,6 +78,7 @@ __all__ = [
     # Parser
     "ParseError",
     "ParseResult",
+    "ParseWarning",
     "PlantUMLParser",
     # Converter
     "ConversionConfig",
@@ -89,6 +92,7 @@ __all__ = [
     "create_default_config",
     "load_import_config",
     # Merger
+    "MergeConflict",
     "MergeResult",
     "OntologyMerger",
     "merge_with_existing",

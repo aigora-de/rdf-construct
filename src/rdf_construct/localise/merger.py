@@ -9,12 +9,21 @@ from pathlib import Path
 
 from rdflib import Graph, Literal, URIRef
 
+from rdf_construct.core.language_tags import canonical_case
+from rdf_construct.core.predicate_tiers import (
+    DEFAULT_PREDICATE_TIERS,
+    PredicateTier,
+    tier_of,
+)
 from rdf_construct.localise.config import (
     ExistingStrategy,
     MergeConfig,
+    TranslationEntry,
     TranslationFile,
     TranslationStatus,
 )
+from rdf_construct.localise.entities import in_language, literals
+from rdf_construct.localise.properties import FILE_PREFIXES, resolve_property
 
 
 @dataclass
@@ -26,6 +35,9 @@ class MergeStats:
         updated: Number of translations updated.
         skipped_status: Translations skipped due to status.
         skipped_existing: Translations skipped (already exist, preserve mode).
+        skipped_group: Translations of a repeatable property left unmerged under ``overwrite``,
+            because their group was incomplete or its sources no longer match the ontology's
+            (#405). Each such group is named in a warning.
         errors: Number of errors encountered.
     """
 
@@ -33,12 +45,19 @@ class MergeStats:
     updated: int = 0
     skipped_status: int = 0
     skipped_existing: int = 0
+    skipped_group: int = 0
     errors: int = 0
 
     @property
     def total_processed(self) -> int:
         """Total translations processed."""
-        return self.added + self.updated + self.skipped_status + self.skipped_existing
+        return (
+            self.added
+            + self.updated
+            + self.skipped_status
+            + self.skipped_existing
+            + self.skipped_group
+        )
 
 
 @dataclass
@@ -65,6 +84,20 @@ class TranslationMerger:
 
     The merger takes completed translation YAML files and adds the
     translations as new language-tagged literals to the ontology.
+
+    Language tags are compared without regard to case, so an existing ``@de`` label is found
+    for a file whose ``target_language`` is ``DE``, and every literal written carries the tag in
+    canonical case (``en-GB``) (#159). For a property that takes any number of values, such as
+    ``skos:altLabel``, ``preserve`` skips a translation only when that same text already exists
+    in the language, rather than whenever any value does.
+
+    Under ``overwrite`` such a property's translations replace that language's values as one set,
+    per entity and property, and only when nothing is lost by it (#405): when the language has no
+    value yet, every finished translation is added; otherwise the set is replaced only if every
+    entry for it is finished and their source texts are exactly the ontology's current source
+    values. A group that fails either test is left as it is, counted in ``skipped_group`` and
+    named in a warning. Nothing in RDF pairs one ``skos:altLabel`` with its translation, so the
+    group, not the entry, is what is matched.
     """
 
     def __init__(self, config: MergeConfig | None = None):
@@ -91,7 +124,7 @@ class TranslationMerger:
         """
         try:
             # Create a copy of the graph to work with
-            merged = Graph()
+            merged = Graph(bind_namespaces="core")
             for prefix, namespace in graph.namespaces():
                 merged.bind(prefix, namespace)
             for triple in graph:
@@ -99,7 +132,19 @@ class TranslationMerger:
 
             stats = MergeStats()
             warnings: list[str] = []
-            target_lang = translation_file.metadata.target_language
+            target_lang = canonical_case(translation_file.metadata.target_language)
+            source_lang = translation_file.metadata.source_language
+
+            # A repeatable property is overwritten as a set: gather each group's entries first,
+            # across the whole file, keyed on the resolved property (#405)
+            groups: dict[tuple[URIRef, URIRef], list[TranslationEntry]] = {}
+            if self.config.existing == ExistingStrategy.OVERWRITE:
+                for entity in translation_file.entities:
+                    for entry in entity.labels:
+                        prop_uri = resolve_property(FILE_PREFIXES, entry.property)
+                        if tier_of(prop_uri, DEFAULT_PREDICATE_TIERS) is PredicateTier.REPEATABLE:
+                            groups.setdefault((URIRef(entity.uri), prop_uri), []).append(entry)
+            merged_groups: set[tuple[URIRef, URIRef]] = set()
 
             # Process each entity
             for entity in translation_file.entities:
@@ -113,6 +158,15 @@ class TranslationMerger:
 
                 # Process each label
                 for entry in entity.labels:
+                    key = (entity_uri, resolve_property(FILE_PREFIXES, entry.property))
+                    if key in groups:
+                        if key not in merged_groups:
+                            merged_groups.add(key)
+                            self._merge_repeatable_group(
+                                merged, key, groups[key], target_lang, source_lang, stats, warnings
+                            )
+                        continue
+
                     # Check status threshold
                     if not self._meets_status(entry.status):
                         stats.skipped_status += 1
@@ -123,13 +177,21 @@ class TranslationMerger:
                         stats.skipped_status += 1
                         continue
 
-                    # Expand property
-                    prop_uri = URIRef(self._expand_property(entry.property))
+                    # A translation file's CURIEs are the file format's, not the ontology's (#355)
+                    prop_uri = resolve_property(FILE_PREFIXES, entry.property)
 
                     # Check for existing translation
                     existing = self._get_existing_translation(
                         merged, entity_uri, prop_uri, target_lang
                     )
+
+                    if (
+                        existing
+                        and self.config.existing == ExistingStrategy.PRESERVE
+                        and tier_of(prop_uri, DEFAULT_PREDICATE_TIERS) is PredicateTier.REPEATABLE
+                    ):
+                        # Another value is another assertion: keep it only if it is this text
+                        existing = [t for t in existing if str(t[2]) == entry.translation]
 
                     if existing:
                         if self.config.existing == ExistingStrategy.PRESERVE:
@@ -175,7 +237,7 @@ class TranslationMerger:
             Combined MergeResult.
         """
         # Start with a copy
-        merged = Graph()
+        merged = Graph(bind_namespaces="core")
         for prefix, namespace in graph.namespaces():
             merged.bind(prefix, namespace)
         for triple in graph:
@@ -201,6 +263,7 @@ class TranslationMerger:
             combined_stats.updated += result.stats.updated
             combined_stats.skipped_status += result.stats.skipped_status
             combined_stats.skipped_existing += result.stats.skipped_existing
+            combined_stats.skipped_group += result.stats.skipped_group
             combined_stats.errors += result.stats.errors
             all_warnings.extend(result.warnings)
 
@@ -210,6 +273,75 @@ class TranslationMerger:
             stats=combined_stats,
             warnings=all_warnings,
         )
+
+    def _merge_repeatable_group(
+        self,
+        graph: Graph,
+        key: tuple[URIRef, URIRef],
+        entries: list[TranslationEntry],
+        target_lang: str,
+        source_lang: str,
+        stats: MergeStats,
+        warnings: list[str],
+    ) -> None:
+        """Overwrite one entity's values of a repeatable property in the target language.
+
+        Args:
+            graph: The graph being merged into, changed in place.
+            key: The entity and the resolved property.
+            entries: Every entry in the file for that entity and property.
+            target_lang: The target language tag, in canonical case.
+            source_lang: The file's source language tag.
+            stats: Counts to update.
+            warnings: Warnings to extend.
+        """
+        subject, prop_uri = key
+        finished = [
+            entry
+            for entry in entries
+            if self._meets_status(entry.status) and entry.translation.strip()
+        ]
+        if not finished:
+            stats.skipped_status += len(entries)
+            return
+
+        existing = self._get_existing_translation(graph, subject, prop_uri, target_lang)
+        if existing:
+            # Replacing the set must not lose a translation that nothing in the file replaces
+            sources = {
+                str(value)
+                for value in literals(graph, subject, prop_uri)
+                if in_language(value, source_lang, source_lang)
+            }
+            in_file = {entry.source_text for entry in entries}
+            reason = ""
+            if len(finished) < len(entries):
+                reason = (
+                    f"{len(entries) - len(finished)} of {len(entries)} entries not translated; "
+                    "finish every entry, copying in any existing translation that still stands"
+                )
+            elif in_file != sources:
+                reason = (
+                    "the file's sources differ from the ontology's (not in the ontology: "
+                    f"{_quoted(in_file - sources)}; not in the file: {_quoted(sources - in_file)}); "
+                    "re-extract"
+                )
+            if reason:
+                stats.skipped_group += len(entries)
+                warnings.append(
+                    f"Left unchanged: {subject} {entries[0].property} @{target_lang}: {reason}"
+                )
+                return
+            for triple in existing:
+                graph.remove(triple)
+
+        stats.skipped_status += len(entries) - len(finished)
+        for entry in finished:
+            graph.add((subject, prop_uri, Literal(entry.translation, lang=target_lang)))
+            if existing:
+                stats.updated += 1
+            else:
+                stats.added += 1
 
     def _meets_status(self, status: TranslationStatus) -> bool:
         """Check if status meets minimum threshold.
@@ -266,39 +398,24 @@ class TranslationMerger:
             language: Language code.
 
         Returns:
-            List of matching triples.
+            List of matching triples, whatever the case of their tags.
         """
         existing = []
 
         for obj in graph.objects(subject, predicate):
-            if isinstance(obj, Literal) and obj.language == language:
+            if (
+                isinstance(obj, Literal)
+                and obj.language
+                and obj.language.lower() == language.lower()
+            ):
                 existing.append((subject, predicate, obj))
 
         return existing
 
-    def _expand_property(self, prop: str) -> str:
-        """Expand a CURIE to full URI.
 
-        Args:
-            prop: Property string (CURIE or full URI).
-
-        Returns:
-            Full URI string.
-        """
-        prefixes = {
-            "rdfs:": "http://www.w3.org/2000/01/rdf-schema#",
-            "skos:": "http://www.w3.org/2004/02/skos/core#",
-            "owl:": "http://www.w3.org/2002/07/owl#",
-            "rdf:": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-            "dc:": "http://purl.org/dc/elements/1.1/",
-            "dcterms:": "http://purl.org/dc/terms/",
-        }
-
-        for prefix, namespace in prefixes.items():
-            if prop.startswith(prefix):
-                return namespace + prop[len(prefix) :]
-
-        return prop
+def _quoted(values: set[str]) -> str:
+    """Return `values` sorted and quoted, or "none"."""
+    return ", ".join(f'"{value}"' for value in sorted(values)) or "none"
 
 
 def merge_translations(
@@ -322,8 +439,8 @@ def merge_translations(
     Returns:
         MergeResult with merged graph.
     """
-    # Load graph
-    graph = Graph()
+    # Load graph: the source's own prefixes, plus rdf, rdfs, owl, xsd and xml (#355)
+    graph = Graph(bind_namespaces="core")
     graph.parse(source)
 
     # Load translation files

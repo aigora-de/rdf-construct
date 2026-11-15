@@ -15,6 +15,28 @@ poetry run rdf-construct docs ontology.ttl --format markdown
 poetry run rdf-construct docs ontology.ttl -o api-docs/
 ```
 
+Most repositories already have a `docs/` of their own, so without `-o` the command refuses to write
+into one it did not create. See [When `docs/` already holds other files](#when-docs-already-holds-other-files).
+
+### When `docs/` already holds other files
+
+Without `-o`, `docs` writes into `docs/` only if the directory is new, empty, or was written by
+`docs` before. Every run that writes leaves a small `.rdf-construct` file there, naming the
+command and the version, and that marker is how a later run knows the directory is its own. A
+directory holding anything else is refused at exit 2 before the source is parsed, and nothing is
+written ([#261](https://github.com/aigora-de/rdf-construct/issues/261)):
+
+```
+Error: docs/ already holds files that rdf-construct docs did not write (index.md). Leaving it untouched. Pass -o <dir> to write somewhere else, or --overwrite to write into docs/ anyway.
+```
+
+`--overwrite` writes there anyway and marks the directory, so it is needed once. It deletes
+nothing: `index.md` stays. An explicit `-o` is never refused. Files an operating system leaves in
+any folder (`.DS_Store`, `Thumbs.db`, `desktop.ini`, `.directory`) and a `.gitkeep` do not count.
+A directory a v0.6.0 run wrote has no marker, so the first v0.7.0 run into it is refused.
+
+A config file's `output_dir` names the directory as `-o` does, so it is never refused either.
+
 ## Output Formats
 
 ### HTML
@@ -92,7 +114,7 @@ The top-level shape of `index.json` is:
 
 ```json
 {
-  "ontology": { "uri": "...", "title": "...", ... },
+  "ontology": { "uri": "...", "title": "...", "derived_from": ["..."], ... },
   "statistics": {
     "classes": 12,
     "object_properties": 8,
@@ -446,6 +468,42 @@ Deprecated terms are still documented. Hiding them behind a flag would
 need per-entity link handling — the `--include` / `--exclude` machinery
 works per entity *type* — so it is not offered yet.
 
+## Terms the Ontology Does Not Own
+
+A file declares terms it does not own. OWL 2 DL asks it to declare every
+annotation property it uses, so `dcterms:creator a owl:AnnotationProperty`,
+or the `prov:wasDerivedFrom` that `order`, `split` and `merge` stamp a
+derived file with, sits beside the ontology's own classes. `docs`
+documents the ontology's own terms only.
+
+**A class or property is not the ontology's own** when the file names an
+ontology (`<…> a owl:Ontology`) and none of its ontologies owns the term's
+namespace. An ontology owns everything on its own host; on `purl.org`,
+`w3id.org` and `www.w3.org`, which many publishers share, it owns only the
+space under its own IRI. A namespace the file *describes* (saying more than
+`rdf:type` about two or more of its terms) is its own whatever the host.
+This is the same answer `lint` and `stats` use
+(see [Whose terms are checked](LINT_GUIDE.md#whose-terms-are-checked)).
+
+Such a term gets no page, no entry in the index or the search, and no
+count, and a class page does not list it among the properties whose
+domain or range the class is. That holds even when the source labels it.
+A file that names no ontology borrows nothing, so every term in it is
+documented.
+
+**The derivation is shown as metadata.** The `prov:wasDerivedFrom` targets
+on the ontology header are listed as **Derived from** at the top of the
+index (HTML and Markdown, single-page too) and as `derived_from` in the
+JSON `ontology` object:
+
+```json
+"ontology": {
+  "uri": "http://example.org/merged",
+  "derived_from": ["http://example.org/Ontology", "http://example.org/extension"],
+  ...
+}
+```
+
 ## Named Individuals
 
 An entity explicitly typed `owl:NamedIndividual` carries a
@@ -492,6 +550,7 @@ rdf-construct docs [OPTIONS] SOURCES...
 |--------|-------------|
 | `SOURCES` | One or more RDF files (Turtle, RDF/XML, etc.) |
 | `-o, --output PATH` | Output directory (default: `docs/`) |
+| `--overwrite` | Write into the default output directory even if it holds files this command did not write. Deletes nothing. |
 | `-f, --format FORMAT` | Output format: `html`, `markdown`, `json` |
 | `-C, --config PATH` | Configuration YAML file |
 | `-t, --template PATH` | Custom template directory |
@@ -501,8 +560,8 @@ rdf-construct docs [OPTIONS] SOURCES...
 | `--no-instances` | Exclude instances from output |
 | `--no-shapes` | Exclude SHACL shapes from output |
 | `--no-skos` | Exclude SKOS concepts and concept schemes from output |
-| `--include TYPES` | Include only these types (comma-separated) |
-| `--exclude TYPES` | Exclude these types (comma-separated) |
+| `--include TYPES` | Include only these entity types (comma-separated; see below) |
+| `--exclude TYPES` | Exclude these entity types (comma-separated; same names) |
 
 ### Entity Type Filtering
 
@@ -522,7 +581,7 @@ poetry run rdf-construct docs ontology.ttl --include classes,shapes
 poetry run rdf-construct docs vocabulary.ttl --include concepts
 ```
 
-Valid type names: `classes`, `properties`, `object_properties`, `datatype_properties`, `annotation_properties`, `other_properties`, `instances`, `shapes`, `concepts`
+Valid type names, for both options: `classes`, `properties`, `object_properties`, `datatype_properties`, `annotation_properties`, `other_properties`, `instances`, `shapes`, `concepts`
 
 `properties` covers all four property groups, `other_properties` included.
 
@@ -533,7 +592,27 @@ is, in code formatting rather than as links to pages this run did not
 write.
 
 `concepts` covers both SKOS kinds — concepts and concept schemes are one
-toggle. `concept_schemes` and `skos` are accepted as spellings of it.
+toggle. `concept_schemes` and `skos` are accepted as spellings of it, so
+`--include concept_schemes` documents every concept as well as every scheme,
+and `--exclude concept_schemes` leaves both out.
+
+Names are matched without regard to case or surrounding spaces. A name the
+tool does not recognise is refused at exit 2 before anything is written,
+with a near match where there is one and the accepted names:
+
+```
+Error: Invalid value for '--include': unknown entity type 'clases' (did you mean 'classes'?). Accepted: classes, properties, object_properties, datatype_properties, annotation_properties, other_properties, instances, shapes, concepts
+```
+
+An empty value (`--include ""`) is refused the same way. So is a selection
+that leaves no entity type at all, such as `--include classes --exclude
+classes` or a configuration file that sets every entity `include_*` key to `false`.
+A partial overlap is fine: `--include properties --exclude other_properties`
+documents every property but those whose kind is not declared (`rdf:Property`,
+`owl:FunctionalProperty` or `owl:DeprecatedProperty` alone). A `--no-` flag and an
+`--include` that names its type contradict each other and are refused
+(`--no-instances --include instances`). A selection the ontology has nothing
+for, such as `--include concepts` on an ontology with no SKOS, is not refused.
 
 ## Configuration File
 

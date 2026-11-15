@@ -2,8 +2,13 @@
 # ======================================
 #
 # This file configures how PlantUML class diagrams are converted to RDF ontologies.
-# Use with: rdf-construct puml2rdf diagram.puml -C puml_import_config.yml
+# Use with: rdf-construct puml2rdf diagram.puml -C puml2rdf_config.yml
 #
+# Every key is checked: a key puml2rdf does not accept, or a value of the wrong
+# type, stops the run (exit 2) and names the key.
+#
+# Options given on the command line win: -n over default_namespace, -l over
+# language, --no-labels over generate_labels.
 
 # Default namespace URI for entities without an explicit package
 # This becomes the base URI for classes and properties
@@ -13,39 +18,39 @@ default_namespace: "http://example.org/ontology#"
 # Standard BCP 47 language tags: en, en-GB, de, fr, etc.
 language: "en"
 
-# Automatically generate rdfs:label from entity names
+# Automatically generate rdfs:label from entity names (true or false, unquoted)
 # When true, every class and property gets a human-readable label
 generate_labels: true
 
-# Convert camelCase/PascalCase names to readable labels
+# Convert camelCase/PascalCase names to readable labels (true or false, unquoted)
 # When true: 'floorArea' becomes 'floor area', 'Building' becomes 'building'
 # When false: names are used as-is
 camel_to_label: true
 
-# Generate inverse properties for object properties
-# When true: 'hasFloor' also creates 'isFloorOf' as inverse
-generate_inverse_properties: false
-
 # Map PlantUML packages to RDF namespaces
 # Each mapping specifies:
-#   package: The package name as it appears in PlantUML
-#   namespace_uri: The full namespace URI (should end with # or /)
-#   prefix: Optional short prefix for the namespace
+#   package: The package as the diagram names it; a nested package with no
+#            IRI of its own is named by its path, such as "site.zone"
+#   namespace_uri: The namespace IRI; "#" is added unless it ends in #, / or :
+#   prefix: Optional prefix to bind it to, instead of the package's name
+# A package the diagram already gives an IRI must be given the same one here.
+# A mapping that matches no package in a diagram is reported and not used, so
+# one config can serve several diagrams.
 namespace_mappings:
   - package: "building"
     namespace_uri: "http://example.org/building#"
     prefix: "bld"
   - package: "core"
     namespace_uri: "http://example.org/core#"
-    prefix: "core"
   - package: "geo"
     namespace_uri: "http://example.org/geo#"
     prefix: "geo"
 
 # Custom datatype mappings
-# Map PlantUML/UML type names to XSD datatypes
-# The built-in mappings handle common types (string, integer, decimal, etc.)
-# Add custom mappings for domain-specific types
+# Map PlantUML/UML type names to datatypes. Type names match without regard to
+# case, as the built-in ones (string, integer, decimal, ...) do. A value is an
+# xsd: CURIE naming an XSD datatype, rdf:langString or another RDF or OWL 2
+# datatype, or a full IRI such as <http://example.org/datatypes#money>.
 datatype_mappings:
   # Business types
   Money: "xsd:decimal"
@@ -66,31 +71,3 @@ datatype_mappings:
   Year: "xsd:gYear"
   Month: "xsd:gYearMonth"
   Timestamp: "xsd:dateTime"
-
-# Preferred prefix ordering in serialised output
-# Prefixes are bound in this order for consistent, readable output
-prefix_order:
-  - ""        # Default namespace (no prefix)
-  - "owl"     # OWL vocabulary
-  - "rdfs"    # RDFS vocabulary
-  - "rdf"     # RDF vocabulary
-  - "xsd"     # XML Schema datatypes
-  - "bld"     # Building namespace
-  - "core"    # Core namespace
-  - "geo"     # Geo namespace
-  - "dcterms" # Dublin Core terms
-
-# URIs to include as owl:imports in the generated ontology
-# These are added to the ontology header
-ontology_imports: []
-  # Uncomment to add imports:
-  # - "http://example.org/core"
-  # - "http://www.w3.org/2004/02/skos/core"
-
-# Annotation properties to recognise from notes
-# When notes contain patterns like "@see http://...", these can be
-# extracted into specific annotation properties
-annotation_properties: []
-  # - "rdfs:seeAlso"
-  # - "dcterms:description"
-  # - "skos:definition"

@@ -1,0 +1,8 @@
+# A declared common: is a namespace like any other: one common.ttl, holding common:Shared, listed
+# once in the manifest. The name is not reserved for the unmatched module.
+@prefix common: <http://example.org/shared#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+common:Shared a owl:Class .
+
+<http://example.org/other#Other> a owl:Class .

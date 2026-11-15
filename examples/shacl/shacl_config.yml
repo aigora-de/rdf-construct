@@ -6,23 +6,25 @@
 
 # Strictness level controls which OWL patterns are converted:
 #   minimal  - Basic type constraints only (sh:class, sh:datatype)
-#   standard - Adds cardinality and functional property constraints (default)
-#   strict   - Maximum constraints including enumerations, closed shapes
+#   standard - Adds cardinality, functional property and enumeration (sh:in)
+#              constraints (default)
+#   strict   - Currently the same as standard
 level: standard
 
-# Default severity for constraint violations:
-#   violation - Validation fails (default)
-#   warning   - Logged as warning
-#   info      - Informational only
-default_severity: violation
+# sh:severity for every node and property shape. Omit it to write none, which SHACL
+# reads as violation. Any result, whatever its severity, means the data does not
+# conform; the severity labels the result, and a processor may let you filter on it.
+#   violation | warning | info
+# default_severity: warning
 
-# Generate closed shapes (sh:closed true)
-# When true, instances cannot have properties not defined in the shape
+# Generate closed shapes (sh:closed true), at any level
+# When true, an instance may carry only rdf:type, ignored_properties, and the
+# properties its class's hierarchy declares (superclasses and subclasses)
 closed: false
 
-# Namespace suffix for generated shapes
-# The shape namespace is derived from the ontology namespace + this suffix
-shape_namespace: "shapes#"
+# Namespace for generated shapes: a full IRI ending in '#', '/' or ':'.
+# Omit it to derive one: the ontology IRI + "-shapes#"
+# shape_namespace: "http://example.org/my-shapes#"
 
 # Target specific classes only (leave empty for all classes)
 # Use local names or full URIs
@@ -45,10 +47,6 @@ include_descriptions: true
 # Inherit property constraints from superclasses
 # When true, subclass shapes include constraints from parent classes
 inherit_constraints: true
-
-# Generate top-level PropertyShapes (not just inline property constraints)
-# Useful for reusable property validation rules
-generate_property_shapes: false
 
 # Properties to ignore in closed shapes
 # These properties are allowed even when sh:closed is true

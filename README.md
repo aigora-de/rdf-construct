@@ -164,6 +164,9 @@ rdf-construct stats v1.ttl v2.ttl --compare --format markdown
 # Basic merge
 rdf-construct merge core.ttl extension.ttl -o merged.ttl
 
+# Name the merged ontology (without a name, its one header is left out)
+rdf-construct merge core.ttl extension.ttl -o merged.ttl --ontology-iri http://example.org/merged
+
 # With priorities (higher wins conflicts)
 rdf-construct merge core.ttl extension.ttl -o merged.ttl -p 1 -p 2
 
@@ -220,6 +223,7 @@ rdf-construct localise report ontology.ttl --languages en,de,fr
 
 **For Users**:
 - [Getting Started](docs/user_guides/GETTING_STARTED.md) - 5-minute quick start
+- [Order Guide](docs/user_guides/ORDER_GUIDE.md) - Semantic serialisation, the founding feature
 - [Describe Guide](docs/user_guides/DESCRIBE_GUIDE.md) - Quick ontology orientation
 - [Docs Guide](docs/user_guides/DOCS_GUIDE.md) - Documentation generation
 - [UML Guide](docs/user_guides/UML_GUIDE.md) - Complete UML features

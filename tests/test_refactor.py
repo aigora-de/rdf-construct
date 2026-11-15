@@ -15,6 +15,7 @@ Tests cover:
 
 import pytest
 from pathlib import Path
+from click.testing import CliRunner, Result
 from rdflib import Graph, URIRef, Literal
 from rdflib.namespace import RDF, RDFS, OWL
 
@@ -664,3 +665,480 @@ class TestIntegration:
         # Verify
         assert (URIRef("http://example.org/ont#Building"), None, None) in result_graph
         assert (URIRef("http://example.org/ont#Buiding"), None, None) not in result_graph
+
+
+# =============================================================================
+# CURIE resolution and namespace boundaries through the CLI (#182, #184)
+# =============================================================================
+
+ORG_SOURCE = """\
+@prefix org: <http://example.org/myorg#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+org:Team a owl:Class ;
+    rdfs:label "Team"@en .
+
+org:Squad_member a owl:Class ;
+    rdfs:subClassOf org:Team .
+"""
+
+FAMILY_SOURCE = """\
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix a: <http://example.org/ont#> .
+@prefix b: <http://example.org/ontology#> .
+@prefix c: <http://example.org/ont/extra#> .
+
+<http://example.org/ont> a owl:Ontology .
+a:One a owl:Class .
+b:Two a owl:Class .
+c:Three a owl:Class .
+"""
+
+MYORG = "http://example.org/myorg#"
+W3C_ORG = "http://www.w3.org/ns/org#"
+
+
+def _run(argv: list[str], tmp_path: Path) -> tuple[Result, dict[str, str], dict[str, str]]:
+    """Run the CLI and snapshot the disk around it."""
+    from rdf_construct.cli import cli
+    from tests.test_cli_smoke import assert_no_crash, snapshot
+
+    before = snapshot(argv, tmp_path)
+    result = CliRunner().invoke(cli, argv)
+    assert_no_crash(result)
+    return result, before, snapshot(argv, tmp_path)
+
+
+def _count(graph: Graph, iri: str) -> int:
+    """Triples in which an IRI appears in any position."""
+    node = URIRef(iri)
+    return sum(1 for t in graph if node in t)
+
+
+class TestCurieResolutionCLI:
+    """A CURIE resolves against the file's own prefixes, or is refused (#182)."""
+
+    def test_documented_typo_fix_renames(self, tmp_path):
+        out = tmp_path / "fixed.ttl"
+        result, _, _ = _run(
+            [
+                "refactor",
+                "rename",
+                str(FIXTURES_DIR / "typos.ttl"),
+                "--from",
+                "ex:Buiding",
+                "--to",
+                "ex:Building",
+                "-o",
+                str(out),
+            ],
+            tmp_path,
+        )
+        assert result.exit_code == 0, result.output
+        g = Graph().parse(out)
+        assert _count(g, "http://example.org/ont#Buiding") == 0
+        assert _count(g, "http://example.org/ont#Building") > 0
+        assert _count(g, "ex:Building") == 0
+
+    def test_file_prefix_beats_rdflib_table_and_survives_output(self, tmp_path):
+        src = tmp_path / "org.ttl"
+        src.write_text(ORG_SOURCE)
+        out = tmp_path / "out.ttl"
+        source_team = _count(Graph().parse(src), f"{MYORG}Team")
+
+        result, _, _ = _run(
+            [
+                "refactor",
+                "rename",
+                str(src),
+                "--from",
+                "org:Team",
+                "--to",
+                "org:Unit",
+                "-o",
+                str(out),
+            ],
+            tmp_path,
+        )
+        assert result.exit_code == 0, result.output
+        g = Graph().parse(out)
+        assert _count(g, f"{MYORG}Unit") == source_team
+        assert _count(g, f"{MYORG}Team") == 0
+        assert _count(g, f"{W3C_ORG}Unit") == 0
+        text = out.read_text()
+        assert f"@prefix org: <{MYORG}>" in text
+        assert "org1:" not in text
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ["--from", "ex:Buiding", "--to", "zz:Building"],
+            ["--from", "zz:Buiding", "--to", "ex:Building"],
+            ["--from", "http://example.org/ont#Buiding", "--to", "zz:Building"],
+            ["--from", "ex:Buiding", "--to", "urn:x:Building"],
+        ],
+    )
+    def test_unbound_prefix_is_refused_and_writes_nothing(self, tmp_path, args):
+        from tests.test_cli_smoke import assert_wrote_nothing
+
+        src = tmp_path / "typos.ttl"
+        src.write_bytes((FIXTURES_DIR / "typos.ttl").read_bytes())
+        argv = ["refactor", "rename", str(src), *args, "-o", str(tmp_path / "out.ttl")]
+        result, before, after = _run(argv, tmp_path)
+        assert result.exit_code == 2, result.output
+        assert "is not bound" in result.output
+        assert_wrote_nothing(before, after)
+
+    def test_bracketed_urn_is_accepted(self, tmp_path):
+        out = tmp_path / "out.ttl"
+        result, _, _ = _run(
+            [
+                "refactor",
+                "rename",
+                str(FIXTURES_DIR / "typos.ttl"),
+                "--from",
+                "ex:Buiding",
+                "--to",
+                "<urn:x:Building>",
+                "-o",
+                str(out),
+            ],
+            tmp_path,
+        )
+        assert result.exit_code == 0, result.output
+        assert _count(Graph().parse(out), "urn:x:Building") > 0
+
+    def test_sources_that_disagree_are_refused(self, tmp_path):
+        from tests.test_cli_smoke import assert_wrote_nothing
+
+        one = tmp_path / "one.ttl"
+        two = tmp_path / "two.ttl"
+        one.write_text("@prefix ex: <http://one.example/#> .\nex:A a ex:B .\n")
+        two.write_text("@prefix ex: <http://two.example/#> .\nex:A a ex:B .\n")
+        argv = [
+            "refactor",
+            "rename",
+            str(one),
+            str(two),
+            "--from",
+            "ex:A",
+            "--to",
+            "ex:C",
+            "-o",
+            str(tmp_path / "out"),
+        ]
+        result, before, after = _run(argv, tmp_path)
+        assert result.exit_code == 2, result.output
+        assert "one.ttl" in result.output and "two.ttl" in result.output
+        assert_wrote_nothing(before, after)
+
+    def test_a_source_that_does_not_bind_the_prefix_is_not_a_disagreement(self, tmp_path):
+        one = tmp_path / "one.ttl"
+        two = tmp_path / "two.ttl"
+        one.write_text("@prefix ex: <http://one.example/#> .\nex:A a ex:B .\n")
+        two.write_text("<http://one.example/#A> a <http://other.example/Thing> .\n")
+        outdir = tmp_path / "out"
+        result, _, _ = _run(
+            [
+                "refactor",
+                "rename",
+                str(one),
+                str(two),
+                "--from",
+                "ex:A",
+                "--to",
+                "ex:C",
+                "-o",
+                str(outdir),
+            ],
+            tmp_path,
+        )
+        assert result.exit_code == 0, result.output
+        for name in ("one.ttl", "two.ttl"):
+            g = Graph().parse(outdir / name)
+            assert _count(g, "http://one.example/#C") == 1
+            assert _count(g, "http://one.example/#A") == 0
+
+    def test_config_entities_resolve(self, tmp_path):
+        out = tmp_path / "out.ttl"
+        cfg = tmp_path / "renames.yml"
+        cfg.write_text(
+            f"source_files: [{FIXTURES_DIR / 'typos.ttl'}]\n"
+            f"output: {out}\n"
+            "rename:\n  entities:\n    'ex:Buiding': 'ex:Building'\n"
+        )
+        result, _, _ = _run(["refactor", "rename", "-c", str(cfg)], tmp_path)
+        assert result.exit_code == 0, result.output
+        g = Graph().parse(out)
+        assert _count(g, "http://example.org/ont#Buiding") == 0
+        assert _count(g, "http://example.org/ont#Building") > 0
+
+    def test_config_entity_with_unbound_prefix_is_refused(self, tmp_path):
+        from tests.test_cli_smoke import assert_wrote_nothing
+
+        cfg = tmp_path / "renames.yml"
+        cfg.write_text(
+            f"source_files: [{FIXTURES_DIR / 'typos.ttl'}]\n"
+            f"output: {tmp_path / 'out.ttl'}\n"
+            "rename:\n  entities:\n    'ex:Buiding': 'zz:Building'\n"
+        )
+        argv = ["refactor", "rename", "-c", str(cfg)]
+        result, before, after = _run(argv, tmp_path)
+        assert result.exit_code == 2, result.output
+        assert_wrote_nothing(before, after)
+
+    def test_deprecate_resolves_entity_and_replacement(self, tmp_path):
+        out = tmp_path / "out.ttl"
+        result, _, _ = _run(
+            [
+                "refactor",
+                "deprecate",
+                str(FIXTURES_DIR / "legacy.ttl"),
+                "--entity",
+                "ex:LegacyPerson",
+                "--replaced-by",
+                "ex:Agent",
+                "-m",
+                "Use Agent.",
+                "-o",
+                str(out),
+            ],
+            tmp_path,
+        )
+        assert result.exit_code == 0, result.output
+        g = Graph().parse(out)
+        dcterms = "http://purl.org/dc/terms/isReplacedBy"
+        assert (
+            URIRef("http://example.org/ont#LegacyPerson"),
+            URIRef(dcterms),
+            URIRef("http://example.org/ont#Agent"),
+        ) in g
+        assert _count(g, "ex:Agent") == 0
+
+    def test_deprecate_unbound_replacement_is_refused(self, tmp_path):
+        from tests.test_cli_smoke import assert_wrote_nothing
+
+        argv = [
+            "refactor",
+            "deprecate",
+            str(FIXTURES_DIR / "legacy.ttl"),
+            "--entity",
+            "ex:LegacyPerson",
+            "--replaced-by",
+            "zz:Agent",
+            "-m",
+            "x",
+            "-o",
+            str(tmp_path / "out.ttl"),
+        ]
+        result, before, after = _run(argv, tmp_path)
+        assert result.exit_code == 2, result.output
+        assert_wrote_nothing(before, after)
+
+    def test_deprecate_config_resolves(self, tmp_path):
+        out = tmp_path / "out.ttl"
+        cfg = tmp_path / "deprecations.yml"
+        cfg.write_text(
+            f"source_files: [{FIXTURES_DIR / 'legacy.ttl'}]\n"
+            f"output: {out}\n"
+            "deprecations:\n  - entity: 'ex:LegacyPerson'\n    replaced_by: 'ex:Agent'\n"
+        )
+        result, _, _ = _run(["refactor", "deprecate", "-c", str(cfg)], tmp_path)
+        assert result.exit_code == 0, result.output
+        g = Graph().parse(out)
+        assert (URIRef("http://example.org/ont#LegacyPerson"), OWL.deprecated, None) in g
+
+
+class TestNamespaceBoundaryCLI:
+    """``--from-namespace`` matches at a namespace boundary (#184)."""
+
+    @pytest.mark.parametrize("from_ns", ["urn:old:", "urn:old"])
+    def test_urn_namespace(self, tmp_path, from_ns):
+        src = tmp_path / "urn.ttl"
+        src.write_text("<urn:old:A> a <urn:old:B> .\n<urn:older:C> a <urn:old:B> .\n")
+        out = tmp_path / "out.ttl"
+        to_ns = from_ns.replace("old", "new")
+        result, _, _ = _run(
+            [
+                "refactor",
+                "rename",
+                str(src),
+                "--from-namespace",
+                from_ns,
+                "--to-namespace",
+                to_ns,
+                "-o",
+                str(out),
+            ],
+            tmp_path,
+        )
+        assert result.exit_code == 0, result.output
+        g = Graph().parse(out)
+        assert (URIRef("urn:new:A"), RDF.type, URIRef("urn:new:B")) in g
+        assert (URIRef("urn:older:C"), RDF.type, URIRef("urn:new:B")) in g
+        assert len(g) == 2
+
+    @pytest.mark.parametrize(
+        ("from_ns", "to_ns", "moved", "kept"),
+        [
+            (
+                "http://example.org/ont",
+                "http://example.org/NEW",
+                {"a": "http://example.org/NEW#", "c": "http://example.org/NEW/extra#"},
+                {"b": "http://example.org/ontology#"},
+            ),
+            (
+                "http://example.org/ont#",
+                "http://example.org/NEW#",
+                {"a": "http://example.org/NEW#"},
+                {"b": "http://example.org/ontology#", "c": "http://example.org/ont/extra#"},
+            ),
+        ],
+    )
+    def test_sibling_namespace_is_untouched(self, tmp_path, from_ns, to_ns, moved, kept):
+        src = tmp_path / "family.ttl"
+        src.write_text(FAMILY_SOURCE)
+        out = tmp_path / "out.ttl"
+        result, _, _ = _run(
+            [
+                "refactor",
+                "rename",
+                str(src),
+                "--from-namespace",
+                from_ns,
+                "--to-namespace",
+                to_ns,
+                "-o",
+                str(out),
+            ],
+            tmp_path,
+        )
+        assert result.exit_code == 0, result.output
+        g = Graph().parse(out)
+        bindings = {p: str(ns) for p, ns in g.namespaces()}
+        local = {"a": "One", "b": "Two", "c": "Three"}
+        for prefix, ns in {**moved, **kept}.items():
+            assert bindings[prefix] == ns
+            assert _count(g, f"{ns}{local[prefix]}") == 1
+        assert _count(g, "http://example.org/ontology#Two") == 1
+        # The bare stem also names the ontology IRI itself; the namespace with its # does not.
+        ontology_moved = not from_ns.endswith("#")
+        assert _count(g, "http://example.org/NEW") == int(ontology_moved)
+        assert _count(g, "http://example.org/ont") == int(not ontology_moved)
+
+
+NESTED_SOURCE = """\
+@prefix core: <http://e.org/core/> .
+@prefix sub: <http://e.org/core/sub/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+core:A a owl:Class .
+sub:B a owl:Class .
+"""
+
+NESTED_RULES = [
+    ("http://e.org/core/", "http://n.org/core/"),
+    ("http://e.org/core/sub/", "http://n.org/sub/"),
+]
+
+
+class TestNamespaceRulesCLI:
+    """The boundary rule (#422, #423) and the longest-match precedence (#424) through the CLI."""
+
+    def _rename(self, tmp_path: Path, source: str, from_ns: str, to_ns: str) -> Graph:
+        src = tmp_path / "src.ttl"
+        src.write_text(source)
+        out = tmp_path / "out.ttl"
+        result, _, _ = _run(
+            [
+                "refactor",
+                "rename",
+                str(src),
+                "--from-namespace",
+                from_ns,
+                "--to-namespace",
+                to_ns,
+                "-o",
+                str(out),
+            ],
+            tmp_path,
+        )
+        assert result.exit_code == 0, result.output
+        return Graph().parse(out)
+
+    @pytest.mark.parametrize(
+        ("from_ns", "iri", "moved"),
+        [
+            (
+                "http://purl.obolibrary.org/obo/GO_",
+                "http://purl.obolibrary.org/obo/GO_0008150",
+                "http://n.org/go/0008150",
+            ),
+            ("http://example.org/items?id=", "http://example.org/items?id=7", "http://n.org/go/7"),
+        ],
+    )
+    def test_a_stem_namespace_renames(self, tmp_path, from_ns, iri, moved):
+        source = (
+            "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n"
+            f"<{iri}> a owl:Class .\n"
+            "<http://purl.obolibrary.org/obo/CL_0000000> a owl:Class .\n"
+        )
+        g = self._rename(tmp_path, source, from_ns, "http://n.org/go/")
+        assert (URIRef(moved), RDF.type, OWL.Class) in g
+        assert (URIRef(iri), None, None) not in g
+        assert (URIRef("http://purl.obolibrary.org/obo/CL_0000000"), RDF.type, OWL.Class) in g
+
+    def test_another_port_is_untouched(self, tmp_path):
+        source = (
+            "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n"
+            "<http://example.org:8080/a#X> a owl:Class .\n"
+            "<http://example.org/ont#Y> a owl:Class .\n"
+        )
+        g = self._rename(tmp_path, source, "http://example.org", "http://example.net")
+        assert (URIRef("http://example.org:8080/a#X"), RDF.type, OWL.Class) in g
+        assert (URIRef("http://example.net/ont#Y"), RDF.type, OWL.Class) in g
+
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_overlapping_rules_take_the_longest_in_either_order(self, tmp_path, reverse):
+        src = tmp_path / "nested.ttl"
+        src.write_text(NESTED_SOURCE)
+        out = tmp_path / "out.ttl"
+        rules = list(reversed(NESTED_RULES)) if reverse else NESTED_RULES
+        lines = "".join(f'    "{old}": "{new}"\n' for old, new in rules)
+        cfg = tmp_path / "rename.yml"
+        cfg.write_text(f"source_files: [{src}]\noutput: {out}\nrename:\n  namespaces:\n{lines}")
+        result, _, _ = _run(["refactor", "rename", "-c", str(cfg)], tmp_path)
+        assert result.exit_code == 0, result.output
+        assert (
+            "Note: http://e.org/core/sub/ lies within http://e.org/core/; each IRI moves by the "
+            "longest rule that contains it."
+        ) in result.stderr
+
+        g = Graph().parse(out)
+        assert (URIRef("http://n.org/core/A"), RDF.type, OWL.Class) in g
+        assert (URIRef("http://n.org/sub/B"), RDF.type, OWL.Class) in g
+        assert len(g) == 2
+        # A prefix moves by the same rule as the terms in it.
+        bindings = {p: str(ns) for p, ns in g.namespaces()}
+        assert bindings["core"] == "http://n.org/core/"
+        assert bindings["sub"] == "http://n.org/sub/"
+
+    def test_rules_that_do_not_nest_give_no_note(self, tmp_path):
+        self._rename(tmp_path, NESTED_SOURCE, "http://e.org/core/", "http://n.org/core/")
+        src = tmp_path / "src.ttl"
+        result, _, _ = _run(
+            [
+                "refactor",
+                "rename",
+                str(src),
+                "--from-namespace",
+                "http://e.org/core/",
+                "--to-namespace",
+                "http://n.org/core/",
+                "--dry-run",
+            ],
+            tmp_path,
+        )
+        assert result.exit_code == 0, result.output
+        assert "Note:" not in result.stderr

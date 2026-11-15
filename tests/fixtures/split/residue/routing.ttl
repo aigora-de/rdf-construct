@@ -1,0 +1,51 @@
+@prefix a: <http://example.org/a#> .
+@prefix b: <http://example.org/b#> .
+@prefix k: <http://example.org/k#> .
+@prefix s: <http://example.org/schemes#> .
+@prefix t: <http://example.org/t#> .
+@prefix ext: <http://external.example/v#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# One case of #176's routing per subject. Its rdfs:comment starts with the file it belongs in.
+
+<http://example.org/routing> a owl:Ontology ; rdfs:label "Routing" .
+
+a:A a owl:Class .
+a:A2 a owl:Class .
+b:B a owl:Class .
+a:link a owl:ObjectProperty .
+a:chain a owl:TransitiveProperty ; rdfs:comment "a.ttl: declared only by an OWL characteristic" .
+a:fun a owl:FunctionalProperty ; rdfs:comment "a.ttl: a property of no inferable kind" .
+a:Old a owl:DeprecatedClass ; rdfs:comment "a.ttl: a class declared only as deprecated" .
+ext:Borrowed a owl:Class ; rdfs:comment "unmatched.ttl: a borrowed vocabulary's term" .
+
+a:one a a:A ; rdfs:comment "a.ttl: an individual of one module's class" .
+a:twoTypes a a:A, b:B ; rdfs:comment "unmatched.ttl: its classes are in two modules" .
+a:onlyThing a owl:Thing ; rdfs:comment "unmatched.ttl: owl:Thing is no module's class" .
+a:foreign a ext:Other ; rdfs:comment "unmatched.ttl: a class the file does not declare" .
+a:ofBorrowed a ext:Borrowed ; rdfs:comment "unmatched.ttl: its class is unmatched" .
+b:Pun a owl:Class, a:A ; rdfs:comment "b.ttl: a class, so it stays one subject in one module" .
+a:untyped rdfs:comment "unmatched.ttl: no rdf:type" .
+
+s:Scheme1 a skos:ConceptScheme ; skos:hasTopConcept k:c1 .
+s:Scheme2 a skos:ConceptScheme .
+t:Scheme3 a skos:ConceptScheme .
+k:c1 a skos:Concept ; skos:inScheme s:Scheme1 ; rdfs:comment "s.ttl: follows its scheme" .
+k:c2 a skos:Concept ; skos:inScheme s:Scheme1, s:Scheme2 ; skos:broader k:c1 ;
+    rdfs:comment "s.ttl: two schemes, one module" .
+k:split a skos:Concept ; skos:inScheme s:Scheme1, t:Scheme3 ;
+    rdfs:comment "unmatched.ttl: schemes in two modules" .
+a:inA a skos:Concept ; rdfs:comment "a.ttl: no scheme, so its namespace's module" .
+k:loose a skos:Concept ; rdfs:comment "unmatched.ttl: no scheme, and its namespace makes no module" .
+
+# Root blank nodes: one naming a single module's terms, two naming two modules' terms
+[] a owl:AllDisjointClasses ; owl:members ( a:A a:A2 ) .
+[] a owl:AllDisjointClasses ; owl:members ( a:A b:B ) .
+[ a owl:Restriction ; owl:onProperty a:link ; owl:someValuesFrom b:B ] rdfs:subClassOf a:A .
+
+# A blank node that subjects in two modules refer to
+a:A rdfs:seeAlso _:shared .
+b:B rdfs:seeAlso _:shared .
+_:shared rdfs:label "shared" .

@@ -1,0 +1,10 @@
+# A competency question that fails on examples/animal_ontology.ttl: the findings state of
+# `cq-test` for the CLI smoke test (#195).
+version: "1.0"
+prefixes:
+  owl: "http://www.w3.org/2002/07/owl#"
+questions:
+  - id: cq-smoke-fail
+    name: "A class the ontology does not define"
+    query: "ASK { <http://example.org/animals#Unicorn> a owl:Class }"
+    expect: true

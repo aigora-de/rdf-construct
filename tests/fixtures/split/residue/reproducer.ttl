@@ -1,0 +1,26 @@
+@prefix ex: <http://example.org/ont#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+# #176's reproducer: 18 triples, of which main wrote 4 and invented 1
+
+<http://example.org/ont> a owl:Ontology ;
+    owl:versionIRI <http://example.org/ont/1.0.0> ;
+    rdfs:label "The Whole Release"@en .
+
+ex:Building a owl:Class ;
+    rdfs:label "Building"@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+        owl:onProperty ex:hasFloor ;
+        owl:minCardinality "1"^^xsd:nonNegativeInteger ] .
+
+ex:hasFloor a owl:ObjectProperty .
+ex:hasPart a owl:TransitiveProperty ; rdfs:label "has part"@en .
+
+ex:theBuilding a owl:NamedIndividual, ex:Building ;
+    rdfs:label "No. 1"@en ;
+    ex:hasFloor ex:floor1 .
+
+ex:Topic a skos:Concept ; skos:prefLabel "Topic"@en .

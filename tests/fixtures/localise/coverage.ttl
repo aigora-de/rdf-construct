@@ -1,0 +1,44 @@
+# The input LOCALISE_GUIDE.md's coverage report is generated from (#158, #159, #157).
+#
+# Each term shows one rule the report follows:
+#   ex:Listing    untagged, so it counts as the source language (en)
+#   ex:Tower      labelled only in German, so the en (base) row is not complete
+#   ex:grade      tagged @und, which matches no language
+#   ex:Cottage    two German labels: one entity covered, and a duplicate warning
+#   ex:partOf     typed only owl:TransitiveProperty, still an entity
+#   ex:Folly      typed owl:DeprecatedClass, left out unless --include-deprecated
+@prefix ex:   <http://example.org/heritage#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ex: a owl:Ontology ;
+    rdfs:label "Heritage buildings"@en .
+
+ex:Building a owl:Class ;
+    rdfs:label "Building"@en, "Gebäude"@de, "Bâtiment"@fr ;
+    rdfs:comment "A structure with a roof and walls."@en, "Ein Bauwerk mit Dach und Wänden."@de .
+
+ex:House a owl:Class ;
+    rdfs:subClassOf ex:Building ;
+    rdfs:label "House"@en, "Haus"@de ;
+    rdfs:comment "A building for people to live in."@en .
+
+ex:Cottage a owl:Class ;
+    rdfs:subClassOf ex:House ;
+    rdfs:label "Cottage"@en, "Häuschen"@de, "Kate"@de .
+
+ex:Listing a owl:Class ;
+    rdfs:label "Listing" .
+
+ex:Tower a owl:Class ;
+    rdfs:subClassOf ex:Building ;
+    rdfs:label "Turm"@de .
+
+ex:Folly a owl:DeprecatedClass ;
+    rdfs:label "Folly"@en .
+
+ex:partOf a owl:TransitiveProperty ;
+    rdfs:label "part of"@en, "Teil von"@de, "partie de"@fr .
+
+ex:grade a owl:DatatypeProperty ;
+    rdfs:label "grade"@und .

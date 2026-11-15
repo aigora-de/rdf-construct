@@ -5,12 +5,13 @@ Supports loading .rdf-lint.yml files with rule settings and severity overrides.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from rdf_construct.lint.engine import LintConfig
+from rdf_construct.lint.engine import LintConfig, check_rule_ids
 from rdf_construct.lint.rules import Severity, list_rules
 
 
@@ -36,6 +37,11 @@ def load_lint_config(config_path: Path) -> LintConfig:
     severity:
       missing-comment: info
       orphan-class: warning
+
+    # Namespaces whose terms are not this ontology's own
+    external_namespaces:
+      - ies:
+      - http://purl.org/dc/terms/
     ```
 
     Args:
@@ -77,7 +83,6 @@ def _parse_config(data: dict[str, Any], source: Path) -> LintConfig:
         ValueError: If configuration is invalid.
     """
     config = LintConfig()
-    known_rules = set(list_rules())
 
     # Parse level
     if "level" in data:
@@ -95,13 +100,8 @@ def _parse_config(data: dict[str, Any], source: Path) -> LintConfig:
         if not isinstance(enabled, list):
             raise ValueError(f"'enable' must be a list in {source}")
 
-        for rule_id in enabled:
-            if rule_id not in known_rules:
-                raise ValueError(
-                    f"Unknown rule '{rule_id}' in 'enable' section of {source}. "
-                    f"Available rules: {', '.join(sorted(known_rules))}"
-                )
-            config.enabled_rules.add(rule_id)
+        check_rule_ids(enabled, f"'enable' section of {source}")
+        config.enabled_rules.update(enabled)
 
     # Parse disabled rules
     if "disable" in data:
@@ -109,13 +109,8 @@ def _parse_config(data: dict[str, Any], source: Path) -> LintConfig:
         if not isinstance(disabled, list):
             raise ValueError(f"'disable' must be a list in {source}")
 
-        for rule_id in disabled:
-            if rule_id not in known_rules:
-                raise ValueError(
-                    f"Unknown rule '{rule_id}' in 'disable' section of {source}. "
-                    f"Available rules: {', '.join(sorted(known_rules))}"
-                )
-            config.disabled_rules.add(rule_id)
+        check_rule_ids(disabled, f"'disable' section of {source}")
+        config.disabled_rules.update(disabled)
 
     # Parse severity overrides
     if "severity" in data:
@@ -123,13 +118,9 @@ def _parse_config(data: dict[str, Any], source: Path) -> LintConfig:
         if not isinstance(severities, dict):
             raise ValueError(f"'severity' must be a mapping in {source}")
 
-        for rule_id, sev_str in severities.items():
-            if rule_id not in known_rules:
-                raise ValueError(
-                    f"Unknown rule '{rule_id}' in 'severity' section of {source}. "
-                    f"Available rules: {', '.join(sorted(known_rules))}"
-                )
+        check_rule_ids(severities, f"'severity' section of {source}")
 
+        for rule_id, sev_str in severities.items():
             try:
                 severity = Severity(sev_str)
             except ValueError:
@@ -140,7 +131,63 @@ def _parse_config(data: dict[str, Any], source: Path) -> LintConfig:
 
             config.severity_overrides[rule_id] = severity
 
+    # Parse external namespaces (#69)
+    if "external_namespaces" in data:
+        config.external_namespaces = _parse_external_namespaces(data["external_namespaces"], source)
+
     return config
+
+
+#: A CURIE as an ``external_namespaces`` entry: a prefix name (or none, for ``:``), a colon,
+#: and no whitespace
+_CURIE = re.compile(r"(?:[A-Za-z_][A-Za-z0-9_.-]*)?:\S*")
+
+
+def _parse_external_namespaces(value: Any, source: Path) -> list[str]:
+    """Check the ``external_namespaces`` list's shape, before any file is read.
+
+    Each entry is a full IRI (``http://…``), an IRI in angle brackets (``<urn:x:>``) or a CURIE
+    (``ies:``, ``dcterms:``). A CURIE is resolved later, against each linted file's prefixes.
+    YAML reads an unquoted ``- ies:`` as a one-key mapping with no value; that is read as the
+    CURIE ``ies:``, so it need not be quoted.
+
+    Args:
+        value: The key's value.
+        source: The config file, for messages.
+
+    Returns:
+        The entries, stripped.
+
+    Raises:
+        ValueError: If the value is not a list, or an entry is not a non-empty string naming an
+            IRI or a CURIE.
+    """
+    if not isinstance(value, list):
+        raise ValueError(
+            f"'external_namespaces' must be a list of namespace IRIs or CURIEs in {source}"
+        )
+    entries = []
+    for item in value:
+        # YAML reads an unquoted `- ies:` as the mapping {"ies": None}: that is the CURIE `ies:`
+        if isinstance(item, dict) and len(item) == 1:
+            ((key, val),) = item.items()
+            if isinstance(key, str) and val is None:
+                item = f"{key}:"
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(
+                f"'external_namespaces' entry {item!r} in {source} must be a non-empty string: "
+                "a namespace IRI, an IRI in angle brackets, or a CURIE such as 'ies:'."
+            )
+        entry = item.strip()
+        bracketed = entry.startswith("<") and entry.endswith(">") and len(entry) > 2
+        iri = "://" in entry and not any(ch.isspace() for ch in entry)
+        if not (bracketed or iri or _CURIE.fullmatch(entry)):
+            raise ValueError(
+                f"'external_namespaces' entry {entry!r} in {source} is not a namespace IRI, an "
+                "IRI in angle brackets, or a CURIE such as 'ies:'."
+            )
+        entries.append(entry)
+    return entries
 
 
 def find_config_file(start_dir: Path | None = None) -> Path | None:
@@ -208,6 +255,13 @@ level: standard
 # severity:
 #   missing-comment: info
 #   orphan-class: warning
+
+# Namespaces whose terms are not this ontology's own: a reference into one is never
+# dangling, and its terms need no label or comment here. IRIs, <IRIs> or CURIEs, which
+# resolve against each linted file's own prefixes.
+# external_namespaces:
+#   - ies:
+#   - http://purl.org/dc/terms/
 
 # Available rules:
 {chr(10).join(f'#   - {r}' for r in known_rules)}

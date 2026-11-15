@@ -1,0 +1,5 @@
+@prefix org: <http://example.org/organisation#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+org:Team a owl:Class ;
+    <http://www.w3.org/ns/org#purpose> "W3C org's namespace, written in full" .

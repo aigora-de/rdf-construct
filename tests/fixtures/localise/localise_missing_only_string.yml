@@ -1,0 +1,6 @@
+# A switch written as text (#408). YAML reads 'false' as the text "false", which Python takes
+# as true: on v0.6.0 this extracted 2 of coverage.ttl's 6 entities, as --missing-only would.
+properties:
+- rdfs:label
+extract:
+  missing_only: 'false'

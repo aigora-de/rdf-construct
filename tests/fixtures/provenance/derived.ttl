@@ -1,0 +1,45 @@
+# Fixture for #90 and #280: what a filtering `order` profile writes into an extract.
+#
+# Every defect it guards shows up as something visible in the output:
+# - a real header, so an extract that copies `owl:versionIRI` (#90) is caught by name;
+# - an anonymous class expression referenced by a property, so a `classes` section that
+#   claims it on its own writes a detached `_:n` stub (#280);
+# - a restriction, so a blank node that the closure must bring in whole is not lost either.
+# No blank node here is a root (nothing-references-it) node: those are written with a fresh
+# label on every run, which would defeat the determinism case in tests/test_determinism.py.
+
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex:   <http://example.org/derived#> .
+
+<http://example.org/derived>
+    a owl:Ontology ;
+    owl:versionIRI <http://example.org/derived/2.1.0> ;
+    owl:versionInfo "2.1.0" ;
+    owl:imports <http://example.org/upstream> ;
+    rdfs:label "Derived identity fixture"@en .
+
+ex:Building a owl:Class ;
+    rdfs:label "Building"@en ;
+    rdfs:subClassOf [
+        a owl:Restriction ;
+        owl:onProperty ex:hasPart ;
+        owl:someValuesFrom ex:Room
+    ] .
+
+ex:Room a owl:Class ;
+    rdfs:label "Room"@en .
+
+ex:Floor a owl:Class ;
+    rdfs:label "Floor"@en .
+
+ex:hasPart a owl:ObjectProperty ;
+    rdfs:domain ex:Building ;
+    rdfs:range [ a owl:Class ; owl:unionOf ( ex:Room ex:Floor ) ] .
+
+ex:name a owl:DatatypeProperty ;
+    rdfs:range xsd:string .
+
+ex:MainHall a owl:NamedIndividual , ex:Building ;
+    ex:name "Main Hall" .

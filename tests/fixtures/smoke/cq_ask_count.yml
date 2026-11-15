@@ -1,0 +1,20 @@
+# An ASK question checked with a count-based expectation, between two valid questions, on
+# examples/animal_ontology.ttl: the question is refused as an ERROR and the run exits 2, while the
+# other two still run (#134).
+version: "1.0"
+prefixes:
+  ex: "http://example.org/animals#"
+  owl: "http://www.w3.org/2002/07/owl#"
+questions:
+  - id: cq-ask-ok
+    name: "Animal is a class"
+    query: "ASK { ex:Animal a owl:Class }"
+    expect: true
+  - id: cq-ask-count
+    name: "An ASK cannot have results to count"
+    query: "ASK { ex:Unicorn a owl:Class }"
+    expect: has_results
+  - id: cq-select-ok
+    name: "The ontology declares classes"
+    query: "SELECT ?c WHERE { ?c a owl:Class }"
+    expect: has_results

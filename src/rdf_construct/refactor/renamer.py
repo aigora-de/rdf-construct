@@ -16,6 +16,8 @@ from typing import Any
 
 from rdflib import Graph, URIRef, Literal, BNode
 
+from rdf_construct.core.utils import rebase_by_rules
+from rdf_construct.refactor.collisions import RenameCollision, find_collisions
 from rdf_construct.refactor.config import RenameConfig, RenameMapping
 
 
@@ -65,6 +67,9 @@ class RenameResult:
         mappings_applied: List of mappings that were actually applied.
         source_triples: Original triple count.
         result_triples: Final triple count.
+        collisions: Renames that merge two entities (#185). Without
+            ``RenameConfig.merge_entities`` they fail the rename and nothing is renamed;
+            with it, they are the merges that were made.
     """
 
     renamed_graph: Graph | None = None
@@ -74,6 +79,7 @@ class RenameResult:
     mappings_applied: list[RenameMapping] = field(default_factory=list)
     source_triples: int = 0
     result_triples: int = 0
+    collisions: list[RenameCollision] = field(default_factory=list)
 
 
 class OntologyRenamer:
@@ -103,7 +109,9 @@ class OntologyRenamer:
             config: Rename configuration with namespace and entity mappings.
 
         Returns:
-            RenameResult with the modified graph and statistics.
+            RenameResult with the modified graph and statistics. A rename that would merge
+            two entities fails, with ``success`` False, no graph and the ``collisions``
+            listed, unless ``config.merge_entities`` is set (#185).
         """
         result = RenameResult()
         result.source_triples = len(graph)
@@ -116,6 +124,16 @@ class OntologyRenamer:
             result.result_triples = len(graph)
             return result
 
+        # Refuse to merge two entities by accident: check every mapping before renaming any
+        result.collisions = find_collisions(graph, mappings)
+        if result.collisions and not config.merge_entities:
+            result.success = False
+            result.error = (
+                "the rename would merge two entities; set merge_entities to allow it: "
+                + " ".join(c.describe() for c in result.collisions)
+            )
+            return result
+
         # Create URI lookup map for efficient substitution
         uri_map: dict[URIRef, tuple[URIRef, str]] = {
             m.from_uri: (m.to_uri, m.source) for m in mappings
@@ -124,8 +142,9 @@ class OntologyRenamer:
         # Track which mappings were actually applied
         applied_mappings: set[URIRef] = set()
 
-        # Create new graph with renamed URIs
-        renamed_graph = Graph()
+        # Create new graph with renamed URIs. "core" rather than rdflib's default table, so
+        # a source prefix such as org: is not pushed aside to org1: on the way out.
+        renamed_graph = Graph(bind_namespaces="core")
 
         # Copy namespace bindings, updating if needed
         old_ns_to_new: dict[str, str] = {}
@@ -134,11 +153,7 @@ class OntologyRenamer:
 
         for prefix, ns in graph.namespace_manager.namespaces():
             ns_str = str(ns)
-            new_ns_str = ns_str
-            for old_ns, new_ns in old_ns_to_new.items():
-                if ns_str.startswith(old_ns) or ns_str == old_ns:
-                    new_ns_str = ns_str.replace(old_ns, new_ns, 1)
-                    break
+            new_ns_str = rebase_by_rules(ns_str, old_ns_to_new) or ns_str
             renamed_graph.bind(prefix, new_ns_str, override=True)
 
         # Process each triple
@@ -245,7 +260,7 @@ def rename_file(
         RenameResult with statistics.
     """
     # Load source graph
-    graph = Graph()
+    graph = Graph(bind_namespaces="core")
     try:
         graph.parse(source_path.as_posix())
     except Exception as e:

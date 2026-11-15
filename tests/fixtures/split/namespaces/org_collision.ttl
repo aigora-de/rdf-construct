@@ -1,0 +1,11 @@
+# rdflib pre-binds org: to W3C's organisation vocabulary, which pushed this file's org: to org1:.
+# Only org: and owl: are declared, so rdfs: and xsd: on output come from the core bindings.
+@prefix org: <http://example.org/org#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+org:Team a owl:Class ;
+    <http://www.w3.org/2000/01/rdf-schema#label> "Team"@en .
+
+org:headcount a owl:DatatypeProperty ;
+    <http://www.w3.org/2000/01/rdf-schema#domain> org:Team ;
+    <http://www.w3.org/2000/01/rdf-schema#range> <http://www.w3.org/2001/XMLSchema#integer> .

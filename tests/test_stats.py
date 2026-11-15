@@ -255,8 +255,8 @@ class TestCollector:
 
     def test_collect_all_categories(self, simple_graph: Graph):
         """Collects all metric categories."""
-        stats = collect_stats(simple_graph, source="test.ttl")
-        assert stats.source == "test.ttl"
+        stats = collect_stats(simple_graph, sources=["test.ttl"])
+        assert stats.sources == ["test.ttl"]
         assert isinstance(stats.timestamp, datetime)
         assert isinstance(stats.basic, BasicStats)
         assert isinstance(stats.hierarchy, HierarchyStats)
@@ -296,23 +296,23 @@ class TestComparator:
 
     def test_identical_stats(self, simple_graph: Graph):
         """Comparing identical graphs shows no changes."""
-        stats1 = collect_stats(simple_graph, source="v1.ttl")
-        stats2 = collect_stats(simple_graph, source="v2.ttl")
+        stats1 = collect_stats(simple_graph, sources=["v1.ttl"])
+        stats2 = collect_stats(simple_graph, sources=["v2.ttl"])
         comparison = compare_stats(stats1, stats2)
         assert len(comparison.changes) == 0
 
     def test_detect_changes(self, simple_graph: Graph, complex_graph: Graph):
         """Detects differences between graphs."""
-        stats1 = collect_stats(simple_graph, source="simple.ttl")
-        stats2 = collect_stats(complex_graph, source="complex.ttl")
+        stats1 = collect_stats(simple_graph, sources=["simple.ttl"])
+        stats2 = collect_stats(complex_graph, sources=["complex.ttl"])
         comparison = compare_stats(stats1, stats2)
         assert len(comparison.changes) > 0
         assert comparison.summary != ""
 
     def test_change_direction(self, simple_graph: Graph, complex_graph: Graph):
         """Change delta is calculated correctly."""
-        stats1 = collect_stats(simple_graph, source="v1")
-        stats2 = collect_stats(complex_graph, source="v2")
+        stats1 = collect_stats(simple_graph, sources=["v1"])
+        stats2 = collect_stats(complex_graph, sources=["v2"])
         comparison = compare_stats(stats1, stats2)
 
         # Complex has more classes
@@ -329,7 +329,7 @@ class TestFormatters:
 
     def test_text_format(self, simple_graph: Graph):
         """Text format produces readable output."""
-        stats = collect_stats(simple_graph, source="test.ttl")
+        stats = collect_stats(simple_graph, sources=["test.ttl"])
         output = format_stats(stats, format_name="text")
         assert "Ontology Statistics" in output
         assert "BASIC COUNTS" in output
@@ -337,14 +337,14 @@ class TestFormatters:
 
     def test_json_format(self, simple_graph: Graph):
         """JSON format is valid JSON."""
-        stats = collect_stats(simple_graph, source="test.ttl")
+        stats = collect_stats(simple_graph, sources=["test.ttl"])
         output = format_stats(stats, format_name="json")
         parsed = json.loads(output)
         assert parsed["basic"]["classes"] == 3
 
     def test_markdown_format(self, simple_graph: Graph):
         """Markdown format has tables."""
-        stats = collect_stats(simple_graph, source="test.ttl")
+        stats = collect_stats(simple_graph, sources=["test.ttl"])
         output = format_stats(stats, format_name="markdown")
         assert "## Ontology Statistics" in output
         assert "| Metric | Value |" in output
@@ -357,8 +357,8 @@ class TestFormatters:
 
     def test_comparison_text_format(self, simple_graph: Graph, complex_graph: Graph):
         """Comparison text format is readable."""
-        stats1 = collect_stats(simple_graph, source="v1.ttl")
-        stats2 = collect_stats(complex_graph, source="v2.ttl")
+        stats1 = collect_stats(simple_graph, sources=["v1.ttl"])
+        stats2 = collect_stats(complex_graph, sources=["v2.ttl"])
         comparison = compare_stats(stats1, stats2)
         output = format_comparison(comparison, format_name="text")
         assert "Comparing:" in output
@@ -366,8 +366,8 @@ class TestFormatters:
 
     def test_comparison_json_format(self, simple_graph: Graph, complex_graph: Graph):
         """Comparison JSON format is valid."""
-        stats1 = collect_stats(simple_graph, source="v1.ttl")
-        stats2 = collect_stats(complex_graph, source="v2.ttl")
+        stats1 = collect_stats(simple_graph, sources=["v1.ttl"])
+        stats2 = collect_stats(complex_graph, sources=["v2.ttl"])
         comparison = compare_stats(stats1, stats2)
         output = format_comparison(comparison, format_name="json")
         parsed = json.loads(output)

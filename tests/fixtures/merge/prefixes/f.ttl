@@ -1,0 +1,4 @@
+@prefix ont: <http://f.example/ontology#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+ont:F a owl:Class .

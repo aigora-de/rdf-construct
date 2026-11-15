@@ -12,6 +12,7 @@ from rdf_construct.diff.change_types import (
     PredicateCategory,
     TripleChange,
 )
+from rdf_construct.diff.filters import not_shown_line, not_shown_sentence
 
 
 class DiffFormatter(Protocol):
@@ -36,6 +37,7 @@ ENTITY_TYPE_NAMES = {
     EntityType.OBJECT_PROPERTY: "ObjectProperty",
     EntityType.DATATYPE_PROPERTY: "DataProperty",
     EntityType.ANNOTATION_PROPERTY: "AnnotationProperty",
+    EntityType.OTHER_PROPERTY: "Property",
     EntityType.INDIVIDUAL: "Instance",
     EntityType.ONTOLOGY: "Ontology",
     EntityType.OTHER: "Entity",
@@ -58,8 +60,19 @@ def format_text(diff: GraphDiff, graph: Graph | None = None) -> str:
     lines.append(f"Comparing {diff.old_path} → {diff.new_path}")
     lines.append("")
 
+    # Changes that cannot be described come before any verdict, so nothing can hide them (#143)
+    if diff.notes:
+        for note in diff.notes:
+            lines.append(f"Note: {note}")
+        lines.append("")
+
     if diff.is_identical:
         lines.append("No semantic differences found.")
+        return "\n".join(lines)
+
+    # A filter that left everything out says what it hid, never that nothing changed (#144)
+    if diff.shows_nothing and any(diff.not_shown.values()):
+        lines.append(not_shown_sentence(diff))
         return "\n".join(lines)
 
     # Added entities
@@ -83,21 +96,33 @@ def format_text(diff: GraphDiff, graph: Graph | None = None) -> str:
             lines.extend(_format_modified_entity(entity, graph))
         lines.append("")
 
+    # Blank-node structures that belong to no named entity
+    if diff.added_structures or diff.removed_structures:
+        lines.append(
+            f"BLANK-NODE STRUCTURES ({len(diff.added_structures)} added, "
+            f"{len(diff.removed_structures)} removed):"
+        )
+        for text in diff.added_structures:
+            lines.append(f"  + {text}")
+        for text in diff.removed_structures:
+            lines.append(f"  - {text}")
+        lines.append("")
+
     # Summary
     summary = diff.summary
-    lines.append(
+    summary_line = (
         f"Summary: {summary['added']} added, "
         f"{summary['removed']} removed, "
         f"{summary['modified']} modified"
     )
-
-    # Blank node warning
-    if diff.blank_node_warning:
-        lines.append("")
-        lines.append(
-            "Note: Blank node changes detected but not fully analysed. "
-            "Consider skolemising blank nodes for detailed comparison."
+    if summary["structures"]:
+        summary_line += (
+            f"; blank-node structures: {len(diff.added_structures)} added, "
+            f"{len(diff.removed_structures)} removed"
         )
+    lines.append(summary_line)
+    if any(diff.not_shown.values()):
+        lines.append(not_shown_line(diff))
 
     return "\n".join(lines)
 
@@ -182,12 +207,18 @@ def _format_modified_entity(entity: EntityChange, graph: Graph | None = None) ->
     # Group and format changes
     for change in entity.added_triples:
         pred_str = _format_uri(change.predicate, graph)
-        obj_str = _format_object(change.object, graph)
+        obj_str = change.turtle or _format_object(change.object, graph)
         lines.append(f"    + {pred_str} {obj_str}")
+
+    for text in entity.added_structures:
+        lines.append(f"    + {text}")
 
     for change in entity.removed_triples:
         pred_str = _format_uri(change.predicate, graph)
-        obj_str = _format_object(change.object, graph)
+        obj_str = change.turtle or _format_object(change.object, graph)
         lines.append(f"    - {pred_str} {obj_str}")
+
+    for text in entity.removed_structures:
+        lines.append(f"    - {text}")
 
     return lines

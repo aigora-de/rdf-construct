@@ -4,14 +4,19 @@ Runs SPARQL queries against RDF graphs and checks results against expectations.
 """
 
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 from rdflib import Graph
+from rdflib.plugins.sparql import prepareQuery
+from rdflib.plugins.sparql.sparql import Query
+from rdflib.query import Result, ResultRow
 
 from rdf_construct.cq.loader import CQTest, CQTestSuite, build_query_with_prefixes
-from rdf_construct.cq.expectations import CheckResult
+from rdf_construct.cq.expectations import CheckResult, query_form_refusal
 
 
 class CQStatus(Enum):
@@ -21,6 +26,9 @@ class CQStatus(Enum):
     FAIL = "fail"
     ERROR = "error"
     SKIP = "skip"
+    #: Not reached because ``fail_fast`` stopped the run; distinct from ``SKIP``, which is
+    #: the author's ``skip: true`` (#137)
+    NOT_RUN = "not_run"
 
 
 @dataclass
@@ -34,6 +42,10 @@ class CQTestResult:
         result_count: Number of results returned (if applicable)
         check_result: Detailed check result from expectation
         error: Error message if status is ERROR
+        error_type: Kind of error: ``QueryError`` when the query could not be run,
+            ``InvalidExpectation`` when its expectation cannot be checked against its query form
+        reason: Why a ``NOT_RUN`` question was not run, e.g.
+            ``not run: --fail-fast stopped after t2``
     """
 
     test: CQTest
@@ -42,6 +54,8 @@ class CQTestResult:
     result_count: int | None = None
     check_result: CheckResult | None = None
     error: str | None = None
+    error_type: str = "QueryError"
+    reason: str | None = None
 
     @property
     def passed(self) -> bool:
@@ -57,6 +71,8 @@ class CQTestResult:
             return self.check_result.message
         if self.status == CQStatus.SKIP:
             return self.test.skip_reason or "Skipped"
+        if self.status == CQStatus.NOT_RUN:
+            return self.reason or "Not run"
         return ""
 
 
@@ -78,7 +94,7 @@ class CQTestResults:
 
     @property
     def total_count(self) -> int:
-        """Total number of tests."""
+        """Total number of tests selected, including any ``fail_fast`` did not reach (#137)."""
         return len(self.results)
 
     @property
@@ -100,6 +116,38 @@ class CQTestResults:
     def skipped_count(self) -> int:
         """Number of skipped tests."""
         return sum(1 for r in self.results if r.status == CQStatus.SKIP)
+
+    @property
+    def not_run_count(self) -> int:
+        """Number of tests ``fail_fast`` did not reach."""
+        return sum(1 for r in self.results if r.status == CQStatus.NOT_RUN)
+
+    @property
+    def ran_count(self) -> int:
+        """Number of tests ``fail_fast`` reached, up to and including the one it stopped after.
+
+        Equals ``total_count`` when nothing was not run. A ``skip: true`` question after the
+        stop is not counted: it keeps its ``SKIP``, but was not reached.
+        """
+        stop = self._stop_index()
+        return self.total_count if stop is None else stop + 1
+
+    @property
+    def stopped_after(self) -> str | None:
+        """Id of the question ``fail_fast`` stopped after, or None if nothing was not run."""
+        stop = self._stop_index()
+        return None if stop is None else self.results[stop].test.id
+
+    def _stop_index(self) -> int | None:
+        """Position of the failure or error ``fail_fast`` stopped after, if any was not run."""
+        statuses = [r.status for r in self.results]
+        if CQStatus.NOT_RUN not in statuses:
+            return None
+        # Author skips may sit between the stop and the first question not run
+        for index in range(statuses.index(CQStatus.NOT_RUN) - 1, -1, -1):
+            if statuses[index] in (CQStatus.FAIL, CQStatus.ERROR):
+                return index
+        return None
 
     @property
     def all_passed(self) -> bool:
@@ -128,7 +176,8 @@ class CQTestRunner:
     - Timing and error handling
 
     Args:
-        fail_fast: Stop on first failure if True
+        fail_fast: Stop after the first question that fails or errors if True; the
+            questions after it are recorded as ``NOT_RUN``
         verbose: Output verbose logging if True
     """
 
@@ -162,11 +211,24 @@ class CQTestRunner:
             graph.bind(prefix, uri)
 
         results = []
-        for test in suite.questions:
+        for position, test in enumerate(suite.questions):
             result = self._run_test(graph, test, suite.prefixes)
             results.append(result)
 
+            # A refused question is an ERROR, so it counts as run and stops here too
             if self.fail_fast and result.status in (CQStatus.FAIL, CQStatus.ERROR):
+                # The total stays the selected suite: record what was not reached (#137)
+                # A skip: true question keeps its SKIP: the author's choice, not the stop's
+                reason = f"not run: --fail-fast stopped after {test.id}"
+                for rest in suite.questions[position + 1 :]:
+                    status = CQStatus.SKIP if rest.skip else CQStatus.NOT_RUN
+                    results.append(
+                        CQTestResult(
+                            test=rest,
+                            status=status,
+                            reason=None if rest.skip else reason,
+                        )
+                    )
                 break
 
         total_duration = (time.perf_counter() - start_time) * 1000
@@ -202,22 +264,39 @@ class CQTestRunner:
             # Inject prefixes into query
             full_query = build_query_with_prefixes(test.query, prefixes)
 
-            # Execute query
-            result = graph.query(full_query)
+            # Execute query; the prepared form's algebra is kept for _solutions. The graph's
+            # prefixes resolve in the query, as graph.query gives them to a query string
+            prepared = prepareQuery(full_query, initNs=dict(graph.namespaces()))
+            result = graph.query(prepared)
 
-            # Check if this is an ASK query (returns boolean) or SELECT (returns rows)
-            # rdflib Result objects have a 'type' attribute
-            is_ask_query = getattr(result, "type", None) == "ASK"
+            # Refuse an expectation that cannot be checked against this query form,
+            # e.g. a count against an ASK, which answers true or false
+            query_form = result.type
+            refusal = query_form_refusal(test.id, test.expectation, query_form)
+            if refusal:
+                return CQTestResult(
+                    test=test,
+                    status=CQStatus.ERROR,
+                    duration_ms=(time.perf_counter() - start_time) * 1000,
+                    error=refusal,
+                    error_type="InvalidExpectation",
+                )
 
-            if is_ask_query:
+            if query_form == "ASK":
                 # ASK query - result is boolean
                 result_count = None
                 check_input = result
             else:
-                # SELECT query - need to materialise results for counting
-                # But we also need them for expectation checking
-                # So we convert to list first
-                results_list = list(result)
+                if query_form == "SELECT":
+                    # Every solution is a row, one with every projected variable unbound
+                    # included: iterating a Result drops it (#386)
+                    projected = result.vars or []
+                    results_list: list[Any] = [
+                        ResultRow(binding, projected) for binding in _solutions(result, prepared)
+                    ]
+                else:
+                    # A CONSTRUCT or DESCRIBE has no bindings; its rows are its triples
+                    results_list = list(result)
                 result_count = len(results_list)
 
                 # Create a fake result object that can be iterated
@@ -260,6 +339,65 @@ class CQTestRunner:
                 duration_ms=duration,
                 error=f"{type(e).__name__}: {e}",
             )
+
+
+def _solutions(result: Result, prepared: Query) -> list[Mapping[Any, Any]]:
+    """Return a SELECT's solutions, as SPARQL 1.1 counts them (#386).
+
+    ``result.bindings`` keeps a solution whose projected variables are all unbound as ``{}``,
+    which iterating the result drops. It also holds one artefact of rdflib's: under an explicit
+    ``GROUP BY`` that forms no groups, rdflib yields one empty binding where SPARQL has no
+    solution (RDFLib/rdflib#3382; fix proposed in #3498). A real group always carries its keys,
+    even unbound ones (``{?label: None}``), so under a top-level ``GROUP BY`` a binding with no
+    keys is that artefact, and is dropped.
+
+    Args:
+        result: The executed SELECT's result
+        prepared: The prepared query it was executed from
+
+    Returns:
+        One mapping per solution, in rdflib's order; an empty mapping is a solution
+    """
+    bindings = list(result.bindings)
+    if _explicitly_grouped(prepared.algebra):
+        return [binding for binding in bindings if binding]
+    return bindings
+
+
+def _explicitly_grouped(algebra: Any) -> bool:
+    """Whether a query's solutions come straight from an explicit ``GROUP BY``, keys intact.
+
+    Walks from the query down the chain of single-pattern operators (projection, DISTINCT,
+    slicing, ordering, HAVING, extensions, a sub-select) to an ``AggregateJoin``. An implicit
+    group (an aggregate with no ``GROUP BY``) has one group even over no solutions, which is
+    correct, so it is not matched. Each projection on the way must keep at least one variable
+    every other keeps: a real group then still carries a key in the final row, so a binding with
+    none can only be rdflib's no-groups artefact. An outer projection sharing no variable with
+    a grouped sub-select makes a real group an empty row too, so it is not matched. A ``GROUP
+    BY`` inside a join or a union, or followed by ``VALUES``, is not reached.
+
+    Args:
+        algebra: A prepared query's algebra
+
+    Returns:
+        True if the solutions are an explicit ``GROUP BY``'s groups, each keeping a variable
+    """
+    node = algebra.get("p") if algebra.name == "SelectQuery" else None
+    kept: set[Any] | None = None
+    while node is not None and hasattr(node, "name"):
+        if node.name == "Project":
+            projected = set(node.PV)
+            kept = projected if kept is None else kept & projected
+        if node.name == "AggregateJoin":
+            group = node.get("p")
+            return (
+                bool(kept)
+                and group is not None
+                and group.name == "Group"
+                and group.expr is not None
+            )
+        node = node.get("p")
+    return False
 
 
 def run_tests(

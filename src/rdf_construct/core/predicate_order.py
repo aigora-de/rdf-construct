@@ -8,8 +8,9 @@ RDF subjects. Supports different orderings for different subject types
 from dataclasses import dataclass, field
 from typing import Any
 
-from rdflib import Graph, RDF, RDFS, URIRef
-from rdflib.namespace import OWL
+from rdflib import Graph, RDF, URIRef
+
+from .vocab import ALL_PROPERTY_TYPES, CLASS_TYPES
 
 
 @dataclass
@@ -108,7 +109,12 @@ class PredicateOrderConfig:
 def classify_subject(graph: Graph, subject: URIRef) -> str:
     """Determine the type category of an RDF subject.
 
-    Classifies subjects into one of: 'class', 'property', 'individual'.
+    Classifies subjects into one of: 'class', 'property', 'individual'. A class is a
+    subject of any type in ``CLASS_TYPES`` and a property one of any type in
+    ``ALL_PROPERTY_TYPES``, so a term declared only ``owl:TransitiveProperty``,
+    ``owl:FunctionalProperty`` or ``owl:DeprecatedProperty``, or only
+    ``owl:DeprecatedClass``, is not mistaken for an individual (#262). A pun that is
+    both a class and a property is a class.
 
     Args:
         graph: RDF graph containing the subject
@@ -120,17 +126,11 @@ def classify_subject(graph: Graph, subject: URIRef) -> str:
     types = set(graph.objects(subject, RDF.type))
 
     # Check if it's a class
-    if OWL.Class in types or RDFS.Class in types:
+    if types & CLASS_TYPES:
         return "class"
 
     # Check if it's a property
-    property_types = {
-        OWL.ObjectProperty,
-        OWL.DatatypeProperty,
-        OWL.AnnotationProperty,
-        RDF.Property,
-    }
-    if types & property_types:
+    if types & ALL_PROPERTY_TYPES:
         return "property"
 
     # Default to individual

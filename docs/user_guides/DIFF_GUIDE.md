@@ -41,7 +41,7 @@ rdf-construct diff [OPTIONS] OLD_FILE NEW_FILE
 
 | Option | Description |
 |--------|-------------|
-| `-o, --output FILE` | Write output to file instead of stdout |
+| `-o, --output FILE` | Write output to file instead of stdout. Refused (exit 2) if it names either input |
 | `-f, --format FORMAT` | Output format: `text` (default), `markdown`, `json` |
 | `--show TYPES` | Show only these change types (comma-separated) |
 | `--hide TYPES` | Hide these change types (comma-separated) |
@@ -50,9 +50,12 @@ rdf-construct diff [OPTIONS] OLD_FILE NEW_FILE
 
 ### Exit Codes
 
-- `0` — Graphs are semantically identical
-- `1` — Differences were found
-- `2` — Error occurred (file not found, parse error, etc.)
+- `0` — Graphs are semantically identical, blank nodes included
+- `1` — Differences were found, or a blank-node structure was too large to compare (see [Blank Nodes](#blank-nodes))
+- `2` — Error occurred (file not found, parse error, a filter value it does not recognise, etc.)
+
+A filter (`--show`, `--hide`, `--entities`) never changes the exit code: it changes only what is
+shown. See [Filtering](#filtering).
 
 ## Output Formats
 
@@ -161,6 +164,23 @@ rdf-construct diff old.ttl new.ttl --format json
 
 ## Filtering
 
+A filter changes only what is shown. The exit code, the `Graphs are semantically identical.`
+verdict and the JSON's `identical` always describe the whole comparison. A filtered view that
+leaves changes out says how many and of what kind, so a filter can never make two different
+files look identical.
+
+A value the filter does not recognise is refused at exit 2, before anything is read or written,
+naming each unknown value in the order given, a near match where there is one, and every
+accepted name:
+
+```text
+Error: Invalid value for '--show': unknown change type 'addedd' (did you mean 'added'?). Accepted: added, removed, modified
+```
+
+Each option is checked on its own, so with mistakes in two options the second is reported once
+the first is fixed. An empty value (`--show ""`, `--show ,`) is refused too. Names are matched ignoring case, and
+whitespace around them is ignored.
+
 ### By Change Type
 
 Show only specific types of changes:
@@ -174,6 +194,9 @@ rdf-construct diff old.ttl new.ttl --hide modified
 ```
 
 Valid change types: `added`, `removed`, `modified`
+
+`--show` and `--hide` cannot be used together, since `--show` already hides every change type it
+does not name, and `--hide` cannot hide all three. Either is refused at exit 2.
 
 ### By Entity Type
 
@@ -192,12 +215,60 @@ rdf-construct diff old.ttl new.ttl --entities classes,instances
 
 Valid entity types:
 
-- `classes` — OWL/RDFS classes
-- `properties` — All property types
-- `object_properties` — OWL ObjectProperty
-- `datatype_properties` — OWL DatatypeProperty
-- `annotation_properties` — OWL AnnotationProperty
-- `individuals` / `instances` — Named instances
+- `classes` — terms typed `owl:Class`, `rdfs:Class` or `owl:DeprecatedClass`
+- `properties` — all property types, the four below
+- `object_properties` — terms typed `owl:ObjectProperty`, or an OWL characteristic that implies
+  it, such as `owl:TransitiveProperty` or `owl:SymmetricProperty`
+- `datatype_properties` — terms typed `owl:DatatypeProperty`
+- `annotation_properties` — terms typed `owl:AnnotationProperty`
+- `other_properties` — properties whose kind the file does not say: typed `rdf:Property`,
+  `owl:FunctionalProperty` or `owl:DeprecatedProperty` and none of the above. They are listed as
+  `Property`, under `Other Properties` in markdown and `other_properties` in the JSON
+- `individuals` / `instances` — other typed terms
+- `ontology` — the `owl:Ontology` header
+- `untyped` — subjects with no `rdf:type` in the file they are listed from
+- `structures` — blank-node structures that belong to no named entity, such as an
+  `owl:AllDisjointClasses` (see [Blank Nodes](#blank-nodes))
+
+The other spellings accepted are `class`, `object-properties`, `objprops`,
+`datatype-properties`, `dataprops`, `annotation-properties`, `annprops`, `other-properties` and
+`otherprops`.
+
+Each entity is listed once, under the first of these that its types allow: ontology, class,
+object, datatype, annotation, other property, individual. A class punned as a property is listed
+as a `Class`. `stats`, which counts rather than lists, counts such a term under each of its kinds.
+
+### Blank-node structures under a filter
+
+A blank-node structure that belongs to a named entity is shown or hidden with that entity. One
+that belongs to none is added or removed, never modified, so `--show` and `--hide` apply to it by
+that action. `--entities` hides it unless the list names `structures`. Either way, what is hidden
+is counted:
+
+```bash
+rdf-construct diff examples/diff/v1.ttl examples/diff/v2.ttl --entities classes
+```
+
+```text
+Comparing v1.ttl → v2.ttl
+
+MODIFIED (2 entities):
+  ~ Class bld:Building
+    + rdfs:subClassOf [ a owl:Restriction ; owl:minCardinality "2"^^xsd:nonNegativeInteger ; owl:onProperty bld:hasFloor ]
+    - rdfs:subClassOf [ a owl:Restriction ; owl:minCardinality "1"^^xsd:nonNegativeInteger ; owl:onProperty bld:hasFloor ]
+  ~ Class bld:Room
+    + [ a owl:Axiom ; owl:annotatedProperty rdfs:subClassOf ; owl:annotatedSource bld:Room ; owl:annotatedTarget bld:Space ; rdfs:comment "A room is an enclosed space."@en ]
+    - [ a owl:Axiom ; owl:annotatedProperty rdfs:subClassOf ; owl:annotatedSource bld:Room ; owl:annotatedTarget bld:Space ; rdfs:comment "A room is a space."@en ]
+
+Summary: 0 added, 0 removed, 2 modified
+Not shown: 2 blank-node structures (--entities classes).
+```
+
+When a filter leaves nothing to show, the output says so instead of listing anything, for
+example: `No added changes. 3 changes not shown (2 modified, 1 blank-node structure) — run
+without --show to see them.` The JSON gains a `filter` object, only under a filter, holding the
+names applied and `not_shown`, the counts it left out, keyed like `summary`; `summary` counts
+what is shown.
 
 ### Ignoring Predicates
 
@@ -211,9 +282,13 @@ rdf-construct diff old.ttl new.ttl --ignore-predicates dcterms:modified
 rdf-construct diff old.ttl new.ttl --ignore-predicates dcterms:modified,dcterms:created
 ```
 
+Unlike a filter, ignoring a predicate changes the comparison, and so the exit code. When nothing
+else differs, `diff` exits 0 and names what it ignored:
+`Graphs are semantically identical, ignoring dcterms:modified.`
+
 ## CI Integration
 
-Use exit codes for CI pipelines:
+Use exit codes for CI pipelines. A filter does not change them, so gate on an unfiltered diff:
 
 ```bash
 # Fail CI if ontology changed unexpectedly
@@ -240,39 +315,113 @@ The diff considers these as **identical** (no changes):
 1. **Statement order** — Triples in different order
 2. **Prefix bindings** — Same URIs with different prefixes
 3. **Whitespace** — Formatting differences
-4. **Blank node labels** — `_:b1` vs `_:genid123` (if structurally equivalent)
+4. **Blank node labels** — `_:b1` vs `_:genid123`: a blank-node structure with the same content, including the named subject that refers to it, is the same structure
 
 The diff detects these as **changes**:
 
 1. **URI changes** — Even if labels are the same
 2. **Literal type changes** — `"42"` (string) vs `42` (integer)
 3. **Language tag changes** — `"Building"@en` vs `"Building"`
+4. **Changes inside blank nodes** — a restriction's cardinality, an axiom annotation's comment, a list's members (see [Blank Nodes](#blank-nodes))
+5. **Lexical form changes** — `"01"^^xsd:integer` vs `"1"^^xsd:integer`: one value written two ways is two literals in RDF 1.1, and neither file is normalised as it is read ([#377](https://github.com/aigora-de/rdf-construct/issues/377)). A bare number in a Turtle file (`007`) is canonicalised by rdflib's parser, so it reads as `7`
+
+## Blank Nodes
+
+A blank node has no name of its own: the parser labels it afresh every time it reads a file. So
+`diff` compares a blank-node structure, such as a restriction, an `owl:Axiom` annotation or an
+`rdf:List`, by its **content**, including the named subject that refers to it. A file compared with
+a copy of itself is identical, however many restrictions it has. A change anywhere inside a
+structure is reported as that whole structure removed and its new version added, written as Turtle.
+
+`examples/diff/` holds a pair of files that differ **only** inside blank nodes:
+
+```bash
+rdf-construct diff examples/diff/v1.ttl examples/diff/v2.ttl
+```
+
+```text
+Comparing v1.ttl → v2.ttl
+
+MODIFIED (2 entities):
+  ~ Class bld:Building
+    + rdfs:subClassOf [ a owl:Restriction ; owl:minCardinality "2"^^xsd:nonNegativeInteger ; owl:onProperty bld:hasFloor ]
+    - rdfs:subClassOf [ a owl:Restriction ; owl:minCardinality "1"^^xsd:nonNegativeInteger ; owl:onProperty bld:hasFloor ]
+  ~ Class bld:Room
+    + [ a owl:Axiom ; owl:annotatedProperty rdfs:subClassOf ; owl:annotatedSource bld:Room ; owl:annotatedTarget bld:Space ; rdfs:comment "A room is an enclosed space."@en ]
+    - [ a owl:Axiom ; owl:annotatedProperty rdfs:subClassOf ; owl:annotatedSource bld:Room ; owl:annotatedTarget bld:Space ; rdfs:comment "A room is a space."@en ]
+
+BLANK-NODE STRUCTURES (1 added, 1 removed):
+  + [ a owl:AllDisjointClasses ; owl:members ( bld:Building bld:Door bld:Floor bld:Room ) ]
+  - [ a owl:AllDisjointClasses ; owl:members ( bld:Building bld:Floor bld:Room ) ]
+
+Summary: 0 added, 0 removed, 2 modified; blank-node structures: 1 added, 1 removed
+```
+
+The exit code is 1. The restriction on `bld:Room` and the `owl:unionOf` on `bld:Space` are the same
+in both files, so they are not listed.
+
+**Where a change is listed:**
+
+- A structure that a named subject refers to is listed under that subject, after the predicate
+  that refers to it (`bld:Building` above). If several subjects refer to one structure, it is
+  listed under each of them.
+- A structure that nothing refers to is listed under the subject it is about: the
+  `owl:annotatedSource` of an axiom annotation (`bld:Room` above), the `rdf:subject` of a reified
+  statement, or the `owl:sourceIndividual` of a negative property assertion.
+- Anything else, such as `owl:AllDisjointClasses`, is listed under **BLANK-NODE STRUCTURES**
+  (in Markdown, `## Blank-node structures`), and the summary counts them as added and removed.
+
+**How a structure is written.** A structure in which every blank node is referred to once is
+written inline, as `[ … ]`, with `( … )` for a well-formed list. A blank node that is referred to
+twice, or one in a cycle, cannot be written inline. Its structure is written as Turtle statements
+instead, and only those nodes get a label: `_:s1`, `_:s2` and so on. These labels belong to the line
+they are on, and are the same in every run. No label the parser invented is ever shown.
+
+**Repeated structures count.** If a class states the same restriction twice and the new file
+states it once, the diff reports one copy removed.
+
+**In JSON**, a blank-node object is `{"type": "bnode", "turtle": "[ … ]"}`. Each entry in `modified`
+has a `structures` list, and the top level has one for structures that belong to no entity. Each
+item in these lists is `{"action": "added" | "removed", "turtle": "…"}`. `summary.structures`
+counts the top-level list.
+
+**Ignored predicates** are removed before structures are compared. So with
+`--ignore-predicates rdfs:comment`, an axiom annotation whose only change is its comment is the
+same in both files.
 
 ## Known Limitations
 
-### Blank Nodes
+### Blank-node structures too large to compare
 
-Blank nodes are challenging for diff. The current implementation:
+Most structures are trees: no blank node in them is referred to by two others, and there is no
+cycle. A tree of any size is compared quickly. A structure that is not a tree is
+compared exactly too, but the cost grows steeply with its size. So `diff` sets aside any structure
+that is not a tree and has more than 500 blank nodes. It names the structure first, before
+anything else in the output, and exits 1, never claiming the files are identical:
 
-- **Detects** that blank node changes occurred
-- **Does not** perform deep structural comparison of blank node neighbourhoods
-
-If your ontology uses blank nodes extensively, consider skolemising them before comparison:
-
-```bash
-# Skolemise blank nodes first (using rapper or similar)
-rapper -i turtle -o turtle old.ttl > old-skolem.ttl
-rapper -i turtle -o turtle new.ttl > new-skolem.ttl
-rdf-construct diff old-skolem.ttl new-skolem.ttl
+```text
+Note: A blank-node structure in old.ttl was not compared: it is not a tree, and it has 5,000 blank nodes, over the limit of 500, under ex:U owl:unionOf. Its changes, if any, are not shown. Each of its blank nodes is owl:sameAs itself, which an OWL-RL closure adds; diff the asserted files instead.
 ```
+
+The usual cause is a reasoner's output: an OWL-RL closure states that every blank node is
+`owl:sameAs` itself, which turns every list into a structure that is not a tree. Compare the
+asserted files instead. Everything outside the set-aside structure is still compared and
+reported. [#388](https://github.com/aigora-de/rdf-construct/issues/388) records the cost and the options for removing the limit.
+
+### Datatypes
+
+A term typed `rdfs:Datatype` is listed as an `Instance`
+([#530](https://github.com/aigora-de/rdf-construct/issues/530)).
 
 ### Large Ontologies
 
 The diff loads both graphs into memory. For very large ontologies (>100k triples), consider:
 
 - Splitting into modules before comparison
-- Using `--entities` to focus on specific entity types
 - Running on a machine with adequate RAM
+
+`--entities` does not help: both graphs are parsed and compared in full before any filter is
+applied.
 
 ## Programmatic Use
 
@@ -298,6 +447,12 @@ else:
 filtered = filter_diff(diff, show_types={"added"})
 print(format_diff(filtered, format_name="text"))
 ```
+
+A filtered diff's `is_identical` still describes the graphs, and `not_shown` counts what the
+filter left out, so `format_diff` says what was hidden. `filter_diff` raises `UnknownFilterError`,
+a `ValueError`, for a name it does not recognise, an empty set, `show_types` with `hide_types`,
+or `hide_types` naming every change type, and for a diff that is already filtered: filter the
+diff `compare_files` returned.
 
 ## Examples
 

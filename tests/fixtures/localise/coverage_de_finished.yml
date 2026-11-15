@@ -1,0 +1,72 @@
+# A finished German translation of coverage.ttl: the file #404's refusal protects.
+#
+# Seven of its eight entries hold a translator's work, one of each kind the refusal counts:
+#   translated 4      the header, House's label and comment, and Listing
+#   needs_review 1    Building's comment
+#   approved 1        Building's label
+#   pending with text 1   Cottage: text typed, status left at pending
+# and partOf is pending and blank, the only entry that is not work. A refusal that counts 6, or
+# 8, has the wrong rule for "finished".
+#
+# Listing is the one entry merge adds (coverage.ttl has no German label for it), so the #408 tests
+# edit that entry: a wrong answer shows as a missing or wrong "Eintrag"@de.
+metadata:
+  source_file: tests/fixtures/localise/coverage.ttl
+  source_language: en
+  target_language: de
+  generated: '2026-10-25T12:00:00'
+  tool: rdf-construct
+  properties:
+  - rdfs:label
+  - rdfs:comment
+entities:
+- uri: http://example.org/heritage#
+  type: owl:Ontology
+  labels:
+  - property: rdfs:label
+    source: Heritage buildings
+    translation: Denkmalgebäude
+    status: translated
+- uri: http://example.org/heritage#Building
+  type: owl:Class
+  labels:
+  - property: rdfs:label
+    source: Building
+    translation: Gebäude
+    status: approved
+  - property: rdfs:comment
+    source: A structure with a roof and walls.
+    translation: Ein Bauwerk.
+    status: needs_review
+- uri: http://example.org/heritage#Cottage
+  type: owl:Class
+  labels:
+  - property: rdfs:label
+    source: Cottage
+    translation: Häuschen
+    status: pending
+- uri: http://example.org/heritage#House
+  type: owl:Class
+  labels:
+  - property: rdfs:label
+    source: House
+    translation: Haus
+    status: translated
+  - property: rdfs:comment
+    source: A building for people to live in.
+    translation: Ein Gebäude zum Wohnen.
+    status: translated
+- uri: http://example.org/heritage#Listing
+  type: owl:Class
+  labels:
+  - property: rdfs:label
+    source: Listing
+    translation: Eintrag
+    status: translated
+- uri: http://example.org/heritage#partOf
+  type: owl:ObjectProperty
+  labels:
+  - property: rdfs:label
+    source: part of
+    translation: ''
+    status: pending

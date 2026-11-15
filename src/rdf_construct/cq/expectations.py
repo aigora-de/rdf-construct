@@ -8,9 +8,10 @@ Supports various expectation styles:
 - Contains: subset matching
 """
 
+import difflib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 from rdflib import URIRef, Literal, BNode
 from rdflib.query import Result
@@ -34,7 +35,20 @@ class CheckResult:
 
 
 class Expectation(ABC):
-    """Abstract base class for all expectation types."""
+    """Abstract base class for all expectation types.
+
+    Attributes:
+        query_forms: The SPARQL query forms whose result this expectation can be checked against.
+            A boolean ASK answer has no rows to count or bind, so only ``BooleanExpectation``
+            accepts it.
+    """
+
+    query_forms: ClassVar[frozenset[str]] = frozenset({"SELECT", "CONSTRUCT", "DESCRIBE"})
+
+    @property
+    def key(self) -> str:
+        """Return the ``expect:`` spelling this expectation is written with."""
+        return self.describe()
 
     @abstractmethod
     def check(self, result: Result) -> CheckResult:
@@ -55,10 +69,19 @@ class Expectation(ABC):
 
 
 class BooleanExpectation(Expectation):
-    """Expectation for ASK queries returning true/false."""
+    """Expectation for ASK queries returning true/false.
+
+    Against a SELECT, CONSTRUCT or DESCRIBE, true means at least one row or triple.
+    """
+
+    query_forms: ClassVar[frozenset[str]] = frozenset({"ASK", "SELECT", "CONSTRUCT", "DESCRIBE"})
 
     def __init__(self, expected: bool):
         self.expected = expected
+
+    @property
+    def key(self) -> str:
+        return str(self.expected).lower()
 
     def check(self, result: Result) -> CheckResult:
         # ASK queries return a boolean result
@@ -67,7 +90,11 @@ class BooleanExpectation(Expectation):
 
         return CheckResult(
             passed=passed,
-            message="ASK query matched" if passed else "ASK query did not match",
+            message=(
+                f"Query answered {actual}, as expected"
+                if passed
+                else f"Query answered {actual}, expected {self.expected}"
+            ),
             expected=str(self.expected),
             actual=str(actual),
         )
@@ -78,6 +105,10 @@ class BooleanExpectation(Expectation):
 
 class HasResultsExpectation(Expectation):
     """Expectation that a query returns at least one result."""
+
+    @property
+    def key(self) -> str:
+        return "has_results"
 
     def check(self, result: Result) -> CheckResult:
         # Convert to list to count (consumes the iterator)
@@ -98,6 +129,10 @@ class HasResultsExpectation(Expectation):
 
 class NoResultsExpectation(Expectation):
     """Expectation that a query returns zero results."""
+
+    @property
+    def key(self) -> str:
+        return "no_results"
 
     def check(self, result: Result) -> CheckResult:
         results_list = list(result)
@@ -128,6 +163,17 @@ class CountExpectation(Expectation):
     exact: int | None = None
     min_count: int | None = None
     max_count: int | None = None
+
+    @property
+    def key(self) -> str:
+        if self.exact is not None:
+            return "count"
+        keys = []
+        if self.min_count is not None:
+            keys.append("min_results")
+        if self.max_count is not None:
+            keys.append("max_results")
+        return " and ".join(keys) if keys else "count"
 
     def check(self, result: Result) -> CheckResult:
         results_list = list(result)
@@ -183,6 +229,11 @@ class ValuesExpectation(Expectation):
     """
 
     expected_results: list[dict[str, Any]] = field(default_factory=list)
+    query_forms: ClassVar[frozenset[str]] = frozenset({"SELECT"})
+
+    @property
+    def key(self) -> str:
+        return "results"
 
     def check(self, result: Result) -> CheckResult:
         results_list = list(result)
@@ -217,8 +268,12 @@ class ValuesExpectation(Expectation):
         return {str(k): self._term_to_string(v) for k, v in row_dict.items()}
 
     def _normalize_dict(self, d: dict) -> dict[str, str]:
-        """Normalize an expected dict for comparison."""
-        return {str(k): str(v) for k, v in d.items()}
+        """Normalize an expected dict for comparison.
+
+        A ``null`` value means the variable is unbound, as a row leaves it out, so
+        ``{label: null}`` and ``{}`` are the same solution (#386).
+        """
+        return {str(k): str(v) for k, v in d.items() if v is not None}
 
     def _term_to_string(self, term: Any) -> str:
         """Convert an RDF term to a comparable string."""
@@ -243,6 +298,11 @@ class ContainsExpectation(Expectation):
     """
 
     expected_bindings: list[dict[str, Any]] = field(default_factory=list)
+    query_forms: ClassVar[frozenset[str]] = frozenset({"SELECT"})
+
+    @property
+    def key(self) -> str:
+        return "contains"
 
     def check(self, result: Result) -> CheckResult:
         results_list = list(result)
@@ -273,10 +333,17 @@ class ContainsExpectation(Expectation):
             actual=f"Missing: {missing}" if missing else "All present",
         )
 
-    def _matches(self, actual: dict[str, str], expected: dict[str, str]) -> bool:
-        """Check if actual contains all expected key-value pairs."""
+    def _matches(self, actual: dict[str, str], expected: dict[str, str | None]) -> bool:
+        """Check if actual contains all expected key-value pairs.
+
+        An expected ``None`` (YAML ``null``) requires the variable to be unbound in that
+        solution (#386); a variable the binding does not name is unconstrained.
+        """
         for key, value in expected.items():
-            if key not in actual or actual[key] != value:
+            if value is None:
+                if key in actual:
+                    return False
+            elif key not in actual or actual[key] != value:
                 return False
         return True
 
@@ -289,9 +356,9 @@ class ContainsExpectation(Expectation):
             row_dict = dict(row)
         return {str(k): self._term_to_string(v) for k, v in row_dict.items()}
 
-    def _normalize_dict(self, d: dict) -> dict[str, str]:
-        """Normalize an expected dict for comparison."""
-        return {str(k): str(v) for k, v in d.items()}
+    def _normalize_dict(self, d: dict) -> dict[str, str | None]:
+        """Normalize an expected dict for comparison; a ``null`` stays ``None``: unbound."""
+        return {str(k): None if v is None else str(v) for k, v in d.items()}
 
     def _term_to_string(self, term: Any) -> str:
         """Convert an RDF term to a comparable string."""
@@ -305,6 +372,74 @@ class ContainsExpectation(Expectation):
 
     def describe(self) -> str:
         return f"contains {len(self.expected_bindings)} binding(s)"
+
+
+def query_form_refusal(question_id: str, expectation: Expectation, query_form: str) -> str | None:
+    """Say why an expectation cannot be checked against a query form, if it cannot.
+
+    Args:
+        question_id: Id of the competency question, named in the message
+        expectation: The question's expectation
+        query_form: The form of the executed query: ``ASK``, ``SELECT``, ``CONSTRUCT`` or
+            ``DESCRIBE``
+
+    Returns:
+        None if the expectation accepts the form, otherwise the refusal message
+    """
+    if query_form in expectation.query_forms:
+        return None
+    if query_form == "ASK":
+        return (
+            f"{question_id}: an ASK query answers true or false, so it cannot be checked with "
+            f"'{expectation.key}'; an ASK takes expect: true or expect: false"
+        )
+    return (
+        f"{question_id}: a {query_form} query returns triples, not variable bindings, so it "
+        f"cannot be checked with '{expectation.key}'"
+    )
+
+
+#: The forms an ``expect:`` mapping takes; ``min_results`` and ``max_results`` combine (#148)
+EXPECT_FORMS: tuple[frozenset[str], ...] = (
+    frozenset({"count"}),
+    frozenset({"min_results", "max_results"}),
+    frozenset({"results"}),
+    frozenset({"contains"}),
+)
+
+EXPECT_KEYS = ("count", "min_results", "max_results", "results", "contains")
+
+
+def _check_expect_keys(expect: dict[Any, Any]) -> None:
+    """Refuse an ``expect:`` mapping with an unknown key, or one that mixes forms (#148).
+
+    A mixed mapping such as ``{count: 2, max_results: 1}`` checked only one of them,
+    in silence.
+
+    Raises:
+        ValueError: Naming the key, or the keys that cannot be combined
+    """
+    for key in expect:
+        name = str(key)
+        if name not in EXPECT_KEYS:
+            nearest = difflib.get_close_matches(name, EXPECT_KEYS, n=1)
+            hint = f" Did you mean '{nearest[0]}'?" if nearest else ""
+            raise ValueError(
+                f"unknown key '{name}' in 'expect:'.{hint} "
+                f"Accepted keys: {', '.join(EXPECT_KEYS)}"
+            )
+    keys = {str(k) for k in expect}
+    if not keys:
+        raise ValueError(
+            "'expect:' is an empty mapping; use one of count, min_results and/or "
+            "max_results, results, contains"
+        )
+    if not any(keys <= form for form in EXPECT_FORMS):
+        named = ", ".join(k for k in EXPECT_KEYS if k in keys)
+        raise ValueError(
+            f"'expect:' combines {named}, which check different things; use one of them "
+            "(only min_results and max_results combine)"
+        )
 
 
 def parse_expectation(expect: Any) -> Expectation:
@@ -345,6 +480,8 @@ def parse_expectation(expect: Any) -> Expectation:
 
     # Dict with specific keys
     if isinstance(expect, dict):
+        _check_expect_keys(expect)
+
         # Exact count
         if "count" in expect:
             return CountExpectation(exact=expect["count"])
@@ -356,13 +493,34 @@ def parse_expectation(expect: Any) -> Expectation:
                 max_count=expect.get("max_results"),
             )
 
-        # Exact values
+        # Exact values; [] is a check that there are no rows
         if "results" in expect:
-            return ValuesExpectation(expected_results=expect["results"])
+            rows = expect["results"]
+            if not isinstance(rows, list) or not all(isinstance(r, dict) for r in rows):
+                raise ValueError(
+                    "'results:' must be a list of rows, each a mapping such as "
+                    "{label: Plant} (or {} for a row with every variable unbound)"
+                )
+            return ValuesExpectation(expected_results=rows)
 
         # Subset contains
         if "contains" in expect:
-            return ContainsExpectation(expected_bindings=expect["contains"])
+            bindings = expect["contains"]
+            if not isinstance(bindings, list) or not all(isinstance(b, dict) for b in bindings):
+                raise ValueError(
+                    "'contains:' must be a list of bindings, each a mapping such as "
+                    "{label: Plant}"
+                )
+            # An empty list or an empty binding matches any result, so it checks nothing (#386)
+            if not bindings or any(b == {} for b in bindings):
+                raise ValueError(
+                    "'contains:' has an empty binding {}, which matches any solution; "
+                    "use expect: has_results"
+                    if bindings
+                    else "'contains:' is an empty list, which checks nothing; "
+                    "use expect: has_results or expect: no_results"
+                )
+            return ContainsExpectation(expected_bindings=bindings)
 
         raise ValueError(f"Unknown expectation dict keys: {expect.keys()}")
 

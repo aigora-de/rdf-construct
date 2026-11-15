@@ -20,6 +20,7 @@ from rdf_construct.core.selector import (
     UnknownSelectorError,
     is_known_selector,
     select_subjects,
+    unknown_selector_error,
 )
 
 SELECTORS = {
@@ -126,6 +127,17 @@ class TestIsKnownSelector:
             else:
                 with pytest.raises(UnknownSelectorError):
                     select_subjects(graph, key, SELECTORS)
+
+
+class TestUnknownSelectorErrorWithoutAGraph:
+    """``order`` checks selectors before it parses the source (#242), with the same words."""
+
+    @pytest.mark.parametrize("key", ["obj_propz", "my_props", "never_defined"])
+    def test_message_matches_select_subjects(self, graph: Graph, key: str):
+        assert not is_known_selector(key, SELECTORS)
+        with pytest.raises(UnknownSelectorError) as excinfo:
+            select_subjects(graph, key, SELECTORS)
+        assert str(unknown_selector_error(key, SELECTORS)) == str(excinfo.value)
 
 
 class TestOrderCommandSurfacesIt:

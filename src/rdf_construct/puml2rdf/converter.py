@@ -11,6 +11,7 @@ from typing import Optional
 from rdflib import Graph, Literal, Namespace, URIRef, RDF, RDFS
 from rdflib.namespace import OWL, XSD
 
+from rdf_construct.puml2rdf.datatypes import BUILTIN_DATATYPES, DatatypeMap, NotADatatype
 from rdf_construct.puml2rdf.model import (
     PumlAttribute,
     PumlClass,
@@ -21,41 +22,8 @@ from rdf_construct.puml2rdf.model import (
 )
 
 
-# Standard XSD datatype mappings from common PlantUML/UML type names
-XSD_TYPE_MAP: dict[str, URIRef] = {
-    # String types
-    "string": XSD.string,
-    "str": XSD.string,
-    "text": XSD.string,
-    # Numeric types
-    "integer": XSD.integer,
-    "int": XSD.integer,
-    "decimal": XSD.decimal,
-    "float": XSD.float,
-    "double": XSD.double,
-    "number": XSD.decimal,
-    # Boolean
-    "boolean": XSD.boolean,
-    "bool": XSD.boolean,
-    # Date/time types
-    "date": XSD.date,
-    "datetime": XSD.dateTime,
-    "time": XSD.time,
-    "gYear": XSD.gYear,
-    "gyear": XSD.gYear,
-    "gYearMonth": XSD.gYearMonth,
-    "duration": XSD.duration,
-    # URI types
-    "uri": XSD.anyURI,
-    "anyURI": XSD.anyURI,
-    "anyuri": XSD.anyURI,
-    "url": XSD.anyURI,
-    # Other common types
-    "base64": XSD.base64Binary,
-    "hexBinary": XSD.hexBinary,
-    "language": XSD.language,
-    "token": XSD.token,
-}
+# The built-in type names, keyed case-folded; kept under its old name for the Python API
+XSD_TYPE_MAP: dict[str, URIRef] = BUILTIN_DATATYPES
 
 
 @dataclass
@@ -66,17 +34,18 @@ class ConversionConfig:
         default_namespace: Default namespace URI for entities without explicit package
         language: Language tag for labels and comments (default: 'en')
         generate_labels: Whether to generate rdfs:label from names
-        generate_inverse_properties: Whether to create inverse properties
         camel_to_label: Convert camelCase names to readable labels
         use_owl_thing: Whether to make classes subclass of owl:Thing explicitly
+        datatypes: The datatype map attribute types resolve through, which the validator
+            reads too; None means the built-in type names alone
     """
 
     default_namespace: str = "http://example.org/ontology#"
     language: str = "en"
     generate_labels: bool = True
-    generate_inverse_properties: bool = False
     camel_to_label: bool = True
     use_owl_thing: bool = False
+    datatypes: DatatypeMap | None = None
 
 
 @dataclass
@@ -119,7 +88,8 @@ class PumlToRdfConverter:
             config: Conversion configuration options
         """
         self.config = config or ConversionConfig()
-        self._graph: Graph = Graph()
+        self._datatypes = self.config.datatypes or DatatypeMap()
+        self._graph: Graph = Graph(bind_namespaces="core")
         self._namespaces: dict[str, Namespace] = {}
         self._class_uris: dict[str, URIRef] = {}
         self._property_uris: dict[str, URIRef] = {}
@@ -127,7 +97,7 @@ class PumlToRdfConverter:
 
     def convert(self, model: PumlModel) -> ConversionResult:
         """Convert a PlantUML model to an RDF graph."""
-        self._graph = Graph()
+        self._graph = Graph(bind_namespaces="core")
         self._namespaces = {}
         self._class_uris = {}
         self._property_uris = {}
@@ -173,11 +143,13 @@ class PumlToRdfConverter:
         for pkg in packages:
             if pkg.namespace_uri:
                 ns_uri = pkg.namespace_uri
-                if not ns_uri.endswith(("#", "/")):
+                # A URN namespace such as urn:example:building: already ends in its delimiter
+                if not ns_uri.endswith(("#", "/", ":")):
                     ns_uri += "#"
                 ns = Namespace(ns_uri)
                 self._namespaces[pkg.name] = ns
-                self._graph.bind(pkg.name, ns)
+                # A namespace_mappings entry may bind it to another prefix (#152)
+                self._graph.bind(pkg.prefix or pkg.name, ns)
                 prefixes.discard(pkg.name)  # Don't auto-generate
 
         # Auto-generate namespaces for remaining prefixes
@@ -187,28 +159,6 @@ class PumlToRdfConverter:
             ns = Namespace(ns_uri)
             self._namespaces[prefix] = ns
             self._graph.bind(prefix, ns)
-
-    def _generate_prefix(self, name: str) -> str:
-        """Generate a namespace prefix from a package name.
-
-        Args:
-            name: Package name (may be a URI or display name)
-
-        Returns:
-            Short lowercase prefix string
-        """
-        # If it looks like a URI, extract the last segment
-        if "://" in name or name.startswith("http"):
-            # Extract meaningful part from URI
-            name = name.rstrip("#/")
-            if "/" in name:
-                name = name.rsplit("/", 1)[-1]
-            if "#" in name:
-                name = name.rsplit("#", 1)[-1]
-
-        # Clean and shorten
-        prefix = re.sub(r"[^a-zA-Z0-9]", "", name).lower()
-        return prefix[:10] if len(prefix) > 10 else prefix or "ns"
 
     def _create_ontology_header(self, model: PumlModel) -> None:
         """Create the owl:Ontology declaration."""
@@ -347,20 +297,17 @@ class PumlToRdfConverter:
         return self._namespaces["default"]
 
     def _map_datatype(self, type_name: str) -> URIRef:
-        """Map a PlantUML type name to XSD datatype."""
-        normalised = type_name.lower().strip()
+        """Map a PlantUML type name to its datatype, through the one datatype map (#155).
 
-        if normalised in XSD_TYPE_MAP:
-            return XSD_TYPE_MAP[normalised]
-
-        # Check for qualified XSD types
-        if type_name.startswith("xsd:"):
-            local = type_name[4:]
-            return XSD[local]
-
-        # Default to string
-        self._warnings.append(f"Unknown datatype '{type_name}', defaulting to xsd:string")
-        return XSD.string
+        A type the map does not know, or one that names no datatype, is written as
+        ``xsd:string``. The model validator, reading the same map, is what reports it, so
+        it is reported once; a caller that converts without validating is not told.
+        """
+        try:
+            datatype = self._datatypes.resolve(type_name)
+        except NotADatatype:
+            datatype = None
+        return datatype if datatype is not None else XSD.string
 
     def _camel_to_label(self, name: str) -> str:
         """Convert camelCase or PascalCase to readable label.

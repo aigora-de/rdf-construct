@@ -6,13 +6,64 @@ Defines configuration structures for:
 - Data migration settings
 """
 
-from dataclasses import dataclass, field
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
 from rdflib import Graph, URIRef
+
+from rdf_construct.core.utils import CurieError, rebase_by_rules, resolve_curie
+
+
+class AmbiguousCurieError(ValueError):
+    """A CURIE that resolves to different IRIs in different source files."""
+
+
+def resolve_term(text: str, sources: Sequence[tuple[Path, Mapping[str, str]]]) -> URIRef:
+    """Resolve a CURIE or IRI against the prefixes of every source file.
+
+    A CURIE means the same entity in every file that binds its prefix. A file that does not
+    bind the prefix is not a disagreement; files that bind it to different namespaces are.
+
+    Args:
+        text: A CURIE, a bracketed IRI or a full IRI.
+        sources: Each source file with its prefix map (see `resolve_curie` for the binding rule).
+
+    Returns:
+        The resolved IRI.
+
+    Raises:
+        CurieError: If no source binds the prefix.
+        AmbiguousCurieError: If sources bind the prefix to different namespaces.
+    """
+    resolved: dict[URIRef, list[Path]] = {}
+    first_error: CurieError | None = None
+    bound: set[str] = set()
+    for path, prefixes in sources:
+        bound.update(prefixes)
+        try:
+            iri = resolve_curie(prefixes, text)
+        except CurieError as e:
+            first_error = first_error or e
+            continue
+        resolved.setdefault(iri, []).append(path)
+
+    if not resolved:
+        if first_error is None:
+            raise CurieError(text, None, bound)
+        raise CurieError(text, first_error.prefix, bound)
+    if len(resolved) > 1:
+        readings = "; ".join(
+            f"<{iri}> in {', '.join(str(p) for p in paths)}" for iri, paths in resolved.items()
+        )
+        raise AmbiguousCurieError(
+            f"{text!r} means different IRIs in different sources: {readings}. "
+            f"Give the full IRI, or process the files separately."
+        )
+    return next(iter(resolved))
 
 
 @dataclass
@@ -41,10 +92,14 @@ class RenameConfig:
     Attributes:
         namespaces: Old namespace -> new namespace mappings.
         entities: Explicit old URI -> new URI mappings.
+        merge_entities: Let a rename merge two entities deliberately: onto an IRI that has
+            triples of its own, two renames onto one IRI, or an axiom made reflexive (#185).
+            Off, such a rename is refused.
     """
 
     namespaces: dict[str, str] = field(default_factory=dict)
     entities: dict[str, str] = field(default_factory=dict)
+    merge_entities: bool = False
 
     def build_mappings(self, graph: Graph) -> list[RenameMapping]:
         """Expand namespace rules to concrete URI mappings.
@@ -75,16 +130,13 @@ class RenameConfig:
 
             # Apply namespace mappings
             for uri in all_uris:
-                uri_str = str(uri)
-                for old_ns, new_ns in self.namespaces.items():
-                    if uri_str.startswith(old_ns):
-                        new_uri_str = uri_str.replace(old_ns, new_ns, 1)
-                        mappings[uri] = RenameMapping(
-                            from_uri=uri,
-                            to_uri=URIRef(new_uri_str),
-                            source="namespace",
-                        )
-                        break
+                new_uri_str = rebase_by_rules(str(uri), self.namespaces)
+                if new_uri_str is not None:
+                    mappings[uri] = RenameMapping(
+                        from_uri=uri,
+                        to_uri=URIRef(new_uri_str),
+                        source="namespace",
+                    )
 
         # Phase 2: Apply explicit entity mappings (override namespace)
         for old_uri_str, new_uri_str in self.entities.items():
@@ -97,6 +149,29 @@ class RenameConfig:
 
         return list(mappings.values())
 
+    def resolved(self, sources: Sequence[tuple[Path, Mapping[str, str]]]) -> "RenameConfig":
+        """Return a copy whose entity renames are full IRIs on both sides.
+
+        Args:
+            sources: Each source file with its prefix map, as `resolve_term` takes.
+
+        Returns:
+            A new RenameConfig. Namespace mappings are copied unchanged.
+
+        Raises:
+            CurieError: If a CURIE's prefix is bound by no source.
+            AmbiguousCurieError: If sources bind a CURIE's prefix differently.
+        """
+        entities = {
+            str(resolve_term(old, sources)): str(resolve_term(new, sources))
+            for old, new in self.entities.items()
+        }
+        return RenameConfig(
+            namespaces=dict(self.namespaces),
+            entities=entities,
+            merge_entities=self.merge_entities,
+        )
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "RenameConfig":
         """Create from dictionary.
@@ -106,10 +181,19 @@ class RenameConfig:
 
         Returns:
             RenameConfig instance.
+
+        Raises:
+            ValueError: If ``merge_entities`` is not true or false.
         """
+        merge_entities = data.get("merge_entities", False)
+        if not isinstance(merge_entities, bool):
+            raise ValueError(
+                f"rename: merge_entities must be true or false, not {merge_entities!r}"
+            )
         return cls(
             namespaces=data.get("namespaces", {}),
             entities=data.get("entities", {}),
+            merge_entities=merge_entities,
         )
 
 
@@ -128,6 +212,27 @@ class DeprecationSpec:
     replaced_by: str | None = None
     message: str | None = None
     version: str | None = None
+
+    def resolved(self, sources: Sequence[tuple[Path, Mapping[str, str]]]) -> "DeprecationSpec":
+        """Return a copy whose entity and replacement are full IRIs.
+
+        Args:
+            sources: Each source file with its prefix map, as `resolve_term` takes.
+
+        Returns:
+            A new DeprecationSpec.
+
+        Raises:
+            CurieError: If a CURIE's prefix is bound by no source.
+            AmbiguousCurieError: If sources bind a CURIE's prefix differently.
+        """
+        return replace(
+            self,
+            entity=str(resolve_term(self.entity, sources)),
+            replaced_by=(
+                str(resolve_term(self.replaced_by, sources)) if self.replaced_by else None
+            ),
+        )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "DeprecationSpec":
@@ -320,6 +425,10 @@ rename:
     # Fix typos
     # "http://example.org/v2#Buiding": "http://example.org/v2#Building"
     # "http://example.org/v2#hasAddres": "http://example.org/v2#hasAddress"
+
+  # A rename onto an IRI that already has triples of its own is refused, because it would
+  # merge two entities. Set this to merge them deliberately (--merge-entities).
+  # merge_entities: false
 
 # Optional data migration
 # migrate_data:

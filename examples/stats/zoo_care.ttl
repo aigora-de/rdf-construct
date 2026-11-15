@@ -1,0 +1,39 @@
+@prefix care: <http://example.org/zoo/care#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix zoo: <http://example.org/zoo/core#> .
+
+# A small ontology for the STATS_GUIDE.md worked examples: the care module.
+#
+# Its classes sit under zoo_core.ttl's, so its hierarchy only adds up over both
+# files (#140): on its own, care:Patient is a root, because its parent is in the
+# other file. care:pairedWith is declared only as an owl:SymmetricProperty, and
+# care:dose only as an rdf:Property (#138).
+
+<http://example.org/zoo/care> a owl:Ontology ;
+    rdfs:label "Zoo care"@en ;
+    owl:imports <http://example.org/zoo/core> .
+
+care:Patient a owl:Class ;
+    rdfs:subClassOf zoo:Mammal ;
+    rdfs:label "Patient"@en .
+
+care:Treatment a owl:Class ;
+    rdfs:label "Treatment"@en ;
+    rdfs:comment "Something done for an animal's health."@en .
+
+care:treats a owl:ObjectProperty ;
+    rdfs:domain care:Treatment ;
+    rdfs:range zoo:Animal ;
+    rdfs:label "treats"@en .
+
+care:pairedWith a owl:SymmetricProperty ;
+    rdfs:domain zoo:Animal ;
+    rdfs:range zoo:Animal .
+
+care:dose a rdf:Property ;
+    rdfs:domain care:Treatment .
+
+care:aspirin a care:Treatment ;
+    rdfs:label "aspirin"@en .
