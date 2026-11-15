@@ -1,4 +1,4 @@
-"""Tests for flag-versus-config precedence (#160, #206, #225, #251).
+"""Tests for flag-versus-config precedence (#160, #206, #225, #251, #351).
 
 Decided on #160: an option given on the command line overrides the config file, and the
 config file overrides the option's default. Click fills in a default whenever a flag is
@@ -16,8 +16,7 @@ Case 3 does not exist for an ``is_flag`` option such as ``--no-search``, because
 can only set it, and nor for an option with no default, such as ``--properties``.
 
 Each fixture makes a wrong answer visible in what the command wrote or how it exited, not
-only in a config object. The exception is ``shacl-gen``'s ``default_severity``: nothing reads
-it even once it arrives (#223), so those tests can only assert that it reaches ``ShaclConfig``.
+only in a config object.
 """
 
 from pathlib import Path
@@ -27,14 +26,15 @@ import click
 import pytest
 import yaml
 from click.testing import CliRunner
-from rdflib import Graph
+from rdflib import Graph, URIRef
+from rdflib.namespace import OWL, RDFS
 
-import rdf_construct.shacl as shacl_package
 from rdf_construct.cli import cli, flag_given
-from rdf_construct.shacl import SH, Severity, ShaclConfig
+from rdf_construct.shacl import SH
 
 REPO = Path(__file__).parent.parent
 DOCS_FIXTURE = REPO / "tests" / "fixtures" / "docs" / "deprecated_terms.ttl"
+MERGE_LABELS = REPO / "tests" / "fixtures" / "merge" / "conflicts"
 
 # One class with no superclass: orphan-class is a warning at standard and an error at
 # strict, so the level shows up in the exit code.
@@ -46,7 +46,7 @@ ex: a owl:Ontology ; rdfs:label "W" ; rdfs:comment "W" .
 ex:Thing a owl:Class ; rdfs:label "Thing" ; rdfs:comment "A thing." .
 """
 
-# owl:oneOf becomes sh:in, and only at strict.
+# owl:oneOf becomes sh:in from standard up (#227); not at minimal.
 ENUM_ONTOLOGY = """\
 @prefix ex: <http://example.org/enum#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
@@ -194,62 +194,49 @@ class TestShaclGen:
     def has_sh_in(shapes: Graph) -> bool:
         return (None, SH["in"], None) in shapes
 
+    # level: since #227, sh:in appears from standard up, so minimal against standard is the
+    # pair a wrong answer shows in (strict is an alias of standard).
+
     def test_level_config_wins_when_the_flag_is_absent(
         self, runner: CliRunner, tmp_path: Path, source: Path
     ) -> None:
-        config = write_yaml(tmp_path / "c.yml", {"level": "strict"})
-        assert self.has_sh_in(self.run(runner, source, config))
+        config = write_yaml(tmp_path / "c.yml", {"level": "minimal"})
+        assert not self.has_sh_in(self.run(runner, source, config))
 
     def test_level_flag_wins_when_given(
         self, runner: CliRunner, tmp_path: Path, source: Path
     ) -> None:
         config = write_yaml(tmp_path / "c.yml", {"level": "standard"})
-        assert self.has_sh_in(self.run(runner, source, config, "--level", "strict"))
+        assert not self.has_sh_in(self.run(runner, source, config, "--level", "minimal"))
 
     def test_level_flag_wins_when_given_at_its_default(
         self, runner: CliRunner, tmp_path: Path, source: Path
     ) -> None:
-        config = write_yaml(tmp_path / "c.yml", {"level": "strict"})
-        assert not self.has_sh_in(self.run(runner, source, config, "--level", "standard"))
+        config = write_yaml(tmp_path / "c.yml", {"level": "minimal"})
+        assert self.has_sh_in(self.run(runner, source, config, "--level", "standard"))
 
-    # default_severity: nothing emits sh:severity yet (#223), so these assert only that the
-    # value reaches the ShaclConfig handed to the generator. They cannot see the output.
-
-    @pytest.fixture
-    def captured(self, monkeypatch: pytest.MonkeyPatch) -> list[ShaclConfig]:
-        configs: list[ShaclConfig] = []
-        real = shacl_package.generate_shapes_to_file
-
-        def spy(
-            source: Path, output: Path, config: ShaclConfig, *args: Any, **kwargs: Any
-        ) -> Graph:
-            configs.append(config)
-            return real(source, output, config, *args, **kwargs)
-
-        monkeypatch.setattr(shacl_package, "generate_shapes_to_file", spy)
-        return configs
+    # default_severity: read from what was written, sh:severity on every shape (#223)
 
     @pytest.mark.parametrize(
         ("flags", "expected"),
         [
-            ((), Severity.WARNING),
-            (("--default-severity", "info"), Severity.INFO),
-            (("--default-severity", "violation"), Severity.VIOLATION),
+            ((), SH.Warning),
+            (("--default-severity", "info"), SH.Info),
+            (("--default-severity", "violation"), SH.Violation),
         ],
         ids=["config-wins-when-absent", "flag-wins", "flag-wins-at-its-default"],
     )
-    def test_default_severity_reaches_the_config(
+    def test_default_severity_is_written(
         self,
         runner: CliRunner,
         tmp_path: Path,
         source: Path,
-        captured: list[ShaclConfig],
         flags: tuple[str, ...],
-        expected: Severity,
+        expected: URIRef,
     ) -> None:
         config = write_yaml(tmp_path / "c.yml", {"default_severity": "warning"})
-        self.run(runner, source, config, *flags)
-        assert [c.default_severity for c in captured] == [expected]
+        shapes = self.run(runner, source, config, *flags)
+        assert set(shapes.objects(None, SH.severity)) == {expected}
 
 
 class TestDocs:
@@ -499,3 +486,189 @@ class TestLocaliseExtract:
         assert written["metadata"]["source_language"] == "fr"
         assert self.entities(written) == {"Todo"}
         assert self.sources(written) == {"A faire"}
+
+
+class TestMerge:
+    """``merge -c`` (#351): ``--strategy``, ``--imports``, ``-p``, ``--migrate-data`` and
+    ``--data-output`` were all discarded whenever a config was given.
+
+    The three ``labels_*`` sources give ``ex:Thing`` the English labels Alpha, Beta and Gamma.
+    With priorities a=1, b=3, c=2, ``first`` keeps Alpha, ``priority`` keeps Beta and ``last``
+    keeps Gamma, so every outcome names the strategy that produced it.
+    """
+
+    THING = URIRef("http://example.org/Thing")
+    IMPORTED = URIRef("http://example.org/other")
+
+    @staticmethod
+    def config(tmp_path: Path, **extra: Any) -> Path:
+        data: dict[str, Any] = {
+            "sources": [
+                {"path": str(MERGE_LABELS / "labels_a.ttl"), "priority": 1},
+                {"path": str(MERGE_LABELS / "labels_b.ttl"), "priority": 3},
+                {"path": str(MERGE_LABELS / "labels_c.ttl"), "priority": 2},
+            ],
+            **extra,
+        }
+        return write_yaml(tmp_path / "merge.yml", data)
+
+    @staticmethod
+    def run(
+        runner: CliRunner, tmp_path: Path, config: Path, *args: str, exit_code: int = 0
+    ) -> Graph:
+        out = tmp_path / "merged.ttl"
+        result = runner.invoke(cli, ["merge", "-c", str(config), "-o", str(out), *args])
+        assert result.exit_code == exit_code, result.output
+        return Graph().parse(out)
+
+    def english(self, graph: Graph) -> set[str]:
+        return {
+            str(label)
+            for label in graph.objects(self.THING, RDFS.label)
+            if getattr(label, "language", None) == "en"
+        }
+
+    # strategy: config first (Alpha), flag last (Gamma), default priority (Beta).
+
+    def test_strategy_config_wins_when_the_flag_is_absent(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        merged = self.run(runner, tmp_path, self.config(tmp_path, conflicts={"strategy": "first"}))
+        assert self.english(merged) == {"Alpha"}
+
+    def test_strategy_flag_wins_when_given(self, runner: CliRunner, tmp_path: Path) -> None:
+        config = self.config(tmp_path, conflicts={"strategy": "first"})
+        merged = self.run(runner, tmp_path, config, "--strategy", "last")
+        assert self.english(merged) == {"Gamma"}
+
+    def test_strategy_flag_wins_when_given_at_its_default(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """The issue's own shape: ``--strategy priority`` over a config's ``mark_all``."""
+        config = self.config(tmp_path, conflicts={"strategy": "mark_all"})
+        merged = self.run(runner, tmp_path, config, "--strategy", "priority")
+        assert self.english(merged) == {"Beta"}
+
+    def test_strategy_mark_all_config_still_marks(self, runner: CliRunner, tmp_path: Path) -> None:
+        config = self.config(tmp_path, conflicts={"strategy": "mark_all"})
+        merged = self.run(runner, tmp_path, config, exit_code=1)
+        assert self.english(merged) == {"Alpha", "Beta", "Gamma"}
+
+    # imports: one source imports ex:other.
+
+    def imports_config(self, tmp_path: Path, **extra: Any) -> Path:
+        source = tmp_path / "importer.ttl"
+        source.write_text(
+            "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n"
+            f"<http://example.org/o> a owl:Ontology ; owl:imports <{self.IMPORTED}> .\n",
+            encoding="utf-8",
+        )
+        return write_yaml(tmp_path / "merge.yml", {"sources": [str(source)], **extra})
+
+    def test_imports_config_wins_when_the_flag_is_absent(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        merged = self.run(runner, tmp_path, self.imports_config(tmp_path, imports="remove"))
+        assert not list(merged.objects(None, OWL.imports))
+
+    def test_imports_flag_wins_when_given(self, runner: CliRunner, tmp_path: Path) -> None:
+        merged = self.run(runner, tmp_path, self.imports_config(tmp_path), "--imports", "remove")
+        assert not list(merged.objects(None, OWL.imports))
+
+    def test_imports_flag_wins_when_given_at_its_default(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        config = self.imports_config(tmp_path, imports="remove")
+        merged = self.run(runner, tmp_path, config, "--imports", "preserve")
+        assert list(merged.objects(None, OWL.imports)) == [self.IMPORTED]
+
+    # -p: the config's priorities keep Beta; -p replaces them in order.
+
+    def test_priority_config_wins_when_the_flag_is_absent(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        assert self.english(self.run(runner, tmp_path, self.config(tmp_path))) == {"Beta"}
+
+    def test_priority_flag_wins_when_given(self, runner: CliRunner, tmp_path: Path) -> None:
+        merged = self.run(runner, tmp_path, self.config(tmp_path), "-p", "1", "-p", "1", "-p", "9")
+        assert self.english(merged) == {"Gamma"}
+
+    def test_a_short_priority_list_keeps_the_config_for_the_rest(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """``-p 9`` raises a above b's 3; b and c keep the config's 3 and 2."""
+        merged = self.run(runner, tmp_path, self.config(tmp_path), "-p", "9")
+        assert self.english(merged) == {"Alpha"}
+
+    @pytest.mark.parametrize("with_config", [True, False], ids=["config", "sources"])
+    def test_more_priorities_than_sources_is_refused(
+        self, runner: CliRunner, tmp_path: Path, with_config: bool
+    ) -> None:
+        from tests.test_cli_smoke import assert_no_crash, assert_wrote_nothing, snapshot
+
+        out = tmp_path / "merged.ttl"
+        if with_config:
+            argv = ["merge", "-c", str(self.config(tmp_path)), "-o", str(out)]
+            argv += ["-p", "1", "-p", "2", "-p", "3", "-p", "4"]
+            message = "-p gives 4 priorities for 3 source(s)"
+        else:
+            argv = ["merge", str(MERGE_LABELS / "labels_a.ttl"), str(MERGE_LABELS / "labels_b.ttl")]
+            argv += ["-o", str(out), "-p", "1", "-p", "2", "-p", "3"]
+            message = "-p gives 3 priorities for 2 source(s)"
+        before = snapshot(argv, tmp_path)
+        result = runner.invoke(cli, argv)
+        assert_no_crash(result)
+        assert result.exit_code == 2, result.output
+        assert message in result.output
+        assert_wrote_nothing(before, snapshot(argv, tmp_path))
+
+    # --migrate-data and --data-output: the config migrates one file to one place.
+
+    @staticmethod
+    def data_file(path: Path, subject: str) -> Path:
+        path.write_text(
+            f"@prefix d: <http://example.org/d#> .\nd:{subject} a d:Record .\n", encoding="utf-8"
+        )
+        return path
+
+    def migrating_config(self, tmp_path: Path) -> Path:
+        data = self.data_file(tmp_path / "config_data.ttl", "fromConfig")
+        return self.config(
+            tmp_path,
+            migrate_data={"sources": [str(data)], "output": str(tmp_path / "config_out.ttl")},
+        )
+
+    @staticmethod
+    def subjects(path: Path) -> set[str]:
+        return {str(s).rsplit("#", 1)[1] for s in Graph().parse(path).subjects()}
+
+    def test_migrate_data_config_wins_when_the_flags_are_absent(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        self.run(runner, tmp_path, self.migrating_config(tmp_path))
+        assert self.subjects(tmp_path / "config_out.ttl") == {"fromConfig"}
+
+    def test_migrate_data_flag_replaces_the_config_sources(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        given = self.data_file(tmp_path / "given.ttl", "fromFlag")
+        self.run(runner, tmp_path, self.migrating_config(tmp_path), "--migrate-data", str(given))
+        assert self.subjects(tmp_path / "config_out.ttl") == {"fromFlag"}
+
+    def test_data_output_flag_replaces_the_config_output(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        out = tmp_path / "flag_out.ttl"
+        self.run(runner, tmp_path, self.migrating_config(tmp_path), "--data-output", str(out))
+        assert self.subjects(out) == {"fromConfig"}
+        assert not (tmp_path / "config_out.ttl").exists()
+
+    def test_migrate_data_without_a_config_migration(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """#351's reproducer: a config with no ``migrate_data:`` and both flags given."""
+        given = self.data_file(tmp_path / "given.ttl", "fromFlag")
+        out = tmp_path / "flag_out.ttl"
+        args = ("--migrate-data", str(given), "--data-output", str(out))
+        self.run(runner, tmp_path, self.config(tmp_path), *args)
+        assert self.subjects(out) == {"fromFlag"}

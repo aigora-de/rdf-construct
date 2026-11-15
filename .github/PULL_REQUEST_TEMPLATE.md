@@ -1,3 +1,5 @@
+<!-- Open this PR against the release branch (release/v…), not main: main holds the last release. -->
+
 ## Summary
 
 Brief description of what this PR does.

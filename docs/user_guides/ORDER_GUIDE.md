@@ -157,7 +157,7 @@ Three keys are read on a section, plus one special section name:
 |---|---|---|
 | `select` | the section's own name | Which selector to use |
 | `sort` | `qname_alpha` | `alpha`/`qname_alpha`, or `topological`/`topological_then_alpha` |
-| `roots` | none | CURIEs whose branches are emitted first, in the order listed |
+| `roots` | none | A list of CURIEs or IRIs whose branches are emitted first, in the order listed; topological sorts only. A root that anchors nothing is reported; one that is not a CURIE or an IRI is refused |
 
 `header: {}` is a section name with a fixed meaning: it places the `owl:Ontology` subjects, the
 ontology's own metadata, wherever the section stands. It takes no keys.
@@ -234,20 +234,27 @@ it is emitted — but it is filed under individuals, which is not what it is. Gi
 ## Sorting
 
 `sort: alpha` (or `qname_alpha`) orders by qualified name. It is the right choice when the file's
-job is to produce small, readable diffs between versions.
+job is to produce small, readable diffs between versions. A section with no `sort:` key is sorted
+this way.
 
-`sort: topological` orders parents before children over `rdfs:subClassOf`, and super-properties
-before sub-properties over `rdfs:subPropertyOf`. Ties are broken alphabetically, so the output is
-deterministic — the same input always produces the same file, in any process.
+`sort: topological` (or `topological_then_alpha`, which is the same) orders parents before children
+over `rdfs:subClassOf`, and super-properties before sub-properties over `rdfs:subPropertyOf`. Ties
+are broken alphabetically, so the output is deterministic — the same input always produces the same
+file, in any process.
 
-> **Check the spelling.** Exactly four values are understood: `alpha`, `qname_alpha`, `topological`
-> and `topological_then_alpha`. Anything else — a typo, or the reasonable-looking `topo` — currently
-> means **alphabetical**, silently, at exit 0 ([#242](https://github.com/aigora-de/rdf-construct/issues/242)).
-> If a profile is not ordering the way you expect, this is the first thing to check.
+Those four values are the whole set, matched regardless of case. Anything else — a typo, the
+reasonable-looking `topo`, a number, or a `sort:` key left empty — is refused at exit 2, naming the
+profile, the section, the value and the four accepted modes. `order` checks every profile it is
+about to write, and every section's `select:` with it, before it reads the source, so a refusal
+leaves nothing behind: not even the files of the profiles that were fine.
 
-Which of the two hierarchy predicates a section uses is decided per section, from the types of the
-subjects it claimed. In practice: class sections walk `rdfs:subClassOf`, property sections walk
-`rdfs:subPropertyOf`.
+Every topological section follows both hierarchy predicates at once, whatever it selects. RDFS
+gives `rdfs:subClassOf` a class at each end and `rdfs:subPropertyOf` a property at each end, so
+neither links a class to a property, and no choice between them is needed. So a section of
+properties declared only by an OWL characteristic (`owl:TransitiveProperty` and the like), an
+`other_props` or annotation-property section, and a custom selector's section are all ordered by
+their hierarchy, and a class that is also declared a property (an OWL Full pun) keeps its place in
+both.
 
 ### Leading with a branch: `roots`
 
@@ -266,9 +273,43 @@ lib:Journal  lib:Work  lib:Article  lib:Book  lib:Anthology
 
 against `hierarchy`'s `lib:Work  lib:Article  lib:Book  lib:Anthology  lib:Journal`.
 
-**Root CURIEs are resolved against the prefixes of the parsed source file.** A root that does not
-resolve, or that resolves to a term the ontology does not contain, is skipped without a message —
-see [Known limitations](#known-limitations), because there is a trap here worth knowing about.
+**Roots are resolved against the prefixes the source file declares**, plus `rdf`, `rdfs`, `owl`,
+`xsd` and `xml`; never against rdflib's own table. Each may be a CURIE, an IRI in angle brackets
+(`<urn:x>`), or a full IRI (`http://…`). A root that is listed twice, or that sits inside an
+earlier root's branch, is already placed and changes nothing.
+
+A root can miss, and one configuration shared between ontologies legitimately does: `-p` is
+optional, so a run without it applies every profile to the source. So a root that anchors nothing
+is **reported on stderr, and the file is still written, at exit 0**. Run the guide's config
+against the other example ontology:
+
+```bash
+rdf-construct order examples/animal_ontology.ttl examples/order/ordering.yml -p anchored -o out/
+```
+
+```
+  ⚠ profile 'anchored', section 'classes': 1 root ignored
+      lib:Journal — prefix 'lib:' is not declared by this source (declared: ex:, owl:, rdf:, rdfs:, xml:, xsd:)
+```
+
+Each root that misses gets one line, for one of four reasons:
+
+| Line | Meaning |
+|---|---|
+| `org:Person, org:Department — prefix 'org:' is not declared by this source (declared: …)` | The source has no such prefix; roots that share it share the line. Declare it in the source, or this profile is for another ontology. |
+| `org:Organization → http://example.org/organisation#Organization — not in this ontology` | The prefix resolved; nothing in the source uses that IRI. Check the spelling. |
+| `ies:Element → … — in this ontology, but not selected by this section` | The term is there (an imported parent, say), but not among the subjects the section sorts. |
+| `ex:Part → … — already placed by section 'classes'` | An earlier section took the term, so this one never sees it. |
+
+`roots` on a section that is not sorted topologically is ignored and says so (`roots ignored — sort
+is 'alpha'`). A `roots` value that is not a list, an entry that is not a string, or one that is
+neither a CURIE nor an IRI (`Animal`) is refused at exit 2 before the source is read, so nothing is
+written:
+
+```
+Error: Nothing was written:
+  profile 'p', section 'classes': roots: expected a list of CURIEs or IRIs, such as [ex:Animal]; got 'lib:Journal'
+```
 
 ## Unclaimed subjects
 
@@ -418,20 +459,49 @@ A source with no `owl:Ontology` has no identity to claim, so nothing is stamped 
 
 Only prefixes **actually used** by the emitted triples are declared. `classes-only` drops the
 datatype properties, so `xsd:` disappears from its header — there is no clutter of unused
-declarations (issue #50):
+declarations (issue #50). `prov:` is there because `classes-only` is an extract and is stamped
+(see above):
 
 ```turtle
 @prefix lib: <http://example.org/library#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 ```
 
+The prefixes are the source's own, plus `rdf`, `rdfs`, `owl`, `xsd` and `xml` (issue #239). A
+source's `org:`, `dc:` or `skos:` is written as the source declares it, even where rdflib has a
+well-known prefix of the same name for another vocabulary. Two consequences:
+
+- A namespace the source uses without declaring a prefix for it, outside those five, is written as
+  a full `<IRI>`. Declare the prefix in the source to get CURIEs.
+- A source that binds one of the five to another namespace (`@prefix owl: <…>` for something other
+  than OWL) has its own renamed, to `owl1:`, so that `owl:` still means OWL.
+
+`roots:` and `predicate_order` CURIEs resolve against the same prefixes.
+
 Declarations use Turtle's `@prefix` form, never SPARQL's `PREFIX` (issue #57). Turtle permits both;
 mixing them is what caused that bug, and the rule now is that `order` emits `@prefix` only.
 
-Prefix declarations are emitted in alphabetical order. The `prefix_order` key exists and does not
-currently change this — see [Known limitations](#known-limitations).
+Prefix declarations are emitted in alphabetical order unless the configuration has a top-level
+`prefix_order` list. The prefixes it names come first, in its order, then the rest alphabetically
+(issue #238). `ordering.yml` has no `prefix_order`; with `prefix_order: [lib, rdfs]` added at the
+top, `classes-only` begins:
+
+```turtle
+@prefix lib: <http://example.org/library#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+```
+
+A listed prefix the output does not use, or that the source never declares, is skipped without a
+message, and a prefix listed twice keeps its first place. Anything but a list of names, such as
+`prefix_order: rdf, owl`, is refused at exit 2 before anything is written. The order is
+presentation only: it changes no triple. `defaults.preserve_prefix_order`, which earlier configurations set, has been
+removed; it never had an effect, and a configuration that still sets it is not refused.
 
 ## Hierarchy cycles
 
@@ -443,6 +513,10 @@ triple is lost and the run exits 0.
 `owl:equivalentClass` — asserting a cycle is an unusual but legitimate way of saying a set of
 classes are equivalent. What is true is narrower: there is no parent-before-child order over a set
 of mutually subsuming classes, so `order` falls back to alphabetical for those terms.
+
+A cycle can also run through both predicates: two punned terms with `A rdfs:subClassOf B` and
+`B rdfs:subPropertyOf A`. Because a section follows both, that is a cycle too, and is written the
+same way.
 
 A term that is its own subclass or subproperty — `C rdfs:subClassOf C`, which RDFS inference adds
 for every class — is a tautology, not a cycle. It is ignored, and the term is ordered normally.
@@ -489,13 +563,8 @@ it is still growing three releases from now, that is the signal, not the table.
 
 | Issue | Behaviour today |
 |---|---|
-| [#242](https://github.com/aigora-de/rdf-construct/issues/242) | A `sort:` value the tool does not recognise **silently means alphabetical**. Only `alpha`, `qname_alpha`, `topological` and `topological_then_alpha` are understood — `topo` and a typo both give you alphabetical order at exit 0. If a profile is not ordering as expected, check this spelling first. |
-| [#238](https://github.com/aigora-de/rdf-construct/issues/238) | `prefix_order` does not change the order prefixes are emitted in; output is always alphabetical. `defaults.preserve_prefix_order` has no observable effect either. |
-| [#239](https://github.com/aigora-de/rdf-construct/issues/239) | A source prefix that collides with one rdflib binds by default — `org`, `dc`, `foaf`, `skos`, `time`, `geo`, `prov`, `dcat` and others — is **renamed** in the output, so `@prefix org:` comes back as `@prefix org1:`. The graph is unchanged and isomorphic; the CURIEs in the file are not. `lib:` in these examples is unaffected. |
-| [#241](https://github.com/aigora-de/rdf-construct/issues/241) | A `roots:` entry that does not resolve, or that names a term absent from the ontology, is skipped with no message. Combined with #239 this bites: a `roots:` written with your source's own prefix can resolve somewhere else entirely. |
 | [#243](https://github.com/aigora-de/rdf-construct/issues/243) | Eleven keys accepted in profiles and sections are read by nothing: `tie_breaker`, `comment_blocks`, `bnode_strategy`, `anchors`, `after_anchors`, `cluster`, `within_level`, `group_by`, `group_order`, `explicit_group_sequence`, `within_group_tie`. They appear in `examples/order/sample_profile.yml` and `examples/order/ies_profile.yml`, where they make two profiles byte-identical to two others. **`examples/order/ordering.yml`, used throughout this guide, contains only keys that work.** |
 | [#247](https://github.com/aigora-de/rdf-construct/issues/247) | A `selectors:` value beginning `FILTER` is matched by prefix only; the expression is never parsed, and such a selector claims every individual regardless of what it says. |
-| [#245](https://github.com/aigora-de/rdf-construct/issues/245) / [#262](https://github.com/aigora-de/rdf-construct/issues/262) | A section containing **only** properties declared by an OWL characteristic is sorted over `rdfs:subClassOf` rather than `rdfs:subPropertyOf`, so its hierarchy is ignored; and such terms are given the individuals' `predicate_order` specification. A mixed section, like the ones in this guide, is unaffected. |
 | [#246](https://github.com/aigora-de/rdf-construct/issues/246) | `predicate_order` entries must be written as bare CURIEs. Full IRIs and `<bracketed IRIs>` are silently dropped, though `roots:` accepts all three forms. |
 | [#369](https://github.com/aigora-de/rdf-construct/issues/369) | An extract whose source imports PROV-O, rather than describing `prov:wasDerivedFrom` itself, declares the property an `owl:AnnotationProperty`, while PROV-O declares it an `owl:ObjectProperty`. Loaded together with its imports, the extract is outside OWL 2 DL. `order` does not resolve imports, so it cannot tell. |
 | [#281](https://github.com/aigora-de/rdf-construct/issues/281) | A filtering profile can drop the declaration of a term that a surviving axiom still uses (`classes-only` drops `lib:publishes` while `lib:Journal`'s restriction refers to it), taking the extract out of OWL 2 DL with no message. |
@@ -524,7 +593,7 @@ from rdf_construct.core import (
 config = OrderingConfig(Path("examples/order/ordering.yml"))
 profile = config.get_profile("hierarchy")
 
-graph = Graph(bind_namespaces="none")
+graph = Graph(bind_namespaces="core")
 graph.parse("examples/order/library.ttl", format="turtle")
 
 ordered: list = []
@@ -558,9 +627,9 @@ print(f"Wrote library-hierarchy.ttl with {len(ordered)} subjects")
 Wrote library-hierarchy.ttl with 17 subjects
 ```
 
-Two things worth copying from it: parse with `bind_namespaces="none"`, or rdflib's well-known
-prefixes will displace your own (#239); and run `bnode_closure` before serialising, or a filtering
-selection can strip the interior of a class expression.
+Two things worth copying from it: parse with `bind_namespaces="core"`, as `order` does, or
+rdflib's well-known prefixes will displace your own (#239); and run `bnode_closure` before
+serialising, or a filtering selection can strip the interior of a class expression.
 
 That the snippet is this long is itself a finding rather than a style choice — there is no public
 "order this graph with this profile" entry point, so a library user has to re-derive the section

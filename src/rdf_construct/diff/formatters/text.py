@@ -12,6 +12,7 @@ from rdf_construct.diff.change_types import (
     PredicateCategory,
     TripleChange,
 )
+from rdf_construct.diff.filters import not_shown_line, not_shown_sentence
 
 
 class DiffFormatter(Protocol):
@@ -36,6 +37,7 @@ ENTITY_TYPE_NAMES = {
     EntityType.OBJECT_PROPERTY: "ObjectProperty",
     EntityType.DATATYPE_PROPERTY: "DataProperty",
     EntityType.ANNOTATION_PROPERTY: "AnnotationProperty",
+    EntityType.OTHER_PROPERTY: "Property",
     EntityType.INDIVIDUAL: "Instance",
     EntityType.ONTOLOGY: "Ontology",
     EntityType.OTHER: "Entity",
@@ -66,6 +68,11 @@ def format_text(diff: GraphDiff, graph: Graph | None = None) -> str:
 
     if diff.is_identical:
         lines.append("No semantic differences found.")
+        return "\n".join(lines)
+
+    # A filter that left everything out says what it hid, never that nothing changed (#144)
+    if diff.shows_nothing and any(diff.not_shown.values()):
+        lines.append(not_shown_sentence(diff))
         return "\n".join(lines)
 
     # Added entities
@@ -114,6 +121,8 @@ def format_text(diff: GraphDiff, graph: Graph | None = None) -> str:
             f"{len(diff.removed_structures)} removed"
         )
     lines.append(summary_line)
+    if any(diff.not_shown.values()):
+        lines.append(not_shown_line(diff))
 
     return "\n".join(lines)
 

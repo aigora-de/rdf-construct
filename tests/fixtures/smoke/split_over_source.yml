@@ -1,0 +1,8 @@
+# A split whose module would replace its own source (#413). The smoke row runs it with
+# -o @tmp and the source copied into @tmp, so the config's output_dir never applies.
+split:
+  output_dir: never-used/
+  modules:
+    - name: organisation
+      output: split_monolith.ttl
+      namespaces: ["http://example.org/ontology/org#"]

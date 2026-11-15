@@ -26,15 +26,22 @@ from __future__ import annotations
 import io
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from rdflib import ConjunctiveGraph, Graph
+from rdflib import BNode, Dataset, Graph, Literal, plugin
+from rdflib.graph import DATASET_DEFAULT_GRAPH_ID, QuotedGraph
+from rdflib.serializer import Serializer
+from rdflib.term import Variable
 
 from rdf_construct.core.formats import (
+    FORMAT_REGISTRY,
     extension_for_format,
     infer_format,
     is_quad_format,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 # ---------------------------------------------------------------------------
@@ -47,17 +54,24 @@ class ConversionResult:
     """The outcome of a :meth:`CastConverter.convert` call.
 
     Attributes:
-        success: ``True`` if at least one format was converted without fatal
-            error (even when :attr:`partial_failure` is ``True``).
+        success: ``True`` if every format that was attempted converted, and at
+            least one was. ``False`` on a fatal error, on a partial failure, and
+            when every requested format was the source's own, so that nothing
+            was attempted (#330). In pipe mode only the first format that is not
+            skipped is attempted, so :attr:`skipped_formats` names only the skips
+            before it.
         partial_failure: ``True`` when some formats succeeded and some failed.
             Only relevant in multi-format mode.
         error: Set to a human-readable message on complete failure (parse
-            error, all formats failed, quad-guard rejection, etc.).
+            error, all formats failed, quad-guard rejection, every format the
+            source's own, etc.).
         written_files: Paths of output files that were actually written.
         stdout_content: Serialised RDF string when in pipe mode; ``None``
             otherwise.
         warnings: Non-fatal messages (skipped source==target format, etc.).
         failed_formats: Canonical format names that failed to serialise.
+        skipped_formats: Canonical format names skipped because they are the
+            source's own format, each named once.
     """
 
     success: bool = False
@@ -67,6 +81,259 @@ class ConversionResult:
     stdout_content: str | None = None
     warnings: list[str] = field(default_factory=list)
     failed_formats: list[str] = field(default_factory=list)
+    skipped_formats: list[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Same-format requests (#330)
+# ---------------------------------------------------------------------------
+
+
+def nothing_to_cast(source_format: str, formats: Sequence[str]) -> bool:
+    """Whether every requested format is the source's own, so nothing can be cast.
+
+    Decided from the request alone, before the source is read: no content can make a
+    format that equals the source's worth writing.
+
+    Args:
+        source_format: The canonical format of the source, as ``infer_format`` gives it.
+        formats: The canonical formats requested.
+
+    Returns:
+        ``True`` when *formats* is non-empty and every entry is *source_format*.
+    """
+    return bool(formats) and all(fmt == source_format for fmt in formats)
+
+
+def formats_other_than(source_format: str) -> list[str]:
+    """Return every canonical format except *source_format*, in registry order.
+
+    Args:
+        source_format: The canonical format to leave out.
+
+    Returns:
+        The canonical format names ``cast`` could write instead.
+    """
+    return [fi.canonical for fi in FORMAT_REGISTRY if fi.canonical != source_format]
+
+
+def nothing_to_cast_message(source: Path, source_format: str, *, allow_flatten: bool) -> str:
+    """Explain why a request naming only the source's own format casts nothing.
+
+    The source's format comes from its extension and is never sniffed, so the message
+    says so, and says when the extension is unknown and the format a guess. From a quad
+    source without *allow_flatten*, it also names the formats that need the flag.
+
+    Args:
+        source: The source file.
+        source_format: Its canonical format, as ``infer_format`` gives it.
+        allow_flatten: Whether ``--allow-flatten`` was given.
+
+    Returns:
+        The message, without any ``Error:`` prefix.
+    """
+    suffix = source.suffix.lower()
+    known = any(suffix in fi.extensions for fi in FORMAT_REGISTRY)
+    if known:
+        what = f"{source.name} is already {source_format} (from its extension)"
+    else:
+        reason = (
+            f"cast does not recognise '{source.suffix}'"
+            if source.suffix
+            else f"{source.name} has no extension"
+        )
+        what = f"{source.name} is taken to be {source_format} ({reason})"
+    message = f"nothing to cast: {what}, and {source_format} was the only format requested."
+    if is_quad_format(source_format) and not allow_flatten:
+        other_quads = [fmt for fmt in formats_other_than(source_format) if is_quad_format(fmt)]
+        message += (
+            f" Every format but {', '.join(other_quads)} is single-graph, and needs "
+            f"--allow-flatten (which merges the named graphs) from "
+            f"{'an' if source_format[0] in 'aeinosx' else 'a'} {source_format} source."
+        )
+    return message
+
+
+# ---------------------------------------------------------------------------
+# Named graphs, and what no target can hold (#540, #542)
+# ---------------------------------------------------------------------------
+
+
+#: How rdflib before 7.3 writes the default graph's name in an N-Quads statement.
+_DEFAULT_GRAPH_TERM = f" <{DATASET_DEFAULT_GRAPH_ID}>".encode()
+
+
+def named_graphs_message(
+    source: Path, source_format: str, single_graph_targets: Sequence[str]
+) -> str:
+    """Explain why a source with named graphs is not written to a single-graph format.
+
+    A TriG or N-Quads source is refused on its format, before it is read. A JSON-LD
+    source is refused on its content, once the parse shows it holds named graphs. The
+    advice names only the quad formats other than the source's own, which ``cast``
+    would refuse as nothing to cast (#330).
+
+    Args:
+        source: The source file.
+        source_format: Its canonical format, as ``infer_format`` gives it.
+        single_graph_targets: The requested formats that cannot hold named graphs.
+
+    Returns:
+        The message, without any ``Error:`` prefix.
+    """
+    what = (
+        f"uses a multi-graph format ({source_format})"
+        if is_quad_format(source_format)
+        else "holds named graphs"
+    )
+    other_quads = [fmt for fmt in formats_other_than(source_format) if is_quad_format(fmt)]
+    return (
+        f"Source '{source.name}' {what} "
+        f"but the requested target format(s) are single-graph: "
+        f"{', '.join(single_graph_targets)}. "
+        f"Use --allow-flatten to merge all named graphs into the default graph, "
+        f"or choose a quad output format ({', '.join(other_quads)})."
+    )
+
+
+def has_named_graphs(dataset: Dataset) -> bool:
+    """Whether *dataset* holds a statement outside its default graph.
+
+    Args:
+        dataset: A parsed source.
+
+    Returns:
+        ``True`` when at least one named graph is not empty.
+    """
+    return any(
+        graph != DATASET_DEFAULT_GRAPH_ID
+        for _s, _p, _o, graph in dataset.quads((None, None, None, None))
+    )
+
+
+def n3_only_statements(dataset: Dataset) -> tuple[int, int, int]:
+    """Count the statements that only N3 can carry (#542).
+
+    Three things parse that are not RDF triples. An N3 formula (``{ … }``) becomes a
+    ``QuotedGraph`` and an N3 variable (``@forAll :x``, ``?x``) a ``Variable``: neither
+    is an IRI, a blank node or a literal. And N3 allows a literal as a subject and a
+    blank node or a literal as a predicate, which rdflib's Turtle parser lets through
+    as well. No other format can hold any of them: rdflib's serialisers write text
+    that does not parse, or drop the statement. Statements are counted rather than
+    formulae, because a formula nested in another makes the latter ambiguous.
+
+    Args:
+        dataset: A parsed source.
+
+    Returns:
+        The number of statements with a formula, the number with a variable, and the
+        number with a literal subject or a blank-node or literal predicate. A statement
+        can be counted in more than one.
+    """
+    formulae = variables = misplaced = 0
+    for s, p, o, _graph in dataset.quads((None, None, None, None)):
+        terms = (s, p, o)
+        formulae += any(isinstance(term, QuotedGraph) for term in terms)
+        variables += any(isinstance(term, Variable) for term in terms)
+        misplaced += isinstance(s, Literal) or isinstance(p, BNode | Literal)
+    return formulae, variables, misplaced
+
+
+def n3_only_message(source: Path, formulae: int, variables: int, misplaced: int = 0) -> str:
+    """Explain why a source with statements only N3 can carry cannot be cast.
+
+    Args:
+        source: The source file.
+        formulae: The number of statements holding a formula.
+        variables: The number of statements holding a variable.
+        misplaced: The number of statements with a literal subject, or a predicate
+            that is not an IRI.
+
+    Returns:
+        The message, without any ``Error:`` prefix.
+    """
+    kinds = (
+        (formulae, "a formula ({ … })"),
+        (variables, "a variable"),
+        (misplaced, "a literal subject or a predicate that is not an IRI"),
+    )
+    counts: list[str] = []
+    for count, kind in kinds:
+        if count:
+            noun = "" if counts else f" statement{'' if count == 1 else 's'}"
+            counts.append(f"{count}{noun} with {kind}")
+    return (
+        f"Source '{source.name}' holds N3 constructs that no other format can carry: "
+        f"{', '.join(counts)}. "
+        f"Only N3 can hold them, so there is nothing cast can write."
+    )
+
+
+# ---------------------------------------------------------------------------
+# A graph named by a blank node, in TriG (#545)
+# ---------------------------------------------------------------------------
+
+
+class GraphNameReferences:
+    """Mixin for rdflib's TriG serialiser: a blank node that names a graph keeps its label.
+
+    rdflib writes a blank node inline, as ``[ … ]``, when it is an object and is
+    referred to once. It counts each use as an object or as a subject, across the
+    whole dataset, but not the use as a graph's name. So a blank node that names a
+    graph and is otherwise used once, as an object, was written ``[ ]``, and the
+    statement no longer pointed at the graph. Counting the name as a reference
+    makes rdflib write the label in both places.
+
+    The count is rdflib's private ``_references``. If a later rdflib no longer has
+    it, a dataset in which a blank node names a graph is refused, rather than
+    written with the link lost. This does not notice an rdflib that keeps the
+    attribute and decides inlining some other way: the tests are what would.
+    """
+
+    store: Any
+    _references: dict[Any, int]
+
+    def preprocess(self) -> None:
+        """Count every blank-node graph name as a reference, after rdflib's own count.
+
+        Raises:
+            RuntimeError: If a blank node names a graph and this rdflib's serialiser
+                keeps no reference count.
+        """
+        names = {
+            graph
+            for _s, _p, _o, graph in self.store.quads((None, None, None, None))
+            if isinstance(graph, BNode)
+        }
+        # Checked before rdflib's own pass, which would fail on the missing count first.
+        if names and not hasattr(self, "_references"):
+            raise RuntimeError(
+                "this version of rdflib writes TriG in a way cast does not know, so a "
+                "graph named by a blank node could lose its name. Use --format nquads, "
+                "which keeps it"
+            )
+        super().preprocess()  # type: ignore[misc]
+        for name in names:
+            self._references[name] += 1
+
+
+def trig_serialiser(dataset: Dataset) -> Serializer:
+    """Build a TriG serialiser for *dataset* that keeps each blank-node graph name (#545).
+
+    It is built over whichever class is registered for ``trig`` when this is
+    called. Inside the CLI that is not rdflib's own but the one that keeps literal
+    forms (#377), so a fixed base class here would undo that.
+
+    Args:
+        dataset: The parsed source.
+
+    Returns:
+        The serialiser; call its ``serialize`` with a binary stream.
+    """
+    registered: type[Serializer] = plugin.get("trig", Serializer)
+    serialiser = type("GraphNameTrigSerializer", (GraphNameReferences, registered), {})
+    built: Serializer = serialiser(dataset)
+    return built
 
 
 # ---------------------------------------------------------------------------
@@ -102,10 +369,12 @@ class CastConverter:
                 serialised RDF is returned in
                 :attr:`ConversionResult.stdout_content` and no file is
                 written.
-            allow_flatten: When ``True``, multi-graph (quad) source files are
-                flattened into the default graph before conversion.  When
-                ``False`` (the default), converting a quad source to a
-                single-graph format is an error.
+            allow_flatten: When ``True``, a source with named graphs is
+                written to a single-graph format by merging every graph
+                into one.  When ``False`` (the default), that conversion is
+                an error.  TriG and N-Quads output keeps the graphs either
+                way.  A source has named graphs if it is TriG or N-Quads,
+                or is JSON-LD and holds one.
 
         Returns:
             A :class:`ConversionResult` describing what happened.
@@ -116,26 +385,25 @@ class CastConverter:
         source_format = infer_format(source)
         is_quad_source = is_quad_format(source_format)
 
+        # --- 1a. Nothing to cast: every format is the source's own (#330) ------
+        if nothing_to_cast(source_format, formats):
+            result.error = nothing_to_cast_message(
+                source, source_format, allow_flatten=allow_flatten
+            )
+            result.skipped_formats.append(source_format)
+            result.success = False
+            return result
+
         # --- 2. Guard: quad source → single-graph target ----------------------
         single_graph_targets = [f for f in formats if not is_quad_format(f)]
         if is_quad_source and single_graph_targets and not allow_flatten:
-            result.error = (
-                f"Source '{source.name}' uses a multi-graph format ({source_format}) "
-                f"but the requested target format(s) are single-graph: "
-                f"{', '.join(single_graph_targets)}. "
-                f"Use --allow-flatten to merge all named graphs into the default graph, "
-                f"or choose a quad output format (trig, nquads)."
-            )
+            result.error = named_graphs_message(source, source_format, single_graph_targets)
             result.success = False
             return result
 
         # --- 3. Parse source --------------------------------------------------
         try:
-            graph = self._load_graph(
-                source,
-                source_format,
-                flatten=is_quad_source and allow_flatten,
-            )
+            dataset = self._load_dataset(source, source_format)
         except Exception as exc:  # noqa: BLE001
             result.error = (
                 f"Failed to parse '{source.name}' as {source_format}: {exc}. "
@@ -144,23 +412,61 @@ class CastConverter:
             result.success = False
             return result
 
-        if is_quad_source and allow_flatten and single_graph_targets:
+        # --- 3a. N3 constructs that no other format can carry (#542) ----------
+        # N3 output can hold them, so a request for nothing else goes ahead.
+        formulae, variables, misplaced = n3_only_statements(dataset)
+        other_targets = [f for f in formats if f not in (source_format, "n3")]
+        if (formulae or variables or misplaced) and other_targets:
+            result.error = n3_only_message(source, formulae, variables, misplaced)
+            result.success = False
+            return result
+
+        # --- 3b. A JSON-LD source holding named graphs is a quad source (#540) -
+        holds_graphs = is_quad_source or (source_format == "json-ld" and has_named_graphs(dataset))
+        merged_targets = list(dict.fromkeys(f for f in single_graph_targets if f != source_format))
+        if holds_graphs and merged_targets and not allow_flatten:
+            result.error = named_graphs_message(source, source_format, merged_targets)
+            result.success = False
+            return result
+
+        flatten = holds_graphs and allow_flatten
+        if flatten and merged_targets:
             result.warnings.append(
-                f"Flattened {source.name}: all named graphs merged into the default graph."
+                f"Flattened {source.name} for {', '.join(merged_targets)}: "
+                f"all named graphs merged into one graph."
             )
 
         # --- 4. Serialise to each target format --------------------------------
         effective_dir = output_dir if output_dir is not None else source.parent
+        union: Graph | None = None
 
         for fmt in formats:
             if fmt == source_format:
                 result.warnings.append(f"Skipping '{fmt}': source and target format are the same.")
+                if fmt not in result.skipped_formats:
+                    result.skipped_formats.append(fmt)
                 continue
+
+            # A quad target holds the dataset, graphs and all, whatever the flag. A
+            # single-graph target holds the default graph, or the union when flattening.
+            graph: Graph
+            if is_quad_format(fmt):
+                graph = dataset
+            elif flatten:
+                if union is None:
+                    union = self._union(dataset)
+                graph = union
+            else:
+                graph = dataset.get_context(DATASET_DEFAULT_GRAPH_ID)
+                if fmt == "json-ld":
+                    # rdflib 7.0.0 writes a dataset's default graph to JSON-LD as a
+                    # graph named urn:x-rdflib:default (#549).
+                    graph = self._plain_copy(graph)
 
             if pipe_mode:
                 # Single format → stdout; we do not write any file.
                 try:
-                    content = self._serialise_to_string(graph, fmt)
+                    content = self._serialise(graph, fmt).decode("utf-8")
                     result.stdout_content = content
                     result.success = True
                 except Exception as exc:  # noqa: BLE001
@@ -173,19 +479,25 @@ class CastConverter:
             out_path = effective_dir / f"{source.stem}{ext}"
             try:
                 effective_dir.mkdir(parents=True, exist_ok=True)
-                graph.serialize(destination=str(out_path), format=fmt)
+                if fmt == "nquads":
+                    # Only N-Quads is rewritten after rdflib serialises it, so only it
+                    # is built in memory first. The other formats keep rdflib's own
+                    # write to the destination: what a failed write leaves is #409's.
+                    out_path.write_bytes(self._serialise(graph, fmt))
+                elif fmt == "trig":
+                    # Built, then opened and written, as rdflib does it, through our
+                    # serialiser (#545).
+                    serialiser = trig_serialiser(dataset)
+                    with out_path.open("wb") as stream:
+                        serialiser.serialize(stream)
+                else:
+                    graph.serialize(destination=str(out_path), format=fmt)
                 result.written_files.append(out_path)
             except Exception as exc:  # noqa: BLE001
                 result.failed_formats.append(fmt)
                 result.warnings.append(f"Failed to write {out_path.name} ({fmt}): {exc}")
 
         # --- 5. Determine overall success -------------------------------------
-        # If every format was skipped (same-as-source) and nothing was attempted:
-        if not result.written_files and not result.failed_formats and not result.stdout_content:
-            # All formats were same-as-source; warn-and-skip is not a failure
-            result.success = True
-            return result
-
         if result.failed_formats and result.written_files:
             result.partial_failure = True
             result.success = False
@@ -204,46 +516,89 @@ class CastConverter:
     # -------------------------------------------------------------------------
 
     @staticmethod
-    def _load_graph(source: Path, source_format: str, *, flatten: bool) -> Graph:
-        """Parse *source* and return an rdflib graph.
+    def _load_dataset(source: Path, source_format: str) -> Dataset:
+        """Parse *source* into an rdflib dataset.
+
+        A single-graph source's triples land in the default graph. A source that
+        carries named graphs (TriG, N-Quads, JSON-LD) keeps them. A plain
+        :class:`~rdflib.Graph` would drop the named graphs, and would be written to
+        TriG under its own blank-node identifier (#540).
 
         Args:
             source: Path to the RDF source file.
             source_format: Canonical rdflib format string.
-            flatten: If ``True``, parse as a :class:`~rdflib.ConjunctiveGraph`
-                and return a plain :class:`~rdflib.Graph` containing all
-                triples from all named graphs merged into the default graph.
 
         Returns:
-            A parsed rdflib :class:`~rdflib.Graph`.
+            The parsed :class:`~rdflib.Dataset`.
         """
-        if flatten:
-            cg = ConjunctiveGraph()
-            cg.parse(str(source), format=source_format)
-            # Merge all quads into a plain Graph
-            flat = Graph()
-            for s, p, o in cg.triples((None, None, None)):
-                flat.add((s, p, o))
-            # Copy prefix bindings from conjunctive graph default context
-            for prefix, ns in cg.namespaces():
-                flat.bind(prefix, ns)
-            return flat
-        else:
-            g = Graph()
-            g.parse(str(source), format=source_format)
-            return g
+        dataset = Dataset()
+        dataset.parse(str(source), format=source_format)
+        return dataset
 
     @staticmethod
-    def _serialise_to_string(graph: Graph, fmt: str) -> str:
-        """Serialise *graph* to a string in the given format.
+    def _union(dataset: Dataset) -> Graph:
+        """Merge every graph of *dataset* into one plain graph.
+
+        Iterates quads: ``Dataset.triples()`` reads only the default graph.
 
         Args:
-            graph: The rdflib graph to serialise.
+            dataset: The parsed source.
+
+        Returns:
+            A plain :class:`~rdflib.Graph` holding each triple once, with the
+            dataset's prefix bindings.
+        """
+        flat = Graph()
+        for s, p, o, _graph in dataset.quads((None, None, None, None)):
+            flat.add((s, p, o))
+        for prefix, ns in dataset.namespaces():
+            flat.bind(prefix, ns)
+        return flat
+
+    @staticmethod
+    def _plain_copy(graph: Graph) -> Graph:
+        """Copy *graph* into a plain graph that belongs to no dataset.
+
+        Args:
+            graph: A graph, typically a dataset's default graph.
+
+        Returns:
+            A plain :class:`~rdflib.Graph` holding the same triples and prefix
+            bindings, under an identifier of its own.
+        """
+        plain = Graph()
+        for triple in graph:
+            plain.add(triple)
+        for prefix, ns in graph.namespaces():
+            plain.bind(prefix, ns)
+        return plain
+
+    @staticmethod
+    def _serialise(graph: Graph, fmt: str) -> bytes:
+        """Serialise *graph* to bytes in the given format.
+
+        rdflib writes a default-graph N-Quads statement with two spaces before the
+        ``.``, one either side of the graph term it leaves out. That is valid but not
+        canonical, so it is rewritten to one. rdflib before 7.3 does not leave the
+        term out: it names the default graph by its own internal IRI, which is
+        removed, so that the default graph is unnamed on every rdflib 7. Both
+        rewrites are exact: N-Quads escapes newlines inside literals, so only a
+        statement can end a line.
+
+        Args:
+            graph: The rdflib graph or dataset to serialise.
             fmt: Canonical rdflib format string.
 
         Returns:
-            The serialised RDF as a string.
+            The serialised RDF, UTF-8 encoded.
         """
         buf = io.BytesIO()
-        graph.serialize(destination=buf, format=fmt)
-        return buf.getvalue().decode("utf-8")
+        if fmt == "trig":
+            trig_serialiser(graph).serialize(buf)  # type: ignore[arg-type]
+        else:
+            graph.serialize(destination=buf, format=fmt)
+        content = buf.getvalue()
+        if fmt == "nquads":
+            content = content.replace(b"  .\n", b" .\n")
+            content = content.replace(_DEFAULT_GRAPH_TERM + b" .\n", b" .\n")
+        return content

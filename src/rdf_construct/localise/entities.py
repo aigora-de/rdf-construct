@@ -30,22 +30,11 @@ from rdf_construct.core.vocab import (
     GENERIC_PROPERTY_TYPES,
     OBJECT_PROPERTY_TYPES,
 )
-
-_CURIES = {
-    "http://www.w3.org/2000/01/rdf-schema#": "rdfs:",
-    "http://www.w3.org/2004/02/skos/core#": "skos:",
-    "http://www.w3.org/2002/07/owl#": "owl:",
-    "http://www.w3.org/1999/02/22-rdf-syntax-ns#": "rdf:",
-    "http://purl.org/dc/elements/1.1/": "dc:",
-    "http://purl.org/dc/terms/": "dcterms:",
-}
+from rdf_construct.localise.properties import FILE_PREFIXES, shorten_property
 
 
 def _shorten(iri: str) -> str:
-    for namespace, prefix in _CURIES.items():
-        if iri.startswith(namespace):
-            return prefix + iri[len(namespace) :]
-    return iri
+    return shorten_property(FILE_PREFIXES, iri)
 
 
 def collect_entities(graph: Graph, properties: Iterable[URIRef]) -> list[URIRef]:
@@ -157,7 +146,9 @@ def related_tags(
     """Count literals tagged with a tag related to `language`, but not `language` itself.
 
     Two tags are related when they share a primary subtag: ``en``, ``en-GB`` and ``en-US`` are
-    related to one another. This finds the material an exact match leaves out, for the warning
+    related to one another. A private-use (``x-…``) or irregular grandfathered (``i-…``) tag
+    starts with a singleton, which names no language, so it is related to nothing (#425). This
+    finds the material an exact match leaves out, for the warning
     given when `language` matches nothing (#159).
 
     Args:
@@ -171,6 +162,8 @@ def related_tags(
     """
     primary = primary_subtag(language)
     found: Counter[str] = Counter()
+    if len(primary) == 1:
+        return found
     props = list(properties)
     for entity in entities:
         for prop in props:
@@ -194,7 +187,7 @@ def zero_match_warnings(found: Counter[str], language: str, flag: str) -> list[s
     """
     return [
         f"Found {count} literal{'s' if count != 1 else ''} tagged {tag}; {flag} {language} "
-        f"does not match them. Did you mean {flag} {tag}?"
+        f"does not match {'them' if count != 1 else 'it'}. Did you mean {flag} {tag}?"
         for tag, count in sorted(found.items(), key=lambda item: (-item[1], item[0]))
     ]
 

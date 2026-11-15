@@ -1026,3 +1026,119 @@ class TestNamespaceBoundaryCLI:
         ontology_moved = not from_ns.endswith("#")
         assert _count(g, "http://example.org/NEW") == int(ontology_moved)
         assert _count(g, "http://example.org/ont") == int(not ontology_moved)
+
+
+NESTED_SOURCE = """\
+@prefix core: <http://e.org/core/> .
+@prefix sub: <http://e.org/core/sub/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+core:A a owl:Class .
+sub:B a owl:Class .
+"""
+
+NESTED_RULES = [
+    ("http://e.org/core/", "http://n.org/core/"),
+    ("http://e.org/core/sub/", "http://n.org/sub/"),
+]
+
+
+class TestNamespaceRulesCLI:
+    """The boundary rule (#422, #423) and the longest-match precedence (#424) through the CLI."""
+
+    def _rename(self, tmp_path: Path, source: str, from_ns: str, to_ns: str) -> Graph:
+        src = tmp_path / "src.ttl"
+        src.write_text(source)
+        out = tmp_path / "out.ttl"
+        result, _, _ = _run(
+            [
+                "refactor",
+                "rename",
+                str(src),
+                "--from-namespace",
+                from_ns,
+                "--to-namespace",
+                to_ns,
+                "-o",
+                str(out),
+            ],
+            tmp_path,
+        )
+        assert result.exit_code == 0, result.output
+        return Graph().parse(out)
+
+    @pytest.mark.parametrize(
+        ("from_ns", "iri", "moved"),
+        [
+            (
+                "http://purl.obolibrary.org/obo/GO_",
+                "http://purl.obolibrary.org/obo/GO_0008150",
+                "http://n.org/go/0008150",
+            ),
+            ("http://example.org/items?id=", "http://example.org/items?id=7", "http://n.org/go/7"),
+        ],
+    )
+    def test_a_stem_namespace_renames(self, tmp_path, from_ns, iri, moved):
+        source = (
+            "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n"
+            f"<{iri}> a owl:Class .\n"
+            "<http://purl.obolibrary.org/obo/CL_0000000> a owl:Class .\n"
+        )
+        g = self._rename(tmp_path, source, from_ns, "http://n.org/go/")
+        assert (URIRef(moved), RDF.type, OWL.Class) in g
+        assert (URIRef(iri), None, None) not in g
+        assert (URIRef("http://purl.obolibrary.org/obo/CL_0000000"), RDF.type, OWL.Class) in g
+
+    def test_another_port_is_untouched(self, tmp_path):
+        source = (
+            "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n"
+            "<http://example.org:8080/a#X> a owl:Class .\n"
+            "<http://example.org/ont#Y> a owl:Class .\n"
+        )
+        g = self._rename(tmp_path, source, "http://example.org", "http://example.net")
+        assert (URIRef("http://example.org:8080/a#X"), RDF.type, OWL.Class) in g
+        assert (URIRef("http://example.net/ont#Y"), RDF.type, OWL.Class) in g
+
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_overlapping_rules_take_the_longest_in_either_order(self, tmp_path, reverse):
+        src = tmp_path / "nested.ttl"
+        src.write_text(NESTED_SOURCE)
+        out = tmp_path / "out.ttl"
+        rules = list(reversed(NESTED_RULES)) if reverse else NESTED_RULES
+        lines = "".join(f'    "{old}": "{new}"\n' for old, new in rules)
+        cfg = tmp_path / "rename.yml"
+        cfg.write_text(f"source_files: [{src}]\noutput: {out}\nrename:\n  namespaces:\n{lines}")
+        result, _, _ = _run(["refactor", "rename", "-c", str(cfg)], tmp_path)
+        assert result.exit_code == 0, result.output
+        assert (
+            "Note: http://e.org/core/sub/ lies within http://e.org/core/; each IRI moves by the "
+            "longest rule that contains it."
+        ) in result.stderr
+
+        g = Graph().parse(out)
+        assert (URIRef("http://n.org/core/A"), RDF.type, OWL.Class) in g
+        assert (URIRef("http://n.org/sub/B"), RDF.type, OWL.Class) in g
+        assert len(g) == 2
+        # A prefix moves by the same rule as the terms in it.
+        bindings = {p: str(ns) for p, ns in g.namespaces()}
+        assert bindings["core"] == "http://n.org/core/"
+        assert bindings["sub"] == "http://n.org/sub/"
+
+    def test_rules_that_do_not_nest_give_no_note(self, tmp_path):
+        self._rename(tmp_path, NESTED_SOURCE, "http://e.org/core/", "http://n.org/core/")
+        src = tmp_path / "src.ttl"
+        result, _, _ = _run(
+            [
+                "refactor",
+                "rename",
+                str(src),
+                "--from-namespace",
+                "http://e.org/core/",
+                "--to-namespace",
+                "http://n.org/core/",
+                "--dry-run",
+            ],
+            tmp_path,
+        )
+        assert result.exit_code == 0, result.output
+        assert "Note:" not in result.stderr

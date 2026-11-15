@@ -75,6 +75,50 @@ or `contains` is reported as that question's error; `has_results` and
 [`cq-test`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#cq-test)
 in the migration note.
 
+**A `cq-test` run that checked nothing now exits 2, and so does a test file of
+the wrong shape.** A tag that matches no question, a file with no questions, or
+a selection where every question is `skip: true` used to exit 0 with `No tests
+to run`. An unknown key anywhere in the test file, a `data:` source that loads
+no triples, and a quoted `skip: "false"` are refused, naming what is wrong.
+`data: sample.ttl` is now read as `files: [sample.ttl]` instead of being
+dropped, so a `no_results` question that passed on missing data can now fail.
+With `--fail-fast`, the JSON and JUnit totals count every selected question, and
+the ones not reached are reported as not run. See
+[`cq-test`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#cq-test)
+in the migration note.
+
+**A `cq-test` SELECT now counts every solution, so verdicts can move either
+way.** A solution whose projected variables are all unbound was not counted: a
+variable-less `SELECT *` that matched had no rows, and an `OPTIONAL` column
+counted only its bound rows. `has_results` and `count` can now pass, and
+`no_results`, `max_results` and an exact `results:` can now fail. `-o` naming a
+file the test file loads through `data:` is refused at exit 2; it was replaced.
+See
+[`cq-test`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#cq-test)
+in the migration note.
+
+**`stats` and `diff` now classify every term the way the other commands do,
+so their figures and labels move for any ontology that declares a property only
+by an OWL characteristic, deprecates a class, or uses a bare `rdf:Property`.**
+Those terms were counted as individuals, or guessed into object properties.
+Both commands gain a fourth kind of property, `other_properties`, for a property
+whose kind the file does not say. Given several files, `stats` now reports
+their union, where it silently reported the first, and its JSON names them in
+`sources`, a list, in place of `source`. See
+[`stats`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#stats)
+and [`diff`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#diff)
+in the migration note.
+
+**`diff` filters no longer hide their mistakes.** An unrecognised or empty
+`--show`, `--hide` or `--entities` value is refused at exit 2, naming the value
+and the accepted names, where a typo used to filter everything out and report
+the graphs identical at exit 0. `--show` with `--hide` is refused too. Under any
+filter the exit code and the "identical" verdict describe the whole comparison:
+a filtered view that hides changes says how many and of what kind, and the JSON
+reports them. `--entities` gains `ontology`, `untyped` and `structures`. See
+[`diff`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#diff)
+in the migration note.
+
 **If you gate CI on `diff`, its verdict changes for any file with a blank
 node.** Blank nodes are now compared by structure. A file containing
 restrictions or other blank nodes is identical to a copy of itself (exit 0,
@@ -102,6 +146,19 @@ understand are now reported by line number, and `--strict` makes them fatal.
 [`puml2rdf`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#puml2rdf)
 in the migration note.
 
+**If you round-trip an ontology through `puml2rdf --merge`, check what it
+lost.** Merging a diagram into a hand-maintained ontology dropped every type,
+superclass, domain and range the diagram could not draw: OWL characteristics
+such as `owl:TransitiveProperty`, `owl:NamedIndividual`, `rdfs:Class`,
+restrictions and other blank-node superclasses, all at exit 0, with no
+conflict reported, and the documented `--merge X -o X` round trip wrote that
+over its only copy. They are now kept. A superclass, domain or range the diagram
+replaces, or a term it declares a different kind of thing, is reported and exits
+1 (`--strict`: 1, nothing written). The ontology is read in its own format, and
+keeps its own `owl:Ontology` header. See
+[`puml2rdf`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#puml2rdf)
+in the migration note.
+
 **Every figure `localise report` prints changes, and `localise` now sees every
 labelled term.** Coverage is counted in entities and printed as counts:
 `6/8 (75%)`. The base row is no longer 100% by construction, and coverage can no
@@ -112,11 +169,83 @@ blank tag is refused at exit 2. See
 [`localise`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#localise)
 in the migration note.
 
+**If you re-run `localise extract` or `init` over a translation file, it now
+refuses.** A file holding any translation work is left untouched at exit 2,
+where it was silently replaced with empty entries. Pass `-o` to write a new
+file, or `--overwrite` to replace it. `localise` also checks the type of every
+value it reads from YAML: an unquoted `Yes` or `123` translation and a scalar
+`properties:` are refused with a message naming where they are, where they
+aborted the merge or extracted nothing. See
+[`localise`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#localise)
+in the migration note.
+
+**If you migrated instance data after renaming a property, the data still uses
+the old one.** `refactor rename --migrate-data` and `merge`'s rename rules moved
+an IRI only where the data used it as a subject or an object, never as a
+predicate, so a renamed property, and every property in a renamed namespace,
+was left on its old IRI. Re-run the migration. See
+[`refactor`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#refactor)
+in the migration note.
+
+**If you rename in place with `refactor rename -o <source>`, add `--in-place`.**
+Every output is now checked before anything is written, and a run whose outputs
+would overwrite each other, or overwrite an input, is refused at exit 2 instead
+of losing files at exit 0. See
+[`refactor`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#refactor)
+in the migration note.
+
+**`refactor rename` refuses to rename onto an IRI that already has triples of
+its own**, which previously merged the two entities silently; a target that is
+only referenced is renamed onto and reported. Pass `--merge-entities` to merge
+deliberately. See
+[`refactor`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#refactor)
+in the migration note.
+
+**`refactor rename` without `-o` is refused, and `refactor deprecate -o <source>`
+needs `--in-place`.** A rename that would write nothing exits 2, a rename that
+matches nothing exits 1, and `deprecate` with several sources takes `-o` as a
+directory. `-c` with an operation flag is refused for both. See
+[`refactor`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#refactor)
+in the migration note.
+
+**`lint`, `docs` and `stats` report on the ontology's own terms only.** A
+term a file declares but does not own, such as `dcterms:creator a
+owl:AnnotationProperty` or the `prov:wasDerivedFrom` that derived files are
+stamped with, is no longer asked for a label, given a `docs` page or counted.
+`lint` no longer lets one node at a bare base namespace turn every reference to
+an imported term into an error. New `external_namespaces:` in `.rdf-lint.yml`
+names other vocabularies. See
+[`lint`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#lint)
+in the migration note.
+
+**`lint` checks every declared class and property, and a file it cannot parse
+exits 2.** A term declared only as `owl:TransitiveProperty`,
+`owl:FunctionalProperty`, `owl:DeprecatedClass` and the like is now checked, so
+files that linted clean can report missing labels and comments. Findings on
+deprecated terms are info at every level. An unparseable file is reported
+beside the others and exits 2 whatever `--fail-on` says. See
+[`lint`](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#lint)
+in the migration note.
+
 **v0.7.0 changes behaviour in most commands, deliberately and once.** Every
 change, and what to do about it, is listed command by command in the
 [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md).
 
 ### Added
+- **`core.ownership`, one answer to "this ontology's own terms"** (#69, #368,
+  #371). `ownership(graph, external=())` gives an `Ownership` whose
+  `is_foreign(iri)` is true for a borrowed vocabulary's term (one in a namespace
+  none of the file's ontologies owns: another host, or, on `purl.org`,
+  `w3id.org` and `www.w3.org`, outside the ontology's own IRI) or one in an
+  external namespace. It is `split`'s rule from #383, moved here, except that a
+  namespace the file describes (more than `rdf:type` about two or more of its
+  terms) is its own whatever the host; `lint`, `docs` and `stats` use it.
+  `ontology_references(graph)` names the IRIs that point at documents rather
+  than terms.
+- **`external_namespaces:` in `.rdf-lint.yml`** (#69): namespaces, as IRIs or
+  CURIEs, whose terms are not the ontology's own.
+- **`docs` shows "Derived from"** (#371): the header's `prov:wasDerivedFrom`
+  targets, at the top of the index and as `derived_from` in the JSON.
 - **`docs/MIGRATION_v0.7.0.md`, the single migration note for v0.7.0** (#312).
   It has a section for changes that cut across commands (exit codes, default
   output directories, flags versus configuration files) and then one section
@@ -180,15 +309,151 @@ change, and what to do about it, is listed command by command in the
   `owl:AnnotationProperty` unless the graph already gives it a property type,
   and binds `prov:`. `order` composes them through
   `stamp_extract()`, with `missing_triples()` as the trigger. `split` (#178) and
-  `merge` (#171) will call the same functions.
+  `merge` (#171) call the same functions.
 - **`header: false` on an `order` profile, or in `defaults:`** (#90), the one
   way to leave the ontology header out. Combined with a `header` section in the
   same profile, or given anything but `true` or `false`, it is refused at exit 2
   before anything is written.
 - **`ontology_iri:` on a `split` config module** (#178): the module's ontology
   IRI, as an IRI or a CURIE of the source's prefixes.
+- **`core.vocab.is_deprecated` and `DEPRECATED_TYPES`** (#204): whether a term
+  is typed `owl:DeprecatedClass` or `owl:DeprecatedProperty`, or has
+  `owl:deprecated` true (`true` or `1`, as an `xsd:boolean` or a plain string).
+- **`core.utils.parse_failure_message`** (#322): the one wording for a source
+  that could not be parsed, shared by `parse_into` and `lint`.
+- **`CQTestSuite.data_files`** (#439): the files a test file's `data:` loaded,
+  each resolved against the test file's directory.
 
 ### Changed
+- **Typed literals keep the lexical form the source wrote** (#377, #547). rdflib
+  normalised every typed literal as it parsed it, so every command wrote
+  `"007"^^xsd:integer` as `"7"`, and `"1"^^xsd:boolean` beside `"true"` on one
+  subject and predicate became one triple, at exit 0. The CLI now runs every
+  command inside `core.preserve_literal_forms()`, which turns that off and
+  guards rdflib's Turtle, TriG and N3 serialisers: they wrote a literal of a
+  shorthand datatype bare, so `"1"^^xsd:boolean` would have come back as an
+  `xsd:integer`. `diff` now reports a change of lexical form. `merge` keeps both
+  forms, and its conflict detection compares values (`value_key`), so `"1"`
+  and `"01"` never conflict. `refactor deprecate` recognises
+  `owl:deprecated "1"^^xsd:boolean`. A bare number in a Turtle source is still
+  canonicalised by rdflib's parser, and JSON-LD output still writes booleans and
+  numbers from their value (#462). The guard works on every rdflib from 7.0.0
+  (#547). Library callers keep rdflib's defaults
+  unless they use `preserve_literal_forms()`. See
+  [Typed literals](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#typed-literals)
+  in the migration note.
+- **`order` reports a `roots:` entry that anchors nothing** (#241). A root
+  whose prefix the source does not declare, that is not in the ontology, that
+  its section does not select, or that an earlier section placed, was skipped
+  without a word. Each is now named on stderr, and the file is still written
+  at exit 0. A `roots:` that is not a list, or an entry that is not a CURIE or
+  an IRI, is refused at exit 2 before anything is written. Roots resolve with
+  `resolve_curie` against the source's own prefixes (`resolve_roots`,
+  `InvalidRootError`).
+- **`test_profile.yml`'s `org_topo` orders by its roots** (#240): its first
+  root is spelt `org:Organisation`, as the ontology spells it, and its header
+  names the file's real path.
+- **`sort: topological` follows both hierarchies in every section** (#245).
+  The predicate was chosen per section by sniffing two types, so
+  characteristic-only, `other_props` and annotation-property hierarchies were
+  ignored, and one class punned as an object property sent its whole class
+  section alphabetical. Every topological section now sorts over
+  `rdfs:subClassOf` and `rdfs:subPropertyOf` together (`HIERARCHY_PREDICATES`).
+- **`predicate_order` recognises every class and property type** (#262). A
+  term declared only by an OWL characteristic (`owl:TransitiveProperty` and
+  the like), or only `owl:FunctionalProperty`, `owl:DeprecatedProperty` or
+  `owl:DeprecatedClass`, was given the `individuals` specification. Subjects
+  are now classified with `core.vocab`'s `CLASS_TYPES` and
+  `ALL_PROPERTY_TYPES`; a class punned as a property is still a class.
+- **`order` honours `prefix_order`** (#238). The serialiser sorted every
+  prefix alphabetically, undoing the order `prefix_order` had asked for, so the
+  key and `defaults.preserve_prefix_order` both did nothing. The prefixes
+  `prefix_order` lists are now declared first, in its order, then the rest
+  alphabetically; a listed prefix the output does not use is skipped, and one
+  listed twice keeps its first place. A `prefix_order` that is not a list of
+  names, such as `prefix_order: rdf, owl`, is refused at exit 2 before
+  anything is written. `preserve_prefix_order` is removed (a configuration
+  that still sets it is not refused). `serialise_turtle` and
+  `serialise_turtle_str` take a `prefix_order` argument; without it, prefixes
+  are still written alphabetically.
+- **The empty prefix is declared** (#455). A source's `@prefix : <…>` was left
+  out of the output while its terms were still written as `:A`, so the file
+  could not be read back.
+- **`order` keeps the source's own prefixes** (#239). It parsed into a bare
+  `Graph()`, whose default bindings pushed a source's `org:`, `dc:`, `foaf:`,
+  `skos:`, `prov:` and the like to `org1:` and so on: the graph was the same,
+  but every CURIE in the file changed. The source is now read with
+  `bind_namespaces="core"`, its own prefixes plus `rdf`, `rdfs`, `owl`, `xsd`
+  and `xml`. A namespace the source uses but never declares, outside those
+  five, is written as a full IRI rather than with a prefix from rdflib's table,
+  and `roots:` and `predicate_order` CURIEs resolve against the same bindings,
+  so `roots: org:Team` names the source's own term. A source that redefines
+  `owl:` or another core prefix still has its own renamed.
+- **`order` refuses a `sort:` mode it does not recognise** (#242). A typo, the
+  natural-looking `topo`, or an empty `sort:` meant alphabetical order, silently,
+  at exit 0, which switched hierarchy ordering off with nothing to show for it;
+  a number, `true` or a list crashed. Each is now refused at exit 2, naming the
+  profile, the section, the value and the four accepted modes (`alpha`,
+  `qname_alpha`, `topological`, `topological_then_alpha`, in any case). A
+  section with no `sort:` key is still alphabetical. Every requested profile's
+  `sort:` and `select:` are checked before the source is read, so an unknown
+  selector in a later profile no longer leaves an earlier profile's file
+  behind. `sort_subjects` and `sort_with_roots` raise `UnknownSortModeError`, a
+  `ValueError`; `SORT_MODES` and `normalise_sort_mode` are new.
+- **An output that names an input, or another output, is refused** (#412).
+  `stats`, `describe`, `diff`, `cq-test`, `shacl-gen`, `puml2rdf`,
+  `localise report` and `localise merge` refuse an `-o` that names one of the
+  run's inputs. `merge` checks `-o`, `--report` and `--data-output` against
+  its sources, data files, config and migration rules, and against each other,
+  under `--dry-run` too. Each is refused at exit 2 before anything is written,
+  listing every problem. Each used to replace the file at exit 0 (1 for `diff`):
+  `stats a.ttl -o a.ttl` left a report where the ontology was, and
+  `merge -o out.ttl --report out.ttl` kept only the report. Paths are compared
+  as files through `core/output_paths.py`, so a link, `..` or a difference in
+  case is caught. `puml2rdf -o` may still name its `--merge` ontology, and
+  `localise merge -o` its source (#162).
+- **`refactor rename` plans its outputs, and refuses a plan that loses work**
+  (#411). Every source and data file is read, and every output path worked out,
+  before the first write. Two outputs that are one file (two `onto.ttl` sources
+  into one `-o` directory, `A.ttl` and `a.ttl`, a `--data-output` equal to `-o`),
+  an output that would replace an input, and a config `output:` with several
+  sources are refused at exit 2 with nothing written; each used to exit 0 with
+  the last write winning or a source replaced. Paths are compared as files, so a
+  symbolic link or `..` is caught. `--in-place` lets a source or data file be
+  rewritten with its own result, and reports `⚠ Replaced <path>`. A CLI `-o` now
+  overrides a config `output:`. `-o` naming a file with several sources is
+  refused instead of crashing. The checks are in `core/output_paths.py`, which
+  reports and never decides.
+- **`refactor rename` refuses to merge two entities by accident** (#185). A
+  rename onto an IRI that is a subject in any source, two renames onto one IRI,
+  and a rename that makes `owl:disjointWith`, `owl:propertyDisjointWith`,
+  `owl:complementOf` or `owl:differentFrom` reflexive are refused at exit 2 with
+  nothing written, every one listed with its file and triple count; `--dry-run`
+  previews, then refuses the same way. Each used to exit 0 with one entity where
+  there were two, sometimes with the triple count unchanged. Every source of a run
+  is checked together, and each `--migrate-data` file against the data's rename
+  map. A target that is only referenced is renamed onto, with a `Note:` naming
+  how often, and so is a rename that makes another triple reflexive. The new
+  `--merge-entities` flag, or `merge_entities: true` under `rename:`, merges
+  deliberately and names each merge. In the library, `OntologyRenamer.rename`
+  returns `success=False` with `collisions` listed and no graph, and
+  `rename_file` writes nothing, unless `RenameConfig(merge_entities=True)`.
+- **`refactor rename` refuses a run that would write nothing, and reports a
+  rename that matches nothing** (#183). Without `-o`, a config `output:` or
+  `output_dir:`, or data to migrate, the run is refused at exit 2; it renamed in
+  memory and exited 0. A mapping that renames nothing in any file of the run,
+  sources and data files together, is listed on stderr and the run exits 1.
+  `inert_renames` and `live_mappings` are exported from `rdf_construct.refactor`.
+- **`refactor deprecate` plans its outputs before writing** (#186). Several
+  sources take `-o` as a directory, each result keeping its source's name; an
+  output over a source needs the new `--in-place`; the config's `output_dir:` is
+  honoured. An entity is reported, exit 1, only when no source describes it, and
+  every source is processed first. The last write used to win, an `-o` naming
+  the first source replaced it with the second's triples, and a missing entity
+  stopped the run at the first file that lacked it.
+- **`refactor` refuses `-c` with an operation flag** (#352): `--from`, `--to`,
+  `--from-namespace`, `--to-namespace`, `--entity`, `--replaced-by`, `--message`
+  or `--version`, at exit 2, before anything is read. They were ignored at exit 0.
 - **`split`'s unmatched module is called `unmatched` by default** (#382), not
   `common`, and a run whose unmatched module would take another module's name
   is refused at exit 2 instead of overwriting it. `--common-name common` keeps
@@ -273,6 +538,15 @@ change, and what to do about it, is listed command by command in the
   `--include-deprecated` were silently discarded whenever a config file was
   passed. An option given on the command line now overrides the config file,
   and the config file overrides the option's default.
+- **`merge -c` honours the flags and source files given alongside it** (#351,
+  #496). `--strategy`, `--imports`, `-p`, `--migrate-data` and `--data-output`
+  were silently discarded whenever a config file was passed, and so were source
+  files: none of their triples reached the output. A flag given on the command
+  line now overrides the config, even at its default value. Source files
+  replace the config's `sources:`, with a note on stderr, and a run that would
+  lose a source's `namespace_remap` that way is refused at exit 2. More `-p`
+  values than sources is refused at exit 2, with or without `-c`; the extra
+  values were dropped.
 - **`localise` translates every labelled term** (#157, #406). An entity is any
   IRI subject carrying a requested property as a literal: a term typed only
   `owl:TransitiveProperty` or `owl:DeprecatedClass`, a SKOS concept or scheme,
@@ -295,9 +569,69 @@ change, and what to do about it, is listed command by command in the
 - **`localise` has one rule for "deprecated"** (#407). `report` leaves out what
   `extract` skips, and gains `--include-deprecated`; a plain-string
   `owl:deprecated "true"` counts.
-- **`localise merge --existing preserve` keeps every translation of a repeatable
-  property** such as `skos:altLabel` (#405, in part). It skips one only when the
-  same text already exists in that language.
+- **`localise merge` keeps every translation of a repeatable property** such as
+  `skos:altLabel` (#405). Under `--existing preserve` it skips one only when the
+  same text already exists in that language. Under `--existing overwrite` the
+  file's translations replace the language's values as one set, counted once
+  each. When values exist, the set is replaced only if every entry for it is
+  finished and its sources are the ontology's current ones; otherwise it is left
+  unchanged, counted as `Skipped (group)`, and the run exits 1.
+  `extract --missing-only` offers every source value of such a property that has
+  two or more, with the existing translations in `notes`, so fewer entities are
+  counted as `Skipped:`. `MergeStats` gains `skipped_group`.
+- **`localise extract` and `init` never replace translation work in silence**
+  (#404). A destination holding an entry that is not `pending`, or whose
+  translation is not blank, is refused at exit 2 before the ontology is read; so
+  is a dangling link. `--overwrite` replaces it and warns how many finished
+  translations it discarded. A file that is not a translation file, or a
+  directory, is refused even with `--overwrite`. The default file is named in
+  canonical case: `-l DE` writes `de.yml`.
+- **`localise` reads YAML values as the type they must be** (#408). In a
+  translation file, a translation YAML reads as a boolean or a number, a missing
+  `uri`, `property` or `source`, an unknown `status` and a file of the wrong
+  shape are refused at exit 2, every one named by file, entity and key; a blank
+  translation is untranslated. In an `extract -c` config, a scalar `properties:`,
+  a switch written as text and any other value of the wrong type are refused.
+  Each of these crashed, aborted with Python's message, or was misread.
+- **`localise --properties` reads the ontology's own prefixes** (#355). A CURIE
+  means the prefix the ontology declares, or `rdf`, `rdfs`, `owl`, `xsd` and
+  `xml`, so `-p ex:note` extracts `ex:note` instead of nothing at exit 0, and
+  `dc:` follows the ontology. An unbound prefix, including a bare `urn:x`, is
+  refused at exit 2 naming the bound ones. A translation file's `property:` and
+  a config file's `properties:` use the file format's six prefixes (`rdf`,
+  `rdfs`, `owl`, `skos`, `dc` for elements, `dcterms`), and any other CURIE is
+  refused: `merge` used to write it as a predicate such as `<ex:note>`. `report`
+  names properties with the ontology's prefixes, and `merge` keeps the
+  ontology's own `org:` instead of renaming it `org1:`. The reporter API
+  resolves CURIEs too; it reported 0 for `rdfs:label`.
+- **`LanguageCoverage.total_strings` is renamed `total_pairs`** (#421): it
+  counts entity and property pairs. The CLI output is unchanged.
+- **`lint` reports findings on deprecated terms at info** (#204, #233), at every
+  level, unless a `severity:` override names the rule.
+- **`lint`'s `empty-ontology` counts every annotation on a header as
+  metadata** (#505). Any triple other than `rdf:type` and `owl:imports` counts,
+  `owl:versionIRI` included, so a named `merge`'s header, which carries only
+  `prov:wasDerivedFrom` when a source has a header, no longer fails `lint`,
+  and neither does a header with
+  only `dcterms:title`. `lint.rules.HEADER_STRUCTURE` holds the two predicates
+  that do not count.
+- **`lint` reports an unparseable file apart from the findings, and exits 2**
+  (#322). `LintResult.parse_error` and `LintSummary.unparsed` replace the
+  `parse-error` issue; the text reads `Could not parse <file> as <format>: …`
+  and the summary line counts the file separately. A directory given as a
+  source is refused before any file is read.
+
+### Deprecated
+- **`describe --reasoning`** (#220). The flag never ran a reasoner: its
+  "Reasoning Analysis" section printed an "entailment regime" looked up from
+  the profile already detected above it, and three lists that were always
+  empty. It is still accepted and prints one warning on stderr, and text and
+  Markdown no longer print the section; the exit code is unchanged. The JSON
+  `reasoning` key is kept unchanged until v0.8.0 removes it, with the flag,
+  `ReasoningAnalysis` and `include_reasoning` (#299). Its `entailment_regime`
+  is a coarser name for the detected profile (`owl-dl` for both DL profiles),
+  not an entailment regime. `describe_file()` and `describe_ontology()` emit a
+  `DeprecationWarning` when given `include_reasoning=True`.
 
 ### Fixed
 
@@ -308,6 +642,103 @@ change, and what to do about it, is listed command by command in the
   stamp as an annotation without declaring it. Only a kind-specific type (an
   object, datatype or annotation property) suppresses it now: an IRI typed as
   both an annotation and another kind of property is outside OWL 2 DL.
+- **`lint`'s `dangling-reference` no longer claims a namespace from one node**
+  (#69). A namespace is checked only when the file defines two or more entities
+  in it, or the reference lies within the file's own ontology IRI, and a
+  borrowed vocabulary is never checked. The objects of `owl:imports`,
+  `owl:versionIRI` and the other ontology-naming predicates, and every object
+  of an ontology header's own triples, are no longer reported (#209). `LINT_GUIDE.md` no
+  longer tells you to name the imported file on the command line, which did
+  nothing.
+- **`missing-label` and `missing-comment` no longer fire on a borrowed
+  vocabulary's term** (#368), including the `prov:wasDerivedFrom` that `order`,
+  `split` and a named `merge` declare for their stamp.
+- **`docs` no longer documents, and `stats` no longer counts, a term the
+  ontology does not own** (#371).
+- **An inline blank node with several objects for one predicate is valid
+  Turtle again** (#343). `order` wrote the predicate again before every object
+  after the comma, and the grammar expects another object there, so rdflib
+  refused the file the command had just written. A restriction carrying two
+  comments reproduced it, and so did every RDFS- or OWL-RL-closed graph, where
+  entailment gives each blank node `a rdfs:Resource` beside its own type. The
+  predicate is now written once and the objects follow as a comma-separated
+  list, as the top-level writer already did. Inline blocks with one object per
+  predicate are unchanged.
+- **`order` no longer drops a cycle of blank nodes from its output** (#341). A
+  blank node is written inline when it is the object of exactly one triple, so
+  a cycle in which each member references only another member qualified every
+  member for inlining while no member was reachable from a written subject:
+  every triple in the cycle vanished without a word, exit 0. A self-referencing
+  blank node hit the same way, which matters for reasoner-closed graphs —
+  OWL-RL's `eq-ref` rule gives every root blank node (`owl:AllDisjointClasses`,
+  `owl:AllDifferent`, `owl:Axiom`) an `owl:sameAs` self-reference. A blank node
+  is now inlined only where a written block actually reaches it; a member of
+  an unreachable cycle is written as a top-level `_:label` block, breaking the
+  cycle once while everything it references stays inline. Graphs without such
+  a cycle serialise byte-identically.
+- **`diff` refuses a filter it does not recognise, and a filter never decides
+  the verdict** (#144). `--show`, `--hide` and `--entities` dropped any value
+  they did not recognise, so `--show addedd` filtered everything out and printed
+  "Graphs are semantically identical." at exit 0, and a valid filter that
+  matched nothing said the same about graphs that differed. An unknown or empty
+  value is now refused at exit 2 before anything is read or written, naming each
+  bad value with a near match where there is one; so are `--show` with
+  `--hide`, and a `--hide` naming all three change types. A filtered `GraphDiff` counts what it
+  left out (`not_shown`), so its `is_identical`, the exit code, the sentence and
+  the JSON's `identical` all describe the graphs, and the text and markdown say
+  what was hidden: `No added changes. 1 change not shown (1 removed) — run
+  without --show to see it.`, or `Not shown: …` beneath a partial view.
+  Blank-node structures that belong to no entity follow `--show`/`--hide` by
+  action, and `--entities` keeps them only when it names `structures`.
+  `--entities ontology` and `untyped` select what no filter could before. Under
+  `--ignore-predicates` the sentence names what was ignored.
+- **`docs` refuses an entity type it does not recognise** (#252). `--include`
+  reassigned every entity toggle from the names it recognised, so `--include
+  clases` switched them all off and wrote a site with no entities at exit 0, and
+  `--include classes,clases` dropped the typo without a word. `--exclude`
+  ignored unknown names too, and knew only seven of `--include`'s eleven:
+  `--exclude object_properties` did nothing, though the guide and the CLI
+  reference both listed it. An unknown or empty name in either option is now
+  refused at exit 2 before anything is written, naming each bad name with a near
+  match where there is one, and the accepted names, which `--help` now lists in
+  full. Also refused: a selection that leaves no entity type switched on, from
+  the flags (`--include classes --exclude classes`) or from a config with every
+  entity `include_*` key false, and a `--no-` flag with an `--include` that names its
+  type, where `--include` silently won. `--exclude` accepts every name
+  `--include` does. The names are defined once, in `rdf_construct.docs`
+  (`ENTITY_TYPE_NAMES`, `ENTITY_TYPE_ALIASES`), with `normalise_entity_types`
+  and `apply_entity_filter`, which raise `EntityFilterError`, a `ValueError`.
+  The check itself is shared with `diff`'s filters in `core.names`, so
+  `filter_diff` now refuses a name that is not a string with
+  `UnknownFilterError`, where it raised `AttributeError`.
+- **`cast` no longer exits 0 having done nothing** (#330). When every requested
+  format is the source's own, it refuses at exit 2 before reading the source,
+  naming the format, where it came from, and what it can be cast to. In pipe
+  mode stdout stays empty, and the `Cast 0 file(s)` line is gone. When some
+  formats are skipped and others written, it exits 1, and the summary names what
+  was skipped. `CastConverter.convert` reports the all-skipped case as
+  `success=False` with an `error`, and a new `skipped_formats` field. **Breaking**:
+  see the migration guide.
+- **`cast` writes TriG and N-Quads that hold what the source holds** (#540, #189,
+  #542, #545, #549). It loaded every source into a plain graph, so `-f trig` put every
+  triple in a graph named by a fresh blank node and left the default graph
+  empty, N-Quads → TriG dropped the named graphs at exit 0, and `-f nq` failed
+  from every source. It now loads into a dataset. A single-graph source's
+  triples are written to the default graph (one unnamed `{ … }` block in TriG,
+  no graph term in N-Quads, with one space before the `.`), and a quad source's
+  graphs are kept under their names, with or without `--allow-flatten`: the
+  flag merges only for single-graph formats, and its warning names them. A
+  blank node that names a graph is written with its label wherever it is
+  used, so a statement that points at the graph still does (#545). JSON-LD
+  output holds a single-graph source's statements at the top level on every
+  rdflib from 7.0.0, not inside a graph named `urn:x-rdflib:default` (#549). A
+  JSON-LD source that holds named graphs is treated as a quad source, where it
+  used to lose them at exit 0. A source with N3 formulae or variables, or with
+  a statement that is not an RDF triple (a literal subject, a predicate that is
+  not an IRI), is refused at exit 2, where it was written as output that did
+  not parse or with the statements missing. The quad guard's advice no longer names the source's
+  own format. Single-graph output from a single-graph source is unchanged.
+  **Breaking**: see the migration guide.
 - **`diff` compares blank nodes by structure, in both directions** (#143). It
   compared triples by the labels rdflib gives blank nodes at parse time, and
   then skipped every blank-node subject. So any file with an `owl:Restriction`
@@ -329,6 +760,33 @@ change, and what to do about it, is listed command by command in the
   `examples/diff/v1.ttl` and `v2.ttl` differ only inside blank nodes (#149's
   `diff` slice), and `DIFF_GUIDE.md`'s blank-node sections are rewritten from
   their output.
+- **`cq-test` checks its test file's shape** (#148). The loader read the file
+  with defaulting lookups and validated almost nothing: `data: sample.ttl` was
+  silently dropped, a top-level list crashed with `AttributeError`, and an
+  unknown key anywhere (`prefixs:`, `expectt:`, `tag:`, `max_resultz:`) was
+  ignored, so a question could test something other than what its author wrote.
+  Every level now has an accepted set of keys, and an unknown one is refused at
+  exit 2 with a did-you-mean. `data:` takes a path or a list of paths as
+  shorthand for `files:`, and any other scalar is refused showing the long form.
+  Each `data:` source must load at least one triple. `skip` must be an unquoted
+  boolean (`skip: "false"` skipped a failing question), and an `expect:` mapping
+  takes one form (`{count: 2, max_results: 1}` checked only the count).
+- **An empty `cq-test` selection exits 2** (#135). It exited 0 with `No tests to
+  run (check tag filters)`, even when no tag was given, so a CI build that ran
+  nothing passed. It is now refused, saying why: no `questions:` key, an empty
+  list, a `--tag` no question has (naming the tags the suite defines),
+  exclusions that remove everything, or a selection where every question is
+  `skip: true`.
+- **`cq-test --fail-fast` reports the whole selected suite** (#137). The summary
+  and the JUnit XML counted only the questions that ran, so a four-question
+  suite stopped at the second reported `total: 2` and `tests="2"`. The questions
+  not reached now have a status of their own, `NOT_RUN`, distinct from an
+  author's `skip: true`: JSON reports `"status": "not_run"` and a
+  `summary.not_run` count, JUnit emits each as a `<testcase>` holding
+  `<skipped message="not run: --fail-fast stopped after <id>"/>`, and the text
+  ends `2 of 4 run — stopped by --fail-fast after '<id>'`. A `skip: true`
+  question after the stop stays skipped. The exit code is unchanged. `--fail-fast`'s help said "Stop on first failure"; it also stops on
+  an error, and now says so.
 - **`cq-test` refuses an ASK query checked with a count-based expectation**
   (#134). On an ASK, `has_results`, `no_results` and `count` counted the one
   boolean rdflib yields, so `has_results` and `count: 1` always passed and
@@ -344,6 +802,21 @@ change, and what to do about it, is listed command by command in the
   `QueryError`. `expect: true|false` on a SELECT, CONSTRUCT or DESCRIBE still
   means "at least one row or triple", and its message no longer says "ASK
   query matched".
+- **`cq-test` counts every SELECT solution** (#386). rdflib's result iteration
+  drops a solution whose projected variables are all unbound, and `cq-test`
+  counted what it iterated: a variable-less `SELECT *` that matched had 0 rows
+  (`no_results` passed), and a column only an `OPTIONAL` binds counted only its
+  bound rows. A SELECT's rows are now its solutions, as SPARQL counts them, for
+  every expectation; a `GROUP BY` that forms no groups still has none, where
+  rdflib returns one empty row (RDFLib/rdflib#3382). In `results:` and
+  `contains:`, `null` means unbound (it was compared as the text `None`), and
+  `contains:` refuses an empty binding `{}` or an empty list, which matched any
+  result. `results:` and `contains:` that are not a list of mappings are refused
+  when the test file loads; they errored at run time or passed vacuously.
+- **`cq-test -o` cannot replace a `data:` file** (#439). `-o` naming a file the
+  test file loads through `data:` replaced it with the results at exit 0, since
+  those files were known only once the suite loaded. It is now refused at exit 2
+  before any question runs, naming the test file, and nothing is written.
 - **`split` places every subject of the source** (#176). It placed only
   classes and properties, so individuals, SKOS concepts, terms declared only by
   an OWL characteristic such as `owl:TransitiveProperty`, and the inside of
@@ -408,7 +881,7 @@ change, and what to do about it, is listed command by command in the
   case; `rdfs:domain`, `rdfs:range` and any property a source declares
   `owl:FunctionalProperty` are load-bearing. A configuration file can move a
   predicate between tiers with `conflicts.predicate_tiers`. The ontology header
-  is not checked until #171. Detection no longer slows quadratically with the
+  is checked like any subject since #171. Detection no longer slows quadratically with the
   values on one subject: 20,000 labels on one subject took 118.6 s and now take
   0.28 s.
 - **`merge` applies the resolution it reports** (#169). The losing values of a
@@ -419,10 +892,59 @@ change, and what to do about it, is listed command by command in the
   second `skos:prefLabel` in one tag is reported as malformed (SKOS S14), a
   second `rdfs:label` as ambiguous. Sources tied at the highest priority are
   not picked between: the conflict is marked and the run exits 1.
-- **`merge` refuses a predicate in `ignore_predicates` that is not an IRI**
-  (#193). `ignore_predicates: ["rdfs:label"]` silently matched nothing; a
-  prefixed name is now refused with exit 2 until `merge` resolves prefixes by
-  the project's binding rule (#357).
+- **`merge` refuses a predicate in `ignore_predicates` that it cannot resolve**
+  (#193). `ignore_predicates: ["rdfs:label"]` silently matched nothing. A CURIE
+  now resolves against `rdf`, `rdfs`, `owl`, `xsd`, `xml` and the config's own
+  `namespaces.preferred_prefixes` (#357), and any other prefixed name is refused
+  with exit 2.
+- **`merge` reads every data file before it writes anything** (#437). A
+  `--migrate-data` file, or one under the config's `migrate_data:`, that was
+  missing or could not be parsed was reported after the merged ontology and
+  report were written, and the run exited 0. It is now refused at exit 2 with
+  nothing written, under `--dry-run` too.
+- **`merge` writes at most one ontology header** (#171). Two headed sources
+  were both written, each with its `owl:versionIRI`, at exit 0. A new
+  `--ontology-iri`, or `namespaces.base` (used as given; the flag wins), names
+  the merged ontology: one header, no `owl:versionIRI`, and one
+  `prov:wasDerivedFrom` per source. A named header that would then hold nothing
+  but its type and imports (no source header can be recorded) is not written,
+  and the run warns, at exit 0, unless the sources share one header, which is
+  kept (#520). Sources sharing one header keep it.
+  Otherwise the output has no header, and the run warns with the command that
+  names it, at exit 0. Each source header is demoted: it loses `owl:Ontology`,
+  `owl:versionIRI`, `owl:imports`, `owl:priorVersion`,
+  `owl:backwardCompatibleWith` and `owl:incompatibleWith`, and keeps the rest,
+  a punned class included. A named header carries the demoted imports, except
+  of what the merge contains. Header annotations now go through the conflict
+  tiers. A value that is not an absolute IRI, or reads as a prefixed name, is
+  refused at exit 2 before anything is written. `MergeResult.identity` reports
+  it all to library callers.
+- **`merge --dry-run` writes nothing** (#436). It wrote the conflict report,
+  over a source if `--report` named one. It now ends by naming each file a real
+  run would write.
+- **A data-migration `transform` rule matches only what its pattern says**
+  (#492). It matched every triple in the data, because a constant in the pattern
+  was taken for a variable, so the guide's own "split fullName" rule, with
+  `delete_matched: true` (the default), deleted every `rdf:type` and every other
+  property at exit 0. A rule's CURIE now resolves only against every prefix the
+  data files declare, `namespaces.preferred_prefixes` and `rdf`, `rdfs`, `owl`,
+  `xsd` and `xml`, never rdflib's built-in table. A `rename` rule's CURIE `from:`/`to:`,
+  which renamed nothing, now resolves the same way. A rule that cannot be read
+  (an unbound prefix, a pattern that is not three terms, an unknown `type:` or
+  `bind:`, a construct variable the match does not bind) is refused at exit 2
+  before anything is written; each of these did nothing, in silence. Literals
+  with a language tag or datatype, and bare numbers, now match. A rule that
+  matches nothing in any data file, or a match left unchanged because a `bind`
+  found no value, is listed on stderr as `migration rule N`, and the run exits 1.
+  A split on a name with no space used to delete it and build nothing. `STRBEFORE`/`STRAFTER` keep the
+  language tag.
+- **An arithmetic `bind` writes a valid `xsd:decimal`** (#465). It was computed
+  in a Python float and written from the float's `repr`, so `1e20` came out as
+  `"1e+20"^^xsd:decimal`, which is not a decimal. It is now computed in decimal
+  arithmetic, with no operand rounded, and written in plain notation. It computes
+  on a literal of a numeric datatype only: `"40"`, `"40"@en` and
+  `"4e1"^^xsd:string` were computed on as numbers, and now leave their match
+  unchanged, as SPARQL's type error would.
 - **`merge` writes a blank-node structure its sources share once** (#170).
   Every restriction, `owl:unionOf` list or `owl:AllDisjointClasses` that two
   sources both stated was written twice, because each parse gives blank nodes
@@ -519,6 +1041,106 @@ change, and what to do about it, is listed command by command in the
   the diagram, validates the RDF and serialises it in memory in the requested
   format, writing nothing and running no `--merge`, so RDF that cannot be
   written fails validation at exit 2 rather than at the real run.
+- **`puml2rdf` files a class in a nested package under the innermost package**
+  (#391). It was minted in the outermost package's namespace. A nested package
+  without an IRI is named by its path, as PlantUML names it: `inner` in `outer`
+  is `outer.inner:`, the namespace `class outer.inner.X` already had. The IRIs
+  of those classes change; see the
+  [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#puml2rdf).
+- **`puml2rdf` no longer reads comments** (#394, #475). A class or arrow inside
+  a `/' … '/` block was converted, and a `package … {` or `title …` inside a
+  `'` line comment moved classes into a package and labelled the ontology, at
+  exit 0. Comments are now blanked, by PlantUML's own rule, before any pass,
+  prefix check or report reads the diagram. Commented-out lines no longer cause
+  refusals. A block comment that never closes is refused at exit 2, because
+  PlantUML draws nothing for it.
+- **`puml2rdf -C` takes effect** (#152). `namespace_mappings` and
+  `datatype_mappings` in a `puml2rdf` config now take effect; the shipped
+  example config produced output byte-identical to a run without `-C`. A
+  mapping is held to the diagram's prefix rules (#150): where the diagram gives
+  a package another IRI, the run is refused at exit 2, naming the mapping and
+  the line, and a mapping that matches no package is a note. Every key is now
+  checked: an unknown key is refused at exit 2 with the nearest valid one, and
+  `generate_labels: "false"` no longer means true. `prefix_order`,
+  `ontology_imports`, `annotation_properties` and `generate_inverse_properties`,
+  which nothing ever read, are removed and refused. See the
+  [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#puml2rdf).
+- **`puml2rdf` has one datatype map** (#155, #480). `gYearMonth` and
+  `hexBinary` were unreachable and written as `xsd:string`; the validator held
+  a second copy of the map, so every unknown type was warned twice. Both now
+  read one map, case-folded, and an unknown type is warned once. An attribute
+  typed `xsd:gYearMonth` was read as the type `xsd`; a CURIE type is now read
+  whole, and one in `xsd:`, `rdf:`, `rdfs:` or `owl:` that names no datatype
+  is refused at exit 2.
+- **`shacl-gen` selects the classes it is given** (#226). `--classes`,
+  `target_classes` and `exclude_classes` matched by substring, so `Cat` also
+  selected `Category` and `Catalogue`, and the documented CURIE form
+  (`--classes "ex:Animal,ex:Dog"`) matched nothing and wrote an empty shapes
+  file at exit 0. Entries now match exactly: a CURIE in the source's own
+  prefixes, an `<IRI>`, a full IRI, or a bare local name. An entry that names
+  no class, a bare name matching two classes, an unbound prefix, a scalar where
+  a list belongs, and an empty selection are refused at exit 2, every problem
+  listed, nothing written. Exclusions now apply alongside `--classes`, and one
+  that names nothing is a note. `ShaclConfig.should_generate_for` is replaced
+  by `resolve_selection`. See the
+  [v0.7.0 migration note](https://github.com/aigora-de/rdf-construct/blob/main/docs/MIGRATION_v0.7.0.md#shacl-gen).
+- **`shacl-gen`'s `ignored_properties` uses the ontology's own prefixes** (#356).
+  It resolved CURIEs against rdflib's built-in table, so a file with its own
+  `org:` got W3C's `org:secret` in `sh:ignoredProperties`, and the closed shape
+  rejected the property it was told to ignore; the file's prefix was written
+  back as `org1:`, and an entry that did not resolve was dropped. An unbound
+  prefix is now refused at exit 2, with the IRI rdflib would have used; the list
+  is de-duplicated; and a list that cannot take effect, without closed shapes,
+  gets a note.
+- **`shacl-gen` no longer mints shapes in Brick's namespace** (#484). A source
+  without an `owl:Ontology` got `https://brickschema.org/schema/Brick-shapes#`,
+  from rdflib's pre-bound prefixes. Its shapes now take the namespace holding
+  the most declared classes, plus `-shapes#`.
+- **`shacl-gen`'s `default_severity`, `shape_namespace` and
+  `generate_property_shapes` do what they say, or are refused** (#223). No
+  `sh:severity` was ever written: now `--default-severity` and
+  `default_severity:` put it on every node and property shape, and none is
+  written when neither is set. `shape_namespace` was ignored; it is now a full
+  namespace IRI, honoured, and anything else (the shipped `"shapes#"`) is refused
+  at exit 2. `generate_property_shapes`, which nothing read, is removed and
+  refused at exit 2. The shipped `examples/shacl/shacl_config.yml` describes
+  only keys that work.
+- **`shacl-gen --closed` closes shapes at every level** (#224). It wrote no
+  `sh:closed` below `--level strict` and printed "(closed shapes enabled)"
+  anyway; the line now counts the shapes closed. A closed shape admits
+  `rdf:type`, `ignored_properties` and every property its class's hierarchy
+  declares, superclasses and subclasses alike, so `--no-inherit` no longer
+  closes a subclass against its inherited properties, and a superclass shape no
+  longer rejects a subclass's instances.
+- **`shacl-gen` writes `owl:oneOf` as `sh:in` at the default level, in source
+  order** (#227). It was dropped below strict, and its members came out in hash
+  order. Two lists for one path are intersected, not unioned. `--level strict`
+  is now the same as `standard`.
+- **`shacl-gen` shapes `owl:DeprecatedClass`** (#228). A class declared only so
+  got no shape, and selecting it was refused. Classes come from
+  `core.vocab.CLASS_TYPES`.
+- **`shacl-gen` gives two classes with one local name two shapes** (#485).
+  `a:Cat` and `b:Cat` shared `CatShape`, each with the other's properties. The
+  class in the home namespace keeps the name; the other is qualified with its
+  prefix (`b_CatShape`). A URN class's shape is named after its last segment.
+- **`shacl-gen` no longer writes `sh:class [ ]` or `sh:datatype [ ]`** (#487).
+  A blank-node range or qualification (a union, an inline datatype) was copied
+  into a constraint that takes only IRIs, and pySHACL failed every value against
+  it. The constraint is now dropped, as the guide says.
+- **`merge` keeps each source's own prefixes, and says when sources disagree**
+  (#357). Sources and the merged graph were bare `Graph()`s, whose default
+  bindings pushed a source's `org:`, `dc:`, `foaf:` and the like to `org1:`.
+  When two sources declare one prefix for different namespaces, the first on
+  the command line keeps it. The other is written as `ex1:`, or, for the empty
+  prefix, named after its namespace (`…/ont#` → `ont:`) instead of `default1:`.
+  Each declaration not written as declared is named in a `Note:` on stderr.
+  `namespaces.preferred_prefixes` now claims its prefix even when a source holds
+  it, where it was renamed `ex1:` in silence. A namespace no source names takes
+  rdflib's prefix for it only when no source uses that prefix.
+- **Data migration keeps the data file's own prefixes** (#358), in `merge
+  --migrate-data` and `refactor rename --migrate-data` (`org:`, not `org1:`).
+  Data files `merge` combines follow #357's rule, and after a namespace rename
+  the data's prefix moves to the new namespace instead of leaving it as `ns1:`.
 - **`sort: topological` no longer turns alphabetical on inferred graphs** (#339).
   RDFS entailment materialises `C rdfs:subClassOf C` for every class (`rdfs10`)
   and `P rdfs:subPropertyOf P` for every property (`rdfs6`). Each self-loop was
@@ -534,6 +1156,27 @@ change, and what to do about it, is listed command by command in the
 - **`puml2rdf` no longer doubles the class count for packaged diagrams** (#154).
   Each class is stored under both `name` and `qualified_name` for relationship
   lookup; the summary now counts distinct URIs so it matches the parse line.
+- **An in-place `refactor rename --migrate-data` migrates the data** (#414). The
+  rename map was rebuilt by re-reading the sources after they were written, so a
+  namespace rename written back over its source found nothing left to map and
+  wrote no data at all, at exit 0. The map now comes from the sources as read. A
+  data file that does not parse is refused at exit 2 before anything is written,
+  where it was skipped with a `✗` line after the ontology had been written.
+- **Data migration renames predicates** (#415). `DataMigrator` substituted
+  subjects and objects only, so `refactor rename --from ex:hasFloors --to
+  ex:floorCount --migrate-data data.ttl` left `d:b1 ex:hasFloors 3` as it was
+  and reported `0 changes`, beside an ontology that no longer declared
+  `ex:hasFloors`. A namespace rename moved the data's classes and left its
+  properties behind, and the shipped `examples/refactor/renames.yml` left both
+  `ex:hasAddres` triples in `instances.ttl`. A renamed IRI now moves in every
+  position, as it already did in the ontology. `MigrationStats` gains
+  `predicates_updated`, counted in `total_changes`, and `merge`'s migration
+  summary prints `Predicates updated`.
+- **`lint` sees every declared class and property** (#204). Its class and
+  property selection, and `property-no-type`'s, are `core.vocab`'s
+  `CLASS_TYPES` and `ALL_PROPERTY_TYPES`, so a term declared only by an OWL
+  characteristic, or as `owl:DeprecatedClass` or `owl:DeprecatedProperty`, is
+  no longer invisible to every rule.
 
 ## [0.6.0] - 2026-09-04
 

@@ -1,0 +1,2 @@
+# A key removed in 0.7.0: refused even when false (#223)
+generate_property_shapes: false

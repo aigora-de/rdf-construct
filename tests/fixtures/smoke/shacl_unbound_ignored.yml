@@ -1,0 +1,3 @@
+# A prefix the source does not bind (#356).
+ignored_properties:
+  - "zz:nope"

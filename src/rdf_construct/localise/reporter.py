@@ -30,6 +30,11 @@ from rdf_construct.localise.entities import (
     related_tags,
     zero_match_warnings,
 )
+from rdf_construct.localise.properties import (
+    resolve_properties,
+    shorten_property,
+    source_prefixes,
+)
 
 
 def percent(covered: int, total: int) -> int:
@@ -95,7 +100,7 @@ class LanguageCoverage:
     Attributes:
         language: Language code.
         is_source: Whether this is the source language.
-        total_strings: Entity and property pairs measured: the sum of every property's total.
+        total_pairs: Entity and property pairs measured: the sum of every property's total.
         translated: Of those, the pairs present in this language.
         by_property: Coverage broken down by property.
         missing_entities: URIs of entities missing this language for a property they carry.
@@ -105,7 +110,7 @@ class LanguageCoverage:
 
     language: str
     is_source: bool = False
-    total_strings: int = 0
+    total_pairs: int = 0
     translated: int = 0
     by_property: dict[str, PropertyCoverage] = field(default_factory=dict)
     missing_entities: list[str] = field(default_factory=list)
@@ -114,14 +119,14 @@ class LanguageCoverage:
     @property
     def coverage(self) -> float:
         """Overall coverage percentage."""
-        if self.total_strings == 0:
+        if self.total_pairs == 0:
             return 0.0
-        return (self.translated / self.total_strings) * 100
+        return (self.translated / self.total_pairs) * 100
 
     @property
     def pending(self) -> int:
         """Number of pending translations."""
-        return self.total_strings - self.translated
+        return self.total_pairs - self.translated
 
 
 @dataclass
@@ -132,7 +137,7 @@ class CoverageReport:
         source_file: Source ontology file.
         source_language: Base language.
         total_entities: Entities measured.
-        properties: Properties analysed.
+        properties: Properties analysed, shortened with the ontology's own prefixes.
         languages: Coverage by language.
         deprecated_entities: Deprecated entities left out of every figure (0 when they are
             included).
@@ -166,7 +171,8 @@ class CoverageReporter:
 
         Args:
             source_language: Base language code.
-            properties: Properties to check. Uses defaults if not provided.
+            properties: Properties to check, as CURIEs on the graph's prefixes or as IRIs. Uses
+                defaults if not provided.
             include_deprecated: Count deprecated entities. By default they are left out, as
                 ``extract`` leaves them out.
         """
@@ -192,9 +198,15 @@ class CoverageReporter:
 
         Returns:
             CoverageReport with detailed statistics.
+
+        Raises:
+            CurieError: If a property is a CURIE whose prefix the graph does not bind (#355).
         """
-        # Collect entities
-        prop_uris = [URIRef(p) for p in self.properties]
+        # Collect entities. A CURIE means what the ontology's prefixes say, and a property is
+        # printed with them (#355)
+        prefixes = source_prefixes(graph)
+        prop_uris = resolve_properties(prefixes, self.properties)
+        names = [(prop, shorten_property(prefixes, prop)) for prop in prop_uris]
         entities = collect_entities(graph, prop_uris)
         deprecated = 0
         if not self.include_deprecated:
@@ -207,7 +219,7 @@ class CoverageReporter:
             source_file=str(source_file),
             source_language=self.source_language,
             total_entities=len(entities),
-            properties=[self._shorten_property(p) for p in self.properties],
+            properties=[short for _, short in names],
             deprecated_entities=deprecated,
         )
 
@@ -220,7 +232,7 @@ class CoverageReporter:
                 measured.append((lang, False, "-l"))
 
         for lang, is_source, flag in measured:
-            coverage = self._analyse_language(graph, entities, lang, is_source=is_source)
+            coverage = self._analyse_language(graph, entities, lang, names, is_source=is_source)
             report.languages[lang] = coverage
             if coverage.translated == 0:
                 found = related_tags(graph, entities, prop_uris, lang)
@@ -233,6 +245,7 @@ class CoverageReporter:
         graph: Graph,
         entities: list[URIRef],
         language: str,
+        names: list[tuple[URIRef, str]],
         is_source: bool = False,
     ) -> LanguageCoverage:
         """Analyse coverage for a single language.
@@ -241,6 +254,7 @@ class CoverageReporter:
             graph: RDF graph.
             entities: List of entity URIs.
             language: Language code to analyse.
+            names: Each property to measure, resolved, with the name it is reported under.
             is_source: Whether this is the source language.
 
         Returns:
@@ -252,8 +266,7 @@ class CoverageReporter:
         )
 
         # Initialise property coverage
-        for prop_uri_str in self.properties:
-            short_prop = self._shorten_property(prop_uri_str)
+        for _, short_prop in names:
             coverage.by_property[short_prop] = PropertyCoverage(property=short_prop)
 
         missing: list[str] = []
@@ -261,17 +274,14 @@ class CoverageReporter:
         for entity in entities:
             entity_missing_any = False
 
-            for prop_uri_str in self.properties:
-                prop_uri = URIRef(prop_uri_str)
-                short_prop = self._shorten_property(prop_uri_str)
-
+            for prop_uri, short_prop in names:
                 values = literals(graph, entity, prop_uri)
                 if not values:
                     continue
 
                 # The entity carries the property, so it is measured for every language
                 coverage.by_property[short_prop].total += 1
-                coverage.total_strings += 1
+                coverage.total_pairs += 1
 
                 count = sum(
                     1 for value in values if in_language(value, language, self.source_language)
@@ -293,30 +303,6 @@ class CoverageReporter:
         coverage.missing_entities = missing
         return coverage
 
-    def _shorten_property(self, prop: str) -> str:
-        """Shorten a full URI to CURIE if possible.
-
-        Args:
-            prop: Full property URI.
-
-        Returns:
-            CURIE or original URI.
-        """
-        namespaces = {
-            "http://www.w3.org/2000/01/rdf-schema#": "rdfs:",
-            "http://www.w3.org/2004/02/skos/core#": "skos:",
-            "http://www.w3.org/2002/07/owl#": "owl:",
-            "http://www.w3.org/1999/02/22-rdf-syntax-ns#": "rdf:",
-            "http://purl.org/dc/elements/1.1/": "dc:",
-            "http://purl.org/dc/terms/": "dcterms:",
-        }
-
-        for namespace, prefix in namespaces.items():
-            if prop.startswith(namespace):
-                return prefix + prop[len(namespace) :]
-
-        return prop
-
 
 def generate_coverage_report(
     source: Path,
@@ -333,14 +319,18 @@ def generate_coverage_report(
         source: Source ontology file.
         languages: List of language codes to check.
         source_language: Base language code.
-        properties: Properties to analyse.
+        properties: Properties to analyse, as CURIEs on the source file's own prefixes or as
+            IRIs.
         include_deprecated: Count deprecated entities.
 
     Returns:
         CoverageReport with detailed statistics.
+
+    Raises:
+        CurieError: If a property is a CURIE whose prefix the source file does not bind.
     """
-    # Load graph
-    graph = Graph()
+    # Load graph: the source's own prefixes, plus rdf, rdfs, owl, xsd and xml (#355)
+    graph = Graph(bind_namespaces="core")
     graph.parse(source)
 
     # Report

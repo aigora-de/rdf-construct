@@ -24,6 +24,7 @@ remove its marker, so the list cannot go quietly stale.
 """
 
 import hashlib
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -54,6 +55,10 @@ TRANSLATIONS = str(SMOKE / "translations_de.yml")
 GB_ONLY = str(REPO / "tests" / "fixtures" / "ies" / "ies-env-building-classification.ttl")
 MALFORMED_TTL = str(SMOKE / "malformed.ttl")
 MALFORMED_YAML = str(SMOKE / "malformed.yml")
+TWO_CATS = str(REPO / "tests" / "fixtures" / "shacl" / "two_cats.ttl")
+ORDER_BAD_SORT = str(SMOKE / "order_bad_sort.yml")
+ORDER_BAD_PREFIX_ORDER = str(SMOKE / "order_bad_prefix_order.yml")
+ORDER_BAD_ROOTS = str(SMOKE / "order_bad_roots.yml")
 
 # The exit-code convention decided on #286.
 STATE_CODE = {"clean": 0, "findings": 1, "refused": 2}
@@ -203,13 +208,17 @@ class Row:
         command: The command path the row exercises, as in ``EXPECTED_COMMANDS``.
         state: ``clean``, ``findings`` or ``refused``.
         argv: The arguments, with output paths written as ``@tmp/<name>``.
-        existing: Files to create in the working directory first.
+        existing: Files to create in the working directory first, each holding a line of
+            text: an empty file has nothing to lose, so some commands replace it (#404).
+        copied: Files to copy into the working directory first, under their own names, so
+            ``argv`` can name a real input there as ``@tmp/<name>`` (#412).
     """
 
     command: str
     state: str
     argv: tuple[str, ...]
     existing: tuple[str, ...] = ()
+    copied: tuple[str, ...] = ()
 
 
 def _row(row: Row, *, xfail: str | None = None, label: str = "") -> "ParameterSet":
@@ -246,8 +255,59 @@ def test_help_exits_cleanly(command: str):
 THREE_STATES = [
     _row(Row("cast", "clean", ("cast", ANIMAL, "-f", "nt", "-o", "@tmp/cast"))),
     _row(Row("cast", "refused", ("cast", ANIMAL, "-f", "nope"))),
+    # Every requested format the source's own casts nothing, in pipe mode and with -o, and a
+    # skip beside a written format is something to report (#330)
+    _row(
+        Row("cast", "refused", ("cast", ANIMAL, "-f", "turtle", "-o", "@tmp/cast")),
+        label="same-format",
+    ),
+    _row(Row("cast", "refused", ("cast", ANIMAL, "-f", "ttl")), label="same-format-pipe"),
+    _row(
+        Row("cast", "findings", ("cast", ANIMAL, "-f", "turtle", "-f", "nt", "-o", "@tmp/cast")),
+        label="skipped",
+    ),
+    # Quad output is written from a dataset: N-Quads from any source (#189), and a quad source's
+    # graphs kept (#540). What no single-graph format can hold is refused (#540, #542)
+    _row(Row("cast", "clean", ("cast", ANIMAL, "-f", "nq", "-o", "@tmp/cast")), label="nquads"),
+    _row(
+        Row(
+            "cast",
+            "clean",
+            ("cast", "@tmp/cast_quads.nq", "-f", "trig", "-o", "@tmp/cast"),
+            copied=(str(SMOKE / "cast_quads.nq"),),
+        ),
+        label="quad-to-quad",
+    ),
+    _row(
+        Row(
+            "cast",
+            "refused",
+            ("cast", str(SMOKE / "cast_named_graphs.jsonld"), "-o", "@tmp/cast"),
+        ),
+        label="jsonld-named-graphs",
+    ),
+    _row(
+        Row(
+            "cast",
+            "refused",
+            ("cast", str(SMOKE / "cast_formula.n3"), "-f", "turtle", "-o", "@tmp/cast"),
+        ),
+        label="n3-formula",
+    ),
     _row(Row("order", "clean", ("order", LIBRARY, ORDERING, "-o", "@tmp/order"))),
     _row(Row("order", "refused", ("order", LIBRARY, ORDERING, "-p", "nope", "-o", "@tmp/order"))),
+    _row(
+        Row("order", "refused", ("order", LIBRARY, ORDER_BAD_SORT, "-o", "@tmp/order")),
+        label="sort-mode",
+    ),
+    _row(
+        Row("order", "refused", ("order", LIBRARY, ORDER_BAD_PREFIX_ORDER, "-o", "@tmp/order")),
+        label="prefix-order",
+    ),
+    _row(
+        Row("order", "refused", ("order", LIBRARY, ORDER_BAD_ROOTS, "-o", "@tmp/order")),
+        label="roots",
+    ),
     _row(Row("profiles", "clean", ("profiles", ORDERING))),
     _row(Row("profiles", "refused", ("profiles", "@tmp/missing.yml"))),
     _row(Row("uml", "clean", ("uml", ANIMAL, "-C", UML_CONTEXTS, "-o", "@tmp/uml"))),
@@ -269,14 +329,165 @@ THREE_STATES = [
     _row(Row("diff", "clean", ("diff", ANIMAL, ANIMAL))),
     _row(Row("diff", "findings", ("diff", ANIMAL, SIMPLE))),
     _row(Row("diff", "refused", ("diff", ANIMAL, "@tmp/missing.ttl"))),
+    # An output that is an input is refused before anything is written (#412)
+    _row(
+        Row(
+            "diff",
+            "refused",
+            ("diff", "@tmp/animal_ontology.ttl", SIMPLE, "-o", "@tmp/animal_ontology.ttl"),
+            copied=(ANIMAL,),
+        ),
+        label="output-is-input",
+    ),
+    # A filter is display: a valid one keeps the verdict, and a bad one is refused before
+    # anything is written (#144)
+    _row(Row("diff", "findings", ("diff", ANIMAL, SIMPLE, "--show", "added")), label="filtered"),
+    _row(
+        Row("diff", "refused", ("diff", ANIMAL, SIMPLE, "--show", "addedd", "-o", "@tmp/d.txt")),
+        label="bad-filter",
+    ),
     _row(Row("docs", "clean", ("docs", ANIMAL, "-o", "@tmp/docs"))),
     _row(Row("docs", "refused", ("docs", ANIMAL, "--format", "nope", "-o", "@tmp/docs"))),
+    # An entity filter that names nothing known, or leaves nothing to document, is refused
+    # before anything is written (#252)
+    _row(
+        Row("docs", "refused", ("docs", ANIMAL, "--include", "clases", "-o", "@tmp/docs")),
+        label="bad-include",
+    ),
+    _row(
+        Row("docs", "refused", ("docs", ANIMAL, "--exclude", "clases", "-o", "@tmp/docs")),
+        label="bad-exclude",
+    ),
+    _row(
+        Row(
+            "docs",
+            "refused",
+            ("docs", ANIMAL, "--include", "classes", "--exclude", "classes", "-o", "@tmp/docs"),
+        ),
+        label="empty-selection",
+    ),
+    _row(
+        Row(
+            "docs",
+            "refused",
+            ("docs", ANIMAL, "--no-instances", "--include", "instances", "-o", "@tmp/docs"),
+        ),
+        label="contradiction",
+    ),
     _row(Row("shacl-gen", "clean", ("shacl-gen", ANIMAL, "-o", "@tmp/shapes.ttl"))),
     _row(
         Row("shacl-gen", "refused", ("shacl-gen", ANIMAL, "-C", MALFORMED_YAML, "-o", "@tmp/s.ttl"))
     ),
+    _row(
+        Row(
+            "shacl-gen",
+            "refused",
+            ("shacl-gen", ANIMAL, "--classes", "ex:Nope", "-o", "@tmp/s.ttl"),
+        ),
+        label="unmatched-target",
+    ),
+    _row(
+        Row(
+            "shacl-gen", "refused", ("shacl-gen", TWO_CATS, "--classes", "Cat", "-o", "@tmp/s.ttl")
+        ),
+        label="ambiguous-target",
+    ),
+    _row(
+        Row(
+            "shacl-gen",
+            "refused",
+            (
+                "shacl-gen",
+                ANIMAL,
+                "-C",
+                str(SMOKE / "shacl_scalar_targets.yml"),
+                "-o",
+                "@tmp/s.ttl",
+            ),
+        ),
+        label="scalar-targets",
+    ),
+    _row(
+        Row(
+            "shacl-gen",
+            "refused",
+            (
+                "shacl-gen",
+                ANIMAL,
+                "-C",
+                str(SMOKE / "shacl_unbound_ignored.yml"),
+                "-o",
+                "@tmp/s.ttl",
+            ),
+        ),
+        label="unbound-ignored-prefix",
+    ),
+    _row(
+        Row(
+            "shacl-gen",
+            "refused",
+            (
+                "shacl-gen",
+                ANIMAL,
+                "-C",
+                str(SMOKE / "shacl_bad_namespace.yml"),
+                "-o",
+                "@tmp/s.ttl",
+            ),
+        ),
+        label="suffix-shape-namespace",
+    ),
+    _row(
+        Row(
+            "shacl-gen",
+            "refused",
+            (
+                "shacl-gen",
+                ANIMAL,
+                "-C",
+                str(SMOKE / "shacl_removed_key.yml"),
+                "-o",
+                "@tmp/s.ttl",
+            ),
+        ),
+        label="removed-key",
+    ),
+    _row(
+        Row(
+            "shacl-gen",
+            "refused",
+            ("shacl-gen", "@tmp/animal_ontology.ttl", "-o", "@tmp/animal_ontology.ttl"),
+            copied=(ANIMAL,),
+        ),
+        label="output-is-input",
+    ),
     _row(Row("puml2rdf", "clean", ("puml2rdf", str(SMOKE / "diagram.puml"), "-o", "@tmp/d.ttl"))),
     _row(Row("puml2rdf", "refused", ("puml2rdf", "@tmp/missing.puml"))),
+    _row(
+        Row(
+            "puml2rdf",
+            "refused",
+            ("puml2rdf", "@tmp/diagram.puml", "-o", "@tmp/diagram.puml"),
+            copied=(str(SMOKE / "diagram.puml"),),
+        ),
+        label="output-is-input",
+    ),
+    _row(
+        Row(
+            "puml2rdf",
+            "findings",
+            (
+                "puml2rdf",
+                str(SMOKE / "diagram.puml"),
+                "--merge",
+                "@tmp/merge_target.ttl",
+                "-o",
+                "@tmp/merge_target.ttl",
+            ),
+            copied=(str(SMOKE / "merge_target.ttl"),),
+        ),
+        label="merge-conflict",
+    ),
     _row(
         Row(
             "cq-test",
@@ -285,15 +496,77 @@ THREE_STATES = [
         )
     ),
     _row(Row("cq-test", "findings", ("cq-test", ANIMAL, str(SMOKE / "cq_failing.yml")))),
+    _row(
+        Row(
+            "cq-test",
+            "findings",
+            ("cq-test", ANIMAL, str(SMOKE / "cq_fail_fast.yml"), "--fail-fast"),
+        ),
+        label="fail-fast",
+    ),
     _row(Row("cq-test", "refused", ("cq-test", ANIMAL, MALFORMED_YAML))),
+    _row(
+        Row(
+            "cq-test",
+            "refused",
+            (
+                "cq-test",
+                ANIMAL,
+                str(EXAMPLES / "cq-test" / "cq_tests_animal.yml"),
+                "--tag",
+                "no-such-tag",
+            ),
+        ),
+        label="empty-selection",
+    ),
     _row(
         Row("cq-test", "refused", ("cq-test", ANIMAL, str(SMOKE / "cq_ask_count.yml"))),
         label="ask-count",
     ),
+    _row(
+        Row(
+            "cq-test",
+            "refused",
+            (
+                "cq-test",
+                "@tmp/animal_ontology.ttl",
+                str(EXAMPLES / "cq-test" / "cq_tests_animal.yml"),
+                "-o",
+                "@tmp/animal_ontology.ttl",
+            ),
+            copied=(ANIMAL,),
+        ),
+        label="output-is-input",
+    ),
     _row(Row("stats", "clean", ("stats", ANIMAL))),
     _row(Row("stats", "refused", ("stats", "--compare", ANIMAL))),
+    _row(
+        Row(
+            "stats",
+            "refused",
+            ("stats", "@tmp/animal_ontology.ttl", "-o", "@tmp/animal_ontology.ttl"),
+            copied=(ANIMAL,),
+        ),
+        label="output-is-input",
+    ),
     _row(Row("describe", "clean", ("describe", ANIMAL))),
+    _row(Row("describe", "clean", ("describe", ANIMAL, "--reasoning")), label="reasoning"),
     _row(Row("describe", "refused", ("describe", ANIMAL, "--format", "nope"))),
+    _row(
+        Row(
+            "describe",
+            "refused",
+            (
+                "describe",
+                "@tmp/animal_ontology.ttl",
+                "--no-resolve",
+                "-o",
+                "@tmp/animal_ontology.ttl",
+            ),
+            copied=(ANIMAL,),
+        ),
+        label="output-is-input",
+    ),
     _row(
         Row(
             "merge",
@@ -323,6 +596,23 @@ THREE_STATES = [
         )
     ),
     _row(Row("merge", "refused", ("merge", "-c", MALFORMED_YAML, "-o", "@tmp/merged.ttl"))),
+    # The sources conflict, so --report would be written over the merge (#412)
+    _row(
+        Row(
+            "merge",
+            "refused",
+            (
+                "merge",
+                str(EXAMPLES / "merge" / "merge_core.ttl"),
+                str(EXAMPLES / "merge" / "merge_conflicting.ttl"),
+                "-o",
+                "@tmp/merged.ttl",
+                "--report",
+                "@tmp/merged.ttl",
+            ),
+        ),
+        label="report-is-output",
+    ),
     _row(Row("split", "clean", ("split", MONOLITH, "--by-namespace", "-o", "@tmp/split"))),
     _row(Row("split", "refused", ("split", MONOLITH, "-o", "@tmp/split"))),
     _row(
@@ -332,6 +622,30 @@ THREE_STATES = [
             ("split", MONOLITH, "-c", str(EXAMPLES / "split" / "split_config.yml"), "-o", "@tmp/s"),
         ),
         label="config",
+    ),
+    _row(
+        Row(
+            "split",
+            "refused",
+            ("split", MONOLITH, "-c", str(SMOKE / "split_shared_output.yml"), "-o", "@tmp/split"),
+        ),
+        label="shared-output",
+    ),
+    _row(
+        Row(
+            "split",
+            "refused",
+            (
+                "split",
+                "@tmp/split_monolith.ttl",
+                "-c",
+                str(SMOKE / "split_over_source.yml"),
+                "-o",
+                "@tmp/",
+            ),
+            copied=(MONOLITH,),
+        ),
+        label="over-source",
     ),
     _row(
         Row(
@@ -354,6 +668,24 @@ THREE_STATES = [
             "refused",
             ("refactor", "rename", str(EXAMPLES / "refactor" / "typos.ttl"), "-o", "@tmp/r.ttl"),
         )
+    ),
+    _row(
+        Row(
+            "refactor rename",
+            "refused",
+            (
+                "refactor",
+                "rename",
+                str(EXAMPLES / "refactor" / "typos.ttl"),
+                "--from",
+                "http://example.org/ont#Addres",
+                "--to",
+                "http://example.org/ont#Structure",
+                "-o",
+                "@tmp/r.ttl",
+            ),
+        ),
+        label="onto-existing-iri",
     ),
     _row(
         Row(
@@ -400,6 +732,79 @@ THREE_STATES = [
     ),
     _row(
         Row(
+            "refactor rename",
+            "refused",
+            (
+                "refactor",
+                "rename",
+                str(EXAMPLES / "refactor" / "typos.ttl"),
+                "--from",
+                "http://example.org/ont#Buiding",
+                "--to",
+                "http://example.org/ont#Building",
+            ),
+        ),
+        label="no-output",
+    ),
+    _row(
+        Row(
+            "refactor rename",
+            "refused",
+            (
+                "refactor",
+                "rename",
+                "-c",
+                str(EXAMPLES / "refactor" / "renames.yml"),
+                "--from",
+                "http://example.org/ont#Organistion",
+                "--to",
+                "http://example.org/ont#Organisation",
+                "-o",
+                "@tmp/r.ttl",
+            ),
+        ),
+        label="config-with-operation",
+    ),
+    _row(
+        Row(
+            "refactor deprecate",
+            "refused",
+            (
+                "refactor",
+                "deprecate",
+                "@tmp/legacy.ttl",
+                "@tmp/typos.ttl",
+                "--entity",
+                "http://example.org/ont#LegacyPerson",
+                "-o",
+                "@tmp/legacy.ttl",
+            ),
+            copied=(
+                str(EXAMPLES / "refactor" / "legacy.ttl"),
+                str(EXAMPLES / "refactor" / "typos.ttl"),
+            ),
+        ),
+        label="output-over-source",
+    ),
+    _row(
+        Row(
+            "refactor deprecate",
+            "refused",
+            (
+                "refactor",
+                "deprecate",
+                "-c",
+                str(EXAMPLES / "refactor" / "deprecations.yml"),
+                "--message",
+                "",
+                "-o",
+                "@tmp/d.ttl",
+            ),
+        ),
+        label="config-with-operation",
+    ),
+    _row(
+        Row(
             "localise extract",
             "clean",
             ("localise", "extract", ANIMAL, "-l", "de", "-o", "@tmp/de.yml"),
@@ -421,12 +826,65 @@ THREE_STATES = [
             ("localise", "extract", ANIMAL, "-l", "en_GB", "-o", "@tmp/de.yml"),
         )
     ),
+    # A destination that is not a translation file is not replaced in silence (#404)
+    _row(
+        Row(
+            "localise extract", "refused", ("localise", "extract", ANIMAL, "-l", "de"), ("de.yml",)
+        ),
+        label="overwrite",
+    ),
+    _row(
+        Row(
+            "localise extract",
+            "refused",
+            ("localise", "extract", ANIMAL, "-l", "de", "--overwrite"),
+            ("de.yml",),
+        ),
+        label="overwrite-flag",
+    ),
+    # --properties reads the ontology's own prefixes, and refuses one it does not bind (#355)
+    _row(
+        Row(
+            "localise extract",
+            "clean",
+            (
+                "localise",
+                "extract",
+                ANIMAL,
+                "-l",
+                "de",
+                "-p",
+                "ex:scientificName",
+                "-o",
+                "@tmp/de.yml",
+            ),
+        ),
+        label="properties",
+    ),
+    _row(
+        Row(
+            "localise extract",
+            "refused",
+            ("localise", "extract", ANIMAL, "-l", "de", "-p", "zz:note", "-o", "@tmp/de.yml"),
+        ),
+        label="unbound-prefix",
+    ),
     _row(
         Row(
             "localise merge",
             "clean",
             ("localise", "merge", ANIMAL, TRANSLATIONS, "-o", "@tmp/l.ttl"),
         )
+    ),
+    # An empty translation file crashed before #408
+    _row(
+        Row(
+            "localise merge",
+            "refused",
+            ("localise", "merge", ANIMAL, "@tmp/t.yml", "-o", "@tmp/l.ttl"),
+            ("t.yml",),
+        ),
+        label="empty",
     ),
     _row(
         Row(
@@ -449,14 +907,55 @@ THREE_STATES = [
             ),
         )
     ),
+    _row(
+        Row(
+            "localise merge",
+            "refused",
+            (
+                "localise",
+                "merge",
+                ANIMAL,
+                "@tmp/translations_de.yml",
+                "-o",
+                "@tmp/translations_de.yml",
+            ),
+            copied=(TRANSLATIONS,),
+        ),
+        label="output-is-input",
+    ),
     _row(Row("localise report", "clean", ("localise", "report", ANIMAL, "-l", "en,de"))),
     _row(Row("localise report", "refused", ("localise", "report"))),
     _row(Row("localise report", "findings", ("localise", "report", GB_ONLY, "-l", "en,de"))),
     _row(Row("localise report", "refused", ("localise", "report", ANIMAL, "-l", "en,,de"))),
     _row(
+        Row("localise report", "refused", ("localise", "report", ANIMAL, "-l", "de", "-p", "zz:x")),
+        label="unbound-prefix",
+    ),
+    _row(
+        Row(
+            "localise report",
+            "refused",
+            (
+                "localise",
+                "report",
+                "@tmp/animal_ontology.ttl",
+                "-l",
+                "de",
+                "-o",
+                "@tmp/animal_ontology.ttl",
+            ),
+            copied=(ANIMAL,),
+        ),
+        label="output-is-input",
+    ),
+    _row(
         Row("localise init", "clean", ("localise", "init", ANIMAL, "-l", "ja", "-o", "@tmp/ja.yml"))
     ),
     _row(Row("localise init", "refused", ("localise", "init"))),
+    _row(
+        Row("localise init", "refused", ("localise", "init", ANIMAL, "-l", "ja"), ("ja.yml",)),
+        label="overwrite",
+    ),
     _row(Row("localise config", "clean", ("localise", "config", "--init"))),
     _row(
         Row(
@@ -478,7 +977,9 @@ def test_every_command_has_a_three_state_row():
 @pytest.mark.parametrize("row", THREE_STATES)
 def test_three_states(row: Row, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     for name in row.existing:
-        (tmp_path / name).write_text("")
+        (tmp_path / name).write_text("not written by rdf-construct\n")
+    for source in row.copied:
+        shutil.copy(source, tmp_path)
     before = snapshot(_resolve(row.argv, tmp_path), tmp_path)
     result = _invoke(row.argv, tmp_path, monkeypatch)
     assert_no_crash(result)
@@ -515,7 +1016,7 @@ MALFORMED = [
         label="yaml",
     ),
     _row(Row("contexts", "refused", ("contexts", MALFORMED_YAML)), xfail="#318", label="yaml"),
-    _row(Row("lint", "refused", ("lint", MALFORMED_TTL)), xfail="#322", label="ttl"),
+    _row(Row("lint", "refused", ("lint", MALFORMED_TTL)), label="ttl"),
     _row(Row("diff", "refused", ("diff", MALFORMED_TTL, ANIMAL)), label="ttl"),
     _row(Row("docs", "refused", ("docs", MALFORMED_TTL, "-o", "@tmp/docs")), label="ttl"),
     _row(
@@ -533,6 +1034,14 @@ MALFORMED = [
             ("puml2rdf", str(SMOKE / "core_prefix.puml"), "-o", "@tmp/p.ttl"),
         ),
         label="puml-prefix",
+    ),
+    _row(
+        Row(
+            "puml2rdf",
+            "refused",
+            ("puml2rdf", str(SMOKE / "diagram.puml"), "--merge", MALFORMED_TTL, "-o", "@tmp/p.ttl"),
+        ),
+        label="merge-ttl",
     ),
     _row(
         Row("cq-test", "refused", ("cq-test", MALFORMED_TTL, str(SMOKE / "cq_failing.yml"))),
@@ -566,6 +1075,28 @@ MALFORMED = [
             ),
         ),
         label="ttl",
+    ),
+    _row(
+        Row(
+            "refactor rename",
+            "refused",
+            (
+                "refactor",
+                "rename",
+                str(EXAMPLES / "refactor" / "typos.ttl"),
+                "--from",
+                "http://example.org/ont#Buiding",
+                "--to",
+                "http://example.org/ont#Building",
+                "-o",
+                "@tmp/r.ttl",
+                "--migrate-data",
+                MALFORMED_TTL,
+                "--data-output",
+                "@tmp/d.ttl",
+            ),
+        ),
+        label="data-ttl",
     ),
     _row(
         Row(

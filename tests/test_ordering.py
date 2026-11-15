@@ -10,9 +10,13 @@ from rdflib.namespace import OWL
 
 from rdf_construct.core import OrderingConfig
 from rdf_construct.core.ordering import (
+    SORT_MODES,
+    UnknownSortModeError,
     build_adjacency,
     descendants_of,
+    normalise_sort_mode,
     sort_subjects,
+    sort_with_roots,
     topo_sort_subset,
 )
 from rdf_construct.core.selector import select_subjects
@@ -412,3 +416,81 @@ def test_self_loop_inside_a_real_cycle_is_still_a_cycle():
     # B hangs below the cycle, so it cannot become ready either; all three follow
     # in key order, as #250 currently defines the remainder.
     assert topo_sort_subset(g, {b, m, z}, RDFS.subClassOf) == [b, m, z]
+
+
+# -- #242: an unrecognised sort mode is refused, not silently alphabetical --
+
+
+def _child_before_parent() -> tuple[Graph, list[URIRef]]:
+    """Z ⊒ M ⊒ A: every class sorts alphabetically before its own parent.
+
+    So a topological request that falls back to alphabetical is visible as
+    the reverse order, not plausible.
+    """
+    g = Graph()
+    ex = "http://example.org/test#"
+    g.bind("ex", ex)
+    z, m, a = (URIRef(ex + n) for n in ("Z", "M", "A"))
+    for t in (z, m, a):
+        g.add((t, RDF.type, OWL.Class))
+    g.add((m, RDFS.subClassOf, z))
+    g.add((a, RDFS.subClassOf, m))
+    return g, [z, m, a]
+
+
+REFUSED_SORT_MODES = ["topolgical", "topo", "", None, 42, True, ["topological"]]
+
+
+def test_sort_modes_are_the_four_documented_ones():
+    assert SORT_MODES == ("alpha", "qname_alpha", "topological", "topological_then_alpha")
+
+
+@pytest.mark.parametrize("mode", [*SORT_MODES, "TOPOLOGICAL", "Alpha"])
+def test_every_accepted_mode_normalises_to_itself_lower_cased(mode):
+    assert normalise_sort_mode(mode) == mode.lower()
+
+
+@pytest.mark.parametrize("mode", ["topological", "topological_then_alpha", "TOPOLOGICAL"])
+def test_topological_modes_order_parents_first(mode):
+    g, expected = _child_before_parent()
+    assert sort_subjects(g, set(expected), mode) == expected
+    assert sort_with_roots(g, set(expected), mode, None) == expected
+
+
+@pytest.mark.parametrize("mode", ["alpha", "qname_alpha", "ALPHA"])
+def test_alphabetical_modes_order_by_qname(mode):
+    g, expected = _child_before_parent()
+    assert sort_subjects(g, set(expected), mode) == list(reversed(expected))
+
+
+@pytest.mark.parametrize("roots", [None, ["ex:M"]])
+def test_topological_then_alpha_is_topological(roots):
+    """The alias takes the same path: ties in the topological sort are already alphabetical."""
+    g, expected = _child_before_parent()
+    assert sort_subjects(g, set(expected), "topological_then_alpha", roots) == sort_subjects(
+        g, set(expected), "topological", roots
+    )
+
+
+@pytest.mark.parametrize("mode", REFUSED_SORT_MODES, ids=repr)
+def test_sort_subjects_refuses_an_unknown_mode(mode):
+    """The #242 reproducer: this used to return alphabetical order, or crash on `.lower()`."""
+    g, expected = _child_before_parent()
+    with pytest.raises(UnknownSortModeError) as excinfo:
+        sort_subjects(g, set(expected), mode)
+    message = str(excinfo.value)
+    assert repr(mode) in message
+    for accepted in SORT_MODES:
+        assert accepted in message
+
+
+@pytest.mark.parametrize("mode", REFUSED_SORT_MODES, ids=repr)
+def test_sort_with_roots_refuses_an_unknown_mode(mode):
+    g, expected = _child_before_parent()
+    with pytest.raises(UnknownSortModeError):
+        sort_with_roots(g, set(expected), mode, ["ex:Z"])
+
+
+def test_unknown_sort_mode_is_a_value_error():
+    """Callers that already catch ValueError for a bad config keep catching this."""
+    assert issubclass(UnknownSortModeError, ValueError)

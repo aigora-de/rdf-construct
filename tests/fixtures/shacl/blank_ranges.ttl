@@ -1,0 +1,24 @@
+# Ranges and qualifications that are blank nodes, which sh:class and sh:datatype cannot take (#487).
+@prefix ex: <http://example.org/blank#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/blank> a owl:Ontology .
+
+ex:A a owl:Class .
+ex:B a owl:Class .
+ex:Pet a owl:Class ;
+    rdfs:subClassOf [
+        a owl:Restriction ;
+        owl:onProperty ex:friend ;
+        owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+        owl:onClass [ a owl:Class ; owl:unionOf ( ex:A ex:B ) ]
+    ] .
+
+ex:likes a owl:ObjectProperty ; rdfs:domain ex:Pet ;
+    rdfs:range [ a owl:Class ; owl:unionOf ( ex:A ex:B ) ] .
+ex:age a owl:DatatypeProperty ; rdfs:domain ex:Pet ;
+    rdfs:range [ a rdfs:Datatype ; owl:onDatatype xsd:integer ;
+                 owl:withRestrictions ( [ xsd:minInclusive 0 ] ) ] .
+ex:friend a owl:ObjectProperty .

@@ -12,6 +12,10 @@ seconds to the suite and catch nothing the smallest does not.
 A contract that fails today is ``xfail(strict=True)`` against the issue that explains it. The fix
 for that issue makes the test pass, and the strict marker then fails the suite until the fix
 removes it.
+
+Every graph is read the way the CLI reads it, without normalising typed literals (#377). Read
+with rdflib's default, both sides would agree on ``"7"`` for ``"007"`` and on one triple for
+``"1"^^xsd:boolean`` beside ``"true"``, and no contract could see either.
 """
 
 import json
@@ -21,12 +25,14 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner, Result
 from rdflib import Graph, Literal, Namespace, URIRef
-from rdflib.namespace import RDF, RDFS, SH
+from rdflib.namespace import OWL, RDF, RDFS, SH
 
 from rdf_construct.cli import cli
+from rdf_construct.core import preserve_literal_forms
 from rdf_construct.core.verify import CONTRACTS, Triple, check_contract, describe
 from rdf_construct.core.vocab import CLASS_TYPES
 from rdf_construct.docs import extract_all
+from rdf_construct.merge.identity import ONTOLOGY_ONLY
 from tests.test_cli_smoke import assert_no_crash
 
 REPO = Path(__file__).parent.parent
@@ -36,6 +42,8 @@ FIXTURES = REPO / "tests" / "fixtures"
 ANIMAL = EXAMPLES / "animal_ontology.ttl"
 LIBRARY = EXAMPLES / "order" / "library.ttl"
 IES_SMALL = FIXTURES / "ies" / "ies-env-building-classification.ttl"
+LITERALS = FIXTURES / "literals" / "lit.ttl"
+MULTI_BNODE = FIXTURES / "order" / "multi_object_bnode.ttl"
 DOCS_SOURCE = FIXTURES / "docs" / "skos_vocabulary.ttl"
 
 EXO = Namespace("http://example.org/")
@@ -50,7 +58,8 @@ def _run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *argv: object) -> Resu
 
 
 def _parse(path: Path, fmt: str | None = None) -> Graph:
-    return Graph().parse(path, format=fmt)
+    with preserve_literal_forms():
+        return Graph().parse(path, format=fmt)
 
 
 def _assert_holds(
@@ -85,6 +94,31 @@ def test_cast_is_isomorphic(source: Path, fmt: str, tmp_path, monkeypatch):
     _assert_holds("cast", inputs=[_parse(source)], outputs=[_parse(written, fmt)])
 
 
+@pytest.mark.parametrize(
+    "fmt",
+    [
+        "nt",
+        "xml",
+        "n3",
+        pytest.param(
+            "json-ld",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="#462: rdflib's JSON-LD serialiser writes booleans and numbers from "
+                'their value, so "1"^^xsd:boolean and "true" are written as one value',
+            ),
+        ),
+    ],
+)
+def test_cast_keeps_every_lexical_form(fmt: str, tmp_path, monkeypatch):
+    """#377: the fixture states 16 triples, and normalising its literals leaves 14."""
+    _run(tmp_path, monkeypatch, "cast", LITERALS, "-f", fmt, "-o", tmp_path / "out")
+    [written] = (tmp_path / "out").iterdir()
+    source = _parse(LITERALS)
+    assert len(source) == 16
+    _assert_holds("cast", inputs=[source], outputs=[_parse(written, fmt)])
+
+
 # ---------------------------------------------------------------------------
 # order: isomorphic, for lossless profiles (filtering profiles are #90, P13)
 # ---------------------------------------------------------------------------
@@ -96,6 +130,9 @@ def test_cast_is_isomorphic(source: Path, fmt: str, tmp_path, monkeypatch):
         (LIBRARY, EXAMPLES / "order" / "ordering.yml", "alpha"),
         (LIBRARY, EXAMPLES / "order" / "ordering.yml", "hierarchy"),
         (LIBRARY, EXAMPLES / "order" / "ordering.yml", "anchored"),
+        # An inline bnode with several objects for one predicate (#343). Every
+        # subject is claimed by `alpha`, so the contract applies.
+        (MULTI_BNODE, EXAMPLES / "order" / "ordering.yml", "alpha"),
         (IES_SMALL, EXAMPLES / "order" / "ies_profile.yml", "alpha"),
         (IES_SMALL, EXAMPLES / "order" / "ies_profile.yml", "logical_topo"),
         (IES_SMALL, EXAMPLES / "order" / "ies_profile.yml", "props_by_domain"),
@@ -144,12 +181,6 @@ RENAMES = [
             "RoofingInsulationNone",
         ),
         id="ies-class",
-    ),
-    pytest.param(
-        ANIMAL,
-        ("--from", "http://example.org/animals#Animal", "--to", "http://example.org/animals#Bird"),
-        id="onto-existing-iri",
-        marks=pytest.mark.xfail(strict=True, reason="#185"),
     ),
 ]
 
@@ -211,10 +242,25 @@ def _merge(tmp_path: Path, monkeypatch, sources: list[Path]) -> Graph:
     return _parse(out)
 
 
+def _demoted(inputs: Sequence[Graph]) -> list[Triple]:
+    """What an unnamed merge removes from each source header: its type, version IRI and the
+    predicates only an ontology takes (#171)."""
+    removed: list[Triple] = []
+    for graph in inputs:
+        for header in graph.subjects(RDF.type, OWL.Ontology):
+            for predicate in (RDF.type, OWL.versionIRI, *ONTOLOGY_ONLY):
+                for value in graph.objects(header, predicate):
+                    if predicate != RDF.type or value == OWL.Ontology:
+                        removed.append((header, predicate, value))
+    return removed
+
+
 def test_merge_keeps_every_source_triple(tmp_path, monkeypatch):
     sources = [EXAMPLES / "merge" / "merge_core.ttl", EXAMPLES / "merge" / "merge_extension.ttl"]
     merged = _merge(tmp_path, monkeypatch, sources)
-    _assert_holds("merge", inputs=[_parse(s) for s in sources], outputs=[merged])
+    inputs = [_parse(s) for s in sources]
+    # Two ontologies and nothing to name the result, so both headers are demoted (#171)
+    _assert_holds("merge", inputs=inputs, outputs=[merged], excluded=_demoted(inputs))
 
 
 def test_merge_keeps_every_blank_node_structure(tmp_path, monkeypatch):
@@ -228,8 +274,10 @@ def test_merge_keeps_every_blank_node_structure(tmp_path, monkeypatch):
 def test_merge_drops_the_losers_of_resolved_conflicts(tmp_path, monkeypatch):
     sources = [EXAMPLES / "merge" / "merge_core.ttl", EXAMPLES / "merge" / "merge_conflicting.ttl"]
     merged = _merge(tmp_path, monkeypatch, sources)
+    inputs = [_parse(s) for s in sources]
+    # merge_conflicting.ttl has no header, so merge_core.ttl's is demoted (#171)
     _assert_holds(
-        "merge", inputs=[_parse(s) for s in sources], outputs=[merged], excluded=MERGE_LOSERS
+        "merge", inputs=inputs, outputs=[merged], excluded=[*MERGE_LOSERS, *_demoted(inputs)]
     )
 
 
@@ -333,14 +381,12 @@ def _classes(graph: Graph) -> set[URIRef]:
             ("--classes", "ex:Dog"),
             {URIRef("http://example.org/animals#Dog")},
             id="classes-curie",
-            marks=pytest.mark.xfail(strict=True, reason="#226"),
         ),
         pytest.param(
             FIXTURES / "docs" / "deprecated_terms.ttl",
             (),
             None,
             id="deprecated-class",
-            marks=pytest.mark.xfail(strict=True, reason="#228"),
         ),
     ],
 )

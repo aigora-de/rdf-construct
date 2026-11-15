@@ -127,6 +127,7 @@ src/rdf_construct/
 │   ├── formatters.py
 │   ├── merger.py
 │   ├── migrator.py
+│   ├── prefixes.py
 │   ├── rules.py
 │   └── splitter.py
 ├── refactor/
@@ -302,6 +303,7 @@ tests/
 - `descendants_of()` - find all descendants of a root
 - `sort_with_roots()` - root-based branch ordering
 - `sort_subjects()` - main sorting dispatcher
+- `normalise_sort_mode()` - check a mode against `SORT_MODES`; raises `UnknownSortModeError`
 
 **`core/serialiser.py`**
 - `format_term()` - format RDF terms as Turtle strings
@@ -313,6 +315,19 @@ tests/
 - `PredicateOrder` dataclass - ordering specification
 - `get_predicate_order()` - retrieve ordering for a profile
 - Configurable predicate output order within subjects
+
+**`core/output_paths.py`**
+- `PlannedOutput` - an output path and the input it is made from
+- `colliding_outputs()` - outputs that are one file (resolved path, ignoring case)
+- `outputs_over_inputs()`, `is_same_file()` - outputs that would replace an input (`os.path.samefile`)
+- Reports only; each command decides what to refuse (`refactor rename`, #411). Nine more commands
+  refuse every case through `cli.py`'s `check_outputs()` (#412)
+
+**`core/names.py`**
+- `normalise_names()` - map names a user typed to a command's canonical names, or refuse every
+  bad one at once with a did-you-mean and the accepted names (`error=` picks the exception)
+- Shared by `diff`'s `--show`/`--hide`/`--entities` (#144) and `docs`' `--include`/`--exclude`
+  (#252)
 
 **`core/utils.py`**
 - `extract_prefix_map()` - get namespaces from graph
@@ -510,6 +525,12 @@ Combine multiple RDF ontologies with conflict detection, namespace management, a
 - Build URI map from namespace remappings
 - Shared infrastructure for split/refactor commands
 
+**`merge/prefixes.py`**
+- `combine_prefixes()` - one prefix per namespace across several sources, with a note for each
+  declaration not written as declared (#357, #358)
+- `table_gaps()`, `fill_table_gaps()` - rdflib's prefix table, only where it displaces nothing
+- `bind_exactly()` - bind a decided prefix map into a `core` graph
+
 **`merge/rules.py`**
 - `RuleEngine` class - execute transformation rules
 - `PatternParser` class - parse SPARQL-like patterns
@@ -579,8 +600,9 @@ Convert PlantUML class diagrams to RDF/OWL ontologies.
 
 **`puml2rdf/merger.py`**
 - `OntologyMerger` class - merge generated RDF with existing ontologies
-- Preserves manual annotations while updating structure
-- Conflict detection and reporting
+- Keeps every type and blank-node axiom the diagram cannot draw; replaces a named superclass,
+  domain or range only with the diagram's own, when the diagram draws the class (#417)
+- `MergeConflict` - one replaced value or kind clash, reported by the CLI at exit 1
 
 **`puml2rdf/validators.py`**
 - `PumlModelValidator` - validate parsed PlantUML model
@@ -709,6 +731,10 @@ Multi-language translation management for ontologies.
 - `CoverageReporter` class - analyse translation coverage
 - Per-language and per-property statistics
 - Missing entity tracking
+
+**`localise/properties.py`**
+- `FILE_PREFIXES` - the six prefixes a translation or config file may use
+- `resolve_property()`, `shorten_property()` - property names via `core.utils.resolve_curie`, against an ontology's own prefixes or the file format's (#355)
 
 **`localise/formatters/`**
 - `text.py` - Console output with colour support

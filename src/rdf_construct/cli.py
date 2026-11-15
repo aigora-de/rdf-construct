@@ -1,8 +1,11 @@
 """Command-line interface for rdf-construct."""
 
+import shlex
 import sys
 import traceback
-from collections.abc import Iterable, Sequence
+import warnings
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Any
 
@@ -25,16 +28,22 @@ from rdf_construct.core import (
     bnode_closure,
     build_section_graph,
     extract_prefix_map,
-    rebind_prefixes,
     BUILTIN_SELECTOR_KEYS,
     UnknownSelectorError,
+    TOPOLOGICAL_MODES,
+    UnknownSortModeError,
+    check_roots,
     is_known_selector,
+    normalise_sort_mode,
+    resolve_roots,
     select_subjects,
     serialise_turtle,
     sort_subjects,
+    unknown_selector_error,
     expand_curie,
     CurieError,
     missing_triples,
+    nested_rules,
     stamp_extract,
 )
 from rdf_construct.core.formats import (
@@ -43,9 +52,22 @@ from rdf_construct.core.formats import (
     infer_format as infer_rdf_format,
     normalise_format,
 )
+from rdf_construct.core.literal_forms import preserve_literal_forms
+from rdf_construct.core.utils import parse_failure_message
 from rdf_construct.core.outdir import OUTPUT_MARKER, foreign_entries, mark_output_dir, read_marker
+from rdf_construct.core.output_paths import (
+    PlannedOutput,
+    colliding_outputs,
+    is_same_file,
+    outputs_over_inputs,
+)
 
 from rdf_construct.cast import CastConverter
+from rdf_construct.cast.converter import (
+    formats_other_than,
+    nothing_to_cast,
+    nothing_to_cast_message,
+)
 
 from rdf_construct.uml import (
     load_uml_config,
@@ -73,19 +95,37 @@ LINT_LEVELS = ["strict", "standard", "relaxed"]
 LINT_FORMATS = ["text", "json"]
 LINT_FAIL_ON = ["error", "warning", "info", "never"]
 
-from rdf_construct.diff import compare_files, format_diff, filter_diff, parse_filter_string
+from rdf_construct.diff import (
+    CHANGE_TYPE_NAMES,
+    ENTITY_TYPE_NAMES,
+    UnknownFilterError,
+    build_filter,
+    compare_files,
+    filter_diff,
+    format_diff,
+    normalise_change_types,
+    normalise_entity_types,
+)
+from rdf_construct.docs.config import (
+    ENTITY_TYPE_NAMES as DOCS_ENTITY_TYPE_NAMES,
+    ENTITY_TYPE_TOGGLES as DOCS_ENTITY_TYPE_TOGGLES,
+    EntityFilterError,
+    apply_entity_filter,
+    normalise_entity_types as normalise_docs_entity_types,
+)
 
 from rdf_construct.puml2rdf import (
     ConversionConfig,
+    NamespaceMapping,
     PlantUMLParser,
     PumlToRdfConverter,
+    OntologyMerger as PumlOntologyMerger,
     load_import_config,
-    merge_with_existing,
     validate_puml,
     validate_rdf,
 )
 
-from rdf_construct.cq import load_test_suite, CQTestRunner, format_results
+from rdf_construct.cq import load_test_suite, CQTestRunner, CQTestSuite, format_results
 
 from rdf_construct.stats import (
     collect_stats,
@@ -103,10 +143,16 @@ from rdf_construct.merge import (
     ImportsStrategy,
     DataMigrationConfig,
     OntologyMerger,
+    MergeResult,
+    MergeIdentity,
+    NamespaceConfig,
     load_merge_config,
     create_default_config,
     get_formatter,
-    migrate_data_files,
+    migrate_data_graphs,
+    resolve_rules,
+    RuleError,
+    parse_declaring,
     # Split imports
     OntologySplitter,
     SplitConfig,
@@ -114,9 +160,12 @@ from rdf_construct.merge import (
     ModuleDefinition,
     UnmatchedStrategy,
     SplitDataConfig,
+    SplitOutputError,
+    check_split_outputs,
     split_by_namespace,
     create_default_split_config,
 )
+from rdf_construct.merge.prefixes import fill_table_gaps
 
 from rdf_construct.refactor import (
     RenameConfig,
@@ -131,8 +180,13 @@ from rdf_construct.refactor import (
     rename_file,
     rename_files,
     deprecate_file,
+    RenameCollision,
+    find_collisions,
+    find_references,
+    InertRename,
+    inert_renames,
 )
-from rdf_construct.refactor.config import AmbiguousCurieError
+from rdf_construct.refactor.config import AmbiguousCurieError, RenameMapping
 from rdf_construct.merge import DataMigrator
 
 from rdf_construct.localise import (
@@ -238,8 +292,54 @@ def parse_into(graph: Graph, source: Path, rdf_format: str) -> None:
     try:
         graph.parse(str(source), format=rdf_format)
     except Exception as exc:
-        detail = str(exc) or type(exc).__name__
-        raise Refusal(f"Could not parse {source} as {rdf_format}: {detail}") from exc
+        raise Refusal(parse_failure_message(source, rdf_format, exc)) from exc
+
+
+def check_outputs(
+    outputs: Sequence[tuple[str, Path]],
+    inputs: Sequence[Path],
+    *,
+    named_in: Mapping[Path, str] | None = None,
+) -> None:
+    """Refuse a run whose outputs are one file, or would replace one of its inputs (#412).
+
+    Call it once every output path and input is known, before the first byte is written. Two
+    outputs are one file when their resolved paths match, ignoring case; an output replaces an
+    input when they are the same existing file, however either is spelled. Both checks are
+    ``core.output_paths``'s. Here neither is ever allowed: a report written over an ontology,
+    or a result over a file it was not made from, is never an in-place rewrite. A command that
+    lets an output replace one of its inputs on purpose leaves that input out of ``inputs``.
+
+    Args:
+        outputs: Each file the run would write, with the option that names it (``-o``,
+            ``--report``), in the order it would write them.
+        inputs: Every file the run reads that no output may replace.
+        named_in: For an input the user did not name on the command line, where it came from,
+            keyed by the path in ``inputs``. It is added to that input's line, after
+            ``, which`` (``cq-test``'s ``data:`` files, #439).
+
+    Raises:
+        Refusal: When any output collides with another or would replace an input. The message
+            lists every problem, one per line.
+    """
+    planned = [PlannedOutput(path) for _, path in outputs]
+    # Two outputs on one path are equal PlannedOutputs, so each is told apart by identity
+    flags = {id(output): flag for output, (flag, _) in zip(planned, outputs, strict=True)}
+
+    problems: list[str] = []
+    for group in colliding_outputs(planned):
+        named = " and ".join(flags[id(output)] for output in group)
+        problems.append(f"{named} name one file, {group[0].path}. Choose different paths.")
+    for output, existing in outputs_over_inputs(planned, inputs):
+        source = (named_in or {}).get(existing)
+        where = f", which {source}" if source else ""
+        problems.append(
+            f"{flags[id(output)]} {output.path} would replace the input {existing}{where}. "
+            "Choose another path."
+        )
+
+    if problems:
+        raise Refusal("Nothing was written:\n  " + "\n  ".join(problems))
 
 
 def check_default_output_dir(
@@ -294,6 +394,26 @@ def check_default_output_dir(
     )
 
 
+INVOCATION = "rdf_construct.invocation"
+"""``ctx.meta`` key for the arguments the program was run with, as given (#171)."""
+
+
+def rerun_command(*extra: str) -> str:
+    """The command the user ran, shell-quoted, with ``extra`` appended.
+
+    Read from the root context, so it is the same under a shell and under ``CliRunner``; a
+    command invoked without the root group falls back to ``sys.argv``.
+
+    Args:
+        *extra: Arguments to append.
+
+    Returns:
+        A command line that can be pasted into a shell.
+    """
+    given = click.get_current_context().meta.get(INVOCATION) or sys.argv[1:]
+    return shlex.join(["rdf-construct", *given, *extra])
+
+
 class CrashHandlingGroup(click.Group):
     """The top-level group: an exception no command handled exits 2, with its traceback (#320).
 
@@ -309,6 +429,12 @@ class CrashHandlingGroup(click.Group):
     A crash stays distinguishable from a refusal at the same code: the traceback always goes to
     stderr, and the ``SystemExit`` is raised ``from`` the original exception, so it is the
     ``__cause__``. Outside standalone mode every exception propagates unchanged.
+
+    It is also where typed literals stop being normalised (#377). Every command runs inside
+    :func:`~rdf_construct.core.literal_forms.preserve_literal_forms`, so it reads and writes each
+    literal in the lexical form it was given. It is set here, not on import, so that a program
+    importing ``rdf_construct`` keeps rdflib's defaults, and it is restored on every way out, so a
+    ``CliRunner`` test leaves it as it found it.
     """
 
     def main(
@@ -335,7 +461,8 @@ class CrashHandlingGroup(click.Group):
             SystemExit: With code 2, chained from the exception no command handled.
         """
         try:
-            return super().main(args, prog_name, complete_var, standalone_mode, **extra)
+            with preserve_literal_forms():
+                return super().main(args, prog_name, complete_var, standalone_mode, **extra)
         except Exception as exc:
             if not standalone_mode:
                 raise
@@ -348,6 +475,29 @@ class CrashHandlingGroup(click.Group):
             )
             traceback.print_exception(exc, file=sys.stderr)
             raise SystemExit(2) from exc
+
+    def make_context(
+        self,
+        info_name: str | None,
+        args: list[str],
+        parent: click.Context | None = None,
+        **extra: Any,
+    ) -> click.Context:
+        """Make the root context, keeping the arguments as given for a command to quote back.
+
+        Args:
+            info_name: The program name.
+            args: The arguments to parse.
+            parent: The parent context, if any.
+            **extra: Passed through to ``click.Group.make_context``.
+
+        Returns:
+            The context, with the arguments under ``ctx.meta[INVOCATION]``.
+        """
+        given = list(args)
+        ctx = super().make_context(info_name, args, parent=parent, **extra)
+        ctx.meta[INVOCATION] = given
+        return ctx
 
 
 @click.group(cls=CrashHandlingGroup)
@@ -391,8 +541,9 @@ def cli():
     "--allow-flatten",
     is_flag=True,
     help=(
-        "Merge all named graphs into the default graph when converting from "
-        "a quad format (TriG, N-Quads) to a single-graph format."
+        "Allow a source with named graphs to be written to a single-graph "
+        "format by merging every graph into one. Lossy: graph names are "
+        "discarded. TriG and N-Quads output always keeps the graphs."
     ),
 )
 def cast(
@@ -414,7 +565,7 @@ def cast(
     \b
     Multiple --format flags write files to the output directory:
 
-        rdf-construct cast ontology.ttl --format ttl --format xml
+        rdf-construct cast ontology.ttl --format xml --format nt
 
     \b
     Omitting --format converts to ttl, xml, and json-ld (excluding source format):
@@ -427,9 +578,13 @@ def cast(
 
     \b
     Exit codes:
-        0 - All conversions succeeded
-        1 - Partial failure (some formats failed, some succeeded)
-        2 - Complete failure (parse error, or all formats failed)
+        0 - Every requested format was written
+        1 - Finished with something to report: a format was skipped (the
+            source's own) or failed, and at least one was written
+        2 - Not done: refused (every format the source's own, a source
+            with named graphs without --allow-flatten, or an N3 source
+            with formulae or variables), a parse error, or every format
+            failed
     """
     source_format = infer_rdf_format(source)
 
@@ -442,6 +597,13 @@ def cast(
             raise SystemExit(2)
     else:
         normalised = default_cast_formats(source_format)
+
+    # Every requested format is the source's own: refuse before reading anything (#330)
+    if nothing_to_cast(source_format, normalised):
+        raise Refusal(
+            nothing_to_cast_message(source, source_format, allow_flatten=allow_flatten),
+            accepted=formats_other_than(source_format),
+        )
 
     # Decide pipe mode: exactly one format AND no explicit output dir → stdout
     pipe_mode = len(normalised) == 1 and output_dir is None
@@ -475,12 +637,14 @@ def cast(
             click.echo("", err=True)
             for path in result.written_files:
                 click.secho(f"  \u2713 {path.name}", fg="green", err=True)
-            click.secho(
-                f"\nCast {len(result.written_files)} file(s) to {effective_dir}/",
-                fg="cyan",
-                err=True,
-            )
-        raise SystemExit(0)
+            summary = f"\nCast {len(result.written_files)} file(s) to {effective_dir}/"
+            if result.skipped_formats:
+                summary += (
+                    f"; skipped {', '.join(result.skipped_formats)} (the source's own format)."
+                )
+            click.secho(summary, fg="cyan", err=True)
+        # A skipped format is something to report (#330)
+        raise SystemExit(1 if result.skipped_formats else 0)
 
     elif result.partial_failure:
         click.secho(
@@ -674,6 +838,121 @@ def _report_stamps(graph: Graph, out_graph: Graph, stamps: list[Stamp], header_k
                 click.secho(f"          {line}", fg="cyan")
 
 
+def _warn_roots(
+    graph: Graph,
+    where: str,
+    sort_mode: str,
+    roots: list[str],
+    selected: set[Node],
+    placed_by: dict[Node, str],
+) -> None:
+    """Report the ``roots:`` entries of one section that anchor nothing (#241).
+
+    A root may legitimately miss: a config shared between ontologies names roots that only
+    some of them have. So each is reported and the run carries on, exit 0. An entry that is
+    not a CURIE or an IRI at all was refused before anything was parsed.
+
+    Args:
+        graph: RDF graph being ordered
+        where: "profile 'p', section 's'", for the message
+        sort_mode: The section's ``sort:``, already checked
+        roots: The section's ``roots:``, already checked
+        selected: What the section's selector chose, before earlier sections took theirs
+        placed_by: The section that placed each subject already written
+    """
+    if normalise_sort_mode(sort_mode) not in TOPOLOGICAL_MODES:
+        click.secho(
+            f"  \u26a0 {where}: roots ignored \u2014 sort is {sort_mode!r}; only a topological"
+            " sort has branches to lead with.",
+            fg="yellow",
+            err=True,
+        )
+        return
+
+    # One line per root, except that roots sharing an undeclared prefix share a line: the
+    # list of declared prefixes is the same for each.
+    lines: list[str] = []
+    undeclared: dict[str, tuple[int, list[str], tuple[str, ...]]] = {}
+    ignored = 0
+    for root in resolve_roots(graph, roots):
+        if root.iri is None:
+            if root.error is None:
+                continue
+            ignored += 1
+            prefix = root.error.prefix or ""
+            if prefix not in undeclared:
+                undeclared[prefix] = (len(lines), [], root.error.bound)
+                lines.append("")
+            undeclared[prefix][1].append(root.text)
+            continue
+        named = f"{root.text} \u2192 {root.iri}"
+        iri = root.iri
+        if all(
+            pattern not in graph
+            for pattern in ((iri, None, None), (None, iri, None), (None, None, iri))
+        ):
+            lines.append(f"{named} \u2014 not in this ontology")
+        elif iri not in selected:
+            lines.append(f"{named} \u2014 in this ontology, but not selected by this section")
+        elif iri in placed_by:
+            lines.append(f"{named} \u2014 already placed by section '{placed_by[iri]}'")
+        else:
+            continue
+        ignored += 1
+    for prefix, (at, texts, bound) in undeclared.items():
+        declared = ", ".join(f"{p}:" for p in bound)
+        lines[at] = (
+            f"{', '.join(texts)} \u2014 prefix '{prefix}:' is not declared by this source"
+            f" (declared: {declared})"
+        )
+
+    if lines:
+        word = "root" if ignored == 1 else "roots"
+        click.secho(f"  \u26a0 {where}: {ignored} {word} ignored", fg="yellow", err=True)
+        for line in lines:
+            click.secho(f"      {line}", fg="yellow", err=True)
+
+
+def _check_order_sections(ordering_config: OrderingConfig, profile_names: list[str]) -> list[str]:
+    """Find every section whose ``select:``, ``sort:`` or ``roots:`` cannot be honoured.
+
+    All three depend on the config alone, so ``order`` checks them for every requested profile
+    before it parses the source or writes anything: a refusal found while generating the
+    second profile would leave the first one's file behind (#242). Sections are walked as
+    ``order`` walks them, and a missing ``sort:`` key means the default, ``qname_alpha``;
+    an explicit empty value does not.
+
+    Args:
+        ordering_config: The loaded ordering configuration
+        profile_names: The profiles about to be generated
+
+    Returns:
+        One line per problem, naming the profile and section; empty if there are none
+    """
+    problems: list[str] = []
+    for prof_name in profile_names:
+        for sec in ordering_config.get_profile(prof_name).sections:
+            if not isinstance(sec, dict) or not sec:
+                continue
+            sec_name, sec_cfg = next(iter(sec.items()))
+            if sec_name == "header":
+                continue
+            cfg: dict[str, Any] = sec_cfg or {}
+            where = f"profile '{prof_name}', section '{sec_name}'"
+            select_key: Any = cfg.get("select", sec_name)  # a YAML value, not yet checked
+            if not is_known_selector(select_key, ordering_config.selectors):
+                problems.append(
+                    f"{where}: {unknown_selector_error(select_key, ordering_config.selectors)}"
+                )
+            try:
+                normalise_sort_mode(cfg.get("sort", "qname_alpha"))
+            except UnknownSortModeError as exc:
+                problems.append(f"{where}: {exc}")
+            # Whether a root is a CURIE or an IRI at all needs no prefixes (#241).
+            problems.extend(f"{where}: {problem}" for problem in check_roots(cfg.get("roots")))
+    return problems
+
+
 @cli.command()
 @click.argument("source", type=click.Path(exists=True, path_type=Path))
 @click.argument("config", type=click.Path(exists=True, path_type=Path))
@@ -745,6 +1024,18 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
     except ValueError as exc:
         raise Refusal(str(exc)) from exc
 
+    # Every requested section's select:, sort: and roots: too, for the same reason (#242, #241).
+    problems = _check_order_sections(ordering_config, profiles_to_gen)
+    # And prefix_order's shape: a string would be read a character at a time (#238).
+    prefix_order: Any = ordering_config.prefix_order  # a YAML value, not yet checked
+    if not isinstance(prefix_order, list) or not all(isinstance(p, str) for p in prefix_order):
+        problems.append(
+            "prefix_order: expected a list of prefix names, such as [rdf, rdfs, owl];"
+            f" got {prefix_order!r}"
+        )
+    if problems:
+        raise Refusal("Nothing was written:\n  " + "\n  ".join(problems))
+
     check_default_output_dir(outdir, "outdir", "order", overwrite=overwrite)
 
     # Create output directory
@@ -752,9 +1043,11 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
 
     # Parse source RDF
     click.echo(f"Loading {source}...")
-    graph = Graph()
+    # The source's own prefixes plus rdf, rdfs, owl, xsd and xml, never rdflib's extended
+    # table: under that table a source's `org:` or `dc:` comes back as `org1:` (#239). It is
+    # also what `roots:` and `predicate_order` CURIEs resolve against.
+    graph = Graph(bind_namespaces="core")
     graph.parse(source.as_posix(), format="turtle")
-    prefix_map = extract_prefix_map(graph)
 
     # Generate each profile
     for prof_name in profiles_to_gen:
@@ -763,6 +1056,7 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
 
         ordered_subjects: list = []
         seen: set = set()
+        placed_by: dict[Node, str] = {}  # the section that placed each subject (#241)
 
         # The header is not a section's to lose (#90): without a header section it still
         # leads the file, and a profile omits it only by saying `header: false`. An omitted
@@ -789,6 +1083,7 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
                 for s in ontology_subjects:
                     ordered_subjects.append(s)
                     seen.add(s)
+                    placed_by[s] = sec_name
                 continue
 
             # Regular sections
@@ -807,6 +1102,15 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
                     err=True,
                 )
                 raise SystemExit(2)
+            if roots_cfg:
+                _warn_roots(
+                    graph,
+                    f"profile '{prof_name}', section '{sec_name}'",
+                    sort_mode,
+                    roots_cfg,
+                    set(chosen),
+                    placed_by,
+                )
             chosen = [s for s in chosen if s not in seen]
 
             ordered = sort_subjects(graph, set(chosen), sort_mode, roots_cfg)
@@ -815,6 +1119,7 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
                 if s not in seen:
                     ordered_subjects.append(s)
                     seen.add(s)
+                    placed_by[s] = sec_name
 
         # The stamp's property travels with the header it annotates (#90), as the source
         # describes it: a stamped extract read back through the same profile then loses
@@ -864,18 +1169,15 @@ def order(source: Path, config: Path, profile: tuple[str, ...], outdir: Path, ov
                 seen.add(WAS_DERIVED_FROM)
             _report_stamps(graph, out_graph, stamps, header_policies[prof_name])
 
-        # Rebind prefixes if configured
-        if ordering_config.defaults.get("preserve_prefix_order", True):
-            if ordering_config.prefix_order:
-                rebind_prefixes(out_graph, ordering_config.prefix_order, prefix_map)
-
         # Get predicate ordering for this profile
         predicate_order = ordering_config.get_predicate_order(prof_name)
 
-        # Serialise with predicate ordering
+        # Serialise with predicate ordering, declaring prefix_order's prefixes first (#238)
         out_file = outdir / f"{source.stem}-{prof_name}.ttl"
         mark_output_dir(outdir, "order")
-        serialise_turtle(out_graph, ordered_subjects, out_file, predicate_order)
+        serialise_turtle(
+            out_graph, ordered_subjects, out_file, predicate_order, ordering_config.prefix_order
+        )
         click.secho(f"  \u2713 {out_file}", fg="green")
 
     click.secho(f"\nConstructed {len(profiles_to_gen)} profile(s) in {outdir}/", fg="cyan")
@@ -900,6 +1202,28 @@ def profiles(config: Path):
             click.echo(f"    {prof.description}")
         click.echo(f"    Sections: {len(prof.sections)}")
         click.echo()
+
+
+def _docs_entity_filter(
+    ctx: click.Context, param: click.Parameter, value: str | None
+) -> tuple[str, ...] | None:
+    """Read ``--include`` or ``--exclude`` into canonical entity types, or refuse it (#252).
+
+    Refused during argument processing, so before the config is read or anything is written.
+    """
+    if value is None:
+        return None
+    try:
+        # Split in order, not into a set, so the message names bad values in the order given
+        return normalise_docs_entity_types(value.split(","))
+    except EntityFilterError as e:
+        raise click.BadParameter(str(e), ctx=ctx, param=param) from e
+
+
+_DOCS_ENTITY_HELP = (
+    f"comma-separated: {', '.join(DOCS_ENTITY_TYPE_NAMES)}; "
+    "concept_schemes and skos are spellings of concepts"
+)
 
 
 @cli.command()
@@ -1136,7 +1460,7 @@ def contexts(config: Path):
 
 
 @cli.command()
-@click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
+@click.argument("sources", nargs=-1, type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option(
     "--level",
     "-l",
@@ -1193,7 +1517,10 @@ def contexts(config: Path):
     type=click.Choice(LINT_FAIL_ON),
     default="error",
     show_default=True,
-    help="Lowest severity that makes the run exit 1 ('never' always exits 0)",
+    help=(
+        "Lowest severity that makes the run exit 1 ('never' exits 0 unless a file "
+        "could not be parsed)"
+    ),
 )
 def lint(
     sources: tuple[Path, ...],
@@ -1219,7 +1546,7 @@ def lint(
     Exit codes:
       0 - No findings at or above --fail-on (default: error)
       1 - Findings at or above --fail-on
-      2 - Input refused or run failed
+      2 - Input refused, a file could not be parsed, or run failed
 
     \b
     Examples:
@@ -1360,7 +1687,11 @@ def lint(
     click.echo(f"Scanning {len(sources)} file(s)...")
     click.echo()
 
-    summary = engine.lint_files(list(sources))
+    # An external_namespaces CURIE a file does not bind is refused before any finding is shown
+    try:
+        summary = engine.lint_files(list(sources))
+    except ValueError as e:
+        raise Refusal(str(e)) from e
 
     # Format and output results
     use_colour = not no_colour and output_format == "text"
@@ -1382,8 +1713,11 @@ def _lint_exit_code(summary: LintSummary, fail_on: str) -> int:
         fail_on: Lowest severity that counts as a finding: error, warning, info or never.
 
     Returns:
-        1 if any finding is at or above ``fail_on``, otherwise 0.
+        2 if any file could not be parsed, whatever ``fail_on`` says (#322); otherwise 1 if any
+        finding is at or above ``fail_on``, and 0 if none is.
     """
+    if summary.unparsed:
+        return 2
     counts = {
         "error": summary.total_errors,
         "warning": summary.total_errors + summary.total_warnings,
@@ -1391,6 +1725,34 @@ def _lint_exit_code(summary: LintSummary, fail_on: str) -> int:
         "never": 0,
     }
     return 1 if counts[fail_on] > 0 else 0
+
+
+def _change_type_filter(
+    ctx: click.Context, param: click.Parameter, value: str | None
+) -> tuple[str, ...] | None:
+    """Read ``--show`` or ``--hide`` into canonical change types, or refuse it (#144).
+
+    Refused during argument processing, so before ``-o`` is checked or a file is parsed.
+    """
+    if value is None:
+        return None
+    try:
+        # Split in order, not into a set, so the message names bad values in the order given
+        return normalise_change_types(value.split(","))
+    except UnknownFilterError as e:
+        raise click.BadParameter(str(e), ctx=ctx, param=param) from e
+
+
+def _entity_type_filter(
+    ctx: click.Context, param: click.Parameter, value: str | None
+) -> tuple[str, ...] | None:
+    """Read ``--entities`` into canonical entity types, or refuse it (#144)."""
+    if value is None:
+        return None
+    try:
+        return normalise_entity_types(value.split(","))
+    except UnknownFilterError as e:
+        raise click.BadParameter(str(e), ctx=ctx, param=param) from e
 
 
 @cli.command()
@@ -1413,17 +1775,21 @@ def _lint_exit_code(summary: LintSummary, fail_on: str) -> int:
 @click.option(
     "--show",
     type=str,
-    help="Show only these change types (comma-separated: added,removed,modified)",
+    callback=_change_type_filter,
+    help=f"Show only these change types (comma-separated: {','.join(CHANGE_TYPE_NAMES)}). "
+    "Changes only what is shown, never the exit code",
 )
 @click.option(
     "--hide",
     type=str,
-    help="Hide these change types (comma-separated: added,removed,modified)",
+    callback=_change_type_filter,
+    help="Hide these change types (comma-separated); not with --show",
 )
 @click.option(
     "--entities",
     type=str,
-    help="Show only these entity types (comma-separated: classes,properties,instances)",
+    callback=_entity_type_filter,
+    help=f"Show only these entity types (comma-separated: {', '.join(ENTITY_TYPE_NAMES)})",
 )
 @click.option(
     "--ignore-predicates",
@@ -1435,9 +1801,9 @@ def diff(
     new_file: Path,
     output: Path | None,
     output_format: str,
-    show: str | None,
-    hide: str | None,
-    entities: str | None,
+    show: tuple[str, ...] | None,
+    hide: tuple[str, ...] | None,
+    entities: tuple[str, ...] | None,
     ignore_predicates: str | None,
 ):
     """Compare two RDF files and show semantic differences.
@@ -1454,14 +1820,23 @@ def diff(
 
     \b
     Exit codes:
-        0 - Graphs are semantically identical
+        0 - Graphs are semantically identical (a filter never changes the exit code)
         1 - Differences were found
         2 - Error occurred
     """
+    # A filter that can show nothing is refused before anything is read or written (#144)
+    try:
+        build_filter(show, hide, entities, labels=("--show", "--hide", "--entities"))
+    except UnknownFilterError as e:
+        raise click.UsageError(str(e), ctx=click.get_current_context()) from e
+
+    if output:
+        check_outputs([("-o", output)], [old_file, new_file])
 
     try:
         # Parse ignored predicates
         ignore_preds: set[URIRef] | None = None
+        ignored: list[str] = []
         if ignore_predicates:
             temp_graph = Graph()
             temp_graph.parse(str(old_file), format="turtle")
@@ -1472,6 +1847,7 @@ def diff(
                 uri = expand_curie(temp_graph, pred_str)
                 if uri:
                     ignore_preds.add(uri)
+                    ignored.append(pred_str)
                 else:
                     click.secho(
                         f"Warning: Could not expand predicate '{pred_str}'",
@@ -1483,17 +1859,14 @@ def diff(
         click.echo(f"Comparing {old_file.name} \u2192 {new_file.name}...", err=True)
         diff_result = compare_files(old_file, new_file, ignore_predicates=ignore_preds)
 
-        # Apply filters
+        # Apply filters. The filtered diff counts what it leaves out, so its is_identical,
+        # and with it the exit code, still describes the graphs (#144)
         if show or hide or entities:
-            show_types = parse_filter_string(show) if show else None
-            hide_types = parse_filter_string(hide) if hide else None
-            entity_types = parse_filter_string(entities) if entities else None
-
             diff_result = filter_diff(
                 diff_result,
-                show_types=show_types,
-                hide_types=hide_types,
-                entity_types=entity_types,
+                show_types=set(show) if show else None,
+                hide_types=set(hide) if hide else None,
+                entity_types=set(entities) if entities else None,
             )
 
         # Load graph for CURIE formatting
@@ -1514,7 +1887,9 @@ def diff(
 
         # Exit code: 0 if identical, 1 if different
         if diff_result.is_identical:
-            click.secho("Graphs are semantically identical.", fg="green", err=True)
+            # Identical under the comparison asked for: say which predicates it ignored (#144)
+            ignoring = f", ignoring {', '.join(dict.fromkeys(ignored))}" if ignored else ""
+            click.secho(f"Graphs are semantically identical{ignoring}.", fg="green", err=True)
             sys.exit(0)
         else:
             sys.exit(1)
@@ -1601,18 +1976,14 @@ def diff(
 @click.option(
     "--include",
     type=str,
-    help=(
-        "Include only these entity types "
-        "(comma-separated: classes,properties,instances,shapes,concepts)"
-    ),
+    callback=_docs_entity_filter,
+    help=f"Include only these entity types ({_DOCS_ENTITY_HELP})",
 )
 @click.option(
     "--exclude",
     type=str,
-    help=(
-        "Exclude these entity types "
-        "(comma-separated: classes,properties,instances,shapes,concepts)"
-    ),
+    callback=_docs_entity_filter,
+    help=f"Exclude these entity types ({_DOCS_ENTITY_HELP})",
 )
 def docs(
     sources: tuple[Path, ...],
@@ -1627,8 +1998,8 @@ def docs(
     no_instances: bool,
     no_shapes: bool,
     no_skos: bool,
-    include: str | None,
-    exclude: str | None,
+    include: tuple[str, ...] | None,
+    exclude: tuple[str, ...] | None,
 ):
     """Generate documentation from RDF ontologies.
 
@@ -1673,6 +2044,13 @@ def docs(
     else:
         doc_config = DocsConfig()
 
+    # Whether the config itself switched an entity type off, for the refusal below (#252)
+    config_switched_off = config is not None and not all(
+        getattr(doc_config, toggle)
+        for toggles in DOCS_ENTITY_TYPE_TOGGLES.values()
+        for toggle in toggles
+    )
+
     # Apply CLI overrides
     if flag_given("output"):
         doc_config.output_dir = output
@@ -1694,39 +2072,47 @@ def docs(
     if title:
         doc_config.title = title
 
-    # Parse include/exclude filters
-    if include:
-        types = [t.strip().lower() for t in include.split(",")]
-        doc_config.include_classes = "classes" in types
-        doc_config.include_object_properties = "properties" in types or "object_properties" in types
-        doc_config.include_datatype_properties = (
-            "properties" in types or "datatype_properties" in types
+    # Entity filters (#252). The names were checked by the option callbacks; what is left is
+    # whether they contradict a --no- flag, and whether anything is left to document. Both
+    # are refused here, before anything is written.
+    if include is not None:
+        for flag_name, option, entity_type in (
+            ("no_instances", "--no-instances", "instances"),
+            ("no_shapes", "--no-shapes", "shapes"),
+            ("no_skos", "--no-skos", "concepts"),
+        ):
+            if flag_given(flag_name) and entity_type in include:
+                raise click.UsageError(
+                    f"{option} and --include {entity_type} contradict each other; drop one.",
+                    ctx=click.get_current_context(),
+                )
+    try:
+        apply_entity_filter(doc_config, include, exclude)
+    except EntityFilterError as e:
+        # Name what switched the types off. --include sets every toggle, so after it only
+        # --exclude counts; without it, the --no- flags and the config count too.
+        switched_off = []
+        if include is not None:
+            switched_off.append(f"--include {','.join(include)}")
+        else:
+            for flag_name, option in (
+                ("no_instances", "--no-instances"),
+                ("no_shapes", "--no-shapes"),
+                ("no_skos", "--no-skos"),
+            ):
+                if flag_given(flag_name):
+                    switched_off.append(option)
+            if config_switched_off:
+                switched_off.append(f"the include_* keys in {config}")
+        if exclude is not None:
+            switched_off.append(f"--exclude {','.join(exclude)}")
+        named = " and ".join(
+            [", ".join(switched_off[:-1]), switched_off[-1]] if switched_off[1:] else switched_off
         )
-        doc_config.include_annotation_properties = (
-            "properties" in types or "annotation_properties" in types
-        )
-        doc_config.include_other_properties = "properties" in types or "other_properties" in types
-        doc_config.include_instances = "instances" in types
-        doc_config.include_shapes = "shapes" in types
-        # One toggle covers both SKOS kinds; "concepts", "concept_schemes"
-        # and "skos" are accepted spellings of it.
-        doc_config.include_skos = any(t in types for t in ("concepts", "concept_schemes", "skos"))
-
-    if exclude:
-        types = [t.strip().lower() for t in exclude.split(",")]
-        if "classes" in types:
-            doc_config.include_classes = False
-        if "properties" in types:
-            doc_config.include_object_properties = False
-            doc_config.include_datatype_properties = False
-            doc_config.include_annotation_properties = False
-            doc_config.include_other_properties = False
-        if "instances" in types:
-            doc_config.include_instances = False
-        if "shapes" in types:
-            doc_config.include_shapes = False
-        if any(t in types for t in ("concepts", "concept_schemes", "skos")):
-            doc_config.include_skos = False
+        # "the include_* keys" is plural on its own; a single option is not
+        plural = len(switched_off) > 1 or (include is None and exclude is None)
+        verb = "leave" if plural else "leaves"
+        raise Refusal(f"Nothing to document: {named} {verb} no entity type switched on.") from e
 
     # Refuse what would fail before anything is written (#301). The generator creates the
     # output directory, so every check, the parse included, comes before it runs: a refusal
@@ -1833,7 +2219,8 @@ def docs(
     "-l",
     type=click.Choice(["minimal", "standard", "strict"], case_sensitive=False),
     default="standard",
-    help="Strictness level for constraint generation (default: standard)",
+    help="Strictness level for constraint generation (default: standard; strict is "
+    "currently the same as standard)",
 )
 @click.option(
     "--config",
@@ -1844,18 +2231,22 @@ def docs(
 @click.option(
     "--classes",
     type=str,
-    help="Comma-separated list of classes to generate shapes for",
+    help="Comma-separated classes to generate shapes for: CURIEs (ex:Dog), <IRI>s, full "
+    "IRIs, or bare local names (Dog). A name that matches no class, or more than one, "
+    "is refused.",
 )
 @click.option(
     "--closed",
     is_flag=True,
-    help="Generate closed shapes (no extra properties allowed)",
+    help="Generate closed shapes, at any level: a node may carry only the properties its "
+    "class's hierarchy declares, rdf:type and ignored_properties",
 )
 @click.option(
     "--default-severity",
     type=click.Choice(["violation", "warning", "info"], case_sensitive=False),
     default="violation",
-    help="Default severity for generated constraints",
+    help="sh:severity for every generated shape (default: none written, which SHACL "
+    "reads as violation)",
 )
 @click.option(
     "--no-labels",
@@ -1896,16 +2287,17 @@ def shacl_gen(
     \b
     Strictness levels:
       minimal   - Basic type constraints only (sh:class, sh:datatype)
-      standard  - Adds cardinality and functional property constraints
-      strict    - Maximum constraints including sh:closed, enumerations
+      standard  - Adds cardinality, functional property and enumeration
+                  (sh:in) constraints
+      strict    - Currently the same as standard
 
     \b
     Examples:
         # Basic generation
         rdf-construct shacl-gen ontology.ttl
 
-        # Generate with strict constraints
-        rdf-construct shacl-gen ontology.ttl --level strict --closed
+        # Generate closed shapes
+        rdf-construct shacl-gen ontology.ttl --closed
 
         # Custom output path and format
         rdf-construct shacl-gen ontology.ttl -o shapes.ttl --format turtle
@@ -1919,13 +2311,18 @@ def shacl_gen(
         # Generate warnings instead of violations
         rdf-construct shacl-gen ontology.ttl --default-severity warning
     """
+    from rdflib import Graph
+
+    from rdf_construct.core.utils import extract_prefix_map
     from rdf_construct.shacl import (
-        generate_shapes_to_file,
+        ShaclSelectionError,
+        ShapeGenerator,
         load_shacl_config,
         ShaclConfig,
         StrictnessLevel,
         Severity,
     )
+    from rdf_construct.shacl.selection import display
 
     # Determine output path
     if output is None:
@@ -1937,6 +2334,8 @@ def shacl_gen(
         output_format = "turtle"
     elif output_format.lower() in ("json-ld", "jsonld"):
         output_format = "json-ld"
+
+    check_outputs([("-o", output)], [source, *([config] if config else [])])
 
     try:
         # Load configuration from file or build from CLI options
@@ -1972,26 +2371,39 @@ def shacl_gen(
         click.echo(f"Generating SHACL shapes from {source}...")
         click.echo(f"  Level: {shacl_config.level.value}")
 
-        if shacl_config.target_classes:
-            click.echo(f"  Target classes: {', '.join(shacl_config.target_classes)}")
+        source_graph = Graph(bind_namespaces="core")
+        source_graph.parse(str(source), format="turtle")
+        generator = ShapeGenerator(source_graph, shacl_config)
+        selection = generator.selection
 
-        shapes_graph = generate_shapes_to_file(
-            source,
-            output,
-            shacl_config,
-            output_format,
-        )
+        if selection.targets:
+            prefixes = extract_prefix_map(source_graph)
+            shown = ", ".join(display(t, prefixes) for t in selection.targets)
+            click.echo(f"  Target classes: {shown}")
+
+        if selection.notes:
+            click.secho("Notes:", err=True)
+            for note in selection.notes:
+                click.echo(f"  {note}", err=True)
+
+        shapes_graph = generator.generate()
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(shapes_graph.serialize(format=output_format))
 
         # Count generated shapes
         from rdf_construct.shacl import SH
 
         num_shapes = len(list(shapes_graph.subjects(predicate=None, object=SH.NodeShape)))
+        num_closed = len(set(shapes_graph.subjects(SH.closed, None)))
 
         click.secho(f"\u2713 Generated {num_shapes} shape(s) to {output}", fg="green")
 
-        if shacl_config.closed:
-            click.echo("  (closed shapes enabled)")
+        # Derived from what was written, not from the flag (#224)
+        if num_closed:
+            click.echo(f"  (closed shapes enabled: {num_closed} closed)")
 
+    except ShaclSelectionError as e:
+        raise Refusal(f"Selection refused, nothing written:\n{e}") from e
     except FileNotFoundError as e:
         click.secho(f"Error: {e}", fg="red", err=True)
         raise SystemExit(2)
@@ -2101,9 +2513,14 @@ def puml2rdf(
     \b
     Exit codes:
         0 - Success, or warnings without --strict
-        1 - Warnings, with --strict (nothing written)
+        1 - Warnings, with --strict (nothing written); or --merge
+            replaced or refused a value the ontology held (written,
+            unless --strict)
         2 - Refused or failed: not a whole diagram (no @startuml or
-            @enduml), a parse or model error, or RDF that cannot be written
+            @enduml), a parse or model error, a -C config with an
+            unknown, removed or mistyped key or a mapping the diagram
+            contradicts, an ontology to merge with that cannot be
+            parsed, or RDF that cannot be written
     """
     # Normalise output format
     format_map = {
@@ -2121,14 +2538,25 @@ def puml2rdf(
         ext = ext_map.get(rdf_format, ".ttl")
         output = source.with_suffix(ext)
 
+    # -o may name the --merge ontology: updating it from the diagram is what --merge is for
+    if output is not None:
+        check_outputs([("-o", output)], [source, *([config] if config else [])])
+
     # Load configuration if provided
+    namespace_mappings: list[NamespaceMapping] = []
     if config:
         try:
             import_config = load_import_config(config)
             conversion_config = import_config.to_conversion_config()
         except Exception as e:
-            click.secho(f"Error loading config: {e}", fg="red", err=True)
+            click.secho(f"Error loading config {config.name}: {e}", fg="red", err=True)
             sys.exit(2)
+        namespace_mappings = import_config.namespace_mappings
+        # What the config chose that is worth saying; never fatal
+        if import_config.notes:
+            click.secho("Config notes:", err=True)
+            for config_note in import_config.notes:
+                click.echo(f"  {config_note}", err=True)
     else:
         conversion_config = ConversionConfig()
 
@@ -2142,7 +2570,8 @@ def puml2rdf(
 
     # Parse PlantUML file
     click.echo(f"Parsing {source.name}...")
-    parser = PlantUMLParser()
+    # The parser applies the config's namespace mappings, under the diagram's prefix checks
+    parser = PlantUMLParser(namespace_mappings, conversion_config.default_namespace)
 
     try:
         parse_result = parser.parse_file(source)
@@ -2169,23 +2598,47 @@ def puml2rdf(
         click.secho("Parse warnings:", fg="yellow", err=True)
         # Lines not understood, and lines outside the diagram (#400), are summarised by number
         folded: dict[str, list[int]] = {"not-understood": [], "outside-diagram": []}
+        # So are boxes drawn as properties or individuals, by kind, and lines naming one (#395)
+        boxes: dict[str, list[int]] = {
+            kind: []
+            for kind in (
+                "object property",
+                "datatype property",
+                "annotation property",
+                "property",
+                "individual",
+                "relationship",
+            )
+        }
         for parse_warning in parse_result.warnings:
-            if parse_warning.code in folded and parse_warning.line_number is not None:
+            if parse_warning.line_number is None:
+                click.echo(f"  {parse_warning}", err=True)
+            elif parse_warning.code in folded:
                 folded[parse_warning.code].append(parse_warning.line_number)
+            elif parse_warning.kind in boxes:
+                boxes[parse_warning.kind].append(parse_warning.line_number)
             else:
                 click.echo(f"  {parse_warning}", err=True)
-        for code, why in (
-            ("not-understood", "not understood"),
-            ("outside-diagram", "outside @startuml \u2026 @enduml"),
-        ):
-            numbers = folded[code]
+        summaries = [
+            (folded["not-understood"], "line", "lines", "not understood"),
+            (folded["outside-diagram"], "line", "lines", "outside @startuml \u2026 @enduml"),
+        ]
+        summaries.extend(
+            (numbers, f"{kind} box", f"{kind} boxes", "not converted, only classes are")
+            for kind, numbers in boxes.items()
+            if kind != "relationship"
+        )
+        summaries.append(
+            (boxes["relationship"], "line", "lines", "naming a box that is not converted")
+        )
+        for numbers, one, many, why in summaries:
             if not numbers:
                 continue
             shown = ", ".join(str(number) for number in numbers[:10])
             if len(numbers) > 10:
                 shown += f", … {len(numbers) - 10} more"
             click.echo(
-                f"  \u26a0 {len(numbers)} line{'s' if len(numbers) != 1 else ''} {why} "
+                f"  \u26a0 {len(numbers)} {many if len(numbers) != 1 else one} {why} "
                 f"({shown}) \u2014 {'they are' if len(numbers) != 1 else 'it is'} not in the output.",
                 err=True,
             )
@@ -2196,7 +2649,8 @@ def puml2rdf(
     )
 
     # Validate model
-    model_validation = validate_puml(model)
+    # The validator reads the converter's one datatype map, so they agree on every type (#155)
+    model_validation = validate_puml(model, conversion_config.datatypes)
 
     if model_validation.has_errors:
         click.secho("Model validation errors:", fg="red", err=True)
@@ -2260,27 +2714,32 @@ def puml2rdf(
         sys.exit(0)
 
     # Merge with existing if requested
+    merge_conflicts = 0
     if merge:
         click.echo(f"Merging with {merge.name}...")
+        # Read in its own format, binding only the prefixes it declares (#417, #354)
+        existing = Graph(bind_namespaces="core")
+        parse_into(existing, merge, infer_rdf_format(merge))
         try:
-            merge_result = merge_with_existing(graph, merge)
-            graph = merge_result.graph
-            click.echo(
-                f"  Added: {merge_result.added_count}, "
-                f"Preserved: {merge_result.preserved_count}"
-            )
-            if merge_result.conflicts:
-                click.secho("Merge conflicts:", fg="yellow", err=True)
-                for conflict in merge_result.conflicts[:5]:  # Limit output
-                    click.echo(f"  {conflict}", err=True)
-                if len(merge_result.conflicts) > 5:
-                    click.echo(
-                        f"  ... and {len(merge_result.conflicts) - 5} more",
-                        err=True,
-                    )
+            merge_result = PumlOntologyMerger().merge_graphs(graph, existing)
         except Exception as e:
             click.secho(f"Error merging: {e}", fg="red", err=True)
             sys.exit(2)
+        graph = merge_result.graph
+        click.echo(
+            f"  Added: {merge_result.added_count}, "
+            f"Preserved: {merge_result.preserved_count}, "
+            f"Replaced: {merge_result.updated_count}"
+        )
+        # Every value the diagram disagreed with, because the target may be the only copy
+        merge_conflicts = len(merge_result.conflicts)
+        if merge_conflicts:
+            click.secho("Merge conflicts:", fg="yellow", err=True)
+            for conflict in merge_result.conflicts:
+                click.echo(f"  \u26a0 {conflict}", err=True)
+            if strict:
+                click.secho("Aborting due to --strict mode", fg="red", err=True)
+                sys.exit(1)
 
     # Serialise output
     try:
@@ -2293,6 +2752,10 @@ def puml2rdf(
     except Exception as e:
         click.secho(f"Error writing output: {e}", fg="red", err=True)
         sys.exit(2)
+
+    # Written, with findings: the diagram disagreed with the merged ontology (#286)
+    if merge_conflicts:
+        sys.exit(1)
 
 
 @cli.command("cq-test")
@@ -2340,7 +2803,7 @@ def puml2rdf(
 @click.option(
     "--fail-fast",
     is_flag=True,
-    help="Stop on first failure",
+    help="Stop after the first question that fails or errors; the rest are reported as not run",
 )
 def cq_test(
     ontology: Path,
@@ -2382,8 +2845,11 @@ def cq_test(
     Exit codes:
         0 - All tests passed
         1 - One or more tests failed
-        2 - Error occurred (invalid file, parse error, etc.)
+        2 - Error occurred (invalid file, parse error, no questions to run, etc.)
     """
+    if output:
+        check_outputs([("-o", output)], [ontology, test_file, *data])
+
     try:
         # Load ontology
         click.echo(f"Loading ontology: {ontology.name}...", err=True)
@@ -2400,15 +2866,16 @@ def cq_test(
         click.echo(f"Loading tests: {test_file.name}...", err=True)
         suite = load_test_suite(test_file)
 
-        # Filter by tags
-        if tag or exclude_tag:
-            include_tags = set(tag) if tag else None
-            exclude_tags = set(exclude_tag) if exclude_tag else None
-            suite = suite.filter_by_tags(include_tags, exclude_tags)
+        # The files the test file's data: names are known only now; nothing is written yet (#439)
+        if output:
+            check_outputs(
+                [("-o", output)],
+                suite.data_files,
+                named_in={p: f"{test_file} loads through 'data:'" for p in suite.data_files},
+            )
 
-        if not suite.questions:
-            click.secho("No tests to run (check tag filters)", fg="yellow", err=True)
-            sys.exit(0)
+        # An empty selection is refused: a run that checked nothing didn't do it (#135)
+        suite = _cq_selection(suite, test_file, tag, exclude_tag)
 
         # Run tests
         click.echo(f"Running {len(suite.questions)} test(s)...", err=True)
@@ -2435,6 +2902,9 @@ def cq_test(
         else:
             sys.exit(0)
 
+    except click.ClickException:
+        # A Refusal is the command's own answer, not an unexpected error
+        raise
     except FileNotFoundError as e:
         click.secho(f"Error: {e}", fg="red", err=True)
         sys.exit(2)
@@ -2444,6 +2914,62 @@ def cq_test(
     except Exception as e:
         click.secho(f"Error: {type(e).__name__}: {e}", fg="red", err=True)
         sys.exit(2)
+
+
+def _cq_selection(
+    suite: CQTestSuite,
+    test_file: Path,
+    tag: tuple[str, ...],
+    exclude_tag: tuple[str, ...],
+) -> CQTestSuite:
+    """Apply ``--tag``/``--exclude-tag`` and refuse a selection with nothing to check (#135).
+
+    Args:
+        suite: The suite as loaded from ``test_file``
+        test_file: The test file, for the message
+        tag: Tags to include, from ``--tag``
+        exclude_tag: Tags to exclude, from ``--exclude-tag``
+
+    Returns:
+        The selected suite, holding at least one question that is not ``skip: true``
+
+    Raises:
+        Refusal: When the file has no questions, the filters leave none, or every
+            selected question has ``skip: true``. A filter refusal names the tags the
+            suite defines.
+    """
+    name = test_file.name
+    if not suite.questions:
+        raise Refusal(f"no questions to run: 'questions:' in {name} is an empty list")
+
+    selected = suite
+    if tag or exclude_tag:
+        selected = suite.filter_by_tags(set(tag) or None, set(exclude_tag) or None)
+
+    if not selected.questions:
+        defined = sorted({t for q in suite.questions for t in q.tags})
+        unmatched = [t for t in tag if not any(t in q.tags for q in suite.questions)]
+        matched = [t for t in tag if t not in unmatched]
+        reasons = []
+        if unmatched:
+            named = ", ".join(f"--tag {t}" for t in unmatched)
+            verb = "matches" if len(unmatched) == 1 else "match"
+            reasons.append(f"{named} {verb} no question in {name}")
+        if matched or not tag:
+            # What a matching tag (or the whole file) selected, the exclusions removed
+            excluded = " ".join(f"--exclude-tag {t}" for t in exclude_tag)
+            if matched:
+                requested = " ".join(f"--tag {t}" for t in matched)
+                reasons.append(f"{excluded} removes every question {requested} selected")
+            else:
+                reasons.append(f"{excluded} removes every question in {name}")
+        why = "; ".join(reasons)
+        raise Refusal(f"no questions to run: {why}\nTags defined: {', '.join(defined) or '(none)'}")
+
+    if all(q.skip for q in selected.questions):
+        raise Refusal("no questions to run: every selected question has skip: true")
+
+    return selected
 
 
 def _infer_format(path: Path) -> str:
@@ -2467,6 +2993,30 @@ def _infer_format(path: Path) -> str:
         ".json": "json-ld",
     }
     return format_map.get(suffix, "turtle")
+
+
+def _union_inputs(files: Sequence[Path]) -> tuple[list[Path], list[str]]:
+    """The files a ``stats`` union reads: each file once, however it is named (#140).
+
+    Parsing one file twice into a graph doubles every blank-node structure in it, so a file
+    named again, by another spelling or through a symbolic link, is read only the first time.
+
+    Args:
+        files: The files as given, in order.
+
+    Returns:
+        The files to read, in order, and a note for each one left out.
+    """
+    kept: list[Path] = []
+    notes: list[str] = []
+    for path in files:
+        first = next((k for k in kept if is_same_file(path, k)), None)
+        if first is None:
+            kept.append(path)
+        else:
+            same = "is named twice" if str(path) == str(first) else f"is {first}"
+            notes.append(f"Note: {path} {same}, read once")
+    return kept, notes
 
 
 @cli.command()
@@ -2511,7 +3061,10 @@ def stats(
     """Compute and display ontology statistics.
 
     Analyses one or more RDF ontology files and displays comprehensive metrics
-    about structure, complexity, and documentation coverage.
+    about structure, complexity, and documentation coverage. Several files are
+    analysed as one: the figures are for their union (not an owl:imports
+    closure), and a file named twice is read once. With --compare, two files
+    are analysed separately and compared.
 
     \b
     Examples:
@@ -2547,6 +3100,9 @@ def stats(
         0 - Success
         2 - Input refused or run failed (invalid options, unreadable file, etc.)
     """
+    if output:
+        check_outputs([("-o", output)], files)
+
     try:
         # Validate file count for compare mode
         if compare:
@@ -2567,14 +3123,38 @@ def stats(
         if exclude:
             exclude_set = {cat.strip().lower() for cat in exclude.split(",")}
 
-        # Load graphs
-        graphs: list[tuple[Graph, Path]] = []
-        for filepath in files:
+        def _load(filepath: Path) -> Graph:
             click.echo(f"Loading {filepath}...", err=True)
             graph = Graph()
-            graph.parse(str(filepath), format="turtle")
-            graphs.append((graph, filepath))
+            try:
+                graph.parse(str(filepath), format="turtle")
+            except Exception as e:
+                raise ValueError(f"Failed to parse {filepath}: {e}") from e
             click.echo(f"  Loaded {len(graph)} triples", err=True)
+            return graph
+
+        # Load graphs: one per file to compare, else one graph holding the union (#140)
+        graphs: list[tuple[Graph, Path]] = []
+        if compare:
+            for filepath in files:
+                graphs.append((_load(filepath), filepath))
+        else:
+            sources, notes = _union_inputs(files)
+            for note in notes:
+                click.echo(note, err=True)
+            # The first file's graph is the union, so one file is read exactly as before
+            union = _load(sources[0])
+            defaults = set(Graph().namespaces())
+            for filepath in sources[1:]:
+                part = _load(filepath)
+                union += part
+                # Each prefix the file declares; the first file's binding wins, a namespace
+                # keeps the prefix it was first given, and rdflib numbers a clash (ex1:)
+                for prefix, namespace in part.namespaces():
+                    if (prefix, namespace) not in defaults:
+                        union.bind(prefix, namespace, override=False)
+            if len(sources) > 1:
+                click.echo(f"Union of {len(sources)} files: {len(union)} triples", err=True)
 
         if compare:
             # Comparison mode
@@ -2584,13 +3164,13 @@ def stats(
             click.echo("Collecting statistics...", err=True)
             old_stats = collect_stats(
                 old_graph,
-                source=str(old_path),
+                sources=[old_path],
                 include=include_set,
                 exclude=exclude_set,
             )
             new_stats = collect_stats(
                 new_graph,
-                source=str(new_path),
+                sources=[new_path],
                 include=include_set,
                 exclude=exclude_set,
             )
@@ -2605,13 +3185,13 @@ def stats(
                 graph=new_graph,
             )
         else:
-            # Single file or multiple files (show stats for first)
-            graph, filepath = graphs[0]
+            # One file, or the union of several (#140)
+            graph = union
 
             click.echo("Collecting statistics...", err=True)
             ontology_stats = collect_stats(
                 graph,
-                source=str(filepath),
+                sources=sources,
                 include=include_set,
                 exclude=exclude_set,
             )
@@ -2672,7 +3252,7 @@ def stats(
 @click.option(
     "--reasoning",
     is_flag=True,
-    help="Include reasoning analysis",
+    help="Deprecated: never ran a reasoner; removed in rdf-construct 0.8.0",
 )
 @click.option(
     "--no-colour",
@@ -2726,16 +3306,37 @@ def describe(
     """
     from rdf_construct.describe import describe_file, format_description
 
+    # Deprecated (#220): the flag never ran a reasoner. Said once, before anything can refuse,
+    # because it is about the invocation; it never changes the exit code. Removed by #299.
+    if reasoning:
+        keeps_key = output_format.lower() == "json" and not brief
+        tail = "its JSON 'reasoning' key is kept until then" if keeps_key else "it does nothing"
+        message = (
+            "⚠ --reasoning is deprecated and will be removed in rdf-construct 0.8.0: "
+            f"it never ran a reasoner, and {tail}"
+        )
+        click.echo(message if no_colour else click.style(message, fg="yellow"), err=True)
+
+    if output:
+        check_outputs([("-o", output)], [file])
+
     try:
         click.echo(f"Analysing {file}...", err=True)
 
-        # Perform analysis
-        description = describe_file(
-            file,
-            brief=brief,
-            resolve_imports=not no_resolve,
-            include_reasoning=reasoning,
-        )
+        # Perform analysis. The line above already told the user; the library's own
+        # DeprecationWarning for include_reasoning is for library callers only.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="include_reasoning is deprecated",
+                category=DeprecationWarning,
+            )
+            description = describe_file(
+                file,
+                brief=brief,
+                resolve_imports=not no_resolve,
+                include_reasoning=reasoning,
+            )
 
         # Format output
         use_colour = not no_colour and output_format == "text" and output is None
@@ -2770,6 +3371,194 @@ def describe(
         sys.exit(2)
 
 
+def _report_merge_identity(
+    identity: MergeIdentity, config_file: Path | None, use_colour: bool
+) -> None:
+    """Say what the merge did to ontology headers (#171): the summary, notes and warning.
+
+    Args:
+        identity: What the merge did.
+        config_file: The config the run used, if any, to point at ``namespaces.base``.
+        use_colour: Whether to colour the warning.
+    """
+    from rdf_construct.merge.identity import describe as describe_header
+
+    if identity.kept:
+        kept = f"<{identity.ontology}>" if identity.ontology is not None else "a blank-node header"
+        click.echo(f"Ontology: {kept} (kept: every source declares this one)")
+    elif identity.ontology is not None:
+        given_as = "--ontology-iri" if flag_given("ontology_iri") else "namespaces.base"
+        click.echo(f"Ontology: <{identity.ontology}> (from: {given_as})")
+    elif identity.declined is not None:
+        click.echo(f"Ontology: none (<{identity.declined}> not written: nothing to say about it)")
+    elif identity.demoted:
+        click.echo("Ontology: none")
+    for header, name in identity.demoted:
+        click.echo(f"  Demoted: {describe_header(header, name)}")
+    for name, targets in identity.stamped:
+        click.echo(f"  Derived from: {', '.join(f'<{t}>' for t in targets)} ({name})")
+    for reason in identity.unstamped:
+        click.echo(f"  Not recorded as derived from: {reason}")
+    if identity.moved_imports:
+        click.echo(f"  Imports kept on the merged header: {len(identity.moved_imports)}")
+    if identity.self_imports:
+        click.echo(
+            f"  Imports dropped, as the merge contains them: "
+            f"{', '.join(f'<{t}>' for t in identity.self_imports)}"
+        )
+    for note in identity.notes:
+        click.echo(note, err=True)
+    colour = "yellow" if use_colour else None
+    if identity.declined is not None:
+        click.secho(
+            f"\u26a0 No ontology header written: <{identity.declined}> would say nothing but its "
+            "type and imports, as no source header can be recorded as derived from.",
+            fg=colour,
+            err=True,
+        )
+        _report_dropped_imports(identity.dropped_imports, colour)
+        click.secho("  To keep it, give a source a named ontology header.", fg=colour, err=True)
+        return
+    if not identity.unnamed:
+        return
+    click.secho(
+        f"\u26a0 No ontology header written: {len(identity.demoted)} source header(s) demoted, "
+        "and nothing names the merged ontology.",
+        fg=colour,
+        err=True,
+    )
+    _report_dropped_imports(identity.dropped_imports, colour)
+    click.secho(
+        "  To name it, run this again with IRI replaced by the merged ontology's IRI:",
+        fg=colour,
+        err=True,
+    )
+    click.echo(f"    {rerun_command('--ontology-iri', 'IRI')}", err=True)
+    if config_file is not None:
+        click.secho(f"  or set namespaces.base: IRI in {config_file}", fg=colour, err=True)
+
+
+def _report_dropped_imports(dropped: list[URIRef], colour: str | None) -> None:
+    """List the imports a merge could not carry onto a header, five at most.
+
+    Args:
+        dropped: The imports not written.
+        colour: The warning's colour, or ``None``.
+    """
+    if not dropped:
+        return
+    shown = dropped[:5]
+    more = len(dropped) - len(shown)
+    listed = ", ".join(f"<{t}>" for t in shown) + (f" and {more} more" if more else "")
+    click.secho(f"  Their imports are not written: {listed}", fg=colour, err=True)
+
+
+def _replace_config_sources(config: MergeConfig, sources: Sequence[Path]) -> None:
+    """Replace a merge config's sources with the ones given on the command line (#496).
+
+    A config source carries a priority and a ``namespace_remap`` as well as a path. The
+    priorities are replaced, and a note on stderr says so. A remap rewrites IRIs, so losing one
+    in silence would change the merged graph without a word: a run that would drop one is
+    refused instead.
+
+    Args:
+        config: The loaded merge config, changed in place.
+        sources: The source arguments, in command-line order.
+
+    Raises:
+        Refusal: A config source that would be replaced has a ``namespace_remap``.
+    """
+    remapped = [src.path for src in config.sources if src.namespace_remap]
+    if remapped:
+        raise Refusal(
+            "Sources given on the command line replace the config's sources:, and "
+            + ", ".join(str(path) for path in remapped)
+            + " there "
+            + ("has a namespace_remap" if len(remapped) == 1 else "have namespace_remaps")
+            + " that would be dropped. List the sources in the config, or give none on the "
+            "command line."
+        )
+    if config.sources:
+        click.echo(
+            f"Note: {len(sources)} source(s) from the command line replace the config's "
+            f"{len(config.sources)}; their priorities come from -p, or their order.",
+            err=True,
+        )
+    config.sources = [SourceConfig(path=path, priority=i) for i, path in enumerate(sources, 1)]
+
+
+def _apply_priorities(sources: Sequence[SourceConfig], priority: Sequence[int]) -> None:
+    """Give the sources the ``-p`` values in order; a source without one keeps its own.
+
+    A source's own priority is its config ``priority:``, or its position on the command line.
+    A value with no source to apply to was dropped in silence; it is refused.
+
+    Args:
+        sources: The sources the run merges, changed in place.
+        priority: The ``-p`` values, in the order given.
+
+    Raises:
+        Refusal: More values than sources.
+    """
+    if len(priority) > len(sources):
+        raise Refusal(
+            f"-p gives {len(priority)} priorities for {len(sources)} source(s). "
+            "Give at most one per source, in the order of the sources."
+        )
+    for src, value in zip(sources, priority):
+        src.priority = value
+
+
+def _load_merge_data(
+    paths: Sequence[Path],
+) -> tuple[list[tuple[Path, Graph]], list[tuple[Path, dict[str, str]]]]:
+    """Read every data file a merge migrates, before anything is written (#437).
+
+    Args:
+        paths: The data files, from ``--migrate-data`` or the config's ``migrate_data``.
+
+    Returns:
+        Each path with its parsed graph, in order; and each path with every prefix it declares,
+        which its graph may not keep (#492).
+
+    Raises:
+        Refusal: A file is missing or cannot be parsed.
+    """
+    graphs: list[tuple[Path, Graph]] = []
+    declared: list[tuple[Path, dict[str, str]]] = []
+    for path in paths:
+        # A config's paths are not checked by Click, as --migrate-data's are
+        if not path.exists():
+            raise Refusal(f"Data file not found: {path}")
+        # "core", so the data's own org: is not pushed aside to org1: (#358)
+        graph = Graph(bind_namespaces="core")
+        try:
+            declared.append((path, parse_declaring(graph, path)))
+        except Exception as e:
+            raise Refusal(f"Could not parse data file {path}: {e}") from e
+        graphs.append((path, graph))
+    return graphs, declared
+
+
+def _echo_merge_dry_run(config: MergeConfig, report: Path | None, result: MergeResult) -> None:
+    """Say what a merge would have written, after a dry run that wrote nothing (#436).
+
+    Args:
+        config: The run's config, after every option is applied.
+        report: The ``--report`` path, if one was given.
+        result: The merge's result.
+    """
+    click.echo()
+    if result.merged_graph and config.output:
+        click.echo(f"Dry run: would write -o {config.output.path}")
+    if report and result.conflicts:
+        click.echo(f"Dry run: would write --report {report} ({len(result.conflicts)} conflict(s))")
+    migration = config.migrate_data
+    if migration and migration.data_sources and migration.output_path:
+        click.echo(f"Dry run: would write --data-output {migration.output_path}")
+    click.echo("Dry run: nothing was written.")
+
+
 @cli.command()
 @click.argument("sources", nargs=-1, type=click.Path(exists=True, path_type=Path))
 @click.option(
@@ -2784,14 +3573,14 @@ def describe(
     "-c",
     "config_file",
     type=click.Path(exists=True, path_type=Path),
-    help="YAML configuration file",
+    help="YAML configuration file; options given override it, and SOURCES replace its sources:",
 )
 @click.option(
     "--priority",
     "-p",
     multiple=True,
     type=int,
-    help="Priority for each source (order matches sources)",
+    help="Priority for each source, in order (higher wins); more values than sources is refused",
 )
 @click.option(
     "--strategy",
@@ -2826,7 +3615,7 @@ def describe(
 @click.option(
     "--migration-rules",
     type=click.Path(exists=True, path_type=Path),
-    help="YAML file with migration rules",
+    help="YAML file with migration rules; not read yet (#172): use the config's migrate_data rules",
 )
 @click.option(
     "--data-output",
@@ -2836,12 +3625,19 @@ def describe(
 @click.option(
     "--dry-run",
     is_flag=True,
-    help="Show what would happen without writing files",
+    help="Write nothing; list the files that would be written",
 )
 @click.option(
     "--no-colour",
     is_flag=True,
     help="Disable coloured output",
+)
+@click.option(
+    "--ontology-iri",
+    help=(
+        "IRI of the merged ontology: its one owl:Ontology header (overrides the config's "
+        "namespaces.base). Without one, a merge of headed sources writes no header"
+    ),
 )
 @click.option(
     "--init",
@@ -2863,6 +3659,7 @@ def merge(
     data_output: Path | None,
     dry_run: bool,
     no_colour: bool,
+    ontology_iri: str | None,
     init_config: bool,
 ):
     """Merge multiple RDF ontology files.
@@ -2878,13 +3675,32 @@ def merge(
       0 - Merged; every conflict was resolved by --strategy, or there were none
       1 - Merged, with conflicts marked in the output for review: always for
           rdfs:domain, rdfs:range and functional properties; for labels under
-          mark_all, or when the highest-priority sources are tied
-      2 - Input refused or run failed (invalid options or config, parse error, etc.)
+          mark_all, or when the highest-priority sources are tied; or a data
+          migration rule matched nothing, or left a match unchanged
+      2 - Input refused or run failed (invalid options or config, parse error,
+          a data file or migration rule that cannot be read, etc.)
+
+    \b
+    With --config, an option given on the command line overrides the file,
+    and SOURCES replace its sources:.
+
+    \b
+    The output has at most one owl:Ontology header (#171). --ontology-iri,
+    or namespaces.base in a config, names it, and each source is recorded
+    with prov:wasDerivedFrom. Without either, sources that share one header
+    keep it; otherwise the output has no header and the run warns, showing
+    the command that names it. Unless kept, each source header is demoted: it
+    loses owl:Ontology, owl:versionIRI, owl:imports, owl:priorVersion,
+    owl:backwardCompatibleWith and owl:incompatibleWith, and keeps the rest.
 
     \b
     Examples:
       # Basic merge of two files
       rdf-construct merge core.ttl ext.ttl -o merged.ttl
+
+      # Name the merged ontology
+      rdf-construct merge core.ttl ext.ttl -o merged.ttl \\
+          --ontology-iri http://example.org/merged
 
       # With priorities (higher wins conflicts)
       rdf-construct merge core.ttl ext.ttl -o merged.ttl -p 1 -p 2
@@ -2936,17 +3752,30 @@ def merge(
                 config.output = OutputConfig(path=output)
         except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
             raise Refusal(f"Could not load config {config_file}: {e}") from e
+
+        # An option given on the command line overrides the config, and the config overrides
+        # the option's default (#160, #351). Source arguments replace the config's sources:,
+        # as they replace refactor's source_files: (#496).
+        if sources:
+            _replace_config_sources(config, sources)
+        if flag_given("strategy"):
+            config.conflicts.strategy = ConflictStrategy[strategy.upper()]
+        if flag_given("imports"):
+            config.imports = ImportsStrategy[imports.upper()]
+        if flag_given("migrate_data"):
+            if config.migrate_data is None:
+                config.migrate_data = DataMigrationConfig()
+            config.migrate_data.data_sources = list(migrate_data)
+        if flag_given("data_output") and config.migrate_data is not None:
+            config.migrate_data.output_path = data_output
+        if flag_given("ontology_iri"):
+            config.namespaces.base = ontology_iri
+        _apply_priorities(config.sources, priority)
     else:
-        # Build config from CLI arguments
-        priorities_list = list(priority) if priority else list(range(1, len(sources) + 1))
-
-        # Pad priorities if needed
-        while len(priorities_list) < len(sources):
-            priorities_list.append(len(priorities_list) + 1)
-
-        source_configs = [
-            SourceConfig(path=p, priority=pri) for p, pri in zip(sources, priorities_list)
-        ]
+        # Build config from CLI arguments: each source's priority is its position, unless -p
+        # gives one
+        source_configs = [SourceConfig(path=p, priority=i) for i, p in enumerate(sources, 1)]
+        _apply_priorities(source_configs, priority)
 
         conflict_strategy = ConflictStrategy[strategy.upper()]
         imports_strategy = ImportsStrategy[imports.upper()]
@@ -2962,6 +3791,7 @@ def merge(
         config = MergeConfig(
             sources=source_configs,
             output=OutputConfig(path=output),
+            namespaces=NamespaceConfig(base=ontology_iri),
             conflicts=ConflictConfig(
                 strategy=conflict_strategy,
                 report_path=report,
@@ -2971,8 +3801,56 @@ def merge(
             dry_run=dry_run,
         )
 
+    # The merged ontology's IRI must be one, before anything is read or written (#171)
+    if config.namespaces.base is not None:
+        from rdf_construct.merge.identity import check_ontology_iri
+
+        given_as = "--ontology-iri" if flag_given("ontology_iri") else "namespaces.base"
+        try:
+            check_ontology_iri(config.namespaces.base)
+        except ValueError as e:
+            raise Refusal(f"{given_as} is not an ontology IRI: {e}") from e
+
+    # Every output is known now, before anything is read or written (#412)
+    planned: list[tuple[str, Path]] = []
+    if config.output:
+        planned.append(("-o", config.output.path))
+    if report:
+        planned.append(("--report", report))
+    migration = config.migrate_data
+    if migration and migration.data_sources and migration.output_path:
+        planned.append(("--data-output", migration.output_path))
+    read = [
+        *(src.path for src in config.sources),
+        *(migration.data_sources if migration else []),
+        *([config_file] if config_file else []),
+        *([migration_rules] if migration_rules else []),
+    ]
+    check_outputs(planned, read)
+
+    # Read every data file before writing anything, so that one that is missing or cannot be
+    # parsed refuses the run instead of failing after the ontology is written (#437)
+    data_graphs, declared = _load_merge_data(migration.data_sources if migration else [])
+
+    # A rule's CURIE means one IRI across every data file's declarations and the config's
+    # preferred_prefixes, and a rule that cannot be read refuses the run before anything is
+    # written (#492)
+    rule_prefixes: list[tuple[Path, dict[str, str]]] = []
+    if config_file and config.namespaces.preferred_prefixes:
+        rule_prefixes.append((config_file, dict(config.namespaces.preferred_prefixes)))
+    rule_prefixes.extend(declared)
+    if migration and migration.rules and data_graphs:
+        try:
+            resolve_rules(
+                migration.rules,
+                [*rule_prefixes, *((path, extract_prefix_map(g)) for path, g in data_graphs)],
+            )
+        except RuleError as e:
+            raise Refusal(f"Cannot read {e}") from e
+
     # Execute merge
     click.echo("Merging ontologies...")
+    _note_nested_rules(*(src.namespace_remap for src in config.sources))
 
     merger = OntologyMerger(config)
     result = merger.merge()
@@ -2985,6 +3863,10 @@ def merge(
     use_colour = not no_colour
     text_formatter = get_formatter("text", use_colour=use_colour)
     click.echo(text_formatter.format_merge_result(result, result.merged_graph))
+    for note in result.prefix_notes:
+        click.echo(note, err=True)
+    if result.identity is not None:
+        _report_merge_identity(result.identity, config_file, use_colour)
 
     # Write output (unless dry run)
     if not dry_run and result.merged_graph and config.output:
@@ -2992,8 +3874,8 @@ def merge(
         click.echo()
         click.secho(f"\u2713 Wrote {config.output.path}", fg="green")
 
-    # Generate conflict report if requested
-    if report and result.conflicts:
+    # Generate conflict report if requested; a dry run writes nothing (#436)
+    if report and result.conflicts and not dry_run:
         report_formatter = get_formatter(report_format)
         report_content = report_formatter.format_conflict_report(
             result.conflicts, result.merged_graph
@@ -3003,6 +3885,7 @@ def merge(
         click.echo(f"  Conflict report: {report}")
 
     # Handle data migration
+    rule_findings = False
     if config.migrate_data and config.migrate_data.data_sources:
         click.echo()
         click.echo("Migrating data...")
@@ -3022,26 +3905,50 @@ def merge(
                     pass
 
         # Apply migration
-        migration_result = migrate_data_files(
-            data_paths=config.migrate_data.data_sources,
+        migration_result = migrate_data_graphs(
+            data_graphs,
             uri_map=uri_map if uri_map else None,
             rules=config.migrate_data.rules if config.migrate_data.rules else None,
             output_path=config.migrate_data.output_path if not dry_run else None,
+            prefixes=rule_prefixes,
         )
 
         if migration_result.success:
             click.echo(text_formatter.format_migration_result(migration_result))
+            for note in migration_result.prefix_notes:
+                click.echo(note, err=True)
+            # A rule that did nothing, or left a match alone, is a finding: exit 1 (#492)
+            for name in migration_result.unmatched_rules:
+                click.secho(
+                    f"\u26a0 Matched nothing in any data file: {name}",
+                    fg="yellow",
+                    err=True,
+                )
+                rule_findings = True
+            for name, kept in migration_result.stats.rules_kept.items():
+                click.secho(
+                    f"\u26a0 Left {kept} match(es) unchanged, as a construct built no value: "
+                    f"{name}",
+                    fg="yellow",
+                    err=True,
+                )
+                rule_findings = True
             if config.migrate_data.output_path and not dry_run:
                 click.secho(
                     f"\u2713 Wrote migrated data to {config.migrate_data.output_path}",
                     fg="green",
                 )
         else:
+            # A migration that did not happen is a 2, never the merge's 0 or 1 (#286, #437)
             click.secho(
                 f"\u2717 Data migration failed: {migration_result.error}",
                 fg="red",
                 err=True,
             )
+            raise SystemExit(2)
+
+    if dry_run:
+        _echo_merge_dry_run(config, report, result)
 
     # Exit code based on unresolved conflicts
     if result.unresolved_conflicts:
@@ -3050,6 +3957,8 @@ def merge(
             f"\u26a0 {len(result.unresolved_conflicts)} unresolved conflict(s) " "marked in output",
             fg="yellow",
         )
+        raise SystemExit(1)
+    elif rule_findings:
         raise SystemExit(1)
     else:
         raise SystemExit(0)
@@ -3094,7 +4003,10 @@ def merge(
 @click.option(
     "--data-output",
     type=click.Path(path_type=Path),
-    help="Output directory for split data files",
+    help=(
+        "Output directory for split data files "
+        "(default: the config's split_data output_dir, else the output directory)"
+    ),
 )
 @click.option(
     "--unmatched",
@@ -3195,16 +4107,19 @@ def split(
         check_default_output_dir(output_dir, "output_dir", "split", overwrite=overwrite)
         click.echo(f"Splitting {source.name} by namespace...")
 
-        result = split_by_namespace(
-            source,
-            output_dir,
-            dry_run=dry_run,
-            unmatched=UnmatchedStrategy(
-                strategy=unmatched,
-                common_module=common_name,
-                common_output=f"{common_name}.ttl",
-            ),
-        )
+        try:
+            result = split_by_namespace(
+                source,
+                output_dir,
+                dry_run=dry_run,
+                unmatched=UnmatchedStrategy(
+                    strategy=unmatched,
+                    common_module=common_name,
+                    common_output=f"{common_name}.ttl",
+                ),
+            )
+        except SplitOutputError as e:
+            raise Refusal(str(e)) from e
 
         if not result.success:
             click.secho(f"\u2717 Split failed: {result.error}", fg="red", err=True)
@@ -3251,12 +4166,14 @@ def split(
             dry_run=dry_run,
         )
 
-    # Add data migration config if specified
+    # Add data migration config if specified: --data-output, else the config's data directory,
+    # else the output directory actually used; the config's prefix still applies (#413)
     if migrate_data:
+        configured = config.split_data
         config.split_data = SplitDataConfig(
             sources=list(migrate_data),
-            output_dir=data_output if data_output else output_dir,
-            prefix="data_",
+            output_dir=data_output or (configured.output_dir if configured else None),
+            prefix=configured.prefix if configured else "data_",
         )
 
     # Override the config's unmatched strategy only with what was given (#291)
@@ -3274,6 +4191,12 @@ def split(
         overwrite=overwrite,
         named=config.output_dir_named and not flag_given("output_dir"),
     )
+
+    # Every file the split could write, planned against its inputs before the parse (#413)
+    try:
+        check_split_outputs(config, [config_file] if config_file else [])
+    except SplitOutputError as e:
+        raise Refusal(str(e)) from e
 
     # Execute split
     click.echo(f"Splitting {source.name}...")
@@ -3393,6 +4316,24 @@ def refactor():
     pass
 
 
+def _note_nested_rules(*rule_sets: dict[str, str]) -> None:
+    """Name each pair of namespace rules where one lies within the other (#424).
+
+    The longer rule wins for the IRIs within it, whatever order the rules were given in. Pairs
+    are found within each rule set and named once, however many sets repeat them.
+
+    Args:
+        rule_sets: Old namespace to new namespace, one mapping per set of rules.
+    """
+    pairs = {pair for rules in rule_sets for pair in nested_rules(rules)}
+    for inner, outer in sorted(pairs):
+        click.echo(
+            f"Note: {inner} lies within {outer}; each IRI moves by the longest rule "
+            "that contains it.",
+            err=True,
+        )
+
+
 def _load_refactor_sources(paths: list[Path]) -> list[tuple[Path, Graph]]:
     """Parse each refactor source, keeping the prefixes the file declares.
 
@@ -3416,6 +4357,421 @@ def _load_refactor_sources(paths: list[Path]) -> list[tuple[Path, Graph]]:
             raise SystemExit(2)
         graphs.append((source_path, graph))
     return graphs
+
+
+@dataclass
+class _RefactorOutputs:
+    """Where ``refactor rename`` or ``deprecate`` will write, worked out before writing (#411, #186).
+
+    Attributes:
+        ontology: Each source's output path, for the sources that have one.
+        data: Each data file's output path, when the data is migrated.
+    """
+
+    ontology: dict[Path, Path] = field(default_factory=dict)
+    data: dict[Path, Path] = field(default_factory=dict)
+
+    def planned(self) -> list[PlannedOutput]:
+        """Every output, ontology first, each with the input it is made from."""
+        return [
+            PlannedOutput(path=out, made_from=source)
+            for source, out in [*self.ontology.items(), *self.data.items()]
+        ]
+
+
+def _apply_refactor_cli(
+    config: RefactorConfig, sources: tuple[Path, ...], output: Path | None
+) -> None:
+    """Lay the command line's sources and ``-o`` over the configuration (#411, #186).
+
+    The sources replace the config's ``source_files:`` first, so ``-o`` is read against the
+    sources the run will actually process: a file for one, a directory for several. Either
+    way ``-o`` replaces the config's ``output:`` and ``output_dir:``, so a config's single
+    file cannot outrank it.
+
+    Args:
+        config: The configuration, loaded from a file or built from the command line.
+        sources: The source arguments, if any.
+        output: ``-o``, if given.
+    """
+    if sources:
+        config.source_files = list(sources)
+    if output:
+        if len(config.source_files) > 1:
+            config.output, config.output_dir = None, output
+        else:
+            config.output, config.output_dir = output, None
+
+
+def _output_label(config: RefactorConfig, output: Path | None) -> str | None:
+    """What named the ontology output: ``-o``, the config's ``output:`` or ``output_dir:``."""
+    if output:
+        return "-o"
+    if config.output is not None:
+        return "the config's output:"
+    if config.output_dir is not None:
+        return "the config's output_dir:"
+    return None
+
+
+def _refuse_one_output_for_many(config: RefactorConfig) -> None:
+    """Refuse a config ``output:`` that names one file for several sources (#411, #186).
+
+    Raises:
+        Refusal: When each result would replace the last.
+    """
+    if config.output and len(config.source_files) > 1:
+        raise Refusal(
+            f"The config's output: names one file, {config.output}, but there are "
+            f"{len(config.source_files)} sources, and each result would replace the last. "
+            "Use output_dir: in the config, or -o with a directory."
+        )
+
+
+def _refuse_config_with_operation(section: str, flags: dict[str, str]) -> None:
+    """Refuse ``-c`` together with an operation given on the command line (#352).
+
+    A flag and the config each specify the operation, so neither can quietly win. Each flag is
+    detected with ``flag_given``, so ``--message ""`` counts. Called before the config is read
+    or any source parsed.
+
+    Args:
+        section: The config key the operation belongs in (``rename:``, ``deprecations:``).
+        flags: Each operation option's parameter name, with its spelling on the command line.
+
+    Raises:
+        Refusal: When any of the flags was given.
+    """
+    given = [spelling for name, spelling in flags.items() if flag_given(name)]
+    if given:
+        raise Refusal(
+            "Nothing was written:\n  -c/--config cannot be combined with "
+            f"{', '.join(given)}. Put the operation in the config's {section} section, or run "
+            "it as a separate command without -c."
+        )
+
+
+def _report_inert_renames(inert: list[InertRename]) -> None:
+    """Name each rename that changed nothing, on stderr (#183)."""
+    if not inert:
+        return
+    count = (
+        "1 rename matched nothing" if len(inert) == 1 else f"{len(inert)} renames matched nothing"
+    )
+    click.secho(f"\u26a0 {count}:", fg="yellow", err=True)
+    for rename in inert:
+        click.secho(f"  {rename.describe()}", fg="yellow", err=True)
+
+
+def _plan_rename_outputs(
+    config: RefactorConfig,
+    graphs: list[tuple[Path, Graph]],
+    data_graphs: list[tuple[Path, Graph]],
+    uri_map: dict[URIRef, URIRef],
+    data_output: Path | None,
+) -> _RefactorOutputs:
+    """Work out every path ``refactor rename`` would write.
+
+    The paths are the ones each write used to work out for itself: ``-o`` or the config's
+    ``output:`` for one source, ``output_dir`` joined with the basename for several; for the
+    data, ``--data-output`` for one file, joined with the basename for several, and
+    ``migrated_<name>`` beside the data file without it. A data file is planned only when the
+    rename maps something, because only then is it migrated.
+
+    Args:
+        config: The resolved refactor configuration.
+        graphs: Each source with its graph.
+        data_graphs: Each data file with its graph.
+        uri_map: The rename map the data is migrated with.
+        data_output: ``--data-output``, if given.
+
+    Returns:
+        The planned outputs.
+    """
+    outputs = _RefactorOutputs()
+    for source_path, _ in graphs:
+        out_path = config.output or (
+            config.output_dir / source_path.name if config.output_dir else None
+        )
+        if out_path:
+            outputs.ontology[source_path] = out_path
+    if uri_map:
+        for data_path, _ in data_graphs:
+            if data_output and len(data_graphs) == 1:
+                outputs.data[data_path] = data_output
+            elif data_output:
+                outputs.data[data_path] = data_output / data_path.name
+            else:
+                outputs.data[data_path] = data_path.parent / f"migrated_{data_path.name}"
+    return outputs
+
+
+def _plan_deprecate_outputs(
+    config: RefactorConfig, graphs: list[tuple[Path, Graph]]
+) -> _RefactorOutputs:
+    """Work out every path ``refactor deprecate`` would write (#186).
+
+    ``-o`` or the config's ``output:`` for one source, ``output_dir`` joined with the
+    basename for several, and ``<stem>_deprecated`` beside each source without either.
+
+    Args:
+        config: The resolved refactor configuration.
+        graphs: Each source with its graph.
+
+    Returns:
+        The planned outputs.
+    """
+    outputs = _RefactorOutputs()
+    for source_path, _ in graphs:
+        if config.output:
+            out_path = config.output
+        elif config.output_dir:
+            out_path = config.output_dir / source_path.name
+        else:
+            out_path = source_path.with_stem(f"{source_path.stem}_deprecated")
+        outputs.ontology[source_path] = out_path
+    return outputs
+
+
+def _check_refactor_outputs(
+    outputs: _RefactorOutputs,
+    config: RefactorConfig,
+    data_paths: tuple[Path, ...],
+    data_output: Path | None,
+    config_file: Path | None,
+    in_place: bool,
+    label: str | None = "-o",
+) -> dict[Path, Path]:
+    """Refuse a plan that would write one file twice, or write over an input (#411, #186).
+
+    An output may replace an input only when it is that input's own result and
+    ``--in-place`` is given: a source rewritten with its rename or its deprecations, a data
+    file with its migration. Every other overlap is refused, flag or not. Each refusal says
+    what to do instead.
+
+    Args:
+        outputs: The planned outputs.
+        config: The resolved refactor configuration.
+        data_paths: The data files given to ``--migrate-data``.
+        data_output: ``--data-output``, if given.
+        config_file: The config file, which is an input too.
+        in_place: Whether ``--in-place`` was given.
+        label: What named the ontology outputs (``-o``, the config's ``output:`` or
+            ``output_dir:``), or ``None`` when each is a default derived from its source.
+
+    Returns:
+        Each output that ``--in-place`` lets replace its own input, with that input.
+
+    Raises:
+        Refusal: When any output collides with another or with an input.
+    """
+    directories = []
+    if config.output is None and config.output_dir is not None and outputs.ontology:
+        directories.append((config.output_dir, label or "-o"))
+    if data_output is not None and len(outputs.data) > 1:
+        directories.append((data_output, "--data-output"))
+    for directory, flag in directories:
+        if directory.exists() and not directory.is_dir():
+            raise Refusal(
+                f"{directory} is a file, but with several inputs {flag} names a directory. "
+                "Name a directory, or a path that does not exist yet."
+            )
+
+    # One input, and a file path that is an existing directory: the write would fail (#186)
+    files = []
+    if config.output is not None and len(outputs.ontology) == 1:
+        files.append((config.output, label or "-o", next(iter(outputs.ontology))))
+    if data_output is not None and len(outputs.data) == 1:
+        files.append((data_output, "--data-output", next(iter(outputs.data))))
+    for path, flag, source in files:
+        if path.is_dir():
+            raise Refusal(
+                f"{path} is a directory, but with one input {flag} names the output file. "
+                f"Name a file, such as {path / source.name}."
+            )
+
+    planned = outputs.planned()
+    problems: list[str] = []
+    for group in colliding_outputs(planned):
+        made_from = ", ".join(str(output.made_from) for output in group)
+        problems.append(
+            f"{group[0].path} would be written {len(group)} times, from {made_from}. Give each "
+            "its own path: inputs that share a file name need separate output directories, "
+            "or separate runs."
+        )
+
+    inputs = [*config.source_files, *data_paths, *([config_file] if config_file else [])]
+    replaced: dict[Path, Path] = {}
+    for output, existing in outputs_over_inputs(planned, inputs):
+        own = output.made_from is not None and is_same_file(output.made_from, existing)
+        if own and in_place:
+            replaced[output.path] = existing
+        elif own:
+            same = "" if output.path == existing else f" ({existing})"
+            problems.append(
+                f"{output.path} is the input it is made from{same}: writing it would replace "
+                "that file. Pass --in-place to rewrite it, or choose another path."
+            )
+        else:
+            which = "an input" if output.path == existing else f"the input {existing}"
+            derived = label is None and output.path in outputs.ontology.values()
+            advice = (
+                "Pass -o to write the results elsewhere." if derived else "Choose another path."
+            )
+            problems.append(
+                f"{output.path} would replace {which}, but it is the result of "
+                f"{output.made_from}. {advice}"
+            )
+
+    if problems:
+        raise Refusal("Nothing was written:\n  " + "\n  ".join(problems))
+    return replaced
+
+
+@dataclass
+class _RenameCollisions:
+    """What ``refactor rename`` would merge or connect, found before anything is written (#185).
+
+    Attributes:
+        problems: One line per collision in the sources or the data, naming the target, where
+            its triples are and what would merge into it.
+        notes: One ``Note:`` line per target that is only referenced, and per triple the
+            rename makes reflexive.
+        advice: What to do instead, filled in with the IRIs when there is one collision.
+    """
+
+    problems: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    advice: str = ""
+
+
+def _in_files(counts: list[tuple[Path, int]]) -> str:
+    """Name where a count was found: `` in a.ttl``, or `` (3 in a.ttl, 2 in b.ttl)``."""
+    if len(counts) == 1:
+        return f" in {counts[0][0]}"
+    return " (" + ", ".join(f"{n} in {path}" for path, n in counts) + ")"
+
+
+def _find_rename_collisions(
+    graphs: list[tuple[Path, Graph]],
+    data_graphs: list[tuple[Path, Graph]],
+    rename: RenameConfig,
+    uri_map: dict[URIRef, URIRef],
+) -> _RenameCollisions:
+    """Check every mapping in every file for a rename that would merge two entities (#185).
+
+    The sources are checked as one graph, so a target described in one source and renamed
+    onto from another is a collision: a split module set would describe it twice. Each data
+    file is checked on its own, against the rename map the data is migrated with.
+
+    Args:
+        graphs: Each source with its graph.
+        data_graphs: Each data file with its graph.
+        rename: The resolved rename configuration.
+        uri_map: The rename map the data is migrated with.
+
+    Returns:
+        The collisions, the notes and the advice.
+    """
+    union = graphs[0][1] if len(graphs) == 1 else Graph()
+    if len(graphs) > 1:
+        for _, graph in graphs:
+            union += graph
+    mappings = rename.build_mappings(union)
+    found = _RenameCollisions()
+
+    def own(target: URIRef, among: list[tuple[Path, Graph]]) -> list[tuple[Path, int]]:
+        counts = [(path, sum(1 for _ in g.triples((target, None, None)))) for path, g in among]
+        return [(path, n) for path, n in counts if n]
+
+    def located(collision: RenameCollision, among: list[tuple[Path, Graph]]) -> str:
+        if collision.kind == "described":
+            return _in_files(own(collision.target, among))
+        if collision.axiom is not None:
+            paths = [path for path, g in among if collision.axiom in g]
+            return " in " + ", ".join(str(path) for path in paths) if paths else ""
+        return ""
+
+    collisions = [(c, graphs) for c in find_collisions(union, mappings)]
+    data_mappings = [RenameMapping(old, new, "explicit") for old, new in uri_map.items()]
+    for data_path, data_graph in data_graphs:
+        data = [(data_path, data_graph)]
+        collisions.extend((c, data) for c in find_collisions(data_graph, data_mappings))
+    found.problems = [c.describe(located(c, among)) for c, among in collisions]
+
+    references, reflexive = find_references(union, mappings)
+    for reference in references:
+        counts = []
+        for path, g in graphs:
+            n = sum(1 for _ in g.triples((None, None, reference.target)))
+            n += sum(1 for _ in g.triples((None, reference.target, None)))
+            if n:
+                counts.append((path, n))
+        times = "time" if reference.count == 1 else "times"
+        found.notes.append(
+            f"Note: <{reference.target}> was already referenced {reference.count} {times}"
+            f"{_in_files(counts)}; those references now reach the renamed entity."
+        )
+    for triple in reflexive:
+        found.notes.append(f"Note: {triple.describe()}")
+
+    if len(collisions) == 1 and len(collisions[0][0].sources) == 1:
+        collision = collisions[0][0]
+        old = collision.sources[0]
+        # Deprecate where the old term is declared: always a source, never the data
+        files = [path for path, g in graphs if (old, None, None) in g] or [p for p, _ in graphs]
+        named = " ".join(shlex.quote(str(path)) for path in files)
+        found.advice = (
+            f"rdf-construct refactor deprecate {named} --entity {shlex.quote(str(old))} "
+            f"--replaced-by {shlex.quote(str(collision.target))}"
+        )
+    else:
+        found.advice = "rdf-construct refactor deprecate SOURCE --entity OLD --replaced-by NEW"
+    return found
+
+
+def _refuse_rename_collisions(found: _RenameCollisions) -> None:
+    """Refuse a rename that would merge two entities, naming every collision (#185).
+
+    Args:
+        found: The collisions, as ``_find_rename_collisions`` reported them.
+
+    Raises:
+        Refusal: When there is at least one collision.
+    """
+    if not found.problems:
+        return
+    n = len(found.problems)
+    count = (
+        "1 rename would merge two entities:"
+        if n == 1
+        else f"{n} renames would each merge two entities:"
+    )
+    raise Refusal(
+        "Nothing was written:\n  "
+        + "\n  ".join([count, *found.problems])
+        + "\nPass --merge-entities to merge them deliberately. To keep both, deprecate the "
+        + "old term instead:\n  "
+        + found.advice
+    )
+
+
+def _report_rename_collisions(found: _RenameCollisions, *, merging: bool, dry_run: bool) -> None:
+    """Print the notes, and each merge that ``--merge-entities`` lets through (#185).
+
+    Args:
+        found: The collisions, as ``_find_rename_collisions`` reported them.
+        merging: Whether merging is allowed, by the flag or the config's ``merge_entities``.
+            Without it the merges are not printed: the run is refused instead.
+        dry_run: Whether the merges are only previewed.
+    """
+    for note in found.notes:
+        click.echo(note, err=True)
+    if not merging:
+        return
+    lead = "Would merge (--merge-entities)" if dry_run else "Merged (--merge-entities)"
+    for problem in found.problems:
+        click.secho(f"\u26a0 {lead}: {problem}", fg="yellow", err=True)
 
 
 @refactor.command("rename")
@@ -3463,6 +4819,19 @@ def _load_refactor_sources(paths: list[Path]) -> list[tuple[Path, Graph]]:
     help="Output path for migrated data.",
 )
 @click.option(
+    "--in-place",
+    is_flag=True,
+    help="Allow -o or --data-output to name an input, and rewrite it with its own result.",
+)
+@click.option(
+    "--merge-entities",
+    is_flag=True,
+    help=(
+        "Allow a rename that merges two entities: onto an IRI that has triples of its own, "
+        "two renames onto one IRI, or an axiom made to contradict itself. Refused without it."
+    ),
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Preview changes without writing files.",
@@ -3489,6 +4858,8 @@ def refactor_rename(
     config_file: Path | None,
     migrate_data: tuple[Path, ...],
     data_output: Path | None,
+    in_place: bool,
+    merge_entities: bool,
     dry_run: bool,
     no_colour: bool,
     init_config: bool,
@@ -3502,10 +4873,23 @@ def refactor_rename(
     \b
     SOURCES: One or more RDF files to process (.ttl, .rdf, .owl)
 
+    A rename onto an IRI that already has triples of its own would merge two
+    entities, and is refused unless --merge-entities is given. So are two renames
+    onto one IRI, and a rename that makes an owl:disjointWith, owl:complementOf,
+    owl:propertyDisjointWith or owl:differentFrom axiom reflexive. A target that is
+    only referenced is renamed onto, and the run says so.
+
+    A run that would write nothing (no -o, no output: or output_dir: in the config,
+    and no data to migrate) is refused; --dry-run writes nothing by design. -c cannot
+    be combined with --from, --to, --from-namespace or --to-namespace: put the
+    operation in the config.
+
     \b
     Exit codes:
       0 - Success
-      2 - Input refused or run failed (invalid options or config, parse error, etc.)
+      1 - Finished, but a rename matched nothing in any file of the run
+      2 - Input refused or run failed (invalid options or config, parse error,
+          a rename that would merge two entities, nothing to write, etc.)
 
     \b
     Examples:
@@ -3525,7 +4909,8 @@ def refactor_rename(
       rdf-construct refactor rename ontology.ttl \\
           --from "ex:OldClass" --to "ex:NewClass" \\
           --migrate-data instances.ttl \\
-          --data-output updated-instances.ttl
+          --data-output updated-instances.ttl \\
+          -o fixed.ttl
 
       # From configuration file
       rdf-construct refactor rename --config renames.yml
@@ -3562,6 +4947,18 @@ def refactor_rename(
             "Provide source files or use --config with a configuration file."
         )
 
+    # An operation on the command line and one in the config cannot both run (#352)
+    if config_file:
+        _refuse_config_with_operation(
+            "rename:",
+            {
+                "from_uri": "--from",
+                "to_uri": "--to",
+                "from_namespace": "--from-namespace",
+                "to_namespace": "--to-namespace",
+            },
+        )
+
     # Validate rename options
     if from_uri and not to_uri:
         raise Refusal("--from requires --to.")
@@ -3577,17 +4974,6 @@ def refactor_rename(
         try:
             config = load_refactor_config(config_file)
             click.echo(f"Using config: {config_file}")
-
-            # Override output if provided on CLI
-            if output:
-                if len(sources) > 1 or (config.source_files and len(config.source_files) > 1):
-                    config.output_dir = output
-                else:
-                    config.output = output
-
-            # Override sources if provided on CLI
-            if sources:
-                config.source_files = list(sources)
         except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
             raise Refusal(f"Could not load config {config_file}: {e}") from e
     else:
@@ -3600,13 +4986,9 @@ def refactor_rename(
         if from_uri and to_uri:
             rename_config.entities[from_uri] = to_uri
 
-        config = RefactorConfig(
-            rename=rename_config,
-            source_files=list(sources),
-            output=output if len(sources) == 1 else None,
-            output_dir=output if len(sources) > 1 else None,
-            dry_run=dry_run,
-        )
+        config = RefactorConfig(rename=rename_config, dry_run=dry_run)
+    # The sources first, then -o read against them: a file for one, a directory for several
+    _apply_refactor_cli(config, sources, output)
 
     # Validate we have something to rename
     if config.rename is None or (not config.rename.namespaces and not config.rename.entities):
@@ -3614,6 +4996,11 @@ def refactor_rename(
             "No renames specified. Use --from/--to, --from-namespace/--to-namespace, "
             "or provide a config file."
         )
+    _note_nested_rules(config.rename.namespaces)
+
+    # One output file cannot hold the results of several sources: each would replace the
+    # last (#411).
+    _refuse_one_output_for_many(config)
 
     # Load every source before writing anything, so that a CURIE is resolved once, against
     # the prefixes the files declare, and refused before any output exists (#182).
@@ -3625,84 +5012,134 @@ def refactor_rename(
     except (CurieError, AmbiguousCurieError) as e:
         raise Refusal(str(e)) from e
 
+    # Parse every data file before writing anything, so that one that cannot be read refuses
+    # the run instead of being skipped after the ontology is written (#414).
+    data_graphs: list[tuple[Path, Graph]] = []
+    if migrate_data:
+        for data_path in migrate_data:
+            # "core", so the data's own org: is not pushed aside to org1: (#358)
+            data_graph = Graph(bind_namespaces="core")
+            try:
+                data_graph.parse(data_path.as_posix())
+            except Exception as e:
+                raise Refusal(f"Could not parse data file {data_path}: {e}") from e
+            data_graphs.append((data_path, data_graph))
+
+    # The data's rename map comes from the sources as they were read, not as written: an
+    # in-place rename would otherwise find nothing left to map (#414).
+    uri_map: dict[URIRef, URIRef] = {}
+    if migrate_data:
+        combined_graph = Graph()
+        for _, graph in graphs:
+            combined_graph += graph
+        for mapping in config.rename.build_mappings(combined_graph):
+            uri_map[mapping.from_uri] = mapping.to_uri
+
+    planned = _plan_rename_outputs(config, graphs, data_graphs, uri_map, data_output)
+
+    # A rename that would write nothing is refused; a dry run writes nothing by design (#183)
+    if not planned.ontology and not planned.data and not dry_run:
+        if migrate_data:
+            reason = (
+                "no output was named for the renamed ontology, and the rename matches nothing "
+                "in the sources, and the data is migrated only with renames found there."
+            )
+        else:
+            reason = "no output was named, so the renamed ontology would be thrown away."
+        advice = (
+            "Pass -o FILE (-o DIR/ for several sources), or set output: or output_dir: in "
+            "the config."
+        )
+        if in_place:
+            advice += " --in-place lets -o replace a source; it does not name one."
+        raise Refusal(f"Nothing was written:\n  {reason}\n{advice}")
+    replaced = _check_refactor_outputs(
+        planned,
+        config,
+        migrate_data,
+        data_output,
+        config_file,
+        in_place,
+        _output_label(config, output),
+    )
+
+    # Every mapping in every file is checked before anything is written; a dry run shows
+    # its preview first (#185).
+    config.rename.merge_entities = config.rename.merge_entities or merge_entities
+    collisions = _find_rename_collisions(graphs, data_graphs, config.rename, uri_map)
+    if not dry_run and not config.rename.merge_entities:
+        _refuse_rename_collisions(collisions)
+
+    # A rename that matches nothing is judged over every file of the run, never file by file:
+    # a module set uses each term in only one or two of its files (#183)
+    union = graphs[0][1] if len(graphs) == 1 else Graph()
+    if len(graphs) > 1:
+        for _, graph in graphs:
+            union += graph
+    inert = inert_renames(config.rename, union, [graph for _, graph in data_graphs])
+    if planned.data and not planned.ontology and not dry_run:
+        click.echo(
+            "Note: no -o, so the renamed ontology is not written; only the migrated data is.",
+            err=True,
+        )
+
     # Execute rename
     formatter = RefactorTextFormatter(use_colour=not no_colour)
     renamer = OntologyRenamer()
 
-    for source_path, graph in graphs:
-        click.echo(f"\nProcessing: {source_path}")
-
-        # Build mappings for preview
-        mappings = config.rename.build_mappings(graph)
-
-        if dry_run:
-            # Show preview
+    if dry_run:
+        for source_path, graph in graphs:
+            click.echo(f"\nProcessing: {source_path}")
             click.echo()
             click.echo(
                 formatter.format_rename_preview(
-                    mappings=mappings,
+                    mappings=config.rename.build_mappings(graph),
                     source_file=source_path.name,
                     source_triples=len(graph),
                 )
             )
-        else:
-            # Perform rename
-            result = renamer.rename(graph, config.rename)
+        _report_rename_collisions(collisions, merging=config.rename.merge_entities, dry_run=True)
+        if not config.rename.merge_entities:
+            _refuse_rename_collisions(collisions)
+        _report_inert_renames(inert)
+        raise SystemExit(1 if inert else 0)
 
-            if not result.success:
-                click.secho(f"\u2717 Rename failed: {result.error}", fg="red", err=True)
-                raise SystemExit(2)
+    # Rename every source before writing any of them, so a failure leaves nothing behind.
+    results = []
+    for source_path, graph in graphs:
+        result = renamer.rename(graph, config.rename)
+        if not result.success:
+            raise Refusal(f"Rename failed for {source_path}: {result.error}")
+        results.append(result)
 
-            # Show result
-            click.echo(formatter.format_rename_result(result))
+    for (source_path, _), result in zip(graphs, results, strict=True):
+        click.echo(f"\nProcessing: {source_path}")
+        click.echo(formatter.format_rename_result(result))
 
-            # Write output
-            if result.renamed_graph:
-                out_path = config.output or (
-                    config.output_dir / source_path.name if config.output_dir else None
-                )
-                if out_path:
-                    out_path.parent.mkdir(parents=True, exist_ok=True)
-                    result.renamed_graph.serialize(destination=out_path.as_posix(), format="turtle")
-                    click.secho(f"\u2713 Wrote {out_path}", fg="green")
+        out_path = planned.ontology.get(source_path)
+        if result.renamed_graph and out_path:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            result.renamed_graph.serialize(destination=out_path.as_posix(), format="turtle")
+            click.secho(f"\u2713 Wrote {out_path}", fg="green")
+            if out_path in replaced:
+                click.secho(f"\u26a0 Replaced {replaced[out_path]}", fg="yellow", err=True)
 
     # Handle data migration
-    if migrate_data and not dry_run:
+    if migrate_data:
         click.echo("\nMigrating data...")
-
-        # Build URI map from rename config
-        combined_graph = Graph()
-        for source_path in config.source_files:
-            combined_graph.parse(source_path.as_posix())
-
-        uri_map = {}
-        for mapping in config.rename.build_mappings(combined_graph):
-            uri_map[mapping.from_uri] = mapping.to_uri
 
         if uri_map:
             migrator = DataMigrator()
-            for data_path in migrate_data:
-                data_graph = Graph()
-                try:
-                    data_graph.parse(data_path.as_posix())
-                except Exception as e:
-                    click.secho(
-                        f"\u2717 Failed to parse data file {data_path}: {e}", fg="red", err=True
-                    )
-                    continue
-
-                migration_result = migrator.migrate(data_graph, uri_map=uri_map)
+            for data_path, data_graph in data_graphs:
+                # The data's prefixes move with a renamed namespace, as the ontology's do (#358)
+                migration_result = migrator.migrate(
+                    data_graph, uri_map=uri_map, namespace_rules=config.rename.namespaces
+                )
 
                 if migration_result.success and migration_result.migrated_graph:
-                    # Determine output path
-                    if data_output and len(migrate_data) == 1:
-                        out_path = data_output
-                    elif data_output:
-                        out_path = data_output / data_path.name
-                    else:
-                        out_path = data_path.parent / f"migrated_{data_path.name}"
-
+                    out_path = planned.data[data_path]
                     out_path.parent.mkdir(parents=True, exist_ok=True)
+                    fill_table_gaps(migration_result.migrated_graph)
                     migration_result.migrated_graph.serialize(
                         destination=out_path.as_posix(), format="turtle"
                     )
@@ -3710,8 +5147,26 @@ def refactor_rename(
                         f"  Migrated {data_path.name}: {migration_result.stats.total_changes} changes"
                     )
                     click.secho(f"  \u2713 Wrote {out_path}", fg="green")
+                    if out_path in replaced:
+                        click.secho(
+                            f"  \u26a0 Replaced {replaced[out_path]}", fg="yellow", err=True
+                        )
 
-    raise SystemExit(0)
+    _report_rename_collisions(collisions, merging=config.rename.merge_entities, dry_run=False)
+    _report_inert_renames(inert)
+    raise SystemExit(1 if inert else 0)
+
+
+def _report_missing_entities(missing: list[str]) -> None:
+    """Name each entity that no source describes, so none deprecated it (#186)."""
+    if not missing:
+        return
+    count = "1 entity is" if len(missing) == 1 else f"{len(missing)} entities are"
+    click.secho(
+        f"\n\u26a0 {count} a subject in no source, so not deprecated:", fg="yellow", err=True
+    )
+    for iri in missing:
+        click.secho(f"  <{iri}>", fg="yellow", err=True)
 
 
 @refactor.command("deprecate")
@@ -3720,7 +5175,7 @@ def refactor_rename(
     "-o",
     "--output",
     type=click.Path(path_type=Path),
-    help="Output file.",
+    help="Output file (for single source) or directory (for multiple sources).",
 )
 @click.option(
     "--entity",
@@ -3747,6 +5202,11 @@ def refactor_rename(
     help="YAML configuration file with deprecation specs.",
 )
 @click.option(
+    "--in-place",
+    is_flag=True,
+    help="Allow -o to name a source, and rewrite it with its own deprecations.",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Preview changes without writing files.",
@@ -3771,6 +5231,7 @@ def refactor_deprecate(
     message: str | None,
     version: str | None,
     config_file: Path | None,
+    in_place: bool,
     dry_run: bool,
     no_colour: bool,
     init_config: bool,
@@ -3788,11 +5249,18 @@ def refactor_deprecate(
     \b
     SOURCES: One or more RDF files to process (.ttl, .rdf, .owl)
 
+    Without -o, each result is written beside its source as <stem>_deprecated.ttl.
+    With several sources, -o names a directory and each result keeps its source's
+    file name. An output that would replace a source is refused unless --in-place is
+    given and it is that source's own result. -c cannot be combined with --entity,
+    --replaced-by, --message or --version: put the deprecation in the config.
+
     \b
     Exit codes:
       0 - Success
-      1 - Success with warnings (some entities not found)
-      2 - Input refused or run failed (invalid options or config, parse error, etc.)
+      1 - Finished, but an entity is a subject in no source, so it was not deprecated
+      2 - Input refused or run failed (invalid options or config, parse error,
+          an output that would replace an input, etc.)
 
     \b
     Examples:
@@ -3841,19 +5309,23 @@ def refactor_deprecate(
             "Provide source files or use --config with a configuration file."
         )
 
+    # A deprecation on the command line and the config's cannot both run (#352)
+    if config_file:
+        _refuse_config_with_operation(
+            "deprecations:",
+            {
+                "entity": "--entity",
+                "replaced_by": "--replaced-by",
+                "message": "--message",
+                "version": "--version",
+            },
+        )
+
     # Build configuration
     if config_file:
         try:
             config = load_refactor_config(config_file)
             click.echo(f"Using config: {config_file}")
-
-            # Override output if provided on CLI
-            if output:
-                config.output = output
-
-            # Override sources if provided on CLI
-            if sources:
-                config.source_files = list(sources)
         except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
             raise Refusal(f"Could not load config {config_file}: {e}") from e
     else:
@@ -3868,16 +5340,17 @@ def refactor_deprecate(
             version=version,
         )
 
-        config = RefactorConfig(
-            deprecations=[spec],
-            source_files=list(sources),
-            output=output,
-            dry_run=dry_run,
-        )
+        config = RefactorConfig(deprecations=[spec], dry_run=dry_run)
+    # The sources first, then -o read against them: a file for one, a directory for several
+    # (#186), as rename does
+    _apply_refactor_cli(config, sources, output)
 
     # Validate we have something to deprecate
     if not config.deprecations:
         raise Refusal("No deprecations specified. Use --entity or provide a config file.")
+
+    # One output file cannot hold the results of several sources (#186)
+    _refuse_one_output_for_many(config)
 
     # Load every source before writing anything, so that a CURIE is resolved once, against
     # the prefixes the files declare, and refused before any output exists (#182).
@@ -3888,14 +5361,34 @@ def refactor_deprecate(
     except (CurieError, AmbiguousCurieError) as e:
         raise Refusal(str(e)) from e
 
+    # Work out every output, and refuse a plan that writes one file twice or over an input,
+    # before anything is written (#186). A dry run is checked the same way.
+    planned = _plan_deprecate_outputs(config, graphs)
+    replaced = _check_refactor_outputs(
+        planned, config, (), None, config_file, in_place, _output_label(config, output)
+    )
+    if in_place and not config.output and not config.output_dir and not dry_run:
+        click.echo(
+            "Note: --in-place lets -o replace its own source; without -o each result is "
+            "written beside its source as <stem>_deprecated.",
+            err=True,
+        )
+
+    # An entity is found if any source describes it: a module set declares each term in one
+    # file and only refers to it from the others (#186)
+    missing = [
+        spec.entity
+        for spec in config.deprecations
+        if not any((URIRef(spec.entity), None, None) in graph for _, graph in graphs)
+    ]
+
     # Execute deprecation
     formatter = RefactorTextFormatter(use_colour=not no_colour)
     deprecator = OntologyDeprecator()
 
-    for source_path, graph in graphs:
-        click.echo(f"\nProcessing: {source_path}")
-
-        if dry_run:
+    if dry_run:
+        for source_path, graph in graphs:
+            click.echo(f"\nProcessing: {source_path}")
             # Perform dry run to get entity info
             temp_graph = Graph(bind_namespaces="core")
             for triple in graph:
@@ -3913,33 +5406,31 @@ def refactor_deprecate(
                     source_triples=len(graph),
                 )
             )
-        else:
-            # Perform deprecation
-            result = deprecator.deprecate_bulk(graph, config.deprecations)
+        _report_missing_entities(missing)
+        raise SystemExit(1 if missing else 0)
 
-            if not result.success:
-                click.secho(f"\u2717 Deprecation failed: {result.error}", fg="red", err=True)
-                raise SystemExit(2)
+    # Deprecate every source before writing any of them, so a failure leaves nothing behind.
+    results = []
+    for source_path, graph in graphs:
+        result = deprecator.deprecate_bulk(graph, config.deprecations)
+        if not result.success:
+            raise Refusal(f"Deprecation failed for {source_path}: {result.error}")
+        results.append(result)
 
-            # Show result
-            click.echo(formatter.format_deprecation_result(result))
+    for (source_path, _), result in zip(graphs, results, strict=True):
+        click.echo(f"\nProcessing: {source_path}")
+        click.echo(formatter.format_deprecation_result(result))
 
-            # Write output
-            if result.deprecated_graph:
-                out_path = config.output or source_path.with_stem(f"{source_path.stem}_deprecated")
-                out_path.parent.mkdir(parents=True, exist_ok=True)
-                result.deprecated_graph.serialize(destination=out_path.as_posix(), format="turtle")
-                click.secho(f"\u2713 Wrote {out_path}", fg="green")
+        out_path = planned.ontology[source_path]
+        if result.deprecated_graph:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            result.deprecated_graph.serialize(destination=out_path.as_posix(), format="turtle")
+            click.secho(f"\u2713 Wrote {out_path}", fg="green")
+            if out_path in replaced:
+                click.secho(f"\u26a0 Replaced {replaced[out_path]}", fg="yellow", err=True)
 
-            # Warn about entities not found
-            if result.stats.entities_not_found > 0:
-                click.secho(
-                    f"\n\u26a0 {result.stats.entities_not_found} entity/entities not found in graph",
-                    fg="yellow",
-                )
-                raise SystemExit(1)
-
-    raise SystemExit(0)
+    _report_missing_entities(missing)
+    raise SystemExit(1 if missing else 0)
 
 
 @cli.group()
@@ -3991,6 +5482,119 @@ def _localise_tags(target_language: str, source_language: str) -> tuple[str, str
     return target, source
 
 
+def _localise_properties(properties: str, graph: Graph) -> list[str]:
+    """Resolve ``--properties`` against the ontology's own prefixes, or refuse them (#355).
+
+    The graph is parsed with ``bind_namespaces="core"``, so a CURIE means the source's prefix,
+    or rdf, rdfs, owl, xsd and xml, never rdflib's extended table. Nothing has been written when
+    this refuses.
+    """
+    from rdf_construct.core.utils import CurieError
+    from rdf_construct.localise.properties import resolve_properties, source_prefixes
+
+    try:
+        resolved: list[str] = [
+            *resolve_properties(source_prefixes(graph), [p.strip() for p in properties.split(",")])
+        ]
+    except CurieError as e:
+        raise Refusal(f"--properties: {e}") from e
+    return resolved
+
+
+def _localise_output(output: Path | None, target_language: str) -> Path:
+    """Return the translation file to write: ``-o``, or ``<tag>.yml`` in canonical case.
+
+    The default is named in canonical case so that ``-l DE`` and ``-l de`` name one file on
+    every filesystem, not only on a case-insensitive one (#404).
+    """
+    from rdf_construct.core.language_tags import canonical_case
+
+    return output or Path(f"{canonical_case(target_language)}.yml")
+
+
+def _check_translation_destination(path: Path, overwrite: bool) -> str | None:
+    """Refuse to replace a translation file that holds a translator's work (#404).
+
+    Principle 4e: a command never overwrites a file it did not write in silence. A destination
+    that does not exist, is empty (zero bytes), or is a translation file with no finished entry,
+    is written as before, since nothing in it can be lost. A translation file with a finished entry, and a dangling link, are refused unless
+    ``--overwrite`` was given. A file that cannot be read as a translation file (an ontology,
+    broken YAML) is refused even with ``--overwrite``, since ``-o ontology.ttl --overwrite`` is
+    an easy slip that would destroy the ontology. A directory is always refused, since no file
+    can be written there.
+
+    The destination is asked of the filesystem, never compared by name, so on a
+    case-insensitive filesystem ``DE.yml`` finds ``de.yml``. Call it before anything is parsed.
+
+    Args:
+        path: The translation file the command will write.
+        overwrite: Whether ``--overwrite`` was given.
+
+    Returns:
+        When ``--overwrite`` replaces something worth a word, what it replaced, for a warning
+        after the write; otherwise ``None``.
+
+    Raises:
+        Refusal: The destination is a directory, is not a translation file, or holds
+            something that may not be replaced without ``--overwrite``.
+    """
+    import yaml
+
+    from rdf_construct.core.language_tags import LanguageTagError
+    from rdf_construct.localise.config import TranslationFileError
+
+    if path.is_dir():
+        raise Refusal(f"{path} is a directory; give -o a file name, such as {path}/de.yml")
+    ways_on = (
+        "Leaving it untouched. Pass -o <file> to write somewhere else, "
+        "or --overwrite to replace it."
+    )
+    if not path.exists():
+        if path.is_symlink():
+            if overwrite:
+                return None
+            raise Refusal(f"{path} is a link to a file that does not exist. {ways_on}")
+        return None
+    if path.stat().st_size == 0:
+        return None
+
+    reason: str | None = None
+    finished: dict[str, int] = {}
+    try:
+        finished = TranslationFile.from_yaml(path).finished_entries()
+    except TranslationFileError as e:
+        reason = e.problems[0] + (
+            f" (and {len(e.problems) - 1} more)" if len(e.problems) > 1 else ""
+        )
+    except LanguageTagError as e:
+        reason = str(e)
+    except yaml.YAMLError:
+        reason = "it is not valid YAML"
+    except UnicodeDecodeError:
+        reason = "it is not UTF-8 text"
+    except OSError as e:
+        reason = e.strerror or type(e).__name__
+
+    if reason is not None:
+        raise Refusal(
+            f"{path} exists and is not a translation file: {reason}. Leaving it untouched; "
+            "--overwrite replaces only a translation file. Pass -o <file> to write somewhere "
+            "else, or remove it first."
+        )
+    if not finished:
+        return None
+
+    total = sum(finished.values())
+    plural, them = ("translation", "it") if total == 1 else ("translations", "them")
+    if overwrite:
+        return f"{path}: {total} finished {plural} discarded"
+    breakdown = ", ".join(f"{status} {n}" for status, n in finished.items())
+    raise Refusal(
+        f"{path} already holds {total} finished {plural} ({breakdown}); writing would "
+        f"replace {them} with empty pending entries. {ways_on}"
+    )
+
+
 def _echo_localise_warnings(warnings: list[str]) -> None:
     """Print a localise run's warnings to stderr."""
     for warning in warnings:
@@ -4010,7 +5614,7 @@ def _echo_localise_warnings(warnings: list[str]) -> None:
     "--output",
     "-o",
     type=click.Path(path_type=Path),
-    help="Output YAML file (default: {language}.yml)",
+    help="Output YAML file (default: {language}.yml, the tag in canonical case)",
 )
 @click.option(
     "--source-language",
@@ -4030,7 +5634,11 @@ def _echo_localise_warnings(warnings: list[str]) -> None:
 @click.option(
     "--missing-only",
     is_flag=True,
-    help="Only extract strings missing in target language",
+    help=(
+        "Only extract strings missing in target language. A property that takes several values "
+        "(skos:altLabel, rdfs:comment) with two or more source values is offered whole, with the "
+        "target's existing values in each entry's notes"
+    ),
 )
 @click.option(
     "--config",
@@ -4038,6 +5646,11 @@ def _echo_localise_warnings(warnings: list[str]) -> None:
     "config_file",
     type=click.Path(exists=True, path_type=Path),
     help="YAML configuration file",
+)
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    help="Replace an existing translation file, even one holding finished translations",
 )
 def localise_extract(
     source: Path,
@@ -4048,6 +5661,7 @@ def localise_extract(
     include_deprecated: bool,
     missing_only: bool,
     config_file: Path | None,
+    overwrite: bool,
 ):
     """Extract translatable strings from an ontology.
 
@@ -4075,32 +5689,27 @@ def localise_extract(
     # Load config if provided
     if config_file:
         from rdf_construct.localise import load_localise_config
+        from rdf_construct.localise.config import LocaliseConfigError
 
-        config = load_localise_config(config_file)
+        try:
+            config = load_localise_config(config_file)
+        except LocaliseConfigError as e:
+            raise Refusal(f"{config_file}: {e}") from e
         extract_config = config.extract
         extract_config.target_language = target_language
 
         # Apply CLI overrides
         if flag_given("source_language"):
             extract_config.source_language = source_language
-        if properties:
-            extract_config.properties = [
-                _expand_localise_property(p.strip()) for p in properties.split(",")
-            ]
         if flag_given("include_deprecated"):
             extract_config.include_deprecated = include_deprecated
         if flag_given("missing_only"):
             extract_config.missing_only = missing_only
     else:
         # Build config from CLI args
-        prop_list = None
-        if properties:
-            prop_list = [_expand_localise_property(p.strip()) for p in properties.split(",")]
-
         extract_config = ExtractConfig(
             source_language=source_language,
             target_language=target_language,
-            properties=prop_list or ExtractConfig().properties,
             include_deprecated=include_deprecated,
             missing_only=missing_only,
         )
@@ -4111,10 +5720,16 @@ def localise_extract(
         target_language, extract_config.source_language
     )
 
-    # Load graph
+    # Refuse to replace a translator's work before reading anything (#404)
+    output_path = _localise_output(output, target_language)
+    replaced = _check_translation_destination(output_path, overwrite)
+
+    # Load graph: --properties are read against its own prefixes (#355)
     click.echo(f"Loading {source}...")
-    graph = Graph()
+    graph = Graph(bind_namespaces="core")
     graph.parse(source)
+    if properties:
+        extract_config.properties = _localise_properties(properties, graph)
 
     # Extract
     click.echo(f"Extracting strings for {target_language}...")
@@ -4129,11 +5744,12 @@ def localise_extract(
         raise SystemExit(2)
 
     # Save output
-    output_path = output or Path(f"{target_language}.yml")
     if result.translation_file:
         result.translation_file.save(output_path)
         click.echo()
         click.secho(f"\u2713 Wrote {output_path}", fg="green")
+        if replaced:
+            click.secho(f"\u26a0 Replaced {replaced}", fg="yellow", err=True)
 
     # Finished, but the source language may have matched nothing (#286: 1)
     _echo_localise_warnings(result.warnings)
@@ -4162,7 +5778,12 @@ def localise_extract(
     "--existing",
     type=click.Choice(["preserve", "overwrite"], case_sensitive=False),
     default="preserve",
-    help="How to handle existing translations (default: preserve)",
+    help=(
+        "How to handle existing translations (default: preserve). Under overwrite, a property "
+        "that takes several values is replaced as a set; one that already has values is left "
+        "unchanged, at exit 1, unless the file's entries for it are all finished and match the "
+        "ontology's source values"
+    ),
 )
 @click.option(
     "--dry-run",
@@ -4209,21 +5830,26 @@ def localise_merge(
         get_formatter as get_localise_formatter,
     )
 
+    # -o equal to SOURCE is #162's question, so only the translation files are checked
+    check_outputs([("-o", output)], translations)
+
     # Load graph
     click.echo(f"Loading {source}...")
-    graph = Graph()
+    graph = Graph(bind_namespaces="core")
     graph.parse(source)
 
     # Load translation files
     click.echo(f"Loading {len(translations)} translation file(s)...")
     from rdf_construct.core.language_tags import LanguageTagError
+    from rdf_construct.localise.config import TranslationFileError
 
     trans_files = []
     for path in translations:
         try:
             trans_files.append(TranslationFile.from_yaml(path))
-        except LanguageTagError as e:
-            # Nothing is written: a file without a usable target tag would merge untagged (#159)
+        except (LanguageTagError, TranslationFileError) as e:
+            # Nothing is written: a file without a usable target tag would merge untagged (#159),
+            # and a value read as the wrong type would merge text nobody typed (#408)
             raise Refusal(f"{path}: {e}") from e
 
     # Build config
@@ -4251,8 +5877,8 @@ def localise_merge(
         click.echo()
         click.secho(f"\u2713 Wrote {output}", fg="green")
 
-    # Exit code based on warnings
-    if result.stats.errors > 0:
+    # Exit code based on warnings: a group left unchanged is a finding too (#405)
+    if result.stats.errors > 0 or result.stats.skipped_group > 0:
         raise SystemExit(1)
     else:
         raise SystemExit(0)
@@ -4351,15 +5977,14 @@ def localise_report(
     except LanguageTagError as e:
         raise Refusal(str(e)) from e
 
-    # Parse properties
-    prop_list = None
-    if properties:
-        prop_list = [_expand_localise_property(p.strip()) for p in properties.split(",")]
+    if output:
+        check_outputs([("-o", output)], [source])
 
-    # Load graph
+    # Load graph: --properties are read against its own prefixes (#355)
     click.echo(f"Loading {source}...")
-    graph = Graph()
+    graph = Graph(bind_namespaces="core")
     graph.parse(source)
+    prop_list = _localise_properties(properties, graph) if properties else None
 
     # Generate report
     click.echo("Analysing translation coverage...")
@@ -4401,18 +6026,24 @@ def localise_report(
     "--output",
     "-o",
     type=click.Path(path_type=Path),
-    help="Output YAML file (default: {language}.yml)",
+    help="Output YAML file (default: {language}.yml, the tag in canonical case)",
 )
 @click.option(
     "--source-language",
     default="en",
     help="Source language tag (default: en). A tag, not a range: en does not match en-GB",
 )
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    help="Replace an existing translation file, even one holding finished translations",
+)
 def localise_init(
     source: Path,
     target_language: str,
     output: Path | None,
     source_language: str,
+    overwrite: bool,
 ):
     """Create empty translation file for a new language.
 
@@ -4432,6 +6063,10 @@ def localise_init(
     # Refuse a malformed tag before reading anything (#159)
     target_language, source_language = _localise_tags(target_language, source_language)
 
+    # Refuse to replace a translator's work before reading anything (#404)
+    output_path = _localise_output(output, target_language)
+    replaced = _check_translation_destination(output_path, overwrite)
+
     # Build config
     extract_config = ExtractConfig(
         source_language=source_language,
@@ -4440,7 +6075,7 @@ def localise_init(
 
     # Load graph
     click.echo(f"Loading {source}...")
-    graph = Graph()
+    graph = Graph(bind_namespaces="core")
     graph.parse(source)
 
     # Extract
@@ -4456,11 +6091,12 @@ def localise_init(
         raise SystemExit(2)
 
     # Save output
-    output_path = output or Path(f"{target_language}.yml")
     if result.translation_file:
         result.translation_file.save(output_path)
         click.echo()
         click.secho(f"\u2713 Created {output_path}", fg="green")
+        if replaced:
+            click.secho(f"\u26a0 Replaced {replaced}", fg="yellow", err=True)
         click.echo(f"  Fill in translations and run:")
         click.echo(f"    rdf-construct localise merge {source} {output_path} -o localised.ttl")
 
@@ -4497,24 +6133,6 @@ def localise_config(init_config: bool):
         click.echo("Use --init to create a default configuration file.")
 
     raise SystemExit(0)
-
-
-def _expand_localise_property(prop: str) -> str:
-    """Expand a CURIE to full URI for localise commands."""
-    prefixes = {
-        "rdfs:": "http://www.w3.org/2000/01/rdf-schema#",
-        "skos:": "http://www.w3.org/2004/02/skos/core#",
-        "owl:": "http://www.w3.org/2002/07/owl#",
-        "rdf:": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-        "dc:": "http://purl.org/dc/elements/1.1/",
-        "dcterms:": "http://purl.org/dc/terms/",
-    }
-
-    for prefix, namespace in prefixes.items():
-        if prop.startswith(prefix):
-            return namespace + prop[len(prefix) :]
-
-    return prop
 
 
 if __name__ == "__main__":

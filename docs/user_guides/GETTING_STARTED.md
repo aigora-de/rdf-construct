@@ -161,6 +161,9 @@ Unlike text diff, this ignores reordering, prefix changes, and whitespace.
 # Basic merge
 rdf-construct merge core.ttl extension.ttl -o merged.ttl
 
+# Name the merged ontology (without a name, its one header is left out)
+rdf-construct merge core.ttl extension.ttl -o merged.ttl --ontology-iri http://example.org/merged
+
 # With conflict resolution priorities
 rdf-construct merge core.ttl extension.ttl -o merged.ttl -p 1 -p 2
 ```

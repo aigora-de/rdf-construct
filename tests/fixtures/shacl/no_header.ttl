@@ -1,0 +1,11 @@
+# No owl:Ontology (#484). The first @prefix holds no class, and most classes are in m:,
+# so the shape namespace is http://example.org/m-shapes# whatever the prefix order.
+@prefix z: <http://example.org/z#> .
+@prefix a: <http://example.org/a#> .
+@prefix m: <http://example.org/m#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+z:thing a owl:Thing .
+a:Lone a owl:Class .
+m:Cat a owl:Class .
+m:Dog a owl:Class .

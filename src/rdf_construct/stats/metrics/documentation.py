@@ -5,8 +5,10 @@ Analyses documentation coverage: labels, comments, definitions.
 
 from dataclasses import dataclass
 
-from rdflib import Graph, RDF, RDFS, Namespace
-from rdflib.namespace import OWL, DCTERMS
+from rdflib import Graph, RDFS, Namespace
+from rdflib.namespace import DCTERMS
+
+from rdf_construct.stats.metrics.basic import get_all_classes, get_all_properties
 
 
 # Common documentation namespaces
@@ -49,23 +51,13 @@ DOC_PREDICATES = (
 
 
 def _get_all_classes(graph: Graph) -> set:
-    """Get all classes from the graph."""
-    classes = set(graph.subjects(RDF.type, OWL.Class))
-    classes |= set(graph.subjects(RDF.type, RDFS.Class))
-    return classes
+    """Get all classes from the graph: the ontology's own, of any `CLASS_TYPES` type (#138)."""
+    return get_all_classes(graph)
 
 
 def _get_all_properties(graph: Graph) -> set:
-    """Get all properties from the graph."""
-    props = set()
-    for prop_type in (
-        OWL.ObjectProperty,
-        OWL.DatatypeProperty,
-        OWL.AnnotationProperty,
-        RDF.Property,
-    ):
-        props |= set(graph.subjects(RDF.type, prop_type))
-    return props
+    """Get all properties from the graph: the ontology's own, of all four kinds (#138, #371)."""
+    return get_all_properties(graph)
 
 
 def _has_any_predicate(graph: Graph, subject: object, predicates: tuple) -> bool:

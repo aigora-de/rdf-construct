@@ -72,6 +72,8 @@ class TextFormatter:
                 lines.append(f"  Skipped (status): {stats.skipped_status}")
             if stats.skipped_existing > 0:
                 lines.append(f"  Skipped (exists): {stats.skipped_existing}")
+            if stats.skipped_group > 0:
+                lines.append(self._warning(f"  Skipped (group): {stats.skipped_group}"))
             if stats.errors > 0:
                 lines.append(self._warning(f"  Errors:          {stats.errors}"))
 
@@ -132,15 +134,15 @@ class TextFormatter:
                 )
 
             # Overall coverage, over every entity and property pair
-            row.append(format_fraction(coverage.translated, coverage.total_strings))
+            row.append(format_fraction(coverage.translated, coverage.total_pairs))
             rows.append(row)
 
             # Status indicator
-            if coverage.total_strings == 0:
+            if coverage.total_pairs == 0:
                 statuses.append("— Nothing to measure")
-            elif coverage.translated == coverage.total_strings:
+            elif coverage.translated == coverage.total_pairs:
                 statuses.append(self._success("✓ Complete"))
-            elif percent(coverage.translated, coverage.total_strings) >= 75:
+            elif percent(coverage.translated, coverage.total_pairs) >= 75:
                 statuses.append(self._warning(f"⚠ {coverage.pending} pending"))
             elif coverage.translated > 0:
                 statuses.append(f"✗ {coverage.pending} pending")

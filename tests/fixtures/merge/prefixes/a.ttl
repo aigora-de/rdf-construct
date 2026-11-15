@@ -1,0 +1,8 @@
+@prefix : <http://a.example/ont#> .
+@prefix ex: <http://a.example/ex#> .
+@prefix org: <http://example.org/organisation#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+:A a owl:Class .
+ex:X a owl:Class .
+org:Team a owl:Class .

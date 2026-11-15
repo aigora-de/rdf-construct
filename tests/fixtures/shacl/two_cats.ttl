@@ -1,0 +1,9 @@
+# Two classes with one local name in different namespaces: a bare `Cat` is ambiguous.
+@prefix a: <http://example.org/a#> .
+@prefix b: <http://example.org/b#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://example.org/zoo> a owl:Ontology .
+a:Cat a owl:Class .
+b:Cat a owl:Class .

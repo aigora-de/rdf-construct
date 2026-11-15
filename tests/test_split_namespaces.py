@@ -16,13 +16,12 @@ from click.testing import CliRunner
 from rdflib import Graph, URIRef
 
 from rdf_construct.cli import cli
-from rdf_construct.core.utils import in_namespace
+from rdf_construct.core.utils import claiming_namespace, in_namespace
 from rdf_construct.core.verify import body
 from rdf_construct.merge.splitter import (
     ModuleDefinition,
     OntologySplitter,
     SplitConfig,
-    _claiming_namespace,
     _fallback_name,
     select_classes,
     select_properties,
@@ -134,13 +133,20 @@ def test_empty_file_writes_no_module(tmp_path: Path) -> None:
         ("http://e.org/ontology#Two", {"http://e.org/ont"}, None),
         ("urn:old:A", {"urn:old:", "urn:"}, "urn:old:"),
         ("urn:older:C", {"urn:old:"}, None),
+        (
+            "http://purl.obolibrary.org/obo/GO_0008150",
+            {"http://purl.obolibrary.org/obo/", "http://purl.obolibrary.org/obo/GO_"},
+            "http://purl.obolibrary.org/obo/GO_",
+        ),
+        ("http://example.org:8080/a#X", {"http://example.org"}, None),
+        ("http://[::1]/a#X", {"http://[::1]", "http://["}, "http://[::1]"),
     ],
 )
 def test_claiming_namespace_is_the_longest_in_namespace_match(
     iri: str, namespaces: set[str], expected: str | None
 ) -> None:
     containing = [ns for ns in namespaces if in_namespace(iri, ns)]
-    assert _claiming_namespace(iri, namespaces) == expected
+    assert claiming_namespace(iri, namespaces) == expected
     assert expected == (max(containing, key=len) if containing else None)
 
 

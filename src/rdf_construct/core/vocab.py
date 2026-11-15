@@ -12,8 +12,8 @@ These sets are the single place that knowledge lives, so a consumer does not
 have to reproduce (and inevitably shorten) the list.
 """
 
-from rdflib import RDF, RDFS
-from rdflib.namespace import OWL
+from rdflib import RDF, RDFS, Graph, Literal
+from rdflib.namespace import OWL, XSD
 from rdflib.term import URIRef
 
 #: Types whose subjects are classes.
@@ -65,3 +65,33 @@ KIND_SPECIFIC_PROPERTY_TYPES: frozenset[URIRef] = (
 
 #: Every type that declares its subject to be a property.
 ALL_PROPERTY_TYPES: frozenset[URIRef] = KIND_SPECIFIC_PROPERTY_TYPES | GENERIC_PROPERTY_TYPES
+
+#: Types whose subjects are deprecated. OWL also says it with the ``owl:deprecated``
+#: annotation; `is_deprecated` reads both.
+DEPRECATED_TYPES: frozenset[URIRef] = frozenset({OWL.DeprecatedClass, OWL.DeprecatedProperty})
+
+
+def is_deprecated(graph: Graph, term: URIRef) -> bool:
+    """Whether ``graph`` marks ``term`` deprecated, by either of OWL's mechanisms.
+
+    A type in `DEPRECATED_TYPES`, or ``owl:deprecated`` true. The annotation is read by
+    value: ``true`` or ``1``, ``xsd:boolean``'s lexical forms for true, as a typed boolean or
+    a plain string. ``owl:deprecated false`` means the opposite, and ``"TRUE"`` is not a
+    boolean's lexical form.
+
+    Args:
+        graph: The graph to read.
+        term: The term to ask about.
+
+    Returns:
+        True if ``graph`` marks ``term`` deprecated.
+    """
+    for value in graph.objects(term, OWL.deprecated):
+        if (
+            isinstance(value, Literal)
+            and value.datatype in (None, XSD.boolean, XSD.string)
+            and value.language is None
+            and str(value) in ("true", "1")
+        ):
+            return True
+    return any((term, RDF.type, t) in graph for t in DEPRECATED_TYPES)

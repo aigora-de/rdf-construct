@@ -1,0 +1,5 @@
+# #408's first reproducer, verbatim: properties: as one value, not a list.
+# On v0.6.0 the string was read character by character and extracted nothing, at exit 0.
+properties: rdfs:label
+extract:
+  properties: rdfs:label

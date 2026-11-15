@@ -13,13 +13,22 @@ The parser uses a multi-pass approach:
 
 import re
 from bisect import bisect_right
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from rdflib import Graph
+from rdflib import RDF, RDFS, Graph, URIRef
+from rdflib.namespace import OWL
 
+from rdf_construct.core.vocab import (
+    ALL_PROPERTY_TYPES,
+    ANNOTATION_PROPERTY_TYPES,
+    DATATYPE_PROPERTY_TYPES,
+    OBJECT_PROPERTY_TYPES,
+)
 from rdf_construct.puml2rdf.model import (
+    NamespaceMapping,
     PumlAttribute,
     PumlClass,
     PumlModel,
@@ -28,6 +37,7 @@ from rdf_construct.puml2rdf.model import (
     PumlRelationship,
     RelationshipType,
 )
+from rdf_construct.uml.odm_renderer import ODM_INDIVIDUAL_STEREOTYPE, ODM_PROPERTY_STEREOTYPES
 
 # A URI starts with a scheme, so `urn:` counts as well as `http:` (#150).
 URI_SCHEME_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
@@ -47,10 +57,21 @@ CORE_PREFIXES: dict[str, str] = {
 STARTUML_PATTERN = re.compile(r"^[ \t]*@startuml\b", re.MULTILINE)
 ENDUML_PATTERN = re.compile(r"^[ \t]*@enduml\b", re.MULTILINE)
 
-# Lines no pass reads that are known to carry nothing for the ontology: comments, layout and
-# presentation (#151). A line no pass reads and nothing here matches is reported.
+# Comments, by PlantUML's own rule (measured with PlantUML 1.2026.9; #394, #475). A line whose
+# first non-blank character is `'` is a comment, in a class or note body too. `/'` opens a block
+# only at a line start; the block ends at a `'/` on that same line, the rest of which is read, or
+# else on the first later line that ends with `'/`. A `/' … '/` that ends a line is a trailing
+# comment. Every pass, check and the unread-line report read the text with these blanked.
+LINE_COMMENT_PATTERN = re.compile(r"^\s*'")
+BLOCK_COMMENT_OPEN_PATTERN = re.compile(r"^\s*/'")
+BLOCK_COMMENT_CLOSE_PATTERN = re.compile(r"'/\s*$")
+# From the last `/'` on the line, so a quoted name holding `/'` before the comment is kept
+TRAILING_COMMENT_PATTERN = re.compile(r"/'(?:(?!/').)*'/\s*$")
+
+# Lines no pass reads that are known to carry nothing for the ontology: layout and presentation
+# (#151). Comments are blanked before any pass reads the text, so they are not listed here. A
+# line no pass reads and nothing here matches is reported.
 IGNORABLE_LINE_PATTERNS = [
-    re.compile(r"^\s*'"),  # ' comment
     re.compile(r"^\s*\}\s*$"),  # a package's or group's closing brace
     re.compile(r"^\s*(?:hide|show)\b"),
     re.compile(r"^\s*(?:left\s+to\s+right|top\s+to\s+bottom)\s+direction\s*$"),
@@ -63,7 +84,6 @@ IGNORABLE_LINE_PATTERNS = [
 # Ignorable blocks: (opening line, closing line). Every line from one to the other is skipped,
 # so a block-form `skinparam` is not read as `skinparam class {`, nor a legend's text as a line.
 IGNORABLE_BLOCK_PATTERNS = [
-    (re.compile(r"^\s*/'"), re.compile(r"'/")),
     (re.compile(r"^\s*skinparam\s+\w+\s*\{\s*$"), re.compile(r"^\s*\}\s*$")),
     (
         re.compile(r"^\s*legend(?:\s+(?:top|bottom|left|right|center))*\s*$"),
@@ -89,6 +109,71 @@ CLASS_CLAUSE_PATTERN = re.compile(
 BARE_ABSTRACT_PATTERN = re.compile(r'^\s*abstract\s+(?!class\b)("[^"]+"|[\w.]+)')
 REALISATION_PATTERN = re.compile(r"\.\.\|>|<\|\.\.")
 DEPENDENCY_PATTERN = re.compile(r"\.\.>|<\.\.")
+
+# A class box `uml` draws for a property or an individual is not converted (#395). The default
+# rendering marks it with a spot, `(O, #FFFFFF)`, inside or outside `<< >>`; ODM with the first
+# stereotype name, `<<objectProperty, functionalProperty>>`; either may be a prefixed type name.
+BOX_SPOT_PATTERN = re.compile(r"\(\s*([A-Za-z])\s*,[^)]*\)")
+BOX_STEREOTYPE_PATTERN = re.compile(r"<<\s*(\w+(?::\w+)?)")
+SPOT_KINDS = {
+    "O": "object property",
+    "D": "datatype property",
+    "A": "annotation property",
+    "P": "property",
+    "I": "individual",
+}
+STEREOTYPE_NAMESPACES = {"owl": OWL, "rdf": RDF, "rdfs": RDFS}
+
+
+def _property_kind(type_iri: URIRef) -> str:
+    """Name the kind of property *type_iri* declares, by :mod:`rdf_construct.core.vocab`."""
+    if type_iri in OBJECT_PROPERTY_TYPES:
+        return "object property"
+    if type_iri in DATATYPE_PROPERTY_TYPES:
+        return "datatype property"
+    if type_iri in ANNOTATION_PROPERTY_TYPES:
+        return "annotation property"
+    return "property"
+
+
+# Every name ODM draws a property with is a property; the IRI it stands for gives the kind
+ODM_BOX_KINDS = {
+    name: _property_kind(URIRef(iri)) for iri, name in ODM_PROPERTY_STEREOTYPES.items()
+}
+ODM_BOX_KINDS[ODM_INDIVIDUAL_STEREOTYPE] = "individual"
+
+
+def _box_kind(stereotype: str) -> str | None:
+    """Name what a class box's stereotype says it is, if that is not a class (#395).
+
+    Args:
+        stereotype: The declaration's text after the box's name.
+
+    Returns:
+        ``object property``, ``datatype property``, ``annotation property``, ``property`` or
+        ``individual``; or None for a class, or a stereotype that does not say.
+    """
+    spot = BOX_SPOT_PATTERN.search(stereotype)
+    if spot:
+        return SPOT_KINDS.get(spot.group(1).upper())
+    first = BOX_STEREOTYPE_PATTERN.search(stereotype)
+    if first is None:
+        return None
+    name = first.group(1)
+    if name in ODM_BOX_KINDS:
+        return ODM_BOX_KINDS[name]
+    prefix, _, local = name.partition(":")
+    if prefix == ODM_INDIVIDUAL_STEREOTYPE:
+        return "individual"
+    namespace = STEREOTYPE_NAMESPACES.get(prefix)
+    if namespace is None or not local:
+        return None
+    iri = namespace[local]
+    if iri in ALL_PROPERTY_TYPES:
+        return _property_kind(iri)
+    if iri == OWL.NamedIndividual:
+        return "individual"
+    return None
 
 
 def parse_dotted_name(dotted: str) -> tuple[Optional[str], str]:
@@ -130,12 +215,17 @@ class ParseWarning:
         line_content: The actual line content
         code: What kind it is: ``not-understood``, ``unmodelled``, ``note-unknown-class``,
             ``empty-diagram`` or ``derived-prefix``
+        kind: For an ``unmodelled`` box that is not a class, what it was drawn as
+            (``object property``, ``datatype property``, ``annotation property``,
+            ``property`` or ``individual``), or ``relationship`` for a line naming one (#395);
+            otherwise empty
     """
 
     line_number: int | None
     message: str
     line_content: str = ""
     code: str = "not-understood"
+    kind: str = ""
 
     def __str__(self) -> str:
         if self.line_number is None:
@@ -163,6 +253,27 @@ class ParseResult:
     def success(self) -> bool:
         """Return True if parsing completed without errors."""
         return len(self.errors) == 0
+
+
+@dataclass(frozen=True)
+class _PackageSpan:
+    """A package declaration and the text its braces enclose (#391).
+
+    Attributes:
+        match: The declaration's match of :attr:`PlantUMLParser.PACKAGE_PATTERN`.
+        start: Offset of the first character after the opening brace.
+        end: Offset of the closing brace, or the end of the text if it never closes.
+        key: The name its classes are filed under, and the prefix it is bound to. A package
+            nested in another, without a namespace URI of its own, is qualified by its
+            parent's key, as PlantUML qualifies it: ``outer.inner``.
+        namespace_uri: The namespace URI the package declares, if any.
+    """
+
+    match: re.Match[str]
+    start: int
+    end: int
+    key: str
+    namespace_uri: str | None
 
 
 class PlantUMLParser:
@@ -221,7 +332,7 @@ class PlantUMLParser:
         r"([+\-#~])?\s*"  # Optional visibility
         r"(\{static\})?\s*"  # Optional static marker
         r"(\w+)"  # Attribute name
-        r"(?:\s*:\s*(\w+))?"  # Optional : type
+        r"(?:\s*:\s*(\w+(?::\w+)?))?"  # Optional : type, which may be a CURIE (#480)
         r"\s*$",
         re.MULTILINE,
     )
@@ -267,12 +378,28 @@ class PlantUMLParser:
     # Skinparam settings
     SKINPARAM_PATTERN = re.compile(r"skinparam\s+(\w+)\s+(\S+)", re.MULTILINE)
 
-    def __init__(self) -> None:
-        """Initialise the parser."""
+    def __init__(
+        self,
+        namespace_mappings: Sequence[NamespaceMapping] = (),
+        default_namespace: str | None = None,
+    ) -> None:
+        """Initialise the parser.
+
+        Args:
+            namespace_mappings: A ``-C`` config's mappings from package to namespace, held
+                to the same prefix checks as the diagram's own packages (#152).
+            default_namespace: The namespace unpackaged classes go in, so a mapping onto it,
+                or onto a namespace generated from it, can be refused. None skips both checks.
+        """
+        self._namespace_mappings = list(namespace_mappings)
+        self._default_namespace = default_namespace
+        # package key -> (prefix, namespace IRI) for every mapping applied
+        self._mapped: dict[str, tuple[str, str]] = {}
         self._errors: list[ParseError] = []
         self._warnings: list[ParseWarning] = []
         self._notes: list[ParseWarning] = []
         self._consumed: list[tuple[int, int]] = []
+        self._dropped: dict[str, str] = {}
         self._current_package: Optional[str] = None
         self._package_stack: list[str] = []
 
@@ -289,6 +416,8 @@ class PlantUMLParser:
         self._warnings = []
         self._notes = []
         self._consumed = []
+        self._dropped = {}
+        self._mapped = {}
 
         model = PumlModel()
 
@@ -306,6 +435,12 @@ class PlantUMLParser:
         # by _report_unread_lines (#400)
         content = self._blank_outside(content, span)
 
+        # Comments are blanked before any check or pass reads the text (#394, #475); a block
+        # comment that never closes is refused whole, as PlantUML draws nothing for it
+        content = self._blank_comments(content)
+        if self._errors:
+            return ParseResult(model=model, errors=self._errors, warnings=[])
+
         # Prefixes are checked before the markers are blanked, so a refusal names the file's line
         self._check_prefixes(content)
 
@@ -317,6 +452,9 @@ class PlantUMLParser:
 
         # Pass 2: Extract classes with attributes
         model.classes = self._parse_classes(content)
+
+        # The namespaces a -C config maps packages to, checked by _check_prefixes (#152)
+        self._apply_mappings(model)
 
         # Pass 3: Extract relationships
         model.relationships = self._parse_relationships(content)
@@ -408,6 +546,56 @@ class PlantUMLParser:
         start, end = span
         return blank(content[:start]) + content[start:end] + blank(content[end:])
 
+    def _blank_comments(self, content: str) -> str:
+        """Blank every comment, keeping every newline, so offsets do not move (#394, #475).
+
+        The rule is PlantUML's own, as the patterns at the top of this module describe. A
+        block comment still open at the end of the text is recorded as a :class:`ParseError`
+        on its opening line, and the rest of the text is blanked.
+
+        Args:
+            content: The text to blank, with the text outside the diagram already blanked.
+
+        Returns:
+            The text with every comment character replaced by a space.
+        """
+        lines = content.split("\n")
+        opened_on: int | None = None
+        for index, line in enumerate(lines):
+            if opened_on is not None:
+                if BLOCK_COMMENT_CLOSE_PATTERN.search(line):
+                    opened_on = None
+                lines[index] = " " * len(line)
+                continue
+            opener = BLOCK_COMMENT_OPEN_PATTERN.match(line)
+            if opener is not None:
+                close = line.find("'/", opener.end())
+                if close == -1:
+                    opened_on = index + 1
+                    lines[index] = " " * len(line)
+                    continue
+                # A block that closes on its opening line leaves the rest of the line to read
+                line = " " * (close + 2) + line[close + 2 :]
+            elif LINE_COMMENT_PATTERN.match(line):
+                lines[index] = " " * len(line)
+                continue
+            trailing = TRAILING_COMMENT_PATTERN.search(line)
+            if trailing is not None:
+                line = line[: trailing.start()] + " " * (len(line) - trailing.start())
+            lines[index] = line
+
+        if opened_on is not None:
+            opener_text = content.split("\n")[opened_on - 1].strip()
+            self._errors.append(
+                ParseError(
+                    line_number=opened_on,
+                    message="this block comment is never closed, so PlantUML draws nothing: "
+                    f"{opener_text}. A block comment closes on a line that ends with '/",
+                    line_content=opener_text,
+                )
+            )
+        return "\n".join(lines)
+
     def _strip_diagram_markers(self, content: str) -> str:
         """Blank out @startuml and @enduml markers, keeping every newline.
 
@@ -433,15 +621,19 @@ class PlantUMLParser:
 
         A line counts as read when a match a pass kept touches it; that is generous to a
         line a pass read only part of. Declarations of kinds the converter does not model
-        are named; any other line is reported as not understood.
+        are named; any other line is reported as not understood. Lines inside the diagram
+        are judged by the text the passes read, so a comment is skipped by the same rule
+        that kept the passes from reading it (#394, #475).
 
         Args:
-            source: The diagram text as given, for the markers and the reported lines.
-            content: The text the passes read, with the markers blanked; same offsets.
+            source: The diagram text as given, for the text outside the diagram.
+            content: The text the passes read, with the comments and markers blanked; same
+                offsets.
             span: The diagram's span in both; a line outside it is reported as such (#400).
         """
         # Lines are numbered by "\n" only, as offsets are mapped below (#401)
         lines = source.split("\n")
+        read_lines = content.split("\n")
         line_starts = [0]
         line_starts.extend(i + 1 for i, char in enumerate(content) if char == "\n")
         first_line = bisect_right(line_starts, span[0])
@@ -472,7 +664,7 @@ class PlantUMLParser:
         body_depth = 0
         opened_on = 0
         for number in range(first_line, last_line + 1):
-            text = lines[number - 1]
+            text = read_lines[number - 1]
             if block_end is not None:
                 if block_end.search(text):
                     block_end = None
@@ -480,7 +672,8 @@ class PlantUMLParser:
             if body_depth:
                 body_depth += text.count("{") - text.count("}")
                 continue
-            if not text.strip() or STARTUML_PATTERN.match(text) or ENDUML_PATTERN.match(text):
+            marker = lines[number - 1]
+            if not text.strip() or STARTUML_PATTERN.match(marker) or ENDUML_PATTERN.match(marker):
                 continue
             opened = next(
                 (
@@ -580,22 +773,50 @@ class PlantUMLParser:
         """Extract package definitions from content."""
         packages = []
 
-        for match in self.PACKAGE_PATTERN.finditer(content):
-            self._consume(match)
-            name = match.group(1) or match.group(2)  # Quoted or unquoted
-            stereotype = match.group(4)
-
-            package_name, namespace_uri = self._package_identity(name, match.group(3))
+        for span in self._package_spans(content):
+            self._consume(span.match)
+            stereotype = span.match.group(4)
 
             packages.append(
                 PumlPackage(
-                    name=package_name,
-                    namespace_uri=namespace_uri,
+                    name=span.key,
+                    namespace_uri=span.namespace_uri,
                     stereotype=stereotype,
                 )
             )
 
         return packages
+
+    @staticmethod
+    def _mapping_line(mapped_lines: dict[str, tuple[str, int]], key: str) -> int:
+        """Return the line a mapping for package *key* was applied on."""
+        return next(line for owner, line in mapped_lines.values() if owner == key)
+
+    def _apply_mappings(self, model: PumlModel) -> None:
+        """Give each mapped package the namespace and prefix its mapping names (#152).
+
+        A ``class pkg.Name`` whose package is mapped but never declared gets a package of
+        its own, so the converter binds the mapped namespace for it.
+        """
+        if not self._mapped:
+            return
+        for package in model.packages:
+            if package.name in self._mapped:
+                prefix, iri = self._mapped[package.name]
+                package.namespace_uri = iri
+                package.prefix = None if prefix == package.name else prefix
+        declared = {package.name for package in model.packages}
+        for cls in model.classes:
+            if cls.package in self._mapped and cls.package not in declared:
+                prefix, iri = self._mapped[cls.package]
+                model.packages.append(
+                    PumlPackage(
+                        name=cls.package,
+                        namespace_uri=iri,
+                        prefix=None if prefix == cls.package else prefix,
+                    )
+                )
+                declared.add(cls.package)
 
     @staticmethod
     def _looks_like_uri(value: str) -> bool:
@@ -677,6 +898,13 @@ class PlantUMLParser:
         Each refusal is a :class:`ParseError` on the declaration's line, so
         nothing is converted or written.
 
+        A ``namespace_mappings`` entry from a ``-C`` config (#152) gives an IRI-less
+        package its namespace and may name its prefix; the mapped prefix and IRI are then
+        claimed as the diagram's own are, and a refusal names the entry. A package whose
+        diagram gives another IRI, or the same IRI under another prefix it names, is
+        refused. So is a mapped IRI that is the default namespace, or the namespace
+        generated for an unmapped package. A mapping that matches no package is a note.
+
         Args:
             source: The diagram text before its markers are stripped, so that
                 line numbers are the file's own.
@@ -695,12 +923,12 @@ class PlantUMLParser:
             content = lines[line - 1].strip() if line <= len(lines) else ""
             self._errors.append(ParseError(line_number=line, message=message, line_content=content))
 
-        def claim(prefix: str, iri: str | None, line: int) -> None:
+        def claim(prefix: str, iri: str | None, line: int, origin: str = "") -> None:
             if not PN_PREFIX_PATTERN.fullmatch(prefix):
                 refuse(
                     line,
                     f'"{prefix}" is not a legal Turtle prefix: it must start with a letter, '
-                    'hold only letters, digits, "_", "-" and ".", and not end with "."',
+                    'hold only letters, digits, "_", "-" and ".", and not end with "."' + origin,
                 )
                 return
             core = CORE_PREFIXES.get(prefix)
@@ -709,7 +937,7 @@ class PlantUMLParser:
                     line,
                     f'"{prefix}" is a core prefix, bound to <{core}>; it cannot name '
                     f"{f'<{iri}>' if iri else 'a namespace of this diagram'}. "
-                    "Choose another prefix",
+                    "Choose another prefix" + origin,
                 )
                 return
             if prefix in bound:
@@ -718,7 +946,7 @@ class PlantUMLParser:
                     refuse(
                         line,
                         f'"{prefix}" is already the prefix for <{earlier}> (line {earlier_line}); '
-                        f"one prefix cannot name <{iri}> as well",
+                        f"one prefix cannot name <{iri}> as well" + origin,
                     )
                     return
             if iri is not None:
@@ -727,14 +955,60 @@ class PlantUMLParser:
                     refuse(
                         line,
                         f'<{iri}> already has the prefix "{other}" (line {other_line}); '
-                        f'one namespace cannot have "{prefix}" as well',
+                        f'one namespace cannot have "{prefix}" as well' + origin,
                     )
                     return
                 named.setdefault(iri, (prefix, line))
             if prefix not in bound or bound[prefix][0] is None:
                 bound[prefix] = (iri, line)
 
-        for match in self.PACKAGE_PATTERN.finditer(source):
+        mappings = {mapping.package: mapping for mapping in self._namespace_mappings}
+        # The keys a mapping matched, mapped IRIs by line, and the packages given a generated IRI
+        matched: set[str] = set()
+        mapped_lines: dict[str, tuple[str, int]] = {}
+        generated: dict[str, int] = {}
+        declared_iri: set[str] = set()
+        default_iri = (
+            self._namespace_iri(self._default_namespace) if self._default_namespace else None
+        )
+
+        def apply(
+            mapping: NamespaceMapping, key: str, uri: str | None, alias: bool, line: int
+        ) -> None:
+            """Check one mapping against the package it matched, and claim what it names."""
+            matched.add(key)
+            entry = f"namespace_mappings entry for package '{key}'"
+            iri = self._namespace_iri(mapping.namespace_uri)
+            prefix = mapping.prefix or key
+            if uri is not None and self._namespace_iri(uri) != iri:
+                refuse(
+                    line,
+                    f"{entry} gives <{iri}>, but this package declares "
+                    f"<{self._namespace_iri(uri)}>; remove one",
+                )
+                return
+            if uri is not None and alias and prefix != key:
+                refuse(
+                    line,
+                    f'{entry} gives the prefix "{prefix}", but this package names "{key}"; '
+                    "remove one",
+                )
+                return
+            if default_iri is not None and iri == default_iri:
+                refuse(
+                    line,
+                    f'{entry} gives <{iri}>, the default namespace, which has the prefix ""; '
+                    f'one namespace cannot have "{prefix}" as well',
+                )
+                return
+            errors = len(self._errors)
+            claim(prefix, iri, line, origin=f" (from the {entry})")
+            if len(self._errors) == errors:
+                self._mapped[key] = (prefix, iri)
+                mapped_lines.setdefault(iri, (key, line))
+
+        for span in self._package_spans(source):
+            match = span.match
             line = line_of(match.start())
             name = match.group(1) or match.group(2)
             alias = match.group(3)
@@ -746,10 +1020,19 @@ class PlantUMLParser:
                 )
                 continue
             prefix, uri = self._package_identity(name, alias)
+            if span.key in mappings:
+                # A derived prefix is not one the diagram names, so the mapping may name it
+                apply(mappings[span.key], span.key, uri, alias is not None, line)
+                continue
+            if uri is None:
+                generated.setdefault(span.key, line)
+            else:
+                declared_iri.add(span.key)
             if alias is None and uri is not None:
                 derived.append((prefix, uri, line))
                 continue
-            claim(prefix, self._namespace_iri(uri) if uri else None, line)
+            # A nested package is bound by its qualified name, as its classes are filed (#391)
+            claim(span.key, self._namespace_iri(uri) if uri else None, line)
 
         for prefix, uri, line in derived:
             iri = self._namespace_iri(uri)
@@ -796,7 +1079,50 @@ class PlantUMLParser:
             if package is None:
                 continue
             line = line_of(match.start() + match.group(0).index("class"))
-            claim(package, bound[package][0] if package in bound else None, line)
+            if package in self._mapped:
+                claim(*self._mapped[package], line)
+            elif package in mappings and package not in matched:
+                # `class pkg.Name` with no package declared: the mapping is all it has
+                apply(mappings[package], package, None, False, line)
+            elif package not in mappings:
+                if package not in declared_iri:
+                    generated.setdefault(package, line)
+                claim(package, bound[package][0] if package in bound else None, line)
+
+        # A package the config does not map is generated a namespace, and bound by its own
+        # name: neither may be what a mapping gives another package
+        base = default_iri.rstrip("#/") if default_iri is not None else None
+        mapped_prefixes = {prefix: key for key, (prefix, _) in self._mapped.items()}
+        for key, key_line in generated.items():
+            owner = mapped_prefixes.get(key)
+            if owner is not None and owner != key:
+                refuse(
+                    self._mapping_line(mapped_lines, owner),
+                    f"namespace_mappings entry for package '{owner}' gives the prefix "
+                    f"\"{key}\", which names package '{key}' (line {key_line}) too; "
+                    "map that package too, or choose another prefix",
+                )
+                continue
+            auto = f"{base}/{key}#" if base is not None else None
+            if auto is not None and auto in mapped_lines:
+                owner, line = mapped_lines[auto]
+                refuse(
+                    line,
+                    f"namespace_mappings entry for package '{owner}' gives <{auto}>, the "
+                    f"namespace generated for package '{key}' (line {key_line}); "
+                    "map that package too, or choose another IRI",
+                )
+
+        for mapping in self._namespace_mappings:
+            if mapping.package not in matched:
+                self._notes.append(
+                    ParseWarning(
+                        None,
+                        f"namespace_mappings entry for package '{mapping.package}' matches no "
+                        "package in this diagram, so it was not used",
+                        code="unmatched-mapping",
+                    )
+                )
 
     def _parse_classes(self, content: str) -> list[PumlClass]:
         """Extract class definitions from content."""
@@ -820,13 +1146,37 @@ class PlantUMLParser:
             stereotype = match.group(6)
             body = match.group(7) or ""
 
-            # Parse attributes from body
-            attributes = self._parse_attributes(body)
-
             # Package from dotted name takes precedence over positional package
             if package is None:
                 pos = match.start()
                 package = self._find_package_at_position(pos, package_map)
+
+            # A box drawn as a property or an individual is named, not converted (#395)
+            named = next(group for group in (3, 4, 5) if match.group(group))
+            line_end = content.find("\n", match.end(named))
+            declared = content[match.end(named) : len(content) if line_end == -1 else line_end]
+            kind = _box_kind(declared.split("{", 1)[0])
+            if kind is not None:
+                written = match.group(named)
+                start = match.start(named)
+                line = content.count("\n", 0, start) + 1
+                text = content[content.rfind("\n", 0, start) + 1 : match.end(named)] + declared
+                self._warnings.append(
+                    ParseWarning(
+                        line,
+                        f"{kind} {written} is not converted: only classes are, "
+                        f"so {written} is not in the output",
+                        line_content=text.strip(),
+                        code="unmodelled",
+                        kind=kind,
+                    )
+                )
+                for dropped in (written, name, f"{package}.{name}" if package else name):
+                    self._dropped.setdefault(dropped, kind)
+                continue
+
+            # Parse attributes from body
+            attributes = self._parse_attributes(body)
 
             classes.append(
                 PumlClass(
@@ -838,6 +1188,11 @@ class PlantUMLParser:
                     display_name=display_name,
                 )
             )
+
+        # A name a class box also declares, as a punned term's is, still names the class
+        for cls in classes:
+            self._dropped.pop(cls.name, None)
+            self._dropped.pop(cls.qualified_name, None)
 
         return classes
 
@@ -867,7 +1222,7 @@ class PlantUMLParser:
                 )
             else:
                 # Try simpler pattern: just "name" or "name : type"
-                simple_match = re.match(r"(\w+)(?:\s*:\s*(\w+))?", line)
+                simple_match = re.match(r"(\w+)(?:\s*:\s*(\w+(?::\w+)?))?", line)
                 if simple_match:
                     attributes.append(
                         PumlAttribute(
@@ -905,6 +1260,8 @@ class PlantUMLParser:
             if left_head and not right_head:
                 # <|-- pattern: target extends source
                 self._consume(match)
+                if self._names_dropped(content, match, source_full, target_full):
+                    continue
                 relationships.append(
                     PumlRelationship(
                         source=target_full,  # Keep full qualified name for lookup
@@ -915,6 +1272,8 @@ class PlantUMLParser:
             elif right_head and not left_head:
                 # --|> pattern: source extends target
                 self._consume(match)
+                if self._names_dropped(content, match, source_full, target_full):
+                    continue
                 relationships.append(
                     PumlRelationship(
                         source=source_full,
@@ -952,6 +1311,8 @@ class PlantUMLParser:
             if "|" in str(target_marker) or "|" in str(source_marker):
                 continue
             self._consume(match)
+            if self._names_dropped(content, match, source, target):
+                continue
 
             # Determine relationship type
             if source_marker == "*" or target_marker == "*":
@@ -976,6 +1337,38 @@ class PlantUMLParser:
             )
 
         return relationships
+
+    def _names_dropped(self, content: str, match: re.Match[str], *ends: str) -> bool:
+        """Name a relationship to a box that is not converted, and say whether there was one.
+
+        A box drawn as a property or an individual is not in the output (#395), so a line
+        naming one is not either; kept, it would name an undeclared class and refuse the file.
+
+        Args:
+            content: The text the passes read.
+            match: The relationship's match.
+            ends: The names at either end, as the line writes them.
+
+        Returns:
+            True if an end names a box that is not converted, with an ``unmodelled`` warning.
+        """
+        end = next((name for name in ends if name in self._dropped), None)
+        if end is None:
+            return False
+        start = match.start() + len(match.group(0)) - len(match.group(0).lstrip())
+        line_end = content.find("\n", start)
+        text = content[start : len(content) if line_end == -1 else line_end].strip()
+        self._warnings.append(
+            ParseWarning(
+                content.count("\n", 0, start) + 1,
+                f"{text} names {self._dropped[end]} {end}, which is not converted, "
+                f"so this line is not in the output",
+                line_content=text,
+                code="unmodelled",
+                kind="relationship",
+            )
+        )
+        return True
 
     def _parse_notes(self, content: str) -> list[PumlNote]:
         """Extract note definitions from content."""
@@ -1057,20 +1450,23 @@ class PlantUMLParser:
             params[key] = value
         return params
 
-    def _build_package_map(self, content: str) -> list[tuple[int, int, str]]:
-        """Build a map of character positions to package names.
+    def _package_spans(self, content: str) -> list[_PackageSpan]:
+        """Find every package declaration, the text it encloses and its key (#391).
 
-        The package name is the same one :meth:`_parse_packages` records, so a
-        class inside ``package "URI" as pfx`` is filed under ``pfx`` and not
-        under the URI (#150).
+        The one reading of packages that the prefix check, the package pass and the class
+        pass share, so all three agree on which package a class is in and what it is called.
 
-        Returns a list of (start, end, package_name) tuples.
+        Args:
+            content: The text to read; offsets in the result are offsets into it.
+
+        Returns:
+            One span per declaration, in declaration order.
         """
-        package_map = []
+        spans: list[_PackageSpan] = []
 
         for match in self.PACKAGE_PATTERN.finditer(content):
             name = match.group(1) or match.group(2)
-            package_name, _namespace_uri = self._package_identity(name, match.group(3))
+            package_name, namespace_uri = self._package_identity(name, match.group(3))
             start = match.end()
 
             # Find matching closing brace
@@ -1083,15 +1479,34 @@ class PlantUMLParser:
                     brace_count -= 1
                 pos += 1
 
-            package_map.append((start, pos - 1, package_name))
+            # Spans nest, so the latest declared one that encloses this one is its parent
+            parent = next(
+                (span for span in reversed(spans) if span.start <= match.start() <= span.end),
+                None,
+            )
+            key = package_name
+            if namespace_uri is None and parent is not None:
+                key = f"{parent.key}.{package_name}"
 
-        return package_map
+            spans.append(_PackageSpan(match, start, pos - 1, key, namespace_uri))
+
+        return spans
+
+    def _build_package_map(self, content: str) -> list[tuple[int, int, str]]:
+        """Build a map of character positions to package names.
+
+        The package name is the same one :meth:`_parse_packages` records, so a
+        class inside ``package "URI" as pfx`` is filed under ``pfx`` and not
+        under the URI (#150), and one inside a nested package is filed under its
+        qualified name (#391).
+
+        Returns a list of (start, end, package_name) tuples.
+        """
+        return [(span.start, span.end, span.key) for span in self._package_spans(content)]
 
     def _find_package_at_position(
         self, pos: int, package_map: list[tuple[int, int, str]]
     ) -> Optional[str]:
-        """Find which package contains a given character position."""
-        for start, end, name in package_map:
-            if start <= pos <= end:
-                return name
-        return None
+        """Find the innermost package that contains a given character position (#391)."""
+        enclosing = [(start, name) for start, end, name in package_map if start <= pos <= end]
+        return max(enclosing)[1] if enclosing else None

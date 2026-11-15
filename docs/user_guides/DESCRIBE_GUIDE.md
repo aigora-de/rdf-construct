@@ -292,11 +292,11 @@ Brief mode is faster for large ontologies or when you only need the basics.
 
 | Option | Description |
 |--------|-------------|
-| `-o, --output FILE` | Write output to file instead of stdout |
+| `-o, --output FILE` | Write output to file instead of stdout. Refused (exit 2) if it names the input |
 | `-f, --format FORMAT` | Output format: `text` (default), `json`, `markdown`, `md` |
 | `-b, --brief` | Quick overview (metadata + metrics + profile only) |
 | `--no-resolve` | Skip import resolution (no network requests) |
-| `--reasoning` | Include reasoning analysis (experimental) |
+| `--reasoning` | **Deprecated**: never ran a reasoner, and does nothing, except that `-f json` still writes the `reasoning` key. Removed in v0.8.0 ([#299](https://github.com/aigora-de/rdf-construct/issues/299)) |
 | `--no-colour` | Disable ANSI colour codes |
 
 ## Programmatic Usage

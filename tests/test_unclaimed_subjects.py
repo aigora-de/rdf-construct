@@ -184,6 +184,25 @@ class TestShippedExamplesRoundTrip:
         assert result.exit_code == 0
         assert "claimed by no section" not in result.output
 
+    def test_org_topo_leads_with_its_roots(self, tmp_path: Path) -> None:
+        """#240: `org_topo` was byte-identical to `topo`, its roots naming nothing.
+
+        Lossless either way, so the round trip above could not see it: the roots must change
+        the order, and a default run on the ontology they were written for must not warn.
+        """
+        source = EXAMPLES / "organisation_ontology.ttl"
+        result = _order(source, EXAMPLES / "order" / "test_profile.yml", tmp_path)
+        assert result.exit_code == 0, result.output
+        assert "profile 'org_topo'" not in result.output, result.output
+
+        def classes(profile: str) -> list[str]:
+            text = (tmp_path / f"{source.stem}-{profile}.ttl").read_text()
+            return [line for line in text.splitlines() if line.startswith("org:")]
+
+        rooted = classes("org_topo")
+        assert rooted != classes("topo")
+        assert rooted[:2] == ["org:Organisation", "org:Company"]
+
     def test_compact_filters_deliberately_and_silently(self, tmp_path: Path) -> None:
         """`compact` is header-and-classes by design and declares `unclaimed: ignore`.
 
@@ -661,6 +680,18 @@ class TestOrderGuideExamples:
         assert "claimed by no section" in result.output
         assert "lib:GreatExpectations" in result.output
         assert "select: individuals" in result.output
+
+    def test_a_root_for_another_ontology_is_reported(self, tmp_path: Path) -> None:
+        """The guide's `roots` example: `anchored` run on the animal ontology (#241)."""
+        result = _order(EXAMPLES / "animal_ontology.ttl", self.CONFIG, tmp_path, "-p", "anchored")
+
+        assert result.exit_code == 0
+        assert "⚠ profile 'anchored', section 'classes': 1 root ignored" in result.output
+        assert (
+            "lib:Journal — prefix 'lib:' is not declared by this source "
+            "(declared: ex:, owl:, rdf:, rdfs:, xml:, xsd:)"
+        ) in result.output
+        assert (tmp_path / "animal_ontology-anchored.ttl").exists()
 
     def test_a_filtering_profile_keeps_its_blank_node_closure(self, tmp_path: Path) -> None:
         """`classes-only` drops lib:publishes but must keep the restriction whole.

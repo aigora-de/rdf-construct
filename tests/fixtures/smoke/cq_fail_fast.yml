@@ -1,0 +1,18 @@
+# Three competency questions on examples/animal_ontology.ttl, the second failing: under
+# --fail-fast the third is reported as not run, and the total stays 3 (#137).
+version: "1.0"
+prefixes:
+  owl: "http://www.w3.org/2002/07/owl#"
+questions:
+  - id: cq-ff-pass
+    name: "Animal is a class"
+    query: "ASK { <http://example.org/animals#Animal> a owl:Class }"
+    expect: true
+  - id: cq-ff-fail
+    name: "A class the ontology does not define"
+    query: "ASK { <http://example.org/animals#Unicorn> a owl:Class }"
+    expect: true
+  - id: cq-ff-not-run
+    name: "Dog is a class"
+    query: "ASK { <http://example.org/animals#Dog> a owl:Class }"
+    expect: true

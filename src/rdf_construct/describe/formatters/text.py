@@ -218,19 +218,6 @@ def format_text(
 
     lines.append("")
 
-    # Reasoning section (if included)
-    if description.reasoning is not None:
-        lines.append(_section("Reasoning Analysis", use_colour))
-        r = description.reasoning
-        lines.append(f"  Entailment regime: {r.entailment_regime}")
-
-        if r.consistency_notes:
-            lines.append(f"  Notes:")
-            for note in r.consistency_notes[:3]:
-                lines.append(f"    - {note}")
-
-        lines.append("")
-
     return "\n".join(lines)
 
 
