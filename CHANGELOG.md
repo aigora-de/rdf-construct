@@ -654,6 +654,16 @@ change, and what to do about it, is listed command by command in the
 - **`missing-label` and `missing-comment` no longer fire on a borrowed
   vocabulary's term** (#368), including the `prov:wasDerivedFrom` that `order`,
   `split` and a named `merge` declare for their stamp.
+- **The derivation stamp is declared an `owl:AnnotationProperty` even when the
+  source types `prov:wasDerivedFrom` only generically** (#426). `order`,
+  `split` and a named `merge` skipped the declaration when the source typed
+  the property `rdf:Property`, `owl:FunctionalProperty` or
+  `owl:DeprecatedProperty`, so their output used the stamp as an annotation
+  without declaring it one. Only a kind-specific type (an object, datatype or
+  annotation property) suppresses the declaration now, because an IRI typed
+  as both an annotation and another kind of property is outside OWL 2 DL. A
+  source that types it `owl:FunctionalProperty` stays outside OWL 2 DL either
+  way: an annotation property cannot be functional.
 - **`docs` no longer documents, and `stats` no longer counts, a term the
   ontology does not own** (#371).
 - **An inline blank node with several objects for one predicate is valid
