@@ -28,11 +28,11 @@ A 0.7.x patch never changes what a correct run does.
 
 The plan is tracking issue [#312](https://github.com/aigora-de/rdf-construct/issues/312), and the
 work is milestone
-[v0.7.0 - Hardening: every breaking fix, one migration](https://github.com/aigora-de/rdf-construct/milestone/3).
+[v0.7.0 - Hardening: what each command writes and how it exits, one migration](https://github.com/aigora-de/rdf-construct/milestone/3).
 
-**This note is filled in as each fix lands, until v0.7.0 is tagged.** A section that says nothing
-has landed yet means nothing there has changed *so far*, not that nothing will. Read
-[Every command](#every-command) first, then the section for each command you use.
+Read [Every command](#every-command) first, then the section for each command you use. A
+section that says nothing changed means that command behaves as it did in v0.6.0, apart from
+what [Every command](#every-command) lists.
 
 ## Every command
 
@@ -211,7 +211,7 @@ with `+00:00`, it kept **one triple** and dropped the other, at exit 0.
 
 ## `profiles`
 
-Nothing has landed yet.
+Nothing changed in v0.7.0.
 
 | Issue | What changed | What to do |
 |---|---|---|
@@ -225,7 +225,7 @@ Nothing has landed yet.
 
 ## `contexts`
 
-Nothing has landed yet.
+Nothing changed in v0.7.0.
 
 | Issue | What changed | What to do |
 |---|---|---|

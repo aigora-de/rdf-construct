@@ -555,7 +555,7 @@ below.
 
 ## Known limitations
 
-These are open issues, current as of v0.6.0. They are here because a guide that describes intended
+These are open issues, current as of v0.7.0. They are here because a guide that describes intended
 behaviour is worse than no guide.
 
 **This table is a maintenance contract: a fix that lands should delete its row in the same PR.** If

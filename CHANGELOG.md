@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-16
+
 **If you gate CI on `lint`'s exit code, it has changed.** Error findings now exit
 1, not 2, and a run with only warnings exits 0. Pass `--fail-on warning` to keep
 failing on warnings. Every command now uses one convention: 0 success, 1
@@ -1209,6 +1211,17 @@ change, and what to do about it, is listed command by command in the
   characteristic, or as `owl:DeprecatedClass` or `owl:DeprecatedProperty`, is
   no longer invisible to every rule.
 
+### Contributors
+- Thanks to @rudra337-lgtm for four fixes: the two serialiser bugs behind #343 and #341 (#345,
+  #349), `puml2rdf`'s package prefixes (#346) and `localise report -o` (#442)
+- Thanks to @bfs2021 for the derivation stamp's declaration (#428), @ssmurfgg04-gif for the
+  whitespace-label fallback in `docs` (#272), and @imshah-id for `merge`'s refusal of incomplete
+  data-migration options (#500)
+- Thanks to @Yahiro025 for `puml2rdf`'s class count (#167) and @qiaobochi040726-source for the
+  guides' broken links (#275)
+- Thanks to @mayankdhingra02, whose #479 found that `lint`'s `redundant-subclass` wording varies
+  between runs (#552)
+
 ## [0.6.0] - 2026-09-04
 
 Completes the `docs` entity-type taxonomy carried over from v0.5.0, and fixes
@@ -2116,6 +2129,7 @@ Initial public release.
 
 | Version | Date       | Highlights                                                                                          |
 |---------|------------|-----------------------------------------------------------------------------------------------------|
+| [0.7.0] | 2026-11-16 | Hardening: one exit-code convention, what each command writes, one migration note               |
 | [0.6.0] | 2026-09-04 | SKOS, named individuals and deprecation in `docs`; link, contrast and determinism fixes             |
 | [0.5.0] | 2026-08-22 | SHACL shapes in `docs`; `order` no longer drops unclaimed subjects                                  |
 | [0.4.7] | 2026-05-07 | Fix cosmetic glitch in `lint --init` generated config                                               |
@@ -2130,7 +2144,8 @@ Initial public release.
 | [0.2.0] | 2025-12-03 | Stats, CQ testing, SHACL gen, docs gen, diff, lint, puml2rdf                                        |
 | [0.1.0] | 2025-11-30 | Initial release: ordering, UML generation, styling                                                  |
 
-[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/aigora-de/rdf-construct/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/aigora-de/rdf-construct/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/aigora-de/rdf-construct/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/aigora-de/rdf-construct/compare/v0.4.7...v0.5.0
 [0.4.7]: https://github.com/aigora-de/rdf-construct/compare/v0.4.6...v0.4.7
