@@ -363,7 +363,6 @@ is already a source's ontology IRI, or one of its terms, is accepted with a `Not
 | Limitation | Issue |
 |------------|-------|
 | Splitting an unnamed merge, `split` finds no header, so it cannot tell a borrowed namespace from the source's own, and a module may claim one such as GeoSPARQL's. Name the merge first | — |
-| When a source types `prov:wasDerivedFrom` only as `rdf:Property`, the stamp's `owl:AnnotationProperty` declaration is left out | #426 |
 
 ### Blank Nodes
 
