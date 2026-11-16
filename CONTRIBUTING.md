@@ -51,7 +51,7 @@ required before that release is ready.
 | Type | Purpose | Example |
 |------|---------|---------|
 | `main` | The last release: what PyPI has | — |
-| `release/v*` | The next release: where work lands | `release/v0.7.0` |
+| `release/v*` | The next releases: where work lands | `release/v0.7.1`, `release/v0.8.0` |
 | `dev/*` | Feature development | `dev/shacl-generation`, `dev/merge-tool-23` |
 | `fix/*` | Bug fixes | `fix/blank-node-handling`, `fix/cli-crash-45` |
 | `refactor/*` | Code restructuring (no new features) | `refactor/serializer-module` |
@@ -63,11 +63,14 @@ required before that release is ready.
 for the next release lands on its release branch, and reaches `main` when that release ships.
 
 **Branch from the release branch, and open your PR against it.** That is the release whose
-milestone your issue is in; if you are unsure, the newest one
-(`git branch -r --list 'origin/release/*'`). A PR opened against `main` is retargeted, and nothing
-is lost: a maintainer runs `scripts/retarget-prs.sh`, which moves it to the release branch of its
-issue's milestone, or to the newest release branch if that milestone has none. Delete your branch
-once it is merged.
+milestone your issue is in. If the issue has no milestone, or you are unsure, use the oldest one
+(`git branch -r --list 'origin/release/*'`), which today is `release/v0.7.1`. A fix that lands
+there reaches every later release when `main` is merged forward; one that lands on a later branch
+cannot come back. A breaking change, one that alters what a correct run writes or how it exits,
+belongs to the next minor release, `release/v0.8.0` today, and review will move it there. A PR
+opened against `main` is retargeted, and nothing is lost: a maintainer runs
+`scripts/retarget-prs.sh`, which moves it to the release branch of its issue's milestone, or to
+the oldest release branch if that milestone has none. Delete your branch once it is merged.
 
 A patch release is a maintainer's decision. To make one, open its milestone and cut its release
 branch from `main`, which holds the release being patched: `release/v0.6.1` from `main` while

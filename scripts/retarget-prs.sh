@@ -13,9 +13,12 @@
 #     branch exists on origin. A patch release such as v0.6.1 is a maintainer's
 #     decision, made by opening its milestone and cutting release/v0.6.1 from
 #     main, and this is how its fixes reach it;
-#   - otherwise to the newest release branch. That covers an issue with no
-#     milestone, and one whose release has no branch yet (a v0.7.1 issue before
-#     v0.7.0 ships lands in v0.7.0).
+#   - otherwise to the oldest release branch, the default base for new work. That
+#     covers an issue with no milestone, and one whose release has no branch yet.
+#     The oldest, because fixes only travel forward: main is merged into the next
+#     release branch after each release, so a fix on the oldest line reaches every
+#     later one, and a fix on a later line cannot come back. A release's branch is
+#     deleted once it ships, so the oldest is always the next release due.
 #
 # The issues come from the PR's title and body, with the closing keywords GitHub
 # honours, exactly as close-issues.sh reads them. If they name milestones whose
@@ -40,7 +43,7 @@ retarget-prs.sh — move PRs opened against main onto the release branch they be
 
 main holds the last release; work lands on release/vX.Y.Z. Each open PR based on
 main goes to the release branch of its issue's milestone, if that branch exists,
-or else to the newest release branch.
+or else to the oldest release branch, the default base for new work.
 
   scripts/retarget-prs.sh -n | --check [PR...]   shows each decision; changes nothing
   scripts/retarget-prs.sh [PR...]                retargets, and comments on each
@@ -78,7 +81,7 @@ if [[ -z "$branches" ]]; then
   echo "no release/vX.Y.Z branch on origin — nothing to retarget to" >&2
   exit 2
 fi
-newest="$(tail -1 <<<"$branches")"
+oldest="$(head -1 <<<"$branches")"
 
 if (( $# )); then
   prs="$*"
@@ -131,8 +134,8 @@ for n in $prs; do
     bad "#$n: its issues point at different branches (${distinct//$'\n'/ }) — decide by hand"
     continue
   fi
-  target="${distinct:-$newest}"
-  reason="newest release branch"
+  target="${distinct:-$oldest}"
+  reason="oldest release branch"
   [[ -n "$distinct" ]] && reason="its issue's milestone"
 
   if [[ "$MODE" == check ]]; then
