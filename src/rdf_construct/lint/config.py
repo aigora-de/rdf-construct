@@ -5,14 +5,19 @@ Supports loading .rdf-lint.yml files with rule settings and severity overrides.
 
 from __future__ import annotations
 
+import difflib
 import re
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from rdf_construct import __version__
 from rdf_construct.lint.engine import LintConfig, check_rule_ids
 from rdf_construct.lint.rules import Severity, list_rules
+
+# Every key a lint config may hold; anything else is refused (#207, as #268 decides)
+ACCEPTED_KEYS: tuple[str, ...] = ("level", "enable", "disable", "severity", "external_namespaces")
 
 
 def load_lint_config(config_path: Path) -> LintConfig:
@@ -82,6 +87,19 @@ def _parse_config(data: dict[str, Any], source: Path) -> LintConfig:
     Raises:
         ValueError: If configuration is invalid.
     """
+    if not isinstance(data, dict):
+        raise ValueError(f"The config must be a mapping in {source}")
+
+    for key in data:
+        name = str(key)
+        if name not in ACCEPTED_KEYS:
+            nearest = difflib.get_close_matches(name, ACCEPTED_KEYS, n=1)
+            hint = f" Did you mean '{nearest[0]}'?" if nearest else ""
+            raise ValueError(
+                f"unknown key '{name}' in {source} (rdf-construct {__version__}).{hint} "
+                f"Accepted keys: {', '.join(ACCEPTED_KEYS)}"
+            )
+
     config = LintConfig()
 
     # Parse level
