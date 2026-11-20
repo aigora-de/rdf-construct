@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A `lint` config's unknown keys are refused** (#207). A misspelt top-level
+  key (`levle:`, `disabled:`) was ignored and the run went ahead on defaults at
+  exit 0. It is now refused at exit 2, naming the key, the nearest valid one
+  and the accepted keys, as `puml2rdf -C` already does (#268). A config that is
+  not a mapping is refused too, where `level strict` crashed with a
+  `TypeError`.
+
 ## [0.7.0] - 2026-11-16
 
 **If you gate CI on `lint`'s exit code, it has changed.** Error findings now exit

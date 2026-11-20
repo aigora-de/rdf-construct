@@ -424,6 +424,18 @@ class TestRuleSelection:
             f"Available rules: {', '.join(sorted(list_rules()))}"
         )
 
+    def test_config_unknown_key_raises(self, tmp_path):
+        from rdf_construct.lint import load_lint_config
+
+        path = tmp_path / "lint.yml"
+        path.write_text("levle: strict\ndisabled:\n  - orphan-class\n")
+        with pytest.raises(ValueError, match=f"unknown key 'levle' in {path}") as excinfo:
+            load_lint_config(path)
+        assert "Did you mean 'level'?" in str(excinfo.value)
+        assert "Accepted keys: level, enable, disable, severity, external_namespaces" in str(
+            excinfo.value
+        )
+
 
 class TestLintEngine:
     """Tests for LintEngine."""

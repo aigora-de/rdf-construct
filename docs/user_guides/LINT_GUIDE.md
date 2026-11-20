@@ -315,6 +315,9 @@ a boundary, so `http://example.org/ont` takes `http://example.org/ont#X` but not
 file is read, and so is a CURIE whose prefix a linted file does not declare. See
 [Whose terms are checked](#whose-terms-are-checked).
 
+These five are the only keys a config file may hold. Any other key, such as a misspelt `levle:`,
+is refused with exit code 2, naming the nearest valid key and the accepted ones.
+
 ### Config File Discovery
 
 The linter automatically searches for configuration files in this order:
